@@ -22,14 +22,21 @@
   - 6단계 계획을 보여 주자 승인했다.
 - 의도: 말하지 않음
 - 커밋:
-  - "엔진 타일 픽셀을 담는 자리를 나눠 힙 밖 저장소를 쓸 수 있게 함"
+  - e6e687f "엔진 타일 픽셀을 담는 자리를 나눠 힙 밖 저장소를 쓸 수 있게 함"
+  - "엔진에 사진 줄이기 단계·메모리·축소본 크기 계산 추가"
 - 바꾼 것:
-  - `raster/TilePixels.kt`(새): 타일 픽셀이 놓이는 곳의 약속과 힙 구현(`HeapTilePixels`). 힙 밖 비트맵 구현은 3단계에서 더한다.
-  - `raster/Tile.kt`: `IntArray` 대신 `TilePixels`를 담는다. `Tile.of(IntArray)`는 그대로 쓴다.
-  - `raster/TileGrid.kt`(새): 캔버스의 가로·세로 타일 수와 타일마다 캔버스 안쪽 사각형
-  - `Document.create`: 첫 레이어의 픽셀(래스터)을 받을 수 있게 했다.
+  - 1단계:
+    - `raster/TilePixels.kt`(새): 타일 픽셀이 놓이는 곳의 약속과 힙 구현(`HeapTilePixels`). 힙 밖 비트맵 구현은 3단계에서 더한다.
+    - `raster/Tile.kt`: `IntArray` 대신 `TilePixels`를 담는다. `Tile.of(IntArray)`는 그대로 쓴다.
+    - `raster/TileGrid.kt`(새): 캔버스의 가로·세로 타일 수와 타일마다 캔버스 안쪽 사각형
+    - `Document.create`: 첫 레이어의 픽셀(래스터)을 받을 수 있게 했다.
+  - 2단계(모두 순수 Kotlin):
+    - `raster/PixelSize.kt`(새): 가로·세로 크기, 화소 수, MP 표시용 반올림
+    - `importing/ImportSizing.kt`(새): 픽셀당 바이트 수(PNG·AVIF는 8바이트로 가정), 여는 순간 메모리(해독본의 2.5배), 반씩 줄이는 단계, 선택 창이 필요한지
+    - `importing/ImportResult.kt`(새): 불러오기 성공·실패(메모리 부족, 읽을 수 없음)
+    - `preview/PreviewLevels.kt`(새): 화면 크기에 맞는 축소 단계(긴 변 4096px 이하), 타일 8×8 묶음 배치
 - 정한 것: 큰 사진 선택 창(사용자 결정), 8비트 sRGB·반씩 줄이기·타일 나누기는 CPU 복사·안드로이드 부분은 app 모듈에서 테스트(계획 승인, 추천 수용). 자세한 내용은 progress.md 결정 기록.
-- 확인한 것: 빌드와 엔진 테스트 47개가 통과했다(새 테스트 9개).
+- 확인한 것: 빌드와 엔진 테스트 72개가 통과했다(1단계 새 테스트 9개, 2단계 25개).
 
 ## 2026-10-17 · 원본 픽셀을 두는 방식 결정
 
