@@ -1,6 +1,9 @@
 package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
+import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.raster.TileKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -24,6 +27,20 @@ class DocumentTest {
         assertEquals(1f, layer.opacity, 0f)
         assertEquals(BlendMode.NORMAL, layer.blendMode)
         assertSame(Raster.EMPTY, (layer.content as RasterContent).raster)
+    }
+
+    @Test
+    fun create_putsGivenRasterInFirstLayer() {
+        val raster = Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.of(IntArray(TILE_PIXEL_COUNT))))
+
+        val document = Document.create(
+            width = 10,
+            height = 10,
+            firstLayerName = "Background",
+            firstLayerRaster = raster
+        )
+
+        assertSame(raster, (document.layers.single().content as RasterContent).raster)
     }
 
     @Test

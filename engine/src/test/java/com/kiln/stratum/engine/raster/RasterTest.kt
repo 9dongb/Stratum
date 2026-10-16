@@ -38,6 +38,19 @@ class RasterTest {
     }
 
     @Test
+    fun tileOfPixels_readsThroughGivenStorage() {
+        // 힙 밖 비트맵 같은 다른 저장소도 같은 방식으로 읽는다
+        val storage = object : TilePixels {
+            override fun pixelAt(x: Int, y: Int): Int = x * 1000 + y
+        }
+        val tile = Tile.of(storage)
+
+        assertEquals(3 * 1000 + 4, tile.pixelAt(3, 4))
+        // 범위 검사는 저장소가 아니라 타일이 맡는다
+        assertThrows(IllegalArgumentException::class.java) { tile.pixelAt(TILE_SIZE, 0) }
+    }
+
+    @Test
     fun tileKey_rejectsNegative() {
         assertThrows(IllegalArgumentException::class.java) { TileKey(-1, 0) }
         assertThrows(IllegalArgumentException::class.java) { TileKey(0, -1) }

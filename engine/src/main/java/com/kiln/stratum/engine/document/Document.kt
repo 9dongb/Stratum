@@ -32,12 +32,20 @@ data class Document(
     fun indexOfLayer(id: LayerId): Int = layers.indexOfFirst { it.id == id }
 
     companion object {
-        /** 빈 레이어 하나로 새 문서를 만든다. 레이어 번호는 0부터 시작한다. */
-        fun create(width: Int, height: Int, firstLayerName: String): Document =
+        /**
+         * 레이어 하나로 새 문서를 만든다. 레이어 번호는 0부터 시작한다.
+         * [firstLayerRaster]를 주지 않으면 빈(투명한) 레이어이고, 불러온 사진은 그 픽셀을 넘긴다.
+         */
+        fun create(
+            width: Int,
+            height: Int,
+            firstLayerName: String,
+            firstLayerRaster: Raster = Raster.EMPTY
+        ): Document =
             Document(
                 width = width,
                 height = height,
-                layers = listOf(Layer(LayerId(0), firstLayerName, RasterContent(Raster.EMPTY))),
+                layers = listOf(Layer(LayerId(0), firstLayerName, RasterContent(firstLayerRaster))),
                 nextLayerId = 1
             )
     }
