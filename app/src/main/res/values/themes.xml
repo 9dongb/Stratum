@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Stratum" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- 다크 테마만 쓴다. 화면이 그려지기 전의 창 배경도 어둡게 해서 흰 화면이 번쩍이지 않게 한다. -->
+    <style name="Theme.Stratum" parent="android:Theme.Material.NoActionBar" />
 </resources>

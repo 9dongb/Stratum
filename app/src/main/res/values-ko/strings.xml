@@ -1,0 +1,4 @@
+<resources>
+    <!-- 브랜드 이름이라 한국어에서도 영문 그대로 쓴다. -->
+    <string name="app_name">Stratum</string>
+</resources>
