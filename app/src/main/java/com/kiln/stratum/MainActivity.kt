@@ -1,4 +1,5 @@
-package com.kiln.stratumv
+package com.kiln.stratum
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
