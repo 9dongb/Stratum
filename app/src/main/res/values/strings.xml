@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">Stratum</string>
+
+    <!-- 홈 화면 -->
+    <string name="home_open_photo">Open photo</string>
+    <string name="home_new_canvas">New canvas</string>
+    <string name="home_recent_projects">Recent projects</string>
+    <string name="home_recent_projects_empty">No projects yet. Open a photo or start a new canvas, and it will show up here.</string>
+
+    <!-- 버튼 이름. 아이콘만 있는 버튼은 화면 읽기 기능이 이 이름을 읽어 준다. -->
+    <string name="action_settings">Settings</string>
+    <string name="action_back">Back</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_export">Export</string>
 </resources>

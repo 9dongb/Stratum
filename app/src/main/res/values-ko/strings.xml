@@ -1,4 +1,17 @@
 <resources>
     <!-- 브랜드 이름이라 한국어에서도 영문 그대로 쓴다. -->
     <string name="app_name">Stratum</string>
+
+    <!-- 홈 화면 -->
+    <string name="home_open_photo">사진 열기</string>
+    <string name="home_new_canvas">새 캔버스</string>
+    <string name="home_recent_projects">최근 프로젝트</string>
+    <string name="home_recent_projects_empty">아직 프로젝트가 없어요. 사진을 열거나 새 캔버스를 만들면 여기에 나타나요.</string>
+
+    <!-- 버튼 이름. 아이콘만 있는 버튼은 화면 읽기 기능이 이 이름을 읽어 준다. -->
+    <string name="action_settings">설정</string>
+    <string name="action_back">뒤로</string>
+    <string name="action_undo">실행 취소</string>
+    <string name="action_redo">다시 실행</string>
+    <string name="action_export">내보내기</string>
 </resources>
