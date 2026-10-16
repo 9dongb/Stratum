@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Stratum"
 include(":app")
+include(":engine")
