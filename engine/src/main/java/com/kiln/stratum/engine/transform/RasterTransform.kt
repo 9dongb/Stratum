@@ -38,7 +38,8 @@ object RasterTransform {
                 is RasterContent -> layer.copy(content = RasterContent(transform(content.raster, plan, composer, checkCanceled)))
             }
         }
-        return document.copy(width = plan.targetSize.width, height = plan.targetSize.height, layers = layers)
+        // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')
+        return document.copy(width = plan.targetSize.width, height = plan.targetSize.height, layers = layers, selection = null)
     }
 
     /** [raster]를 [plan]대로 옮긴 새 래스터. 원본 조각이 모두 투명(타일 없음)인 자리는 대상도 비워 둔다. */

@@ -22,6 +22,7 @@ import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.Selection
 import java.util.IdentityHashMap
 import kotlin.math.roundToInt
 
@@ -241,6 +242,7 @@ class LayerPreviewCache {
     /**
      * 그림 [image](문서의 [region] 부분을 그 단계로 그린 것, 없으면 투명) 위에 획들 [strokes]를 차례로 그린 그림(GPU).
      * 레이어 축소본 위에 그리거나(합치기 전), 쉬운 경우에는 확대 그림 위에 바로 그린다(맨 위 표준 레이어에 그릴 때, ViewModel이 고른다).
+     * 획에 선택 영역이 있으면 그 영역 안으로 자른다(기록할 때와 같다).
      */
     fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>): Bitmap? {
         val width = region.previewWidth
@@ -255,11 +257,21 @@ class LayerPreviewCache {
                 left = region.rect.left.toFloat(),
                 top = region.rect.top.toFloat(),
                 width = width.toFloat(),
-                height = height.toFloat()
+                height = height.toFloat(),
+                clip = stroke.selection?.let { selectionMask(it, region) }
             )
         }
         picture.endRecording()
         return PreviewRenderer.drawOnGpu(picture, width, height)
+    }
+
+    /** 마지막으로 줄여 그린 선택 영역 알파 그림. 끄는 동안 같은 선택 영역·자리를 매번 다시 그리지 않는다. */
+    private var lastMask: Triple<Selection, PreviewRegion, Bitmap>? = null
+
+    /** [selection]을 [region]에 줄여 그린 알파 그림(같은 것이면 다시 쓴다) */
+    private fun selectionMask(selection: Selection, region: PreviewRegion): Bitmap {
+        lastMask?.let { (s, r, bitmap) -> if (s === selection && r == region) return bitmap }
+        return SelectionPreview.mask(selection, region).also { lastMask = Triple(selection, region, it) }
     }
 
     /** [raster] 하나만 담은 문서(불투명도 1, 표준, 보정 없음)의 축소본 */
@@ -282,5 +294,12 @@ class LayerPreviewCache {
 /**
  * 끄는 동안의 브러시 획(기록 전). [LayerPreviewCache.render]가 [layerId] 레이어 축소본 위에 그려 미리 보인다.
  * [dabs]는 그리는 동안 바뀌지 않는 목록이어야 한다(끄는 쪽이 복사해 넘긴다).
+ * [selection]은 획을 시작할 때의 선택 영역이다. 있으면 미리 보기도 그 안으로 자른다.
  */
-class LiveStroke(val layerId: LayerId, val dabs: List<StrokePoint>, val settings: BrushSettings, val erase: Boolean)
+class LiveStroke(
+    val layerId: LayerId,
+    val dabs: List<StrokePoint>,
+    val settings: BrushSettings,
+    val erase: Boolean,
+    val selection: Selection? = null
+)

@@ -15,6 +15,8 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.selection.Selection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -196,6 +198,37 @@ class EditHistoryTest {
 
         // 한 가지 색 한 장과 새로 칠한 두 장. 이전 문서들과 함께 쓰는 타일은 한 번만 센다.
         assertEquals(3 * tileBytes, history.bytesInUse)
+    }
+
+    @Test
+    fun bytesInUse_countsSelectionTiles_andSharedFullTilesAreFree() {
+        val history = EditHistory(canvas)
+        val before = history.bytesInUse
+        val partial = MaskTile.of(ByteArray(TILE_PIXEL_COUNT) { 100 })
+
+        history.execute(Select(Selection.of(mapOf(TileKey(0, 0) to partial, TileKey(1, 0) to MaskTile.FULL))))
+
+        // 픽셀을 가진 알파 타일 한 장(픽셀당 1바이트)만 늘고, 다 고른 타일은 메모리를 쓰지 않는다
+        assertEquals(before + TILE_PIXEL_COUNT, history.bytesInUse)
+    }
+
+    @Test
+    fun selectionChange_isAnUndoStep() {
+        val history = EditHistory(canvas)
+        val selection = Selection.of(mapOf(TileKey(0, 0) to MaskTile.FULL))
+
+        assertTrue(history.execute(Select(selection)))
+        // 같은 선택 영역을 다시 고르면 바뀌지 않는다
+        assertFalse(history.execute(Select(selection)))
+        assertTrue(history.undo())
+        assertNull(history.document.selection)
+        assertTrue(history.redo())
+        assertSame(selection, history.document.selection)
+    }
+
+    /** 선택 영역을 바꾸는 명령(테스트용) */
+    private class Select(val selection: Selection) : EditCommand {
+        override fun applyTo(document: Document): Document = document.withSelection(selection)
     }
 
     @Test

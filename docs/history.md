@@ -14,6 +14,26 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 선택 도구 (진행 중)
+
+- 요청: "최종 보고가 끝나면 이어서 선택 도구(자동 선택, 사각형, 원형, 올가미), 픽셀 유동화, 리터칭(복제 도장, 스팟 복구 브러시 도구, 복구 브러시 도구), 명암 도구(번, 닷지)기능도 추가하세요." 그중 첫째인 선택 도구다.
+- 의도: 말하지 않음
+- 커밋:
+  - "엔진에 선택 영역(알파 타일)·모양·합치기·자동 선택·윤곽선과 선택 명령을 더하고 브러시·지우개를 선택 영역 안으로 자름"
+- 바꾼 것:
+  - 1단계(엔진):
+    - `selection/`(새, 순수 Kotlin): `Selection`·`MaskTile`(문서 크기 알파 마스크, 다 고른 타일은 한 장을 함께 씀), `SelectionShape`(사각형·타원·올가미와 타일이 안·밖·걸침인지), `SelectionMode`와 `combineSelection`(새로·더하기·빼기·교차), `ColorRegion`(자동 선택의 채우기, 줄인 그림에서), `MaskContour`(윤곽선, 마칭 스퀘어). 단위 테스트 25개
+    - `document/Document.kt`: 선택 영역(`selection`)과 `withSelection`(비면 없앰, 같으면 그대로). `history/EditHistory.kt`: 메모리에 알파 타일도 센다. 단위 테스트 3개
+    - `platform/MaskTiles.kt`(새): 알파 타일 그리기(모양·페더는 안드로이드 흐림), 합치기(Porter-Duff), 줄인 마스크를 원본 크기로 키우기
+    - `platform/SelectionCommands.kt`(새): 고르기(`SelectShape`·`SelectSimilarColor`·`SelectAll`·`Deselect`·`InvertSelection`), `DeleteSelected`, `CopySelectedToLayer`(복사·잘라내기)
+    - `platform/SelectionPreview.kt`(새): 선택 영역을 축소본 단계로 줄여 그리기, 윤곽선(문서 좌표)
+    - `BrushPainter`·`PaintStroke`·`LayerPreviewCache`: 획을 선택 영역 알파로 자른다(기록과 끄는 동안의 미리 보기 모두). 고르지 않은 타일은 그리지 않는다.
+    - 자르기·회전·뒤집기·크기 변경(`RasterTransform`·`ImageResizer`)은 선택을 푼다.
+    - 에뮬레이터 테스트 `SelectionCommandsTest` 16개
+- 정한 것(Claude 판단, progress.md 결정 기록 '선택 도구')
+- 확인한 것:
+  - 1단계: 빌드와 단위 테스트(선택 25개, 문서·기록 3개)가 통과했다. 에뮬레이터에서 `SelectionCommandsTest` 16개를 돌려 처음에 3개가 실패했다. 알파 그림(ALPHA_8)을 그냥 그리면 소프트웨어 그리기는 그 알파를 덮는 정도로만 써서 DST_IN(곱하기)이 아무것도 바꾸지 않았다(GPU에서는 됐다). 알파를 셰이더로 그리게 고치고(`MaskTiles.drawAlpha`), 합친 결과가 모두 0이면 그 타일을 지우게 했다(다 빼도 선택이 남던 것). 다시 돌려 모두 통과했다.
+
 ## 2026-10-18 · 설정 화면
 
 - 요청: 다음 후보 7번. 승인 없이 이어서 하라는 요청은 progress.md '진행 중'에 있다.

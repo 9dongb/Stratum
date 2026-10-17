@@ -42,7 +42,8 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
                 is RasterContent -> layer.copy(content = RasterContent(ImageResizer.resize(content.raster, plan, checkCanceled)))
             }
         }
-        return document.copy(width = width, height = height, layers = layers)
+        // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')
+        return document.copy(width = width, height = height, layers = layers, selection = null)
     }
 
     /** 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다. */

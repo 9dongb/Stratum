@@ -18,6 +18,7 @@ import kotlin.math.roundToInt
  * - 자국은 둥글다. 단단하면([HARD] 이상) 경계가 또렷한 원을 그리고, 아니면 가운데부터 부드럽게 옅어지는 모양(알파 마스크)을 늘여 찍는다.
  * - 한 획의 자국들은 따로 그린 뒤(saveLayer) 불투명도로 한 번 얹는다. 그래서 자국이 겹쳐도 획은 불투명도보다 짙어지지 않는다.
  * - 지우개는 같은 자국으로, 얹을 때 아래를 지운다(DST_OUT). 브러시는 그 위에 칠한다(SRC_OVER).
+ * - 선택 영역이 있으면 얹기 전에 획을 선택 영역 알파로 자른다(DST_IN). 고르지 않은 곳에는 그려지지 않는다.
  * - 셰이더 프로그램(RuntimeShader)이나 하드웨어 비트맵을 쓰지 않아 소프트웨어 캔버스에서도 그려진다.
  */
 internal object BrushPainter {
@@ -34,6 +35,7 @@ internal object BrushPainter {
     /**
      * [canvas]에 [dabs]를 [settings]로 그린다([erase]면 지운다). 자국은 문서 좌표이고,
      * 캔버스 좌표는 (문서 - ([left], [top])) × [scale]이다. 캔버스의 그릴 자리는 [width]×[height]이고, 그 밖의 자국은 건너뛴다.
+     * [clip]이 있으면 캔버스 (0, 0)에 맞춘 알파 그림(선택 영역)으로 획을 자른다. 크기는 그릴 자리와 같다.
      */
     fun drawStroke(
         canvas: Canvas,
@@ -44,7 +46,8 @@ internal object BrushPainter {
         left: Float,
         top: Float,
         width: Float,
-        height: Float
+        height: Float,
+        clip: Bitmap? = null
     ) {
         if (dabs.isEmpty()) return
         val stroke = Paint().apply {
@@ -72,6 +75,8 @@ internal object BrushPainter {
                 canvas.drawBitmap(mask, null, target, dab)
             }
         }
+        // 알파를 셰이더로 그려야 소프트웨어 그리기에서도 DST_IN이 곱해진다(MaskTiles.drawAlpha)
+        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
         canvas.restoreToCount(saved)
     }
 

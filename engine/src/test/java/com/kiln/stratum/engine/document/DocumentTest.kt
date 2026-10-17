@@ -4,7 +4,10 @@ import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.selection.Selection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -75,6 +78,20 @@ class DocumentTest {
                 Layer(LayerId(0), "a", RasterContent(Raster.EMPTY), opacity = opacity)
             }
         }
+    }
+
+    @Test
+    fun withSelection_dropsEmptySelections_andKeepsTheSameDocumentWhenNothingChanges() {
+        val document = Document.create(100, 100, "Background")
+        val selection = Selection.of(mapOf(TileKey(0, 0) to MaskTile.FULL))
+
+        val selected = document.withSelection(selection)
+        assertSame(selection, selected.selection)
+        assertSame(selected, selected.withSelection(selection))
+        // 비어 있는 선택 영역은 선택이 없는 것으로 둔다
+        assertNull(selected.withSelection(Selection.EMPTY).selection)
+        assertSame(document, document.withSelection(null))
+        assertSame(document, document.withSelection(Selection.EMPTY))
     }
 
     @Test

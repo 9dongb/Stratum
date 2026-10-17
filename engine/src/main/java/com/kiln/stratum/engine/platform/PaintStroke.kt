@@ -17,11 +17,13 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.Selection
 
 /**
  * [layerId] 레이어에 브러시 획 하나를 그린다([erase]면 지운다). 원본 해상도에 바로 그린다(결정 기록 '원본 픽셀').
  *
  * 획이 닿는 타일만 새로 만들고 나머지는 앞 문서와 함께 쓴다. 빈 자리를 지우면 그대로 비워 둔다.
+ * 선택 영역이 있으면 고른 곳에만 그린다(고르지 않은 타일은 건너뛴다).
  * 타일은 안드로이드 소프트웨어 그리기로 만든다(결정 기록 '브러시 기록은 안드로이드 내부 그리기'). 획이 닿지 않은 픽셀은 값이 그대로다.
  * 없는 레이어거나 문서에 닿지 않는 획이면 문서를 그대로 돌려준다.
  */
@@ -40,7 +42,7 @@ data class PaintStroke(
         val size = PixelSize(document.width, document.height)
         val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return document
         val painted = try {
-            BrushTiles.paint(raster, size, bounds, dabs, settings, erase, checkCanceled)
+            BrushTiles.paint(raster, size, bounds, dabs, settings, erase, document.selection, checkCanceled)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
@@ -74,7 +76,7 @@ internal object BrushTiles {
 
     /**
      * [raster]의 [bounds] 안 타일에 획을 그린 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다.
-     * 타일마다 그 타일에 닿는 자국만 그린다. [checkCanceled]는 타일 사이마다 부른다.
+     * 타일마다 그 타일에 닿는 자국만 그린다. [selection]이 있으면 고른 곳에만 그린다. [checkCanceled]는 타일 사이마다 부른다.
      */
     fun paint(
         raster: Raster,
@@ -83,6 +85,7 @@ internal object BrushTiles {
         dabs: List<StrokePoint>,
         settings: BrushSettings,
         erase: Boolean,
+        selection: Selection?,
         checkCanceled: () -> Unit
     ): Raster {
         val grid = TileGrid(size.width, size.height)
@@ -93,6 +96,8 @@ internal object BrushTiles {
         try {
             for (key in keysIn(bounds)) {
                 checkCanceled()
+                // 선택 영역이 있는데 이 자리를 하나도 고르지 않았으면 그릴 것이 없다
+                val mask = if (selection == null) null else (selection.tiles[key] ?: continue)
                 val old = raster.tiles[key]
                 // 빈 자리는 지울 것이 없다
                 if (old == null && erase) continue
@@ -111,7 +116,8 @@ internal object BrushTiles {
                     left = tile.left.toFloat(),
                     top = tile.top.toFloat(),
                     width = tile.width.toFloat(),
-                    height = tile.height.toFloat()
+                    height = tile.height.toFloat(),
+                    clip = mask?.let { MaskTiles.bitmapOf(it, temporary) }
                 )
                 picture.endRecording()
                 // GPU 전용 내용이 없어 소프트웨어로 그리고, 바꿀 수 없는 비트맵 하나로 돌려준다(CanvasTileComposer와 같다)

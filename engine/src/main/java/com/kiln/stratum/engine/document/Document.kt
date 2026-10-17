@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.Selection
 
 /**
  * 편집 중인 문서 하나(캔버스와 레이어들).
@@ -12,12 +13,15 @@ import com.kiln.stratum.engine.raster.Raster
  * @property height 캔버스 세로 픽셀 수
  * @property layers 레이어 목록. 첫 번째가 맨 아래, 마지막이 맨 위이며, 항상 1개 이상이다.
  * @property nextLayerId 다음에 만들 레이어의 번호. 지금 있는 모든 레이어 번호보다 크다.
+ * @property selection 선택 영역. 없으면 null(모든 곳을 편집한다). 비어 있는 선택 영역은 두지 않는다([withSelection]).
+ *   실행 취소 기록에는 남지만 프로젝트 파일에는 저장하지 않는다(결정 기록 '선택 도구').
  */
 data class Document(
     val width: Int,
     val height: Int,
     val layers: List<Layer>,
-    val nextLayerId: Long
+    val nextLayerId: Long,
+    val selection: Selection? = null
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }
@@ -30,6 +34,15 @@ data class Document(
 
     /** [id] 레이어의 위치(0이 맨 아래). 없으면 -1. */
     fun indexOfLayer(id: LayerId): Int = layers.indexOfFirst { it.id == id }
+
+    /**
+     * 선택 영역을 [selection]으로 바꾼 문서. 비어 있으면 선택이 없는 것(null)으로 둔다.
+     * 바뀌는 것이 없으면(같은 객체, 또는 없던 것을 없앰) 자기 자신을 돌려주어 실행 취소 기록에 남지 않는다.
+     */
+    fun withSelection(selection: Selection?): Document {
+        val next = selection?.takeUnless { it.isEmpty }
+        return if (next === this.selection) this else copy(selection = next)
+    }
 
     companion object {
         /**

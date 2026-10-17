@@ -4,6 +4,7 @@ import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.selection.MaskTile
 
 /**
  * 실행 취소·다시 실행 기록.
@@ -62,13 +63,17 @@ class EditHistory(
     val redoCommand: EditCommand?
         get() = steps.getOrNull(position)?.command
 
-    /** 남겨 둔 모든 문서(실행 취소·다시 실행할 것 포함)의 타일이 쓰는 메모리(바이트). 같은 타일 객체는 한 번만 센다. */
+    /**
+     * 남겨 둔 모든 문서(실행 취소·다시 실행할 것 포함)의 타일이 쓰는 메모리(바이트). 같은 타일 객체는 한 번만 센다.
+     * 선택 영역의 알파 타일도 센다.
+     */
     val bytesInUse: Long
         get() {
             val tiles = HashSet<Tile>()
-            addTiles(base, tiles)
-            for (step in steps) addTiles(step.after, tiles)
-            return tiles.sumOf { it.byteCount.toLong() }
+            val masks = HashSet<MaskTile>()
+            addTiles(base, tiles, masks)
+            for (step in steps) addTiles(step.after, tiles, masks)
+            return tiles.sumOf { it.byteCount.toLong() } + masks.sumOf { it.byteCount.toLong() }
         }
 
     /**
@@ -134,7 +139,8 @@ class EditHistory(
         position--
     }
 
-    private fun addTiles(document: Document, into: MutableSet<Tile>) {
+    private fun addTiles(document: Document, into: MutableSet<Tile>, masks: MutableSet<MaskTile>) {
+        document.selection?.let { masks.addAll(it.tiles.values) }
         for (layer in document.layers) {
             when (val content = layer.content) {
                 is RasterContent -> into.addAll(content.raster.tiles.values)
