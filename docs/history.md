@@ -21,7 +21,8 @@
   - 원래 추천 순서(사진 열기 다음은 화면 크기별 편집 레이아웃)대로 이 작업을 골라 계획을 보여 주자 승인했다.
 - 의도: 말하지 않음
 - 커밋:
-  - "화면 폭 분류와 접히는 부분(힌지) 정보를 받아 오는 기반 추가"
+  - 4f0199c "화면 폭 분류와 접히는 부분(힌지) 정보를 받아 오는 기반 추가"
+  - "편집 화면을 화면 폭에 따라 세 가지로 배치하고 도구·패널 자리를 둠"
 - 바꾼 것:
   - 1단계:
     - `ui/layout/WidthClass.kt`(새): 화면 폭으로 Compact(600dp 미만)·Medium(840dp 미만)·Expanded를 고른다.
@@ -30,6 +31,17 @@
     - `MainActivity.kt`: 힌지 목록을 화면 전체에 넘긴다.
     - `androidx.window:window` 1.5.0을 build.gradle에 적었다(Compose UI를 통해 이미 들어와 있던 것).
     - 단위 테스트 12개 추가
+  - 2단계:
+    - `ui/edit/EditScreen.kt`: 상단 바와 캔버스를 따로 떼고, 화면 폭에 따라 Compact(캔버스 + 아래 도구 탭 줄)·Medium(도구 막대 + 캔버스 + 아래 접이식 패널)·Expanded(도구 막대 + 캔버스 + 오른쪽 패널)로 배치한다.
+      - 시스템 바·카메라 구멍은 영역마다 바깥쪽만 비켜 둔다.
+      - 아래 패널을 펼쳤는지는 접기·펼치기·회전에도 이어진다.
+      - 화면 폭별 미리보기 3개를 더했다.
+    - `ui/edit/EditTools.kt`(새): 1단계 도구 6개(자르기·변형, 조정, 브러시, 지우개, 텍스트, 레이어)와 하위 도구 삼각형
+    - `ui/edit/ToolRail.kt`, `ToolTabBar.kt`, `EditPanel.kt`, `EditScreenTags.kt`(새): 도구 막대, 탭 줄, 패널, 화면 테스트용 이름표
+      - 도구와 패널 탭은 모두 비활성이고, 아래 패널의 접기·펼치기 버튼만 동작한다.
+      - 탭 줄은 짧은 이름을 보이고, 화면 읽기 기능은 긴 이름을 읽는다.
+    - 아이콘 8개(crop, tune, brush, ink_eraser, text_fields, layers, expand_less, expand_more)를 google/material-design-icons에서 받아 넣었다.
+    - 문구 9개를 영어·한국어로 추가했다.
 - 정한 것(사용자):
   - 테이블탑은 나중에, 도구 배치는 추천안대로, 아이콘은 Google 공식 Material Icons에서 받기(모두 추천 수용, progress.md 결정 기록)
   - 200MP 조각 해독은 이후 과제로 둔다(다음 후보에 남김).

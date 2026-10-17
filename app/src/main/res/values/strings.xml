@@ -22,6 +22,19 @@
     <string name="edit_open_failed">Couldn\'t open this photo.</string>
     <string name="edit_open_failed_memory">Not enough memory to open this photo.</string>
 
+    <!-- 편집 도구. _short는 커버 화면 탭 줄에 보이는 짧은 이름이고, 나머지는 화면 읽기 기능이 읽는 이름이다. -->
+    <string name="tool_transform">Crop and transform</string>
+    <string name="tool_transform_short">Crop</string>
+    <string name="tool_adjust">Adjust</string>
+    <string name="tool_brush">Brush</string>
+    <string name="tool_eraser">Eraser</string>
+    <string name="tool_text">Text</string>
+    <string name="tool_layers">Layers</string>
+
+    <!-- 편집 패널 -->
+    <string name="panel_expand">Expand panel</string>
+    <string name="panel_collapse">Collapse panel</string>
+
     <!-- 큰 사진 선택 창. %1$d는 화소 수(MP)다. -->
     <string name="large_photo_title">Large photo</string>
     <string name="large_photo_message">This photo is %1$d MP. Opening it at full size uses a lot of memory and can be slow. Opening it smaller doesn\'t change the original file.</string>

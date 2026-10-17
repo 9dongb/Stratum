@@ -23,6 +23,19 @@
     <string name="edit_open_failed">사진을 열 수 없어요.</string>
     <string name="edit_open_failed_memory">메모리가 부족해서 사진을 열 수 없어요.</string>
 
+    <!-- 편집 도구. _short는 커버 화면 탭 줄에 보이는 짧은 이름이고, 나머지는 화면 읽기 기능이 읽는 이름이다. -->
+    <string name="tool_transform">자르기·변형</string>
+    <string name="tool_transform_short">자르기</string>
+    <string name="tool_adjust">조정</string>
+    <string name="tool_brush">브러시</string>
+    <string name="tool_eraser">지우개</string>
+    <string name="tool_text">텍스트</string>
+    <string name="tool_layers">레이어</string>
+
+    <!-- 편집 패널 -->
+    <string name="panel_expand">패널 펼치기</string>
+    <string name="panel_collapse">패널 접기</string>
+
     <!-- 큰 사진 선택 창. %1$d는 화소 수(MP)다. -->
     <string name="large_photo_title">큰 사진이에요</string>
     <string name="large_photo_message">이 사진은 %1$dMP예요. 원본 크기로 열면 메모리를 많이 써서 느릴 수 있어요. 줄여서 열어도 원본 파일은 바뀌지 않아요.</string>

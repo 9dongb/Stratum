@@ -4,9 +4,17 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,12 +27,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -32,19 +45,22 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.importing.ImportFailure
+import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
- * 편집 화면. 상단 바와 캔버스 영역이 있다.
+ * 편집 화면. 상단 바 아래를 화면 폭에 따라 세 가지로 배치한다(CLAUDE.md 6장).
  *
- * 캔버스에는 엔진이 그린 축소본을 화면에 맞춰 보여 준다. 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
- * 도구 막대, 레이어·조정 패널은 다음 작업에서 붙인다.
+ * - Compact(커버·폰 세로): 위 캔버스, 아래 도구 탭 줄
+ * - Medium(메인 세로): 왼쪽 도구 막대, 캔버스, 아래 접이식 패널
+ * - Expanded(메인 가로): 왼쪽 도구 막대, 캔버스, 오른쪽 고정 패널
+ *
+ * 도구와 패널 탭은 아직 기능이 없어 비활성이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
  * @param onChooseSize 큰 사진 선택 창에서 고른 크기. true면 원본 크기, false면 줄여서 연다.
  */
-// TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditScreen(
     state: EditorState,
@@ -53,87 +69,135 @@ fun EditScreen(
     onChooseSize: (original: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {},
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                actions = {
-                    // 실행 취소·다시 실행·내보내기는 아직 기능이 없어서, 자리만 두고 누를 수 없게 한다
-                    IconButton(onClick = {}, enabled = false) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_undo),
-                            contentDescription = stringResource(R.string.action_undo)
-                        )
-                    }
-                    IconButton(onClick = {}, enabled = false) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_redo),
-                            contentDescription = stringResource(R.string.action_redo)
-                        )
-                    }
-                    IconButton(onClick = {}, enabled = false) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_ios_share),
-                            contentDescription = stringResource(R.string.action_export)
-                        )
-                    }
-                },
-                // 캔버스와 구분되게 상단 바를 한 단계 밝게 칠한다
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
-        }
-    ) { innerPadding ->
-        // 캔버스 영역. 배경은 내비게이션 바 뒤까지 칠하고, 안에 놓을 내용만 innerPadding으로 상단 바·시스템 바를 피한다.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .padding(innerPadding)
-                .onSizeChanged { onCanvasSize(it.width, it.height) },
-            contentAlignment = Alignment.Center
-        ) {
-            when (state) {
-                EditorState.Empty, is EditorState.AskSize -> Unit
-                EditorState.Opening -> OpeningIndicator()
-                is EditorState.Ready -> {
-                    // 축소본이 바뀔 때만 Compose용 이미지로 감싼다
-                    val image = remember(state.preview) { state.preview.asImageBitmap() }
-                    Image(
-                        bitmap = image,
-                        contentDescription = stringResource(R.string.edit_canvas_description),
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit
-                    )
+    // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
+    var panelExpanded by rememberSaveable { mutableStateOf(true) }
+
+    // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val widthClass = widthClassOf(maxWidth.value)
+        Scaffold(
+            topBar = { EditTopBar(onBack) },
+            // 시스템 바·카메라 구멍은 영역마다 바깥쪽만 비켜 두므로, Scaffold는 상단 바 높이만 비운다
+            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        ) { innerPadding ->
+            val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
+            when (widthClass) {
+                WidthClass.Compact -> Column(body) {
+                    EditCanvas(state, onCanvasSize, WindowInsetsSides.Horizontal, Modifier.weight(1f))
+                    ToolTabBar()
                 }
-                is EditorState.Failed -> Text(
-                    text = stringResource(
-                        when (state.reason) {
-                            ImportFailure.NOT_ENOUGH_MEMORY -> R.string.edit_open_failed_memory
-                            ImportFailure.UNREADABLE -> R.string.edit_open_failed
-                        }
-                    ),
-                    modifier = Modifier.padding(24.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+
+                WidthClass.Medium -> Row(body) {
+                    ToolRail()
+                    Column(Modifier.weight(1f)) {
+                        EditCanvas(state, onCanvasSize, WindowInsetsSides.End, Modifier.weight(1f))
+                        BottomPanel(expanded = panelExpanded, onToggle = { panelExpanded = !panelExpanded })
+                    }
+                }
+
+                WidthClass.Expanded -> Row(body) {
+                    ToolRail()
+                    EditCanvas(state, onCanvasSize, WindowInsetsSides.Bottom, Modifier.weight(1f))
+                    SidePanel()
+                }
             }
         }
     }
 
     if (state is EditorState.AskSize) {
         LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)
+    }
+}
+
+/** 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행·내보내기(아직 비활성) */
+// TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTopBar(onBack: () -> Unit) {
+    TopAppBar(
+        title = {},
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_back),
+                    contentDescription = stringResource(R.string.action_back)
+                )
+            }
+        },
+        actions = {
+            // 실행 취소·다시 실행·내보내기는 아직 기능이 없어서, 자리만 두고 누를 수 없게 한다
+            IconButton(onClick = {}, enabled = false) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_undo),
+                    contentDescription = stringResource(R.string.action_undo)
+                )
+            }
+            IconButton(onClick = {}, enabled = false) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_redo),
+                    contentDescription = stringResource(R.string.action_redo)
+                )
+            }
+            IconButton(onClick = {}, enabled = false) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_ios_share),
+                    contentDescription = stringResource(R.string.action_export)
+                )
+            }
+        },
+        // 캔버스와 구분되게 상단 바를 한 단계 밝게 칠한다
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    )
+}
+
+/**
+ * 캔버스 영역. 엔진이 그린 축소본을 화면에 맞춰 보여 준다. 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
+ * 배경은 영역 끝까지 칠하고, 안의 내용만 [insetSides] 쪽 시스템 바·카메라 구멍을 피한다.
+ */
+@Composable
+private fun EditCanvas(
+    state: EditorState,
+    onCanvasSize: (width: Int, height: Int) -> Unit,
+    insetSides: WindowInsetsSides,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(insetSides))
+            .onSizeChanged { onCanvasSize(it.width, it.height) }
+            .testTag(EditScreenTags.CANVAS),
+        contentAlignment = Alignment.Center
+    ) {
+        when (state) {
+            EditorState.Empty, is EditorState.AskSize -> Unit
+            EditorState.Opening -> OpeningIndicator()
+            is EditorState.Ready -> {
+                // 축소본이 바뀔 때만 Compose용 이미지로 감싼다
+                val image = remember(state.preview) { state.preview.asImageBitmap() }
+                Image(
+                    bitmap = image,
+                    contentDescription = stringResource(R.string.edit_canvas_description),
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            is EditorState.Failed -> Text(
+                text = stringResource(
+                    when (state.reason) {
+                        ImportFailure.NOT_ENOUGH_MEMORY -> R.string.edit_open_failed_memory
+                        ImportFailure.UNREADABLE -> R.string.edit_open_failed
+                    }
+                ),
+                modifier = Modifier.padding(24.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
     }
 }
 
@@ -191,7 +255,10 @@ private fun LargePhotoDialog(
     )
 }
 
-@Preview
+// 화면 폭별 배치 미리보기(폴드8 커버·메인 세로·메인 가로와 비슷한 크기)
+@Preview(name = "Compact", widthDp = 411, heightDp = 800)
+@Preview(name = "Medium", widthDp = 700, heightDp = 900)
+@Preview(name = "Expanded", widthDp = 930, heightDp = 700)
 @Composable
 private fun EditScreenPreview() {
     StratumTheme {
