@@ -104,3 +104,21 @@
 - "Pixel Launcher isn't responding" 같은 창은 PC 메모리가 부족해서 뜬다(앱 문제 아님). Wait로 안 풀리면 Close app을 누른다.
   - "Process system isn't responding"·"System UI isn't responding"도 같다. 먼저 Wait를 누른다(Close app은 안드로이드를 다시 시작시킨다).
 - Pixel_Fold 안쪽 화면에서 처음 실행할 때 위쪽에 뜨는 "Tap handle to access menu…" 말풍선은 시스템 안내다.
+
+## 실기기(폴드8)로 확인
+
+에뮬레이터 대신 사용자의 폴드8에 설치해 볼 때의 요령이다(2026-10-17 처음 해 봄).
+
+- 폰 준비(처음 한 번):
+  - 설정 → 휴대전화 정보 → 소프트웨어 정보 → '빌드 번호'를 7번 누르면 '개발자 옵션'이 생긴다.
+  - 개발자 옵션 → 'USB 디버깅'을 켠다.
+  - 설정 → 보안 및 개인정보 보호 → '자동 차단'이 켜져 있으면 USB 디버깅이 막힌다. 테스트하는 동안만 끈다.
+- USB-C 데이터 케이블로 Mac에 연결하고, 폰에 뜨는 'USB 디버깅 허용'에서 '이 컴퓨터에서 항상 허용'을 고른다.
+  - `adb devices -l`에 기기가 `device`로 보이면 된다. 케이블이 없으면 Android Studio Device Manager의 'Pair devices using Wi-Fi'(무선 디버깅)를 쓴다.
+- 설치: Android Studio에서 기기를 고르고 실행(▶), 또는 `./gradlew installDebug`(JDK는 `docs/progress.md`의 '기술 주의점')
+- 접히는 선 정보: 앱을 연 채로 `adb logcat -s WindowHinges`
+  - 폴드8에서 읽은 값(2026-10-17):
+    - 접은 상태(커버, 1248×1972): 빈 목록
+    - 펼친 기본 방향(2448×1848): `Rect(1224, 0 - 1224, 1848) VERTICAL FLAT`
+    - 펼쳐서 돌린 방향(1848×2448): `Rect(0, 1224 - 1848, 1224) HORIZONTAL FLAT`
+  - 펼치는 순간 한 번, 아직 커버 크기인 창 기준으로 `Rect(624, 0 - 624, 1972)`가 왔다가 약 0.16초 뒤 바뀐다.
