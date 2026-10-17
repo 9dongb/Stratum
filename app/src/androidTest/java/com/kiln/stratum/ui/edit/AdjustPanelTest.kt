@@ -288,8 +288,12 @@ class AdjustPanelTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.assertClickablesAvoid(hinge)
 
-        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로)
+        // 도구 옵션이 위에 뜨면 조정 칸은 처음에 접힌다(레이어 목록이 좁아지지 않게). 펼칠 수 있다.
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        val expand = composeRule.activity.getString(com.kiln.stratum.R.string.section_expand, composeRule.activity.getString(com.kiln.stratum.R.string.tool_adjust))
+        composeRule.onNodeWithContentDescription(expand).performClick()
+        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로)
         slider(AdjustItem.EXPOSURE).assertIsNotEnabled()
     }
 

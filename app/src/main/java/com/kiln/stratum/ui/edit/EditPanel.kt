@@ -168,6 +168,8 @@ private fun PanelTabButton(label: String, selected: Boolean, enabled: Boolean, o
  * 도구를 고르면([toolOptions]가 있으면) 맨 위에 그 도구의 이름([toolTitle])과 옵션을 보인다. 옵션은 가로로 지나가는 힌지의 띠를 피해 쌓는다.
  * 조정 칸과 레이어 칸은 남는 높이를 반씩 나눠 쓰고, 제목 줄의 접기 버튼으로 접으면 다른 칸이 그 자리를 쓴다
  * (CLAUDE.md 6장 '조정은 넣었다 뺄 수 있다'). 접은 상태는 접기·펼치기에도 남는다.
+ * 도구 옵션이 맨 위에 있는 동안에는 조정 칸을 처음에 접어 둔다. 셋이 나눠 쓰면 레이어 목록이 한 줄도 다 보이지 않기 때문이다.
+ * 그동안 펼치면 그것도 따로 기억한다(도구를 내려놓으면 원래 상태로 돌아간다).
  *
  * @param adjustAction 조정 칸 제목 줄 오른쪽의 버튼('모두 초기화')
  * @param adjustContent 조정 칸의 내용. 문서가 없으면 null이다.
@@ -185,7 +187,10 @@ fun SidePanel(
     layersContent: (@Composable () -> Unit)? = null
 ) {
     var adjustOpen by rememberSaveable { mutableStateOf(true) }
+    var adjustOpenWithTool by rememberSaveable { mutableStateOf(false) }
     var layersOpen by rememberSaveable { mutableStateOf(true) }
+    val showingTool = toolOptions != null && toolTitle != null
+    val adjustExpanded = if (showingTool) adjustOpenWithTool else adjustOpen
     Surface(
         modifier = modifier.fillMaxHeight().width(SidePanelWidth).testTag(EditScreenTags.SIDE_PANEL),
         color = MaterialTheme.colorScheme.surfaceContainerLow
@@ -193,18 +198,18 @@ fun SidePanel(
         Column(
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
         ) {
-            if (toolOptions != null && toolTitle != null) {
-                PanelTitle(toolTitle, Modifier.padding(horizontal = 8.dp))
+            if (showingTool) {
+                PanelTitle(checkNotNull(toolTitle), Modifier.padding(horizontal = 8.dp))
                 Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
-                    toolOptions()
+                    checkNotNull(toolOptions)()
                 }
                 HorizontalDivider()
             }
             PanelSection(
                 title = R.string.tool_adjust,
-                open = adjustOpen,
-                onToggle = { adjustOpen = !adjustOpen },
-                modifier = if (adjustOpen) Modifier.weight(1f) else Modifier,
+                open = adjustExpanded,
+                onToggle = { if (showingTool) adjustOpenWithTool = !adjustOpenWithTool else adjustOpen = !adjustOpen },
+                modifier = if (adjustExpanded) Modifier.weight(1f) else Modifier,
                 action = adjustAction,
                 content = adjustContent,
                 tag = EditScreenTags.SIDE_ADJUST
