@@ -10,10 +10,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasFill
+import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.command.SetLayerAdjustments
+import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.history.EditHistory
 import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportPlan
@@ -21,6 +25,7 @@ import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
@@ -95,6 +100,15 @@ sealed interface EditorMessage {
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
 data class ShareRequest(val uri: Uri, val mimeType: String)
 
+/** 화면에 보일 레이어 하나의 속성(보정·레이어 패널). 아래 레이어부터의 순서로 [EditorState.Ready.layers]에 담는다. */
+data class LayerSummary(
+    val id: LayerId,
+    val name: String,
+    val opacity: Float,
+    val blendMode: BlendMode,
+    val adjustments: Adjustments
+)
+
 /**
  * 엔진이 그린 축소본 한 장과, 그것이 덮는 문서 영역·단계. 비트맵 픽셀 하나가 문서 픽셀 2^단계개다.
  * [bitmap]은 하드웨어 비트맵이고, 화면이 그리고 있을 수 있어 ViewModel이 버릴 때 recycle()하지 않는다.
@@ -134,6 +148,8 @@ sealed interface EditorState {
      * @property revision 보이는 문서가 바뀔 때마다(편집·실행 취소·다시 실행) 늘어나는 번호.
      *   화면은 자르기 테두리처럼 문서마다 새로 시작할 상태를 이것으로 구별한다. 화면 크기 때문에 다시 그린 것은 같은 번호다.
      * @property busy 편집을 계산하거나 그 결과를 그리는 중이다. 화면은 편집 버튼을 막고 처리 중 표시를 보인다.
+     * @property layers 레이어들(아래부터). 보정 값처럼 화면이 보일 속성만 담는다.
+     * @property activeLayer 고른 레이어. 보정은 이 레이어에 한다.
      */
     data class Ready(
         val base: PreviewImage,
@@ -142,8 +158,15 @@ sealed interface EditorState {
         val revision: Long = 0,
         val canUndo: Boolean = false,
         val canRedo: Boolean = false,
-        val busy: Boolean = false
-    ) : EditorState
+        val busy: Boolean = false,
+        val layers: List<LayerSummary> = emptyList(),
+        val activeLayer: LayerId? = null
+    ) : EditorState {
+
+        /** 고른 레이어의 속성 */
+        val active: LayerSummary?
+            get() = layers.firstOrNull { it.id == activeLayer }
+    }
 
     /** 문서를 열거나 만들지 못했다. */
     data class Failed(val reason: EditorFailure) : EditorState
@@ -201,6 +224,18 @@ class EditorViewModel(
 
     /** 편집이 멈추면 저장하는 작업. 편집할 때마다 앞 계획을 취소하고 다시 잡는다. */
     private var autosaveJob: Job? = null
+
+    /** 레이어별 축소본. 보정·불투명도만 바뀌면 레이어를 다시 그리지 않고 합친다. [renderMutex] 안에서만 쓴다. */
+    private val layerPreviews = LayerPreviewCache()
+
+    /** 고른 레이어. 문서를 열면 맨 위 레이어이고, 그 레이어가 없어지면(실행 취소 등) 다시 맨 위 레이어다. */
+    private var activeLayer: LayerId? = null
+
+    /** 슬라이더를 끄는 동안 미리 볼 문서(기록하지 않음). 그리는 작업은 가장 나중 것만 그린다. */
+    private var liveDocument: Document? = null
+
+    /** [liveDocument]를 그리는 작업 */
+    private var liveJob: Job? = null
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
     private var history: EditHistory? = null
@@ -387,6 +422,52 @@ class EditorViewModel(
             savedState[KEY_PROJECT] = id
             showPreview(loaded.document)
         }
+    }
+
+    /** [id] 레이어를 고른다. 보정은 고른 레이어에 한다. 없는 레이어면 무시한다. */
+    fun selectLayer(id: LayerId) {
+        val document = history?.document ?: return
+        if (document.indexOfLayer(id) < 0) return
+        activeLayer = id
+        (_state.value as? EditorState.Ready)?.let { _state.value = it.copy(activeLayer = id) }
+    }
+
+    /**
+     * 슬라이더를 끄는 동안 고른 레이어에 [adjustments]를 건 모습을 보인다. 기록하지 않는다(설계 메모 '슬라이더').
+     * 그리는 동안 또 바뀌면 가장 나중 값만 그린다. 픽셀은 그대로라 레이어별 축소본을 합치기만 해서 빠르다.
+     * 미리 보는 동안은 확대 그림(부분 그림)을 숨긴다. 편집을 처리하는 중이면 무시한다.
+     */
+    fun previewAdjustments(adjustments: Adjustments) {
+        val history = history ?: return
+        val layer = activeLayer ?: return
+        if (editing || _state.value !is EditorState.Ready) return
+        liveDocument = SetLayerAdjustments(layer, adjustments).applyTo(history.document)
+        detailJob?.cancel()
+        if (liveJob?.isActive == true) return
+        liveJob = viewModelScope.launch {
+            while (true) {
+                val document = liveDocument ?: break
+                val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+                val bitmap = renderMutex.withLock {
+                    withContext(Dispatchers.Default) { layerPreviews.render(document, level) { ensureActive() } }
+                }
+                // 그사이 놓았으면(기록) 그쪽이 그린다
+                if (liveDocument == null) break
+                val ready = _state.value as? EditorState.Ready ?: break
+                if (bitmap != null) {
+                    val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
+                    _state.value = ready.copy(base = PreviewImage(bitmap, region), detail = null)
+                }
+                if (liveDocument === document) break
+            }
+        }
+    }
+
+    /** 슬라이더를 놓으면 고른 레이어의 보정 값을 [adjustments]로 기록한다(실행 취소 한 단계). */
+    fun commitAdjustments(adjustments: Adjustments) {
+        val layer = activeLayer ?: return
+        liveDocument = null
+        edit(SetLayerAdjustments(layer, adjustments))
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -597,6 +678,8 @@ class EditorViewModel(
             _state.value = it.copy(busy = false, canUndo = history?.canUndo == true, canRedo = history?.canRedo == true)
         }
         if (message != null) _messages.trySend(message)
+        // 미리 보느라 숨긴 부분 그림을 다시 그린다
+        planDetail()
     }
 
     /**
@@ -659,7 +742,7 @@ class EditorViewModel(
         val level = levelFor(document)
         renderMutex.withLock {
             val preview = withContext(Dispatchers.Default) {
-                PreviewRenderer.render(document, level) { ensureActive() }
+                layerPreviews.render(document, level) { ensureActive() }
             }
             if (preview == null) {
                 // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
@@ -684,6 +767,7 @@ class EditorViewModel(
             val detail = if (sameDocument) shown?.detail?.takeIf { it.region.level < level } else null
             if (finishEdit) editing = false
             // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
+            liveDocument = null
             _state.value = EditorState.Ready(
                 base = PreviewImage(preview, PreviewLevels.wholeRegion(size, level)),
                 documentSize = size,
@@ -691,7 +775,9 @@ class EditorViewModel(
                 revision = revision,
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
-                busy = editing
+                busy = editing,
+                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments) },
+                activeLayer = activeLayerIn(document)
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다
@@ -715,8 +801,9 @@ class EditorViewModel(
     private suspend fun updateDetail() {
         val ready = _state.value as? EditorState.Ready ?: return
         val document = history?.document ?: return
-        // 편집 중이거나 새 문서의 축소본을 아직 그리는 중이면, 그 축소본을 그린 뒤 다시 계획한다
-        if (editing || document !== shownDocument) return
+        // 편집 중이거나 새 문서의 축소본을 아직 그리는 중이면, 그 축소본을 그린 뒤 다시 계획한다.
+        // 슬라이더로 미리 보는 동안도 그리지 않는다(기록한 문서의 그림이라 미리 보기와 다르다).
+        if (editing || document !== shownDocument || liveDocument != null) return
         val viewport = viewport ?: return
         val size = PixelSize(document.width, document.height)
         // 다른 문서를 보던 때의 보기는 쓰지 않는다
@@ -773,5 +860,15 @@ class EditorViewModel(
         viewport = null
         editing = false
         shownDocument = null
+        activeLayer = null
+        liveDocument = null
+        liveJob?.cancel()
+        layerPreviews.clear()
+    }
+
+    /** [document]에서 고른 레이어. 고른 레이어가 없거나 없어졌으면 맨 위 레이어를 고른다. */
+    private fun activeLayerIn(document: Document): LayerId {
+        val chosen = activeLayer?.takeIf { document.indexOfLayer(it) >= 0 }
+        return (chosen ?: document.layers.last().id).also { activeLayer = it }
     }
 }
