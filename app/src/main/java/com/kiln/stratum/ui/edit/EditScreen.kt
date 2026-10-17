@@ -317,11 +317,17 @@ private fun EditCanvas(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val notEnoughMemory = stringResource(R.string.edit_not_enough_memory)
+    val exportSaved = stringResource(R.string.edit_export_saved)
+    val exportNotEnoughMemory = stringResource(R.string.edit_export_not_enough_memory)
+    val exportFailed = stringResource(R.string.edit_export_failed)
     LaunchedEffect(messages) {
         // 하나씩 보이고, 사라진 뒤 다음 것을 보인다
         messages.collect { message ->
             val text = when (message) {
                 EditorMessage.EDIT_NOT_ENOUGH_MEMORY -> notEnoughMemory
+                EditorMessage.EXPORT_SAVED -> exportSaved
+                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY -> exportNotEnoughMemory
+                EditorMessage.EXPORT_FAILED -> exportFailed
             }
             snackbarHostState.showSnackbar(text)
         }

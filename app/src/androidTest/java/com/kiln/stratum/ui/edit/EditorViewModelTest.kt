@@ -2,8 +2,10 @@ package com.kiln.stratum.ui.edit
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -11,6 +13,8 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.export.ExportFormat
+import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.engine.platform.FlipImage
 import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.engine.raster.PixelSize
@@ -18,6 +22,7 @@ import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -33,7 +38,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class EditorViewModelTest {
 
-    private val viewModel = EditorViewModel(ApplicationProvider.getApplicationContext<Application>())
+    private val context = ApplicationProvider.getApplicationContext<Application>()
+    private val viewModel = EditorViewModel(context)
 
     /** 편집 상태는 메인 스레드에서만 다루므로, 부르는 것도 메인 스레드에서 한다. */
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
@@ -209,6 +215,93 @@ class EditorViewModelTest {
         // 계산하던 것이 끝날 만큼 기다려도, 늦게 끝난 결과가 빈 상태를 덮지 않는다
         Thread.sleep(2_000)
         assertEquals(EditorState.Empty, viewModel.state.value)
+    }
+
+    /** 공유 요청을 기다린다. */
+    private fun awaitShare(): ShareRequest = runBlocking { withTimeout(30_000) { viewModel.shareRequests.first() } }
+
+    /** 다음 알림을 기다린다. */
+    private fun awaitMessage(): EditorMessage = runBlocking { withTimeout(30_000) { viewModel.messages.first() } }
+
+    @Test
+    fun exportToShare_keepsTheDocument_andSendsTheChosenSize() {
+        val opened = openStripedPhoto(1200, 900)
+        val choice = ExportChoice(ExportFormat.PNG, 90, ExportSize.LongEdge(1080))
+
+        onMain { viewModel.export(choice, ExportTarget.SHARE) }
+
+        val request = awaitShare()
+        assertEquals("image/png", request.mimeType)
+        val bytes = checkNotNull(context.contentResolver.openInputStream(request.uri)).use { it.readBytes() }
+        val decoded = checkNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        assertEquals(PixelSize(1080, 810), PixelSize(decoded.width, decoded.height))
+        // 문서와 실행 취소 기록은 그대로이고, 바쁨이 풀린다. 고른 것은 기억한다.
+        val after = awaitState { it is EditorState.Ready && !it.busy } as EditorState.Ready
+        assertEquals(opened.revision, after.revision)
+        assertEquals(PixelSize(1200, 900), after.documentSize)
+        assertFalse(after.canUndo)
+        assertEquals(choice, viewModel.exportChoice.value)
+    }
+
+    @Test
+    fun secondExportWhileBusy_isIgnored() {
+        openStripedPhoto(1200, 900)
+
+        onMain {
+            viewModel.export(ExportChoice(ExportFormat.JPEG, 90, ExportSize.LongEdge(1080)), ExportTarget.SHARE)
+            viewModel.export(ExportChoice(ExportFormat.PNG), ExportTarget.SHARE)
+        }
+
+        assertEquals("image/jpeg", awaitShare().mimeType)
+        awaitState { it is EditorState.Ready && !it.busy }
+        assertNull(runBlocking { withTimeoutOrNull(1_500) { viewModel.shareRequests.first() } })
+        assertEquals(ExportFormat.JPEG, viewModel.exportChoice.value.format)
+    }
+
+    @Test
+    fun exportWithoutMemory_tellsTheScreen_andKeepsTheDocument() {
+        val opened = openStripedPhoto(600, 400)
+        viewModel.availableMemory = { 0L }
+
+        onMain { viewModel.export(ExportChoice(), ExportTarget.GALLERY) }
+
+        assertEquals(EditorMessage.EXPORT_NOT_ENOUGH_MEMORY, awaitMessage())
+        val after = awaitState { it is EditorState.Ready && !it.busy } as EditorState.Ready
+        assertEquals(opened.revision, after.revision)
+    }
+
+    @Test
+    fun exportToGallery_tellsTheScreen() {
+        openStripedPhoto(600, 400)
+        val startSeconds = System.currentTimeMillis() / 1000
+
+        onMain { viewModel.export(ExportChoice(ExportFormat.JPEG, 80), ExportTarget.GALLERY) }
+
+        assertEquals(EditorMessage.EXPORT_SAVED, awaitMessage())
+        // 테스트가 갤러리에 만든 사진을 찾아 지운다. 하나만 만들었다.
+        assertEquals(1, deleteExportedSince(startSeconds))
+    }
+
+    @Test
+    fun close_whileExporting_staysEmpty_andDropsTheShare() {
+        openStripedPhoto(2000, 1500)
+
+        onMain {
+            viewModel.export(ExportChoice(ExportFormat.PNG), ExportTarget.SHARE)
+            viewModel.close()
+        }
+
+        // 내보내던 것이 끝날 만큼 기다려도 빈 상태이고, 공유 창을 띄우라는 요청도 오지 않는다
+        Thread.sleep(2_000)
+        assertEquals(EditorState.Empty, viewModel.state.value)
+        assertNull(runBlocking { withTimeoutOrNull(500) { viewModel.shareRequests.first() } })
+    }
+
+    /** 갤러리의 사진/Stratum 폴더에 [startSeconds] 뒤에 생긴 사진을 지우고 그 수를 돌려준다. */
+    private fun deleteExportedSince(startSeconds: Long): Int {
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DATE_ADDED} >= ?"
+        return context.contentResolver.delete(collection, selection, arrayOf("Pictures/Stratum/", startSeconds.toString()))
     }
 
     /** 세로줄 사진(한 가지 색이 아니라 회전할 때 타일을 새로 만든다)을 파일로 만들어 연다. */

@@ -49,6 +49,9 @@
     <string name="resize_result">새 크기: %1$d × %2$d px</string>
     <string name="resize_error_too_large">너무 커요. %1$dMP까지 바꿀 수 있어요.</string>
     <string name="edit_not_enough_memory">메모리가 부족해서 편집할 수 없어요.</string>
+    <string name="edit_export_saved">사진/Stratum에 저장했어요.</string>
+    <string name="edit_export_not_enough_memory">메모리가 부족해서 내보내지 못했어요. 더 작은 크기를 골라 보세요.</string>
+    <string name="edit_export_failed">내보내지 못했어요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
 

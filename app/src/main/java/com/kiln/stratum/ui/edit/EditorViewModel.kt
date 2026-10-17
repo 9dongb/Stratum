@@ -19,11 +19,17 @@ import com.kiln.stratum.engine.importing.ImportPlan
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.platform.BlankCanvas
+import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
+import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.export.ExportStorage
+import com.kiln.stratum.export.exportFileName
+import java.io.IOException
+import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -58,8 +64,20 @@ enum class EditorFailure {
 /** 편집 화면에 잠깐 알릴 일. 화면이 알맞은 문구를 골라 알림 막대로 보여 준다. */
 enum class EditorMessage {
     /** 메모리가 부족해 편집하지 못했다. 문서는 그대로다. */
-    EDIT_NOT_ENOUGH_MEMORY
+    EDIT_NOT_ENOUGH_MEMORY,
+
+    /** 갤러리의 사진/Stratum 폴더에 저장했다. */
+    EXPORT_SAVED,
+
+    /** 메모리가 부족해 내보내지 못했다. 더 작은 크기는 될 수 있다. */
+    EXPORT_NOT_ENOUGH_MEMORY,
+
+    /** 파일을 쓰지 못해 내보내지 못했다. */
+    EXPORT_FAILED
 }
+
+/** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
+data class ShareRequest(val uri: Uri, val mimeType: String)
 
 /**
  * 엔진이 그린 축소본 한 장과, 그것이 덮는 문서 영역·단계. 비트맵 픽셀 하나가 문서 픽셀 2^단계개다.
@@ -127,6 +145,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     /** 잠깐 알릴 일. 화면이 하나씩 받아 보여 준다. 화면이 다시 만들어지는 동안 온 것은 기다렸다가 전한다. */
     val messages: Flow<EditorMessage> = _messages.receiveAsFlow()
+
+    private val _shareRequests = Channel<ShareRequest>(Channel.BUFFERED)
+
+    /** 공유 창으로 보낼 사진. 화면이 하나씩 받아 공유 창을 띄운다. 화면이 없는 동안 온 것은 기다렸다가 전한다. */
+    val shareRequests: Flow<ShareRequest> = _shareRequests.receiveAsFlow()
+
+    private val _exportChoice = MutableStateFlow(ExportChoice())
+
+    /** 마지막으로 내보낸 고르기. 내보내기 창이 이것으로 시작한다. 앱을 끌 때까지 남는다(다른 문서를 열어도). */
+    val exportChoice: StateFlow<ExportChoice> = _exportChoice.asStateFlow()
+
+    /** 지금 더 쓸 수 있는 메모리(바이트). 테스트가 메모리 부족을 흉내 낼 수 있게 바꿀 수 있다. */
+    internal var availableMemory: () -> Long = { MemoryBudget.availableBytes(getApplication()) }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
     private var history: EditHistory? = null
@@ -315,6 +346,68 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * 지금 문서를 [choice]대로 [target]에 내보낸다. 문서와 실행 취소 기록은 바꾸지 않는다(CLAUDE.md 5장).
+     * 다른 편집·내보내기를 처리하는 중이면 무시한다(두 번 눌러도 한 번만 된다).
+     *
+     * - 그리기는 축소본을 그리는 일과 같은 잠금 안에서 하고, 압축·쓰기는 그 밖에서 한다.
+     * - 압축까지 메모리가 모자랄 것 같으면 실행 취소 기록은 버리지 않고 알린다. 더 작은 크기는 될 수 있다.
+     * - 갤러리에 저장하면 알리고, 공유면 화면이 공유 창을 띄우게 한다([shareRequests]).
+     * - 홈으로 나가면 취소되고, 쓰다 만 항목·파일은 지워진다. 압축은 중간에 멈추지 못해 끝난 뒤 지운다.
+     */
+    fun export(choice: ExportChoice, target: ExportTarget) {
+        val history = history ?: return
+        if (editing || _state.value !is EditorState.Ready) return
+        _exportChoice.value = choice
+        val document = history.document
+        val settings = choice.settingsFor(PixelSize(document.width, document.height))
+        startEditing()
+        editJob = viewModelScope.launch {
+            val message = try {
+                if (settings.estimatedBytes > availableMemory()) throw NotEnoughMemoryException()
+                val image = renderMutex.withLock {
+                    withContext(Dispatchers.Default) { ImageExporter.render(document, settings) { ensureActive() } }
+                }
+                image.use { write(it, target) }
+            } catch (e: NotEnoughMemoryException) {
+                Log.w(TAG, "Not enough memory to export $settings", e)
+                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to encode $settings", e)
+                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not export $settings", e)
+                EditorMessage.EXPORT_FAILED
+            }
+            finishEditing(message)
+            // 내보내는 동안 멈춘 부분 그림을 다시 계획한다
+            planDetail()
+        }
+    }
+
+    /** 그린 [image]를 압축해 [target]에 쓴다. 갤러리면 알릴 일을 돌려주고, 공유면 공유 요청을 보내고 null을 돌려준다. */
+    private suspend fun write(image: RenderedImage, target: ExportTarget): EditorMessage? {
+        val app = getApplication<Application>()
+        val format = image.settings.format
+        val name = exportFileName(LocalDateTime.now(), format)
+        return when (target) {
+            ExportTarget.GALLERY -> {
+                withContext(Dispatchers.IO) {
+                    ExportStorage.saveToGallery(app, name, format.mimeType) { out -> image.writeTo(out) { ensureActive() } }
+                }
+                EditorMessage.EXPORT_SAVED
+            }
+            ExportTarget.SHARE -> {
+                val uri = withContext(Dispatchers.IO) {
+                    ExportStorage.writeShareFile(app, name) { out -> image.writeTo(out) { ensureActive() } }
+                }
+                // 메인 스레드에서 보낸다. 그사이 문서를 닫았으면 위 withContext가 취소로 끝나 보내지 않는다.
+                _shareRequests.trySend(ShareRequest(uri, format.mimeType))
+                null
+            }
+        }
+    }
+
     /** 한 단계 실행 취소한다. 편집을 처리하는 중이면 무시한다. */
     fun undo() = moveInHistory(step = EditHistory::undo, revert = EditHistory::redo)
 
@@ -376,6 +469,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         detailJob?.cancel()
         editJob?.cancel()
         pendingPhoto = null
+        // 아직 화면이 받지 않은 공유 요청은 버린다. 다음에 편집 화면이 열릴 때 뜬금없이 공유 창이 뜨지 않게 한다.
+        while (_shareRequests.tryReceive().isSuccess) Unit
         release()
         _state.value = EditorState.Empty
     }
