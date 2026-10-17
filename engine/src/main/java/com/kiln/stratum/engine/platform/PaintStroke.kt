@@ -1,0 +1,125 @@
+package com.kiln.stratum.engine.platform
+
+import android.graphics.Bitmap
+import android.graphics.Picture
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.brush.StrokeDabs
+import com.kiln.stratum.engine.brush.StrokePoint
+import com.kiln.stratum.engine.command.CancellableCommand
+import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.raster.TileGrid
+import com.kiln.stratum.engine.raster.TileKey
+
+/**
+ * [layerId] 레이어에 브러시 획 하나를 그린다([erase]면 지운다). 원본 해상도에 바로 그린다(결정 기록 '원본 픽셀').
+ *
+ * 획이 닿는 타일만 새로 만들고 나머지는 앞 문서와 함께 쓴다. 빈 자리를 지우면 그대로 비워 둔다.
+ * 타일은 안드로이드 소프트웨어 그리기로 만든다(결정 기록 '브러시 기록은 안드로이드 내부 그리기'). 획이 닿지 않은 픽셀은 값이 그대로다.
+ * 없는 레이어거나 문서에 닿지 않는 획이면 문서를 그대로 돌려준다.
+ */
+data class PaintStroke(
+    val layerId: LayerId,
+    val dabs: List<StrokePoint>,
+    val settings: BrushSettings,
+    val erase: Boolean
+) : CancellableCommand {
+
+    override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
+        val index = document.indexOfLayer(layerId)
+        if (index < 0) return document
+        val layer = document.layers[index]
+        val raster = (layer.content as? RasterContent)?.raster ?: return document
+        val size = PixelSize(document.width, document.height)
+        val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return document
+        val painted = try {
+            BrushTiles.paint(raster, size, bounds, dabs, settings, erase, checkCanceled)
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        if (painted === raster) return document
+        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted))) }
+        return document.copy(layers = layers)
+    }
+
+    /** 획이 닿는 타일마다 새 타일 한 장(지우개는 있는 타일만) */
+    override fun estimateNewBytes(document: Document): Long {
+        val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return 0L
+        val raster = (layer.content as? RasterContent)?.raster ?: return 0L
+        val bounds = StrokeDabs.bounds(dabs, settings.radius, PixelSize(document.width, document.height)) ?: return 0L
+        val keys = BrushTiles.keysIn(bounds)
+        val count = if (erase) keys.count { it in raster.tiles } else keys.size
+        return count.toLong() * TILE_SIZE * TILE_SIZE * Int.SIZE_BYTES
+    }
+}
+
+/** 브러시 획을 타일에 그린다(소프트웨어). */
+internal object BrushTiles {
+
+    /** [bounds]에 닿는 타일 자리 */
+    fun keysIn(bounds: PixelRect): List<TileKey> {
+        val keys = ArrayList<TileKey>()
+        for (row in bounds.top / TILE_SIZE..(bounds.bottom - 1) / TILE_SIZE) {
+            for (column in bounds.left / TILE_SIZE..(bounds.right - 1) / TILE_SIZE) keys += TileKey(column, row)
+        }
+        return keys
+    }
+
+    /**
+     * [raster]의 [bounds] 안 타일에 획을 그린 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다.
+     * 타일마다 그 타일에 닿는 자국만 그린다. [checkCanceled]는 타일 사이마다 부른다.
+     */
+    fun paint(
+        raster: Raster,
+        size: PixelSize,
+        bounds: PixelRect,
+        dabs: List<StrokePoint>,
+        settings: BrushSettings,
+        erase: Boolean,
+        checkCanceled: () -> Unit
+    ): Raster {
+        val grid = TileGrid(size.width, size.height)
+        val reach = settings.radius + 1f
+        val changes = HashMap<TileKey, Tile?>()
+        // 힙에 담긴 타일(테스트·작은 데이터)은 그리는 동안만 비트맵으로 바꿔 쓴다
+        val temporary = ArrayList<Bitmap>()
+        try {
+            for (key in keysIn(bounds)) {
+                checkCanceled()
+                val old = raster.tiles[key]
+                // 빈 자리는 지울 것이 없다
+                if (old == null && erase) continue
+                val tile = grid.bounds(key)
+                val near = dabs.filter {
+                    it.x + reach >= tile.left && it.x - reach <= tile.left + tile.width &&
+                        it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
+                }
+                if (near.isEmpty()) continue
+                val picture = Picture()
+                val canvas = picture.beginRecording(tile.width, tile.height)
+                if (old != null) canvas.drawBitmap(CanvasTileComposer.bitmapOf(old, temporary), 0f, 0f, CanvasTileComposer.CopyPaint)
+                BrushPainter.drawStroke(
+                    canvas, near, settings, erase,
+                    scale = 1f,
+                    left = tile.left.toFloat(),
+                    top = tile.top.toFloat(),
+                    width = tile.width.toFloat(),
+                    height = tile.height.toFloat()
+                )
+                picture.endRecording()
+                // GPU 전용 내용이 없어 소프트웨어로 그리고, 바꿀 수 없는 비트맵 하나로 돌려준다(CanvasTileComposer와 같다)
+                changes[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
+            }
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
+        }
+        return if (changes.isEmpty()) raster else raster.withTiles(changes)
+    }
+}

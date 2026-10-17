@@ -2,18 +2,26 @@ package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
+import android.graphics.BlendMode
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.Shader
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewLevels
+import com.kiln.stratum.engine.preview.PreviewRegion
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.TileGrid
+import com.kiln.stratum.engine.raster.TileKey
 import java.util.IdentityHashMap
 import kotlin.math.roundToInt
 
@@ -45,27 +53,60 @@ class LayerPreviewCache {
     var layerRenders = 0
         private set
 
+    /** 레이어 축소본을 바뀐 곳만 고쳐 그린 횟수(브러시 획을 기록한 뒤 등). 테스트가 확인한다. */
+    var layerPatches = 0
+        private set
+
+    /** 마지막으로 그린 문서의 레이어마다의 래스터. 다음에 픽셀이 조금만 바뀌면 바뀐 곳만 고쳐 그리는 데 쓴다. */
+    private val lastRasters = HashMap<LayerId, Raster>()
+
     /**
      * [document]를 [level] 단계(1/2^level)로 그린 하드웨어 비트맵. 크기는 문서 전체 축소본과 같다.
      * 보이는 레이어(불투명도가 0보다 큼)만 아래부터 합친다. GPU가 그리지 못하면 null.
      * [checkCanceled]는 레이어 사이마다 부른다.
+     *
+     * [strokes]가 있으면 끄는 동안의(또는 기록을 기다리는) 브러시 획을 그 레이어 축소본 위에 차례로 그려 합친다(기록 전 미리 보기).
+     * 레이어의 픽셀이 조금만 바뀌었으면(브러시 획을 기록한 뒤) 앞 축소본에서 바뀐 타일 자리만 다시 그린다.
      */
-    fun render(document: Document, level: Int, checkCanceled: () -> Unit = {}): Bitmap? {
+    fun render(
+        document: Document,
+        level: Int,
+        strokes: List<LiveStroke> = emptyList(),
+        checkCanceled: () -> Unit = {}
+    ): Bitmap? {
         val size = PixelSize(document.width, document.height)
         val region = PreviewLevels.wholeRegion(size, level)
         val visible = document.layers.filter { it.opacity > 0f }
+        // 앞 축소본을 고쳐 쓸 수 있게, 놓아 주기 전에 붙잡아 둔다
+        val previous = HashMap<LayerId, Bitmap>()
+        for (layer in document.layers) {
+            val last = lastRasters[layer.id] ?: continue
+            if (last !== rasterOf(layer)) entries[last]?.takeIf { it.level == level }?.let { previous[layer.id] = it.bitmap }
+        }
         // 지금 문서에 없는 래스터와 다른 단계의 축소본은 놓아 준다(화면이 아직 그리고 있을 수 있어 recycle하지 않는다).
         // 숨긴(불투명도 0) 레이어의 축소본은 작은 그림에 쓰므로 남긴다.
+        val lastByLayer = HashMap(lastRasters)
         forget(document, level)
+        lastRasters.clear()
+        for (layer in document.layers) lastRasters[layer.id] = rasterOf(layer)
 
         val previews = ArrayList<Pair<Layer, Bitmap>>()
         for (layer in visible) {
             checkCanceled()
             val raster = rasterOf(layer)
-            // 빈 레이어는 그릴 것이 없다
-            if (raster.tiles.isEmpty()) continue
-            val bitmap = entries[raster]?.bitmap ?: renderLayer(size, raster, level)?.also { entries[raster] = Entry(level, it) }
-                ?: return null
+            val layerStrokes = strokes.filter { it.layerId == layer.id }
+            val stroking = layerStrokes.isNotEmpty()
+            // 빈 레이어는 그릴 것이 없다(끄는 획이 있으면 투명한 바탕에 그린다)
+            if (raster.tiles.isEmpty() && !stroking) continue
+            val base = if (raster.tiles.isEmpty()) {
+                null
+            } else {
+                entries[raster]?.bitmap
+                    ?: patchFrom(size, lastByLayer[layer.id], previous[layer.id], raster, level)?.also { entries[raster] = Entry(level, it) }
+                    ?: renderLayer(size, raster, level)?.also { entries[raster] = Entry(level, it) }
+                    ?: return null
+            }
+            val bitmap = if (stroking) strokeOver(base, region, layerStrokes) ?: return null else checkNotNull(base)
             previews += layer to bitmap
         }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
@@ -113,6 +154,7 @@ class LayerPreviewCache {
     fun clear() {
         entries.clear()
         thumbnails.clear()
+        lastRasters.clear()
     }
 
     /** [document]에 없는 래스터의 축소본·작은 그림과, [level]이 아닌 단계의 축소본을 놓아 준다. */
@@ -150,6 +192,76 @@ class LayerPreviewCache {
         return thumbnail
     }
 
+    /**
+     * 같은 레이어의 앞 래스터 [last]와 그 축소본 [lastPreview]로 [raster]의 축소본을 고쳐 만든다. 고쳐 쓸 수 없으면 null.
+     * 앞 래스터가 비어 있었으면(새 레이어에 처음 그림) 투명한 바탕에서 고친다.
+     */
+    private fun patchFrom(size: PixelSize, last: Raster?, lastPreview: Bitmap?, raster: Raster, level: Int): Bitmap? =
+        when {
+            last == null -> null
+            lastPreview != null -> patch(size, last, lastPreview, raster, level)
+            last.tiles.isEmpty() -> patch(size, last, null, raster, level)
+            else -> null
+        }
+
+    /**
+     * [raster]가 [previous]에서 바뀐 타일 자리만 다시 그려 [previousPreview](없으면 투명)를 고친 축소본. 바뀐 것이 없으면 [previousPreview] 그대로다.
+     * 타일의 절반 넘게 바뀌었으면 통째로 다시 그리는 편이 낫다고 보고 null을 돌려준다. GPU가 그리지 못해도 null이다.
+     * 영역은 단계 격자에 맞춰 그려 전체를 그린 것과 픽셀이 같다(PreviewRenderer.renderRegion).
+     */
+    private fun patch(size: PixelSize, previous: Raster, previousPreview: Bitmap?, raster: Raster, level: Int): Bitmap? {
+        val dirty = HashSet<TileKey>()
+        for ((key, tile) in raster.tiles) if (previous.tiles[key] !== tile) dirty += key
+        for (key in previous.tiles.keys) if (key !in raster.tiles) dirty += key
+        if (dirty.isEmpty()) return previousPreview
+        val grid = TileGrid(size.width, size.height)
+        if (dirty.size * 2 > grid.columns * grid.rows) return null
+        val rect = PixelRect(
+            dirty.minOf { it.column } * TILE_SIZE,
+            dirty.minOf { it.row } * TILE_SIZE,
+            minOf((dirty.maxOf { it.column } + 1) * TILE_SIZE, size.width),
+            minOf((dirty.maxOf { it.row } + 1) * TILE_SIZE, size.height)
+        )
+        val area = PreviewLevels.region(size, level, rect) ?: return previousPreview
+        val whole = PreviewLevels.wholeRegion(size, level)
+        val repaint = PreviewRenderer.renderRegion(Document.create(size.width, size.height, "", raster), area) ?: return null
+        try {
+            val picture = Picture()
+            val canvas = picture.beginRecording(whole.previewWidth, whole.previewHeight)
+            if (previousPreview != null) canvas.drawBitmap(previousPreview, 0f, 0f, null)
+            canvas.drawBitmap(repaint, area.previewLeft.toFloat(), area.previewTop.toFloat(), Paint().apply { blendMode = BlendMode.SRC })
+            picture.endRecording()
+            layerPatches++
+            return PreviewRenderer.drawOnGpu(picture, whole.previewWidth, whole.previewHeight)
+        } finally {
+            repaint.recycle()
+        }
+    }
+
+    /**
+     * 그림 [image](문서의 [region] 부분을 그 단계로 그린 것, 없으면 투명) 위에 획들 [strokes]를 차례로 그린 그림(GPU).
+     * 레이어 축소본 위에 그리거나(합치기 전), 쉬운 경우에는 확대 그림 위에 바로 그린다(맨 위 표준 레이어에 그릴 때, ViewModel이 고른다).
+     */
+    fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>): Bitmap? {
+        val width = region.previewWidth
+        val height = region.previewHeight
+        val picture = Picture()
+        val canvas = picture.beginRecording(width, height)
+        if (image != null) canvas.drawBitmap(image, 0f, 0f, null)
+        for (stroke in strokes) {
+            BrushPainter.drawStroke(
+                canvas, stroke.dabs, stroke.settings, stroke.erase,
+                scale = 1f / (1 shl region.level),
+                left = region.rect.left.toFloat(),
+                top = region.rect.top.toFloat(),
+                width = width.toFloat(),
+                height = height.toFloat()
+            )
+        }
+        picture.endRecording()
+        return PreviewRenderer.drawOnGpu(picture, width, height)
+    }
+
     /** [raster] 하나만 담은 문서(불투명도 1, 표준, 보정 없음)의 축소본 */
     private fun renderLayer(size: PixelSize, raster: Raster, level: Int): Bitmap? {
         layerRenders++
@@ -166,3 +278,9 @@ class LayerPreviewCache {
         const val THUMBNAIL_EDGE = 128
     }
 }
+
+/**
+ * 끄는 동안의 브러시 획(기록 전). [LayerPreviewCache.render]가 [layerId] 레이어 축소본 위에 그려 미리 보인다.
+ * [dabs]는 그리는 동안 바뀌지 않는 목록이어야 한다(끄는 쪽이 복사해 넘긴다).
+ */
+class LiveStroke(val layerId: LayerId, val dabs: List<StrokePoint>, val settings: BrushSettings, val erase: Boolean)
