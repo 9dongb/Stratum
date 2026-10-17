@@ -60,6 +60,9 @@
 
 - 실행 직후 캡처는 까맣게 나올 수 있다. 3~5초 기다린다.
 - 캡처: `adb exec-out screencap -p > screen.png`
+- 화면 테스트 안에서 찍기(예: 두 손가락으로 확대한 화면): `InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()`을 앱 폴더(`getExternalFilesDir`)에 PNG로 저장하고 `adb pull`로 받는다(2026-10-17).
+  - 테스트가 끝나면 앱이 지워지면서 앱 폴더도 지워진다. `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`를 붙여 돌리고, 받은 뒤 `adb uninstall com.kiln.stratum.test`, `adb uninstall com.kiln.stratum`으로 지운다.
+  - 두 손가락 조작 바로 뒤에 찍으면 조작 전 화면이 찍힌다(그래픽을 CPU로 그려 느림). 1초쯤 기다린 뒤 찍는다.
 - 화면 구성 읽기(`uiautomator dump`)는 화면이 바뀌는 중에 실패하고, 그러면 예전 파일이 대신 읽힌다.
   - 매번 예전 파일을 지운다(기기 쪽 기본 위치: `/sdcard/window_dump.xml`).
   - 실패하면 다시 시도한다.
