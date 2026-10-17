@@ -52,7 +52,7 @@ internal object CanvasTileComposer : TileComposer {
     }
 
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */
-    private fun bitmapOf(tile: Tile, temporary: MutableList<Bitmap>): Bitmap =
+    internal fun bitmapOf(tile: Tile, temporary: MutableList<Bitmap>): Bitmap =
         when (val pixels = tile.pixels) {
             is BitmapTilePixels -> pixels.bitmap
             is HeapTilePixels ->
@@ -65,7 +65,7 @@ internal object CanvasTileComposer : TileComposer {
      * 그대로 베끼는 붓. `Paint()`와 `Paint(0)`도 비트맵 필터가 켜져 있어서(SDK 소스로 확인) 직접 끈다.
      * 대상은 처음에 투명하고 조각이 겹치지 않으므로, 원본을 그대로 쓴다(SRC).
      */
-    private val CopyPaint = Paint().apply {
+    internal val CopyPaint = Paint().apply {
         isAntiAlias = false
         isFilterBitmap = false
         isDither = false

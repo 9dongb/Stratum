@@ -27,6 +27,17 @@ class Raster private constructor(
         return Raster(updated)
     }
 
+    /** [rect](픽셀 좌표)에 걸친 타일이 하나라도 있는지. 없으면 그 영역은 완전 투명이다. */
+    fun hasTilesIn(rect: PixelRect): Boolean {
+        if (rect.width == 0 || rect.height == 0) return false
+        for (row in rect.top / TILE_SIZE..(rect.bottom - 1) / TILE_SIZE) {
+            for (column in rect.left / TILE_SIZE..(rect.right - 1) / TILE_SIZE) {
+                if (tiles.containsKey(TileKey(column, row))) return true
+            }
+        }
+        return false
+    }
+
     companion object {
         /** 타일이 하나도 없는(완전 투명한) 래스터. */
         val EMPTY = Raster(emptyMap())

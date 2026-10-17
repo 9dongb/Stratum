@@ -104,18 +104,28 @@ internal object ImageResizer {
         return first.takeIf { tile -> raster.tiles.values.all { it === tile } }
     }
 
-    /** 대상 묶음 [block]을 그린 소프트웨어 비트맵(대상 픽셀 크기). GPU가 그리지 못하면 null. */
-    private fun renderBlock(single: Document, plan: ResizePlan, block: PixelRect, sourceRect: PixelRect): Bitmap? {
+    /**
+     * 대상 묶음 [block]을 그린 소프트웨어 비트맵(대상 픽셀 크기). GPU가 그리지 못하면 null.
+     * [document]의 보이는 레이어를 모두 합성해 그린다(크기 변경은 레이어 하나만 담은 문서, 내보내기는 문서 전체).
+     * [background]가 있으면 그 색 바탕 위에 얹는다(JPEG로 내보낼 때의 흰 바탕).
+     */
+    internal fun renderBlock(
+        document: Document,
+        plan: ResizePlan,
+        block: PixelRect,
+        sourceRect: PixelRect,
+        background: Int? = null
+    ): Bitmap? {
         val fine = minOf(plan.levelX, plan.levelY)
         val coarse = maxOf(plan.levelX, plan.levelY)
         // 더 거친 단계의 격자에 맞춰 두어야, 한 축만 더 반으로 줄일 때도 두 픽셀 짝이 문서 전체와 같다
         val snapped = checkNotNull(PreviewLevels.region(plan.source, coarse, sourceRect)) { "Empty source for $block" }
         val region = PreviewRegion(fine, snapped.rect)
-        var level = PreviewRenderer.renderRegion(single, region) ?: return null
+        var level = PreviewRenderer.renderRegion(document, region) ?: return null
         try {
             repeat(plan.levelX - fine) { level = halve(level, horizontal = true) ?: return null }
             repeat(plan.levelY - fine) { level = halve(level, horizontal = false) ?: return null }
-            return resample(level, plan, block, region.rect)
+            return resample(level, plan, block, region.rect, background)
         } finally {
             level.recycle()
         }
@@ -131,8 +141,9 @@ internal object ImageResizer {
     /**
      * 반씩 줄인 원본 [level](문서 [sourceRect]를 그린 것)을 바이큐빅으로 보간해 대상 묶음 [block]을 그리고 GPU에서 읽어 온다.
      * 대상 픽셀 가운데 (x + 0.5)는 원본 x / 배율이고, 반씩 줄인 단계에서는 그것을 2^단계로 나눈 자리다.
+     * [background]가 있으면 먼저 칠하고 그 위에 얹는다. 없으면 보간한 값을 그대로 쓴다.
      */
-    private fun resample(level: Bitmap, plan: ResizePlan, block: PixelRect, sourceRect: PixelRect): Bitmap? {
+    private fun resample(level: Bitmap, plan: ResizePlan, block: PixelRect, sourceRect: PixelRect, background: Int?): Bitmap? {
         val perPixelX = 1.0 / (plan.scaleX * (1 shl plan.levelX))
         val perPixelY = 1.0 / (plan.scaleY * (1 shl plan.levelY))
         val shader = RuntimeShader(BICUBIC).apply {
@@ -151,9 +162,10 @@ internal object ImageResizer {
         }
         val picture = Picture()
         val canvas = picture.beginRecording(block.width, block.height)
+        if (background != null) canvas.drawColor(background)
         canvas.drawRect(0f, 0f, block.width.toFloat(), block.height.toFloat(), Paint().apply {
             this.shader = shader
-            blendMode = BlendMode.SRC
+            blendMode = if (background != null) BlendMode.SRC_OVER else BlendMode.SRC
         })
         picture.endRecording()
         // GPU 전용 내용이라 하드웨어 비트맵으로 그린 뒤 직접 읽어 온다. 둘 다 실패하면 null이다(SDK 소스로 확인).
@@ -179,16 +191,6 @@ internal object ImageResizer {
                 into[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, bounds.width, bounds.height, Bitmap.Config.ARGB_8888)))
             }
         }
-    }
-
-    /** [rect]에 걸친 타일이 하나라도 있는지 */
-    private fun Raster.hasTilesIn(rect: PixelRect): Boolean {
-        for (row in rect.top / TILE_SIZE..(rect.bottom - 1) / TILE_SIZE) {
-            for (column in rect.left / TILE_SIZE..(rect.right - 1) / TILE_SIZE) {
-                if (tiles.containsKey(TileKey(column, row))) return true
-            }
-        }
-        return false
     }
 
     /** 그대로 베끼는 붓(필터·안티에일리어싱 끔). `Paint()`도 비트맵 필터가 켜져 있어 직접 끈다. */

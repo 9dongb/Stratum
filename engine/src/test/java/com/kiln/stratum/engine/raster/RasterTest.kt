@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RasterTest {
@@ -88,6 +89,19 @@ class RasterTest {
         assertSame(tileB, edited.tiles[b])
         // 원래 래스터는 그대로다
         assertSame(tileA, original.tiles[a])
+    }
+
+    @Test
+    fun hasTilesIn_looksOnlyAtOverlappingPlaces() {
+        val raster = Raster.EMPTY.withTiles(mapOf(TileKey(1, 0) to solidTile(0xFF0000FF.toInt())))
+
+        assertTrue(raster.hasTilesIn(PixelRect(256, 0, 257, 1)))
+        // 왼쪽 타일에서 시작해 오른쪽 타일로 걸친다
+        assertTrue(raster.hasTilesIn(PixelRect(200, 100, 300, 200)))
+        assertFalse(raster.hasTilesIn(PixelRect(0, 0, 256, 256)))
+        assertFalse(raster.hasTilesIn(PixelRect(256, 256, 512, 512)))
+        // 빈 사각형
+        assertFalse(raster.hasTilesIn(PixelRect(300, 10, 300, 20)))
     }
 
     @Test
