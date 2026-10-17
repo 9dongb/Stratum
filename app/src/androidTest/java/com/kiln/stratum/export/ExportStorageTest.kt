@@ -109,6 +109,18 @@ class ExportStorageTest {
     }
 
     @Test
+    fun viewIntent_opensThePhotoWithReadAccess() {
+        val uri = Uri.parse("content://media/external/images/media/42")
+
+        val intent = ExportStorage.viewIntent(uri, "image/png")
+
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(uri, intent.data)
+        assertEquals("image/png", intent.type)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+    }
+
+    @Test
     fun shareChooser_sendsThePhotoWithReadAccess() {
         val uri = ExportStorage.writeShareFile(context, "Stratum_share.jpg") { it.write(byteArrayOf(9)) }
 

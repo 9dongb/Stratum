@@ -87,6 +87,12 @@ object ExportStorage {
     /** 공유 파일 주소의 이름(매니페스트의 ShareFileProvider와 같다) */
     fun shareAuthority(context: Context): String = context.packageName + ".share"
 
+    /** 갤러리에 저장한 [uri] 사진을 사진 앱으로 여는 요청. 받는 앱에 읽기 권한을 준다. */
+    fun viewIntent(uri: Uri, mimeType: String): Intent =
+        Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, mimeType)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
     /**
      * [uri] 사진을 다른 앱으로 보내는 안드로이드 공유 창.
      * 받는 앱에 읽기 권한을 직접 준다(공유 창의 미리보기도 이것으로 읽는다).

@@ -17,6 +17,7 @@
     <string name="action_apply">Apply</string>
     <string name="action_share">Share</string>
     <string name="action_save">Save</string>
+    <string name="action_view">View</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">Background</string>

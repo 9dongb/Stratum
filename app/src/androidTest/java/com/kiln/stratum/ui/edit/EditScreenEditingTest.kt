@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -86,8 +87,18 @@ class EditScreenEditingTest {
 
     @Test
     fun message_showsInTheSnackbar() {
-        show(ready(), messages = flowOf(EditorMessage.EDIT_NOT_ENOUGH_MEMORY))
+        show(ready(), messages = flowOf(EditorMessage.EditNotEnoughMemory))
 
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_not_enough_memory)).assertIsDisplayed()
+    }
+
+    @Test
+    fun exportSaved_offersToViewTheCopy() {
+        val saved = EditorMessage.ExportSaved(Uri.parse("content://media/external/images/media/1"), "image/jpeg")
+
+        show(ready(), messages = flowOf(saved))
+
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_export_saved)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.action_view)).assertIsDisplayed()
     }
 }

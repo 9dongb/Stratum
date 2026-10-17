@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import android.content.ActivityNotFoundException
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -358,20 +361,31 @@ private fun EditCanvas(
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val notEnoughMemory = stringResource(R.string.edit_not_enough_memory)
     val exportSaved = stringResource(R.string.edit_export_saved)
     val exportNotEnoughMemory = stringResource(R.string.edit_export_not_enough_memory)
     val exportFailed = stringResource(R.string.edit_export_failed)
+    val view = stringResource(R.string.action_view)
     LaunchedEffect(messages) {
         // 하나씩 보이고, 사라진 뒤 다음 것을 보인다
         messages.collect { message ->
-            val text = when (message) {
-                EditorMessage.EDIT_NOT_ENOUGH_MEMORY -> notEnoughMemory
-                EditorMessage.EXPORT_SAVED -> exportSaved
-                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY -> exportNotEnoughMemory
-                EditorMessage.EXPORT_FAILED -> exportFailed
+            when (message) {
+                is EditorMessage.ExportSaved -> {
+                    // 저장한 사본을 사진 앱으로 바로 열어 볼 수 있게 한다
+                    val result = snackbarHostState.showSnackbar(exportSaved, actionLabel = view, duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) {
+                        try {
+                            context.startActivity(ExportStorage.viewIntent(message.uri, message.mimeType))
+                        } catch (e: ActivityNotFoundException) {
+                            // 사진 앱이 없으면 아무것도 하지 않는다
+                        }
+                    }
+                }
+                EditorMessage.EditNotEnoughMemory -> snackbarHostState.showSnackbar(notEnoughMemory)
+                EditorMessage.ExportNotEnoughMemory -> snackbarHostState.showSnackbar(exportNotEnoughMemory)
+                EditorMessage.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
             }
-            snackbarHostState.showSnackbar(text)
         }
     }
     Box(

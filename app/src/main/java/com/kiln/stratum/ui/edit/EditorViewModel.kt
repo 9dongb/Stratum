@@ -62,18 +62,22 @@ enum class EditorFailure {
 }
 
 /** 편집 화면에 잠깐 알릴 일. 화면이 알맞은 문구를 골라 알림 막대로 보여 준다. */
-enum class EditorMessage {
-    /** 메모리가 부족해 편집하지 못했다. 문서는 그대로다. */
-    EDIT_NOT_ENOUGH_MEMORY,
+sealed interface EditorMessage {
 
-    /** 갤러리의 사진/Stratum 폴더에 저장했다. */
-    EXPORT_SAVED,
+    /** 메모리가 부족해 편집하지 못했다. 문서는 그대로다. */
+    data object EditNotEnoughMemory : EditorMessage
+
+    /**
+     * 갤러리의 사진/Stratum 폴더에 사본([uri])을 저장했다. 원본 사진은 그대로다.
+     * 화면은 '보기'로 그 사본을 바로 열어 볼 수 있게 한다.
+     */
+    data class ExportSaved(val uri: Uri, val mimeType: String) : EditorMessage
 
     /** 메모리가 부족해 내보내지 못했다. 더 작은 크기는 될 수 있다. */
-    EXPORT_NOT_ENOUGH_MEMORY,
+    data object ExportNotEnoughMemory : EditorMessage
 
     /** 파일을 쓰지 못해 내보내지 못했다. */
-    EXPORT_FAILED
+    data object ExportFailed : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -330,7 +334,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             } catch (e: NotEnoughMemoryException) {
                 Log.w(TAG, "Not enough memory for $command", e)
-                finishEditing(EditorMessage.EDIT_NOT_ENOUGH_MEMORY)
+                finishEditing(EditorMessage.EditNotEnoughMemory)
                 return@launch
             }
             if (!history.commit(command, before, after)) {
@@ -341,7 +345,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (!showPreview(after, finishEdit = true)) {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
-                finishEditing(EditorMessage.EDIT_NOT_ENOUGH_MEMORY)
+                finishEditing(EditorMessage.EditNotEnoughMemory)
             }
         }
     }
@@ -371,13 +375,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 image.use { write(it, target) }
             } catch (e: NotEnoughMemoryException) {
                 Log.w(TAG, "Not enough memory to export $settings", e)
-                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY
+                EditorMessage.ExportNotEnoughMemory
             } catch (e: OutOfMemoryError) {
                 Log.w(TAG, "Not enough memory to encode $settings", e)
-                EditorMessage.EXPORT_NOT_ENOUGH_MEMORY
+                EditorMessage.ExportNotEnoughMemory
             } catch (e: IOException) {
                 Log.w(TAG, "Could not export $settings", e)
-                EditorMessage.EXPORT_FAILED
+                EditorMessage.ExportFailed
             }
             finishEditing(message)
             // 내보내는 동안 멈춘 부분 그림을 다시 계획한다
@@ -392,10 +396,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val name = exportFileName(LocalDateTime.now(), format)
         return when (target) {
             ExportTarget.GALLERY -> {
-                withContext(Dispatchers.IO) {
+                val uri = withContext(Dispatchers.IO) {
                     ExportStorage.saveToGallery(app, name, format.mimeType) { out -> image.writeTo(out) { ensureActive() } }
                 }
-                EditorMessage.EXPORT_SAVED
+                EditorMessage.ExportSaved(uri, format.mimeType)
             }
             ExportTarget.SHARE -> {
                 val uri = withContext(Dispatchers.IO) {
@@ -425,7 +429,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editJob = viewModelScope.launch {
             if (!showPreview(document, finishEdit = true)) {
                 revert(history)
-                finishEditing(EditorMessage.EDIT_NOT_ENOUGH_MEMORY)
+                finishEditing(EditorMessage.EditNotEnoughMemory)
             }
         }
     }

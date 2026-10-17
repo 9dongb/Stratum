@@ -196,7 +196,7 @@ class EditorViewModelTest {
 
         onMain { viewModel.edit(OutOfMemoryCommand) }
 
-        assertEquals(EditorMessage.EDIT_NOT_ENOUGH_MEMORY, runBlocking { withTimeout(10_000) { viewModel.messages.first() } })
+        assertEquals(EditorMessage.EditNotEnoughMemory, runBlocking { withTimeout(10_000) { viewModel.messages.first() } })
         val after = awaitState { it is EditorState.Ready && !it.busy } as EditorState.Ready
         assertEquals(opened.revision, after.revision)
         assertFalse(after.canUndo)
@@ -265,7 +265,7 @@ class EditorViewModelTest {
 
         onMain { viewModel.export(ExportChoice(), ExportTarget.GALLERY) }
 
-        assertEquals(EditorMessage.EXPORT_NOT_ENOUGH_MEMORY, awaitMessage())
+        assertEquals(EditorMessage.ExportNotEnoughMemory, awaitMessage())
         val after = awaitState { it is EditorState.Ready && !it.busy } as EditorState.Ready
         assertEquals(opened.revision, after.revision)
     }
@@ -277,10 +277,67 @@ class EditorViewModelTest {
 
         onMain { viewModel.export(ExportChoice(ExportFormat.JPEG, 80), ExportTarget.GALLERY) }
 
-        assertEquals(EditorMessage.EXPORT_SAVED, awaitMessage())
+        val saved = awaitMessage() as EditorMessage.ExportSaved
+        assertEquals("image/jpeg", saved.mimeType)
         // 테스트가 갤러리에 만든 사진을 찾아 지운다. 하나만 만들었다.
         assertEquals(1, deleteExportedSince(startSeconds))
     }
+
+    @Test
+    fun exportToGallery_keepsTheOpenedPhoto_andAddsACopy() {
+        // 갤러리에 원본 사진을 하나 넣고, 사진 선택기로 고른 것처럼 그 주소로 연다
+        val pixels = IntArray(300 * 200) { if (it % 300 < 150) Color.RED else Color.BLUE }
+        val png = java.io.ByteArrayOutputStream().also {
+            check(Bitmap.createBitmap(pixels, 300, 200, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it))
+        }.toByteArray()
+        val resolver = context.contentResolver
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val original = checkNotNull(resolver.insert(collection, android.content.ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "StratumOriginal_${System.nanoTime()}.png")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/StratumTest")
+        }))
+        val startSeconds = System.currentTimeMillis() / 1000
+        try {
+            checkNotNull(resolver.openOutputStream(original)).use { it.write(png) }
+            // 갤러리가 새 파일을 훑어 수정 시각을 적을 때까지 기다린다(바로 읽으면 0이다)
+            val deadline = System.currentTimeMillis() + 10_000
+            while (dateModified(original) == 0L && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            val modifiedBefore = dateModified(original)
+            assertTrue(modifiedBefore > 0)
+            onMain { viewModel.openPhoto(original) }
+            awaitState(readyWithSize(300, 200))
+
+            onMain { viewModel.export(ExportChoice(ExportFormat.JPEG, 90), ExportTarget.GALLERY) }
+            val saved = awaitMessage() as EditorMessage.ExportSaved
+
+            // 원본 파일은 내용도 수정 시각도 그대로다
+            org.junit.Assert.assertArrayEquals(png, checkNotNull(resolver.openInputStream(original)).use { it.readBytes() })
+            assertEquals(modifiedBefore, dateModified(original))
+            // 사본은 사진/Stratum 폴더에 따로 하나 생겼다
+            val copies = checkNotNull(resolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DATE_ADDED} >= ?",
+                arrayOf("Pictures/Stratum/", startSeconds.toString()),
+                null
+            )).use { cursor -> List(cursor.count) { cursor.moveToPosition(it); cursor.getLong(0) } }
+            assertEquals(1, copies.size)
+            assertTrue(copies.single() != android.content.ContentUris.parseId(original))
+            // 알림의 '보기'는 그 사본을 연다
+            assertEquals(copies.single(), android.content.ContentUris.parseId(saved.uri))
+        } finally {
+            resolver.delete(original, null, null)
+            deleteExportedSince(startSeconds)
+        }
+    }
+
+    /** 갤러리 항목의 수정 시각(초) */
+    private fun dateModified(uri: Uri): Long =
+        checkNotNull(context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATE_MODIFIED), null, null, null)).use {
+            check(it.moveToFirst())
+            it.getLong(0)
+        }
 
     @Test
     fun close_whileExporting_staysEmpty_andDropsTheShare() {
