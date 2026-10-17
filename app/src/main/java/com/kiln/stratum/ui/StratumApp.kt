@@ -45,9 +45,8 @@ fun StratumApp(editor: EditorViewModel) {
             onOpenPhoto = {
                 pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },
-            // 새 캔버스 시트는 다음 작업이다. 지금은 빈 편집 화면으로 이동만 한다.
-            onNewCanvas = {
-                editor.close()
+            onCreateCanvas = { width, height, fill ->
+                editor.newCanvas(width, height, fill)
                 screen = AppScreen.Edit
             }
         )

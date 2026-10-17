@@ -43,7 +43,7 @@ class HomeScreenHingeTest {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(841.dp, 701.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { HomeScreen(onOpenPhoto = {}, onNewCanvas = {}) }
+                    StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _ -> }) }
                 }
             }
         }

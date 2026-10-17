@@ -37,6 +37,32 @@
     <string name="panel_expand">Expand panel</string>
     <string name="panel_collapse">Collapse panel</string>
 
+    <!-- 새 캔버스 창. 프리셋 이름은 짧게, 크기·비율은 숫자 형식이다. -->
+    <string name="new_canvas_title">New canvas</string>
+    <string name="new_canvas_size">Size</string>
+    <string name="new_canvas_background">Background</string>
+    <string name="preset_square">Square</string>
+    <string name="preset_portrait">Portrait</string>
+    <string name="preset_story">Story · Shorts</string>
+    <string name="preset_landscape">Landscape</string>
+    <string name="preset_photo">Photo</string>
+    <string name="preset_fold8_cover">Fold8 cover wallpaper</string>
+    <string name="preset_fold8_main">Fold8 main wallpaper</string>
+    <!-- %1$d:%2$d는 비율, %3$d × %4$d는 픽셀 크기다. -->
+    <string name="new_canvas_preset_detail_ratio">%1$d:%2$d · %3$d × %4$d px</string>
+    <string name="new_canvas_preset_detail">%1$d × %2$d px</string>
+    <string name="new_canvas_width">Width</string>
+    <string name="new_canvas_height">Height</string>
+    <string name="new_canvas_px">px</string>
+    <string name="new_canvas_swap">Swap width and height</string>
+    <string name="new_canvas_background_white">White</string>
+    <string name="new_canvas_background_black">Black</string>
+    <string name="new_canvas_background_transparent">Transparent</string>
+    <!-- %1$d는 한 변의 최대 픽셀 수, 아래 %1$d는 최대 화소 수(MP)다. -->
+    <string name="new_canvas_error_range">Enter a width and height from 1 to %1$d px.</string>
+    <string name="new_canvas_error_too_large">Too large. You can make a canvas of up to %1$d MP.</string>
+    <string name="new_canvas_create">Create</string>
+
     <!-- 큰 사진 선택 창. %1$d는 화소 수(MP)다. -->
     <string name="large_photo_title">Large photo</string>
     <string name="large_photo_message">This photo is %1$d MP. Opening it at full size uses a lot of memory and can be slow. Opening it smaller doesn\'t change the original file.</string>
