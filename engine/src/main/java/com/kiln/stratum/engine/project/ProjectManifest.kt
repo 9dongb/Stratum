@@ -1,6 +1,11 @@
 package com.kiln.stratum.engine.project
 
+import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.adjust.CurvePoint
+import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -36,13 +41,14 @@ data class ProjectManifest(
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
 }
 
-/** 레이어 하나의 속성과 내용 */
+/** 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에 적고, 보정이 없으면 적지 않는다. */
 data class LayerEntry(
     val id: Long,
     val name: String,
     val opacity: Float,
     val blendMode: BlendMode,
-    val content: ContentEntry
+    val content: ContentEntry,
+    val adjustments: Adjustments = Adjustments.NONE
 )
 
 /** 레이어 내용. 나중에 텍스트 같은 종류가 더해진다. */
@@ -87,6 +93,9 @@ object ProjectManifestCodec {
     private const val MAGIC = 0x5354524D
 
     private const val CONTENT_RASTER = 1
+
+    /** 레이어 덧붙임 꼬리표: 기본 보정 값 */
+    private const val EXTRA_ADJUSTMENTS = 1
     private const val TILE_FILE: Byte = 0
     private const val TILE_SOLID: Byte = 1
 
@@ -126,8 +135,13 @@ object ProjectManifestCodec {
                     }
                 }
             }
-            // 레이어 덧붙임(아직 없음)
-            out.writeInt(0)
+            // 레이어 덧붙임: 보정 값(있을 때만)
+            if (layer.adjustments.isIdentity) {
+                out.writeInt(0)
+            } else {
+                out.writeInt(1)
+                writeExtra(out, EXTRA_ADJUSTMENTS, adjustmentBytes(layer.adjustments))
+            }
         }
         // 문서 덧붙임(아직 없음)
         out.writeInt(0)
@@ -160,10 +174,11 @@ object ProjectManifestCodec {
                     )
                     else -> throw UnreadableProjectException("Unknown layer content $type")
                 }
-                data.skipExtras()
-                LayerEntry(id, name, opacity, blendMode, content)
+                var adjustments = Adjustments.NONE
+                data.readExtras { tag, bytes -> if (tag == EXTRA_ADJUSTMENTS) adjustments = adjustmentsOf(bytes) }
+                LayerEntry(id, name, opacity, blendMode, content, adjustments)
             }
-            data.skipExtras()
+            data.readExtras { _, _ -> }
             return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken project: ${e.message}")
@@ -192,12 +207,58 @@ object ProjectManifestCodec {
     private fun DataInputStream.readCount(): Int =
         readInt().also { if (it < 0) throw UnreadableProjectException("Broken count $it") }
 
-    /** 덧붙임을 건너뛴다. 이 판에서 아는 꼬리표가 아직 없다. */
-    private fun DataInputStream.skipExtras() {
+    /** 덧붙임들을 읽어 [onExtra]에 넘긴다. 모르는 꼬리표는 받는 쪽이 그냥 지나친다. */
+    private fun DataInputStream.readExtras(onExtra: (tag: Int, bytes: ByteArray) -> Unit) {
         repeat(readCount()) {
-            readInt()
-            val length = readCount()
-            skipBytes(length).also { if (it != length) throw UnreadableProjectException("Broken extra") }
+            val tag = readInt()
+            val bytes = ByteArray(readCount())
+            readFully(bytes)
+            onExtra(tag, bytes)
+        }
+    }
+
+    private fun writeExtra(out: DataOutputStream, tag: Int, bytes: ByteArray) {
+        out.writeInt(tag)
+        out.writeInt(bytes.size)
+        out.write(bytes)
+    }
+
+    /** 보정 값: 실수 7개(노출, 색온도, 그림자, 하이라이트, 밝기, 대비, 채도), 곡선 점 수와 점들(x, y) */
+    private fun adjustmentBytes(adjustments: Adjustments): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeFloat(adjustments.exposure)
+            out.writeFloat(adjustments.temperature)
+            out.writeFloat(adjustments.shadows)
+            out.writeFloat(adjustments.highlights)
+            out.writeFloat(adjustments.brightness)
+            out.writeFloat(adjustments.contrast)
+            out.writeFloat(adjustments.saturation)
+            out.writeInt(adjustments.curve.points.size)
+            for (point in adjustments.curve.points) {
+                out.writeFloat(point.x)
+                out.writeFloat(point.y)
+            }
+            out.flush()
+        }.toByteArray()
+
+    private fun adjustmentsOf(bytes: ByteArray): Adjustments {
+        val data = DataInputStream(ByteArrayInputStream(bytes))
+        try {
+            val values = FloatArray(7) { data.readFloat() }
+            val points = List(data.readCount()) { CurvePoint(data.readFloat(), data.readFloat()) }
+            return Adjustments(
+                exposure = values[0],
+                temperature = values[1],
+                shadows = values[2],
+                highlights = values[3],
+                brightness = values[4],
+                contrast = values[5],
+                saturation = values[6],
+                curve = ToneCurve(points)
+            )
+        } catch (e: IllegalArgumentException) {
+            throw UnreadableProjectException("Broken adjustments: ${e.message}")
         }
     }
 

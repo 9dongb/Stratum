@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.command
 
+import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
@@ -67,6 +68,18 @@ data class SetLayerBlendMode(val layerId: LayerId, val blendMode: BlendMode) : E
     override fun applyTo(document: Document): Document =
         document.updateLayer(layerId) { layer ->
             if (layer.blendMode == blendMode) layer else layer.copy(blendMode = blendMode)
+        }
+}
+
+/**
+ * [layerId] 레이어의 기본 보정 값을 [adjustments]로 바꾼다(비파괴: 픽셀은 그대로 두고 값만 기록한다).
+ * 없는 레이어이거나 값이 같으면 그대로 둔다.
+ */
+data class SetLayerAdjustments(val layerId: LayerId, val adjustments: Adjustments) : EditCommand {
+    override fun applyTo(document: Document): Document =
+        document.updateLayer(layerId) { layer ->
+            val normalized = adjustments.normalized()
+            if (layer.adjustments == normalized) layer else layer.copy(adjustments = normalized)
         }
 }
 

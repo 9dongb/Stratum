@@ -1,5 +1,7 @@
 package com.kiln.stratum.engine.document
 
+import com.kiln.stratum.engine.adjust.Adjustments
+
 import com.kiln.stratum.engine.raster.Raster
 
 /**
@@ -37,13 +39,15 @@ data class RasterContent(val raster: Raster) : LayerContent
  *
  * @property name 화면에 보이는 이름. 엔진은 문구를 만들지 않으므로 앱이 strings.xml에서 만들어 넘긴다.
  * @property opacity 불투명도. 0(투명)부터 1(불투명)까지.
+ * @property adjustments 기본 보정 값(비파괴). 픽셀은 그대로 두고 그릴 때 이 값대로 보정한다.
  */
 data class Layer(
     val id: LayerId,
     val name: String,
     val content: LayerContent,
     val opacity: Float = 1f,
-    val blendMode: BlendMode = BlendMode.NORMAL
+    val blendMode: BlendMode = BlendMode.NORMAL,
+    val adjustments: Adjustments = Adjustments.NONE
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }

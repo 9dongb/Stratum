@@ -1,5 +1,8 @@
 package com.kiln.stratum.engine.project
 
+import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.adjust.CurvePoint
+import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -7,6 +10,7 @@ import java.io.DataOutputStream
 import java.io.EOFException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProjectManifestTest {
@@ -105,5 +109,17 @@ class ProjectManifestTest {
         // 쓰다 만 파일(끝이 잘림)도 읽지 않는다
         val cut = bytesOf(manifest).copyOf(40)
         assertThrows(EOFException::class.java) { ProjectManifestCodec.read(ByteArrayInputStream(cut)) }
+    }
+
+    @Test
+    fun adjustments_roundTrip_andNoneWritesNothingExtra() {
+        val curve = ToneCurve(listOf(CurvePoint(0f, 0.05f), CurvePoint(0.4f, 0.5f), CurvePoint(1f, 0.95f)))
+        val adjusted = manifest.copy(
+            layers = listOf(manifest.layers[0].copy(adjustments = Adjustments(exposure = -0.5f, saturation = 0.3f, curve = curve)), manifest.layers[1])
+        )
+
+        assertEquals(adjusted, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(adjusted))))
+        // 보정이 없는 레이어는 덧붙임을 쓰지 않아 크기가 그대로다
+        assertTrue(bytesOf(adjusted).size > bytesOf(manifest).size)
     }
 }

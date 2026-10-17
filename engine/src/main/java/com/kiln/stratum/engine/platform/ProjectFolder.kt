@@ -78,7 +78,7 @@ class ProjectFolder(val directory: File) {
                 checkCanceled()
                 TileEntry(key.column, key.row, refOf(tile, referenced))
             }
-            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles))
+            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments)
         }
         val manifest = ProjectManifest(
             width = document.width,
@@ -125,7 +125,7 @@ class ProjectFolder(val directory: File) {
                 }
             }
             try {
-                Layer(LayerId(entry.id), entry.name, RasterContent(Raster.EMPTY.withTiles(tiles)), entry.opacity, entry.blendMode)
+                Layer(LayerId(entry.id), entry.name, RasterContent(Raster.EMPTY.withTiles(tiles)), entry.opacity, entry.blendMode, entry.adjustments)
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")
             }

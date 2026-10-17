@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.command
 
+import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
@@ -152,5 +153,21 @@ class LayerCommandsTest {
 
         assertSame(document, SetLayerBlendMode(LayerId(0), BlendMode.NORMAL).applyTo(document))
         assertSame(document, SetLayerBlendMode(LayerId(9), BlendMode.SCREEN).applyTo(document))
+    }
+
+    @Test
+    fun setAdjustments_recordsValuesOnly() {
+        val document = documentWithLayers(2)
+        val warm = Adjustments(temperature = 0.5f, exposure = 0.3f)
+
+        val adjusted = SetLayerAdjustments(LayerId(1), warm).applyTo(document)
+
+        assertEquals(warm, adjusted.layers[1].adjustments)
+        // 픽셀(래스터)은 그대로 함께 쓴다
+        assertSame((document.layers[1].content as RasterContent).raster, (adjusted.layers[1].content as RasterContent).raster)
+        // 같은 값(-0 포함)이면 문서를 그대로 돌려준다
+        assertSame(adjusted, SetLayerAdjustments(LayerId(1), warm).applyTo(adjusted))
+        assertSame(document, SetLayerAdjustments(LayerId(0), Adjustments(contrast = -0f)).applyTo(document))
+        assertSame(document, SetLayerAdjustments(LayerId(9), warm).applyTo(document))
     }
 }
