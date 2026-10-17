@@ -90,3 +90,45 @@ fun HingeSplitRow(
         }
     }
 }
+
+/**
+ * 하나를 왼쪽 위 구석([margin]만큼 안쪽)에 놓되, 힌지의 띠(양쪽 [HingeMargin])에 걸리면 비켜 놓는다.
+ * 세로 힌지에 걸리면 띠 오른쪽으로, 가로 힌지에 걸리면 띠 아래로 옮긴다.
+ *
+ * 받은 영역을 다 차지하지만 터치는 받지 않아서, 아래에 깔린 캔버스 조작을 막지 않는다.
+ * 배치하는 순간 자기 위치를 읽어 한 프레임 늦지 않는다([HingeAvoidingColumn]과 같다).
+ */
+@Composable
+fun HingeAvoidingTopStart(
+    modifier: Modifier = Modifier,
+    margin: Dp = 0.dp,
+    content: @Composable () -> Unit
+) {
+    val hinges = LocalHinges.current
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val placeable = measurables.single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val marginPx = margin.roundToPx()
+        val hingeMarginPx = HingeMargin.roundToPx()
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            var x = marginPx
+            var y = marginPx
+            // 정렬선을 재는 단계에서는 위치를 몰라(null) 구석에 놓고, 곧 이어지는 배치에서 다시 놓는다
+            val origin = coordinates?.positionInWindow()
+            if (origin != null) {
+                val left = origin.x.roundToInt() + marginPx
+                val top = origin.y.roundToInt() + marginPx
+                x += stackAvoiding(
+                    listOf(placeable.width),
+                    gap = 0,
+                    bands = hinges.filter { it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-left) }
+                ).single()
+                y += stackAvoiding(
+                    listOf(placeable.height),
+                    gap = 0,
+                    bands = hinges.filter { !it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-top) }
+                ).single()
+            }
+            placeable.place(x, y)
+        }
+    }
+}

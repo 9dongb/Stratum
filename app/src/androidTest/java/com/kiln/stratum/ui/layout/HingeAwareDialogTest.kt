@@ -73,9 +73,11 @@ class HingeAwareDialogTest {
 
     private fun card(): Rect = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
 
-    /** 화면 테스트의 밀도로 바꾼 힌지 띠 너비(양쪽 [HingeMargin])의 반. */
+    /** 띠의 반쪽 폭. 화면 루트가 아니라 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다. */
     private fun marginPx(): Int =
-        with(composeRule.onRoot().fetchSemanticsNode().layoutInfo.density) { HingeMargin.roundToPx() }
+        with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
+            HingeMargin.roundToPx()
+        }
 
     @Test
     fun noHinge_centersCardHorizontally() {

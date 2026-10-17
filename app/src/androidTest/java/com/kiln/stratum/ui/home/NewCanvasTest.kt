@@ -127,7 +127,10 @@ class NewCanvasTest {
 
         composeRule.assertClickablesAvoid(hinge)
         val card = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-        val margin = with(composeRule.onRoot().fetchSemanticsNode().layoutInfo.density) { HingeMargin.roundToPx() }
+        // 띠의 반쪽 폭은 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다
+        val margin = with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
+            HingeMargin.roundToPx()
+        }
         assertTrue("card $card is not right of the band", card.left >= centerX + margin)
     }
 
@@ -143,7 +146,10 @@ class NewCanvasTest {
 
         composeRule.assertClickablesAvoid(hinge)
         val card = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-        val margin = with(composeRule.onRoot().fetchSemanticsNode().layoutInfo.density) { HingeMargin.roundToPx() }
+        // 띠의 반쪽 폭은 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다
+        val margin = with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
+            HingeMargin.roundToPx()
+        }
         assertTrue("card $card is not above the band", card.bottom <= centerY - margin)
         // 창 높이가 화면 반쪽으로 줄어도 '만들기'는 보인다
         composeRule.onNodeWithTag(NewCanvasTags.CREATE).assertExists()

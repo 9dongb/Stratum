@@ -23,8 +23,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     6. 비율 표시(누르면 맞춤)
     7. 선명하게 다시 그리기
     8. 에뮬레이터 확인, 자기 검토, 기록
-  - 한 일: 계획 승인, 1~5단계
-  - 남은 일: 6~8단계
+  - 한 일: 계획 승인, 1~6단계
+  - 남은 일: 7~8단계
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -168,6 +168,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - M3 `Surface`는 자기 아래 형제에게 가는 터치는 막지만, 부모의 터치 처리는 막지 않는다. 바깥을 눌러 닫는 바탕은 카드의 부모가 아니라 형제로 깐다(`HingeAwareDialog`).
 - Compose 화면 테스트는 Espresso 3.7.0 이상이 필요하다. 3.5.1은 API 37에서 없어진 `InputManager.getInstance`를 불러, 화면 테스트가 모두 바로 실패한다.
 - 화면 테스트의 화면 크기는 `DeviceConfigurationOverride.ForcedSize`로 정한다. 정한 크기가 기기 화면보다 크면 밀도를 낮춰 맞추므로, 테스트에서 dp를 픽셀로 바꿀 때는 노드의 밀도(`layoutInfo.density`)를 쓴다.
+  - 화면 루트(`onRoot`)는 강제 크기 바깥이라 기기 밀도 그대로다. 강제 크기 안쪽 노드의 밀도를 쓴다.
+- 화면 테스트에서 노드의 `layoutInfo.coordinates`는 모든 Modifier 안쪽, 곧 눈에 보이는 부분이다. Material 버튼의 48dp 최소 터치 영역은 그 바깥이므로, 힌지 검사는 `touchBoundsInWindow`로 48dp까지 넓혀 본다(`HingeAssertions.kt`).
 
 ## 확인 방법
 

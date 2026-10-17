@@ -176,7 +176,11 @@ private fun EditCanvas(
             EditorState.Empty, is EditorState.AskSize -> Unit
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
-            is EditorState.Ready -> CanvasViewport(state, viewState, Modifier.fillMaxSize())
+            is EditorState.Ready -> {
+                CanvasViewport(state, viewState, Modifier.fillMaxSize())
+                // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다.
+                CanvasZoomChip(viewState, Modifier.fillMaxSize())
+            }
             is EditorState.Failed -> Text(
                 text = stringResource(
                     when (state.reason) {
