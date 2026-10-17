@@ -1,11 +1,20 @@
 package com.kiln.stratum.engine.history
 
 import com.kiln.stratum.engine.command.AddLayer
+import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.documentWithLayers
+import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
+import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.raster.TileGrid
+import com.kiln.stratum.engine.raster.TileKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -156,5 +165,110 @@ class EditHistoryTest {
     @Test
     fun init_rejectsMaxUndoStepsBelowOne() {
         assertThrows(IllegalArgumentException::class.java) { EditHistory(documentWithLayers(1), maxUndoSteps = 0) }
+    }
+
+    /** 타일 한 장의 메모리(바이트). */
+    private val tileBytes = (TILE_PIXEL_COUNT * 4).toLong()
+
+    /** 가로 타일 4장짜리 캔버스. 처음에는 한 가지 색 타일 [solid] 한 장을 모든 자리가 함께 쓴다. */
+    private val solid = Tile.solid(0xFFFFFFFF.toInt())
+    private val canvas = Document.create(4 * TILE_SIZE, TILE_SIZE, "Background", Raster.filled(TileGrid(4 * TILE_SIZE, TILE_SIZE), solid))
+
+    private fun newTile(): Tile = Tile.of(IntArray(TILE_PIXEL_COUNT))
+
+    /** 레이어 0의 [key] 자리를 [tile]로 바꾸는 테스트용 명령. 칠하기처럼 그 자리만 새 타일이 된다. */
+    private data class PutTile(val key: TileKey, val tile: Tile) : EditCommand {
+        override fun applyTo(document: Document): Document {
+            val layer = document.layers[0]
+            val raster = (layer.content as RasterContent).raster.withTiles(mapOf(key to tile))
+            return document.copy(layers = listOf(layer.copy(content = RasterContent(raster))) + document.layers.drop(1))
+        }
+    }
+
+    @Test
+    fun bytesInUse_countsEachTileObjectOnce() {
+        val history = EditHistory(canvas)
+        // 네 자리가 함께 쓰는 한 장
+        assertEquals(tileBytes, history.bytesInUse)
+
+        history.execute(PutTile(TileKey(1, 0), newTile()))
+        history.execute(PutTile(TileKey(2, 0), newTile()))
+
+        // 한 가지 색 한 장과 새로 칠한 두 장. 이전 문서들과 함께 쓰는 타일은 한 번만 센다.
+        assertEquals(3 * tileBytes, history.bytesInUse)
+    }
+
+    @Test
+    fun maxBytes_dropsOldestStepsFirst() {
+        val history = EditHistory(canvas, maxBytes = 3 * tileBytes)
+        val first = newTile()
+        val second = newTile()
+        history.execute(PutTile(TileKey(0, 0), first))
+        history.execute(PutTile(TileKey(0, 0), second))
+        // 같은 자리를 세 번째로 칠하면 타일 네 장(한 가지 색, 첫째, 둘째, 셋째)이 되어 한도를 넘는다
+        history.execute(PutTile(TileKey(0, 0), newTile()))
+
+        // 첫째 타일을 쓰는 가장 오래된 두 단계를 버려 세 장으로 줄인다
+        assertEquals(3 * tileBytes, history.bytesInUse)
+        assertTrue(history.undo())
+        assertSame(second, (history.document.layers[0].content as RasterContent).raster.tiles[TileKey(0, 0)])
+        assertFalse(history.canUndo)
+    }
+
+    @Test
+    fun maxBytes_keepsTheCurrentDocumentEvenIfTooLarge() {
+        val history = EditHistory(canvas, maxBytes = 0)
+        val tile = newTile()
+
+        assertTrue(history.execute(PutTile(TileKey(3, 0), tile)))
+
+        assertSame(tile, (history.document.layers[0].content as RasterContent).raster.tiles[TileKey(3, 0)])
+        assertFalse(history.canUndo)
+    }
+
+    @Test
+    fun commit_recordsResultComputedElsewhere() {
+        val history = EditHistory(canvas)
+        val command = PutTile(TileKey(0, 0), newTile())
+        val before = history.document
+        // 무거운 편집은 다른 스레드에서 계산한다
+        val after = command.applyTo(before)
+
+        assertTrue(history.commit(command, before, after))
+
+        assertSame(after, history.document)
+        assertSame(command, history.undoCommand)
+    }
+
+    @Test
+    fun commit_ignoresLateResult() {
+        val history = EditHistory(canvas)
+        val command = PutTile(TileKey(0, 0), newTile())
+        val before = history.document
+        val after = command.applyTo(before)
+        // 계산하는 동안 다른 편집이 먼저 기록됐다
+        history.execute(makeHalfTransparent)
+        val current = history.document
+
+        assertFalse(history.commit(command, before, after))
+
+        assertSame(current, history.document)
+        assertSame(makeHalfTransparent, history.undoCommand)
+    }
+
+    @Test
+    fun releaseOldSteps_dropsOldestUndoStepsButKeepsRedo() {
+        val history = EditHistory(canvas)
+        repeat(3) { history.execute(PutTile(TileKey(0, 0), newTile())) }
+        history.undo()
+        val current = history.document
+
+        val remaining = history.releaseOldSteps(targetBytes = 3 * tileBytes)
+
+        // 한 가지 색, 지금 문서의 타일, 다시 실행할 타일 세 장만 남는다
+        assertEquals(3 * tileBytes, remaining)
+        assertSame(current, history.document)
+        assertFalse(history.canUndo)
+        assertTrue(history.canRedo)
     }
 }
