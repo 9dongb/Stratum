@@ -34,7 +34,7 @@ enum class SubTool(
 }
 
 /**
- * 1단계 편집 도구(CLAUDE.md 8장). 자르기·변형, 조정, 레이어가 켜져 있고, 나머지는 기능이 생길 때까지 비활성이다.
+ * 1단계 편집 도구(CLAUDE.md 8장). 모두 켜져 있다.
  * 2·3단계 도구(반창고·제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
@@ -59,9 +59,13 @@ enum class EditTool(
     ),
     /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
     Adjust(R.drawable.ic_tune, R.string.tool_adjust, available = true),
-    Brush(R.drawable.ic_brush, R.string.tool_brush),
-    Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser),
-    Text(R.drawable.ic_text_fields, R.string.tool_text),
+    /** 브러시. 고르면 캔버스를 한 손가락으로 끌어 고른 레이어에 그린다. */
+    Brush(R.drawable.ic_brush, R.string.tool_brush, available = true),
+
+    /** 지우개. 브러시와 같은 모양으로 고른 레이어를 지운다(투명하게). */
+    Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser, available = true),
+    /** 글자. 고르면 캔버스를 눌러 그 자리에 글자 레이어를 더한다. */
+    Text(R.drawable.ic_text_fields, R.string.tool_text, available = true),
     /** 레이어. 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
     Layers(R.drawable.ic_layers, R.string.tool_layers, available = true);
 

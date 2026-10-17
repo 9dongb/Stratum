@@ -55,6 +55,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
@@ -95,6 +97,11 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param adjust 보정 패널이 보내는 일(미리 보기·기록)
  * @param liveOpacity 불투명도 슬라이더를 끄는 동안의 값(없으면 null). 레이어 패널만 읽도록 함수로 받는다.
  * @param layerActions 레이어 패널이 보내는 일(고르기·더하기·지우기·옮기기·불투명도·혼합 모드)
+ * @param brush 브러시 설정, [onBrush]로 바꾼다
+ * @param eraser 지우개 설정, [onEraser]로 바꾼다
+ * @param strokeActions 브러시·지우개를 고른 채 캔버스를 끌 때 보내는 일
+ * @param textStyle 글자 모양, [onTextStyle]로 바꾼다
+ * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위)
  */
 @Composable
 fun EditScreen(
@@ -114,7 +121,15 @@ fun EditScreen(
     liveAdjustments: () -> Adjustments? = { null },
     adjust: AdjustActions = AdjustActions.None,
     liveOpacity: () -> Float? = { null },
-    layerActions: LayerActions = LayerActions.None
+    layerActions: LayerActions = LayerActions.None,
+    brush: BrushSettings = BrushSettings(),
+    onBrush: (BrushSettings) -> Unit = {},
+    eraser: BrushSettings = BrushSettings(),
+    onEraser: (BrushSettings) -> Unit = {},
+    strokeActions: StrokeActions = StrokeActions.None,
+    textStyle: TextStyle = TextStyle(),
+    onTextStyle: (TextStyle) -> Unit = {},
+    onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> }
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -149,6 +164,13 @@ fun EditScreen(
         } else {
             selection.choose(subTool)
         }
+    }
+    // 글자를 넣을 자리(문서 좌표 x, y)와 그때의 문서 크기. 글자 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
+    var textAt by rememberSaveable { mutableStateOf<List<Float>?>(null) }
+    // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다(누른 자리가 맞지 않는다)
+    LaunchedEffect(ready?.documentSize) {
+        val size = ready?.documentSize
+        if (textAt?.let { it[2].toInt() != size?.width || it[3].toInt() != size.height } == true) textAt = null
     }
     // 내보내기 창에서 고르던 것. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
@@ -203,6 +225,13 @@ fun EditScreen(
         val layerControls = ready?.let {
             LayerControls(it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions)
         }
+        // 고른 브러시·지우개의 설정
+        val brushControls = when (activeTool) {
+            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush)
+            EditTool.Eraser -> BrushControls(eraser, erase = true, onChange = onEraser)
+            else -> null
+        }
+        val textControls = TextControls(textStyle, onTextStyle).takeIf { activeTool == EditTool.Text }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -214,7 +243,9 @@ fun EditScreen(
                     adjust = adjustControls,
                     adjustItem = adjustItem,
                     onAdjustItem = { adjustItem = it },
-                    layers = layerControls
+                    layers = layerControls,
+                    brush = brushControls,
+                    text = textControls
                 )
             }
         }
@@ -222,9 +253,26 @@ fun EditScreen(
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
         val railToolTitle = toolTitle?.takeIf { railTool != null }
         val railToolOptions = toolOptions?.takeIf { railTool != null }
-        // 자르기 중에는 캔버스 위에 테두리를 겹친다
+        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개를 고르면 그리는 터치 자리를 겹친다
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
+            if (ready != null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
+                StrokeOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    erase = activeTool == EditTool.Eraser,
+                    actions = strokeActions,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && activeTool == EditTool.Text) {
+                TextOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    onTap = { x, y -> textAt = listOf(x, y, ready.documentSize.width.toFloat(), ready.documentSize.height.toFloat()) },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             if (cropMode && frame != null && ready != null) {
                 CropOverlay(
                     frame = frame,
@@ -325,6 +373,18 @@ fun EditScreen(
                 onApply = { width, height ->
                     onEdit(ResizeImage(width, height))
                     resizeInput = null
+                }
+            )
+        }
+        val place = textAt
+        if (place != null && ready != null) {
+            TextPrompt(
+                widthClass = widthClass,
+                busy = ready.busy,
+                onDismiss = { textAt = null },
+                onAdd = { text ->
+                    onAddText(text, place[0], place[1])
+                    textAt = null
                 }
             )
         }

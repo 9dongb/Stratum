@@ -156,4 +156,16 @@
     <string name="blend_overlay">Overlay</string>
     <string name="section_expand">Expand %1$s</string>
     <string name="section_collapse">Collapse %1$s</string>
+
+    <!-- 브러시·지우개 -->
+    <string name="brush_size">Size</string>
+    <string name="brush_size_value">%1$d px</string>
+    <string name="brush_hardness">Hardness</string>
+    <string name="brush_color">Color %1$d, %2$s</string>
+
+    <!-- 글자 -->
+    <string name="text_hint">Tap the canvas where the text should start (its top-left corner).</string>
+    <string name="text_prompt_title">Add text</string>
+    <string name="text_prompt_label">Text</string>
+    <string name="action_add">Add</string>
 </resources>

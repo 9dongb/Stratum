@@ -73,6 +73,9 @@ fun StratumApp(editor: EditorViewModel) {
             // 끄는 동안 자주 바뀌므로 State로 받아 두고, 보정 패널만 읽게 한다
             val liveAdjustments = editor.liveAdjustments.collectAsState()
             val liveOpacity = editor.liveOpacity.collectAsState()
+            val brush by editor.brush.collectAsState()
+            val eraser by editor.eraser.collectAsState()
+            val textStyle by editor.textStyle.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -89,7 +92,15 @@ fun StratumApp(editor: EditorViewModel) {
                 liveAdjustments = { liveAdjustments.value },
                 adjust = editor.adjustActions,
                 liveOpacity = { liveOpacity.value },
-                layerActions = editor.layerActions
+                layerActions = editor.layerActions,
+                brush = brush,
+                onBrush = editor::setBrush,
+                eraser = eraser,
+                onEraser = editor::setEraser,
+                strokeActions = editor.strokeActions,
+                textStyle = textStyle,
+                onTextStyle = editor::setTextStyle,
+                onAddText = editor::addText
             )
         }
     }

@@ -39,6 +39,17 @@ object EditScreenTags {
     const val SIDE_ADJUST = "sideAdjust"
     const val SIDE_LAYERS = "sideLayers"
     const val LAYER_PANEL = "layerPanel"
+    const val BRUSH_OPTIONS = "brushOptions"
+    const val BRUSH_SIZE = "brushSize"
+    const val BRUSH_HARDNESS = "brushHardness"
+    const val BRUSH_OPACITY = "brushOpacity"
+    const val BRUSH_COLORS = "brushColors"
+    const val STROKE_OVERLAY = "strokeOverlay"
+    const val TEXT_OPTIONS = "textOptions"
+    const val TEXT_SIZE = "textSize"
+    const val TEXT_OVERLAY = "textOverlay"
+    const val TEXT_FIELD = "textField"
+    const val TEXT_ADD = "textAdd"
     const val LAYER_LIST = "layerList"
     const val LAYER_ADD = "layerAdd"
     const val LAYER_DELETE = "layerDelete"
@@ -70,6 +81,9 @@ object EditScreenTags {
 
     /** 레이어 줄의 순서 손잡이 */
     fun layerHandle(id: com.kiln.stratum.engine.document.LayerId): String = "layerHandle_${id.value}"
+
+    /** 브러시 색 줄의 [index]번째 색 */
+    fun brushColor(index: Int): String = "brushColor_$index"
 
     /** 혼합 모드 메뉴의 [mode] 항목 */
     fun blendMode(mode: com.kiln.stratum.engine.document.BlendMode): String = "blendMode_${mode.name}"

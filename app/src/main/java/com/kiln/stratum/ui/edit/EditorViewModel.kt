@@ -11,6 +11,9 @@ import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.brush.StrokeDabs
+import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.DeleteLayer
@@ -32,13 +35,17 @@ import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LiveStroke
+import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
 import com.kiln.stratum.project.ProjectInfo
@@ -273,6 +280,61 @@ class EditorViewModel(
         override fun preview(change: (Adjustments) -> Adjustments) = previewAdjustments(change)
         override fun commit() = commitLive()
         override fun record(change: (Adjustments) -> Adjustments) = recordAdjustments(change)
+    }
+
+    private val _brush = MutableStateFlow(BrushSettings())
+
+    /** 브러시 설정(크기·단단함·불투명도·색). 앱을 끌 때까지 남는다(다른 문서를 열어도). */
+    val brush: StateFlow<BrushSettings> = _brush.asStateFlow()
+
+    private val _eraser = MutableStateFlow(BrushSettings(size = 60f, hardness = 0.7f))
+
+    /** 지우개 설정(색은 쓰지 않는다). 브러시와 따로 기억한다. */
+    val eraser: StateFlow<BrushSettings> = _eraser.asStateFlow()
+
+    private val _textStyle = MutableStateFlow(TextStyle())
+
+    /**
+     * 글자 모양(크기·색). 앱을 끌 때까지 남는다. 크기를 직접 고르기 전에는 문서를 열 때마다 문서에 알맞은 크기(짧은 변의 6%)로 맞춘다.
+     */
+    val textStyle: StateFlow<TextStyle> = _textStyle.asStateFlow()
+
+    /** 글자 크기를 직접 골랐는지 */
+    private var textSizeChosen = false
+
+    /** 획 하나: 그릴 레이어, 설정, 지우개인지, 지금까지 놓은 자국 */
+    private class Stroke(val layer: LayerId, val settings: BrushSettings, val erase: Boolean) {
+        val dabs = StrokeDabs(settings.spacing)
+
+        /** 그리는 동안 바뀌지 않는 미리 보기용 사본 */
+        fun live(): LiveStroke = LiveStroke(layer, ArrayList(dabs.dabs), settings, erase)
+    }
+
+    /** 끄는 중인 획 */
+    private var drawing: Stroke? = null
+
+    /** 손을 뗐지만 아직 기록하지 못한 획(앞에서부터 하나씩 기록한다). 미리 보기에는 그대로 보인다. */
+    private val queuedStrokes = ArrayList<Stroke>()
+
+    /** 획을 기록하는 편집을 처리하는 중인지. 그동안에도 다음 획은 그릴 수 있다. */
+    private var strokeCommitting = false
+
+    /** 획들을 그리기 전의 확대 그림. 쉬운 경우(맨 위 표준 레이어에 그릴 때) 끄는 동안 그 위에 획을 얹어 선명하게 보인다. */
+    private var detailBeforeStroke: PreviewImage? = null
+
+    /** [detailBeforeStroke] 뒤로 그린 획들(기록한 것도). 확대 그림 위에 차례로 얹는다. */
+    private val detailStrokes = ArrayList<Stroke>()
+
+    /** 획 미리 보기를 그리는 작업과, 그사이 자국이 더해졌는지 */
+    private var strokeJob: Job? = null
+    private var strokeDirty = false
+
+    /** 캔버스의 브러시·지우개 손가락이 보내는 일 */
+    val strokeActions: StrokeActions = object : StrokeActions {
+        override fun begin(x: Float, y: Float, erase: Boolean) = beginStroke(StrokePoint(x, y), erase)
+        override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
+        override fun end() = endStroke()
+        override fun cancel() = cancelStroke()
     }
 
     /** 레이어 패널이 보내는 일 */
@@ -530,6 +592,82 @@ class EditorViewModel(
         edit(SetLayerBlendMode(layer.id, mode))
     }
 
+    /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */
+    fun setTextStyle(style: TextStyle) {
+        if (style.size != _textStyle.value.size) textSizeChosen = true
+        _textStyle.value = style
+    }
+
+    /**
+     * [text]를 그린 새 레이어를 고른 레이어 바로 위에 더하고 그 레이어를 고른다(실행 취소 한 단계).
+     * 글자 상자의 왼쪽 위가 문서 좌표 ([x], [y])다. 레이어 이름은 글자의 첫 줄(앞 20자)이다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun addText(text: String, x: Float, y: Float) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || drawing != null || text.isBlank()) return
+        val firstLine = text.trim().lineSequence().first().trim()
+        val name = if (firstLine.length > 20) firstLine.take(20) + "…" else firstLine
+        runEdit(
+            AddTextLayer(text.take(TextStyle.MAX_LENGTH), x, y, _textStyle.value, name, activeIndexIn(document) + 1),
+            select = LayerId(document.nextLayerId)
+        )
+    }
+
+    /** 글자 크기를 아직 고르지 않았으면 [document]에 알맞은 크기로 맞춘다(짧은 변의 6%) */
+    private fun fitTextSize(document: Document) {
+        if (textSizeChosen) return
+        val size = (minOf(document.width, document.height) * 0.06f).coerceIn(TextStyle.MIN_SIZE, TextStyle.MAX_SIZE)
+        _textStyle.value = _textStyle.value.copy(size = kotlin.math.round(size))
+    }
+
+    /** 브러시 설정을 바꾼다. 다음 획부터 쓴다(기록하지 않는다). */
+    fun setBrush(settings: BrushSettings) {
+        _brush.value = settings
+    }
+
+    /** 지우개 설정을 바꾼다. 다음 획부터 쓴다. */
+    fun setEraser(settings: BrushSettings) {
+        _eraser.value = settings
+    }
+
+    /**
+     * 고른 레이어에 획을 그리기 시작한다([erase]면 지우개). 손가락을 떼면([endStroke]) 실행 취소 한 단계로 기록한다.
+     * 앞 획을 기록하는 동안에도 그릴 수 있다(차례로 기록한다). 다른 종류의 편집을 처리하는 중이거나 슬라이더를 끄는 중이면 무시한다.
+     */
+    fun beginStroke(point: StrokePoint, erase: Boolean) {
+        val ready = _state.value as? EditorState.Ready ?: return
+        if (drawing != null || hasLiveValues || (editing && !strokeCommitting)) return
+        val layer = currentLayer() ?: return
+        val stroke = Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase)
+        stroke.dabs.add(point)
+        drawing = stroke
+        if (detailStrokes.isEmpty()) detailBeforeStroke = ready.detail
+        detailStrokes += stroke
+        showStrokes()
+    }
+
+    /** 끄는 손가락이 [point]까지 왔다. 새 자국이 생기면 미리 보기를 다시 그린다. */
+    fun extendStroke(point: StrokePoint) {
+        val stroke = drawing ?: return
+        if (stroke.dabs.add(point).isNotEmpty()) showStrokes()
+    }
+
+    /** 손가락을 뗐다. 획을 기록할 차례에 넣는다(앞 획을 기록하는 중이면 그 뒤에). */
+    fun endStroke() {
+        val stroke = drawing ?: return
+        drawing = null
+        queuedStrokes += stroke
+        commitNextStroke()
+    }
+
+    /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. */
+    fun cancelStroke() {
+        val stroke = drawing ?: return
+        drawing = null
+        detailStrokes.remove(stroke)
+        showStrokes()
+    }
+
     /**
      * 슬라이더를 끄는 동안 고른 레이어의 보정을 미리 본다. 기록하지 않는다(설계 메모 '슬라이더').
      * [change]는 지금 값(미리 보는 값, 없으면 기록된 값)을 받아 새 값을 돌려준다. 그래서 화면이 한 박자 늦은 값을 들고 있어도
@@ -627,8 +765,9 @@ class EditorViewModel(
             while (true) {
                 val document = liveDocument ?: break
                 val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+                val strokes = liveStrokes()
                 val bitmap = renderMutex.withLock {
-                    withContext(Dispatchers.Default) { layerPreviews.render(document, level) { ensureActive() } }
+                    withContext(Dispatchers.Default) { layerPreviews.render(document, level, strokes) { ensureActive() } }
                 }
                 // 그사이 놓았거나(기록) 다른 편집이 새 축소본을 그렸으면 그쪽을 따른다
                 if (liveDocument == null) break
@@ -645,16 +784,96 @@ class EditorViewModel(
 
     /**
      * 편집이 끝난 뒤 기다리던 일을 이어서 한다. 처리하는 동안 놓은 값이 있으면 기록하고,
-     * 아직 끄는 중이면 그 값으로 미리 보기를 그린다.
+     * 아직 끄는 중이면 그 값으로 미리 보기를 그린다. 기록을 기다리는 획이 있으면 다음 획을 기록한다.
+     * 그릴 획이 다 끝났으면 미리 보느라 멈춘 확대 그림을 다시 그린다.
      */
     private fun runPendingLive() {
         if (editing) return
+        if (queuedStrokes.isNotEmpty()) {
+            commitNextStroke()
+            return
+        }
+        if (drawing == null && detailStrokes.isNotEmpty()) {
+            detailStrokes.clear()
+            detailBeforeStroke = null
+            planDetail()
+        }
         if (liveCommitPending) {
             liveCommitPending = false
             commitLive()
         } else if (hasLiveValues && liveDocument == null) {
             showLive()
         }
+    }
+
+    /** 미리 보기에 얹을 획들: 기록을 기다리는 것들, 그다음 끄는 것 */
+    private fun liveStrokes(): List<LiveStroke> = queuedStrokes.map { it.live() } + listOfNotNull(drawing?.live())
+
+    /**
+     * 기록을 기다리는 맨 앞 획을 기록한다(실행 취소 한 단계). 다른 편집을 처리하는 중이면 그 편집이 끝난 뒤 한다.
+     * 기록하는 순간 기다리는 목록에서 빼서, 새 축소본(기록한 문서 + 남은 획)에 두 번 그려지지 않게 한다.
+     */
+    private fun commitNextStroke() {
+        if (editing) return
+        val stroke = queuedStrokes.firstOrNull() ?: return
+        strokeCommitting = true
+        runEdit(
+            PaintStroke(stroke.layer, ArrayList(stroke.dabs.dabs), stroke.settings, stroke.erase),
+            onCommitted = { queuedStrokes.remove(stroke) }
+        ) {
+            // 기록하지 못했거나(메모리) 바뀐 것이 없어도 목록에서 뺀다
+            queuedStrokes.remove(stroke)
+            strokeCommitting = false
+        }
+    }
+
+    /**
+     * 끄는 획(과 기록을 기다리는 획)을 얹은 축소본을 그린다. 그리는 동안 자국이 더해지면 끝난 뒤 한 번 더 그린다.
+     * 쉬운 경우([strokesFitDetail])에는 확대 그림에도 획을 얹어 확대한 채로 선명하게 보인다. 아니면 확대 그림을 숨긴다.
+     */
+    private fun showStrokes() {
+        strokeDirty = true
+        detailJob?.cancel()
+        if (strokeJob?.isActive == true) return
+        strokeJob = viewModelScope.launch {
+            while (strokeDirty) {
+                strokeDirty = false
+                val history = history ?: break
+                val document = history.document
+                val strokes = liveStrokes()
+                val detailBase = detailBeforeStroke?.takeIf { strokesFitDetail(document) }
+                val detailLive = detailStrokes.map { it.live() }
+                val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+                val (base, detail) = renderMutex.withLock {
+                    withContext(Dispatchers.Default) {
+                        val base = layerPreviews.render(document, level, strokes) { ensureActive() }
+                        val detail = detailBase?.let { layerPreviews.strokeOver(it.bitmap, it.region, detailLive) }
+                        base to detail
+                    }
+                }
+                // 그사이 획을 기록했으면 새 축소본(기록한 문서 + 남은 획)이 이미 보인다
+                if (this@EditorViewModel.history?.document !== document) continue
+                val ready = _state.value as? EditorState.Ready ?: break
+                if (base == null) continue
+                val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
+                _state.value = ready.copy(
+                    base = PreviewImage(base, region),
+                    detail = if (detail != null && detailBase != null) PreviewImage(detail, detailBase.region) else null
+                )
+                liveShown = true
+            }
+        }
+    }
+
+    /**
+     * 확대 그림 위에 획을 바로 얹어도 결과가 같은지. 획들이 모두 맨 위 보이는 레이어(표준, 불투명도 1, 보정 없음)에 그리고,
+     * 지우개는 그 레이어가 보이는 유일한 레이어일 때다. 그러면 그 위에 아무것도 없어 합친 그림에 바로 그린 것과 같다.
+     */
+    private fun strokesFitDetail(document: Document): Boolean {
+        val visible = document.layers.filter { it.opacity > 0f }
+        val top = visible.lastOrNull() ?: return false
+        if (top.blendMode != BlendMode.NORMAL || top.opacity < 1f || !top.adjustments.isIdentity) return false
+        return detailStrokes.all { it.layer == top.id && (!it.erase || visible.size == 1) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -736,8 +955,14 @@ class EditorViewModel(
      * [edit]과 같고, 편집이 끝나면(기록했거나, 바뀐 것이 없거나, 하지 못했으면) 화면 상태를 바꾸는 바로 그때 [onFinished]를 부른다.
      * 바뀐 것이 없는데 미리 보기를 보이고 있었으면 기록된 문서로 다시 그린다.
      * [select]가 있으면 기록한 문서에서 그 레이어를 고른다(레이어를 더하거나 지울 때). 기록을 되돌리면 앞 레이어로 돌아간다.
+     * [onCommitted]는 기록한 바로 그때, 새 축소본을 그리기 전에 부른다(그 축소본에 다시 그리지 않을 획을 빼는 데 쓴다).
      */
-    private fun runEdit(command: EditCommand, select: LayerId? = null, onFinished: () -> Unit = {}) {
+    private fun runEdit(
+        command: EditCommand,
+        select: LayerId? = null,
+        onCommitted: () -> Unit = {},
+        onFinished: () -> Unit = {}
+    ) {
         val history = history ?: return
         if (editing || _state.value !is EditorState.Ready) return
         startEditing()
@@ -754,6 +979,8 @@ class EditorViewModel(
             } catch (e: NotEnoughMemoryException) {
                 Log.w(TAG, "Not enough memory for $command", e)
                 onFinished()
+                // 미리 보기(획 등)를 보이고 있었으면 기록된 문서로 되돌려 그린다
+                if (liveShown) showPreview(before, finishEdit = true)
                 finishEditing(EditorMessage.EditNotEnoughMemory)
                 return@launch
             }
@@ -765,15 +992,17 @@ class EditorViewModel(
             }
             val previousActive = activeLayer
             if (select != null) activeLayer = select
-            if (showPreview(after, finishEdit = true)) {
-                onFinished()
+            onCommitted()
+            // 끄던 값은 새 상태를 내보내는 바로 그 순간에 지운다(지우고 나서 보이는 상태가 앞 값으로 되돌아가지 않게)
+            var finished = false
+            if (showPreview(after, finishEdit = true) { finished = true; onFinished() }) {
                 scheduleSave()
                 runPendingLive()
             } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
                 activeLayer = previousActive
-                onFinished()
+                if (!finished) onFinished()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
             }
         }
@@ -945,13 +1174,16 @@ class EditorViewModel(
      * [finishEdit]이면 편집(실행 취소·다시 실행 포함)을 마치는 그리기라, 보일 때 편집 버튼을 다시 켠다.
      *
      * 그리는 동안 기록의 지금 문서가 다른 것으로 바뀌었으면 보이지 않는다. 그 문서를 그리는 쪽이 따로 있다.
+     * [beforeShow]는 새 상태를 내보내기 바로 전에 부른다(보였을 때만).
      * 그리지 못하면, 처음 여는 문서는 실패 화면을 보이고 이미 보이던 문서가 있으면 화면을 그대로 둔다.
      */
-    private suspend fun showPreview(document: Document, finishEdit: Boolean = false): Boolean {
+    private suspend fun showPreview(document: Document, finishEdit: Boolean = false, beforeShow: () -> Unit = {}): Boolean {
         val level = levelFor(document)
         renderMutex.withLock {
+            // 기록을 기다리거나 끄는 획은 그대로 보이게 얹는다
+            val strokes = liveStrokes()
             val preview = withContext(Dispatchers.Default) {
-                layerPreviews.render(document, level) { ensureActive() }
+                layerPreviews.render(document, level, strokes) { ensureActive() }
             }
             // 레이어 패널의 작은 그림. 바뀐 레이어만 새로 만든다.
             val thumbnails = withContext(Dispatchers.Default) { layerPreviews.thumbnails(document, level) { ensureActive() } }
@@ -980,6 +1212,7 @@ class EditorViewModel(
             // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
             liveDocument = null
             liveShown = false
+            beforeShow()
             _state.value = EditorState.Ready(
                 base = PreviewImage(preview, PreviewLevels.wholeRegion(size, level)),
                 documentSize = size,
@@ -1015,7 +1248,7 @@ class EditorViewModel(
         val document = history?.document ?: return
         // 편집 중이거나 새 문서의 축소본을 아직 그리는 중이면, 그 축소본을 그린 뒤 다시 계획한다.
         // 슬라이더로 미리 보는 동안도 그리지 않는다(기록한 문서의 그림이라 미리 보기와 다르다).
-        if (editing || document !== shownDocument || liveDocument != null) return
+        if (editing || document !== shownDocument || liveDocument != null || detailStrokes.isNotEmpty()) return
         val viewport = viewport ?: return
         val size = PixelSize(document.width, document.height)
         // 다른 문서를 보던 때의 보기는 쓰지 않는다
@@ -1063,8 +1296,10 @@ class EditorViewModel(
     }
 
     /** 새 문서의 실행 취소 기록. 메모리 한도는 기기 메모리에 맞춘다. */
-    private fun newHistory(document: Document): EditHistory =
-        EditHistory(document, maxBytes = MemoryBudget.historyBudgetBytes(getApplication()))
+    private fun newHistory(document: Document): EditHistory {
+        fitTextSize(document)
+        return EditHistory(document, maxBytes = MemoryBudget.historyBudgetBytes(getApplication()))
+    }
 
     private fun release() {
         history = null
@@ -1079,6 +1314,12 @@ class EditorViewModel(
         _liveAdjustments.value = null
         _liveOpacity.value = null
         liveCommitPending = false
+        drawing = null
+        queuedStrokes.clear()
+        strokeCommitting = false
+        detailBeforeStroke = null
+        detailStrokes.clear()
+        strokeJob?.cancel()
         layerPreviews.clear()
     }
 

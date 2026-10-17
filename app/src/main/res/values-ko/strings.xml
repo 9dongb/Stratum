@@ -154,4 +154,16 @@
     <string name="blend_overlay">오버레이</string>
     <string name="section_expand">%1$s 펼치기</string>
     <string name="section_collapse">%1$s 접기</string>
+
+    <!-- 브러시·지우개 -->
+    <string name="brush_size">크기</string>
+    <string name="brush_size_value">%1$d px</string>
+    <string name="brush_hardness">단단함</string>
+    <string name="brush_color">색 %1$d, %2$s</string>
+
+    <!-- 글자 -->
+    <string name="text_hint">글자를 넣을 자리(글자의 왼쪽 위)를 캔버스에서 누르세요.</string>
+    <string name="text_prompt_title">글자 넣기</string>
+    <string name="text_prompt_label">글자</string>
+    <string name="action_add">넣기</string>
 </resources>

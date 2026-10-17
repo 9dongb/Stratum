@@ -63,6 +63,8 @@ class CropControls(
  * @param adjust 조정 옵션이 쓰는 값과 할 일. 문서가 없으면 null이다.
  * @param adjustItem 커버 화면 조정 옵션에서 고른 항목
  * @param layers 레이어 옵션이 쓰는 값과 할 일. 문서가 없으면 null이다.
+ * @param brush 고른 도구(브러시·지우개)의 설정과 바꾸기
+ * @param text 글자 도구의 모양과 바꾸기
  */
 @Composable
 fun ToolOptions(
@@ -75,12 +77,16 @@ fun ToolOptions(
     adjust: AdjustControls? = null,
     adjustItem: AdjustItem = AdjustItem.EXPOSURE,
     onAdjustItem: (AdjustItem) -> Unit = {},
-    layers: LayerControls? = null
+    layers: LayerControls? = null,
+    brush: BrushControls? = null,
+    text: TextControls? = null
 ) {
     when (selection.active) {
         EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
         EditTool.Adjust -> if (adjust != null) AdjustCompact(adjust, adjustItem, onAdjustItem, modifier)
         EditTool.Layers -> if (layers != null) LayerCompact(layers, modifier)
+        EditTool.Brush, EditTool.Eraser -> if (brush != null) BrushOptions(brush, modifier)
+        EditTool.Text -> if (text != null) TextOptions(text, modifier)
         else -> Unit
     }
 }
