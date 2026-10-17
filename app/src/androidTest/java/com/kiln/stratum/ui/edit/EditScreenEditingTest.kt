@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -82,7 +83,8 @@ class EditScreenEditingTest {
 
         composeRule.onNodeWithTag(EditScreenTags.UNDO).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.REDO).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.BUSY).assertExists()
+        // 처리 중 막대는 잠깐 넘게 걸릴 때만 보인다(짧은 편집마다 깜빡이지 않게)
+        composeRule.waitUntil(2_000) { composeRule.onAllNodesWithTag(EditScreenTags.BUSY).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

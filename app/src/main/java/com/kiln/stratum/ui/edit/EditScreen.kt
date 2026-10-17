@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
@@ -67,6 +68,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -77,8 +79,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * - Medium(메인 세로): 왼쪽 도구 막대, 캔버스, 아래 접이식 패널
  * - Expanded(메인 가로): 왼쪽 도구 막대, 캔버스, 오른쪽 고정 패널
  *
- * 도구는 자르기·변형만 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
- * 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널 맨 위에 보인다. 패널 탭(레이어·조정)은 아직 비활성이다.
+ * 도구는 자르기·변형과 조정이 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
+ * 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널 맨 위에 보인다.
+ * 조정은 커버 화면에서는 탭(도구)이고, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. 레이어 탭은 아직 비활성이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
  * @param onViewport 확대·이동으로 보기가 바뀌면 보이는 문서 영역을 알린다. 엔진이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
@@ -88,6 +91,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param exportChoice 마지막으로 내보낸 고르기. 내보내기 창이 이것으로 시작한다.
  * @param onExport 내보내기 창에서 고른 것과 내보낼 곳(갤러리·공유)
  * @param shareRequests 공유 창으로 보낼 사진. 앱이 화면에 있을 때 공유 창을 띄운다.
+ * @param liveAdjustments 보정 슬라이더를 끄는 동안의 값(없으면 null). 보정 패널만 읽도록 함수로 받는다.
+ * @param adjust 보정 패널이 보내는 일(미리 보기·기록)
  */
 @Composable
 fun EditScreen(
@@ -103,7 +108,9 @@ fun EditScreen(
     onEdit: (EditCommand) -> Unit = {},
     exportChoice: ExportChoice = ExportChoice(),
     onExport: (ExportChoice, ExportTarget) -> Unit = { _, _ -> },
-    shareRequests: Flow<ShareRequest> = emptyFlow()
+    shareRequests: Flow<ShareRequest> = emptyFlow(),
+    liveAdjustments: () -> Adjustments? = { null },
+    adjust: AdjustActions = AdjustActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -111,9 +118,14 @@ fun EditScreen(
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
     // 고른 도구. 커버에서 고른 도구가 펼친 뒤에도 그대로 이어지도록 배치를 고르기 전에 둔다.
     val selection = rememberToolSelection()
+    // 메인 세로 아래 패널의 탭. 커버에서 조정을 고른 채 펼치면 조정 탭을 보인다.
+    var panelTab by rememberSaveable { mutableStateOf(PanelTab.ADJUST) }
+    // 커버 화면 조정 옵션에서 고른 항목
+    var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
+        if (selection.active == EditTool.Adjust) panelTab = PanelTab.ADJUST
     }
     val ready = state as? EditorState.Ready
     // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
@@ -178,9 +190,28 @@ fun EditScreen(
                 }
             )
         }
-        val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
-            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = chooseSubTool, crop = crop) }
+        // 고른 레이어의 보정. 자르기 중에는 막는다(기록하면 문서가 바뀌어 자르기 테두리가 처음으로 돌아가므로).
+        val adjustControls = ready?.active?.let { layer ->
+            AdjustControls(committed = layer.adjustments, live = liveAdjustments, enabled = !cropMode, actions = adjust)
         }
+        val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
+            {
+                ToolOptions(
+                    selection,
+                    busy = ready?.busy == true,
+                    onEdit = onEdit,
+                    onChoose = chooseSubTool,
+                    crop = crop,
+                    adjust = adjustControls,
+                    adjustItem = adjustItem,
+                    onAdjustItem = { adjustItem = it }
+                )
+            }
+        }
+        // 메인 화면의 패널 위쪽에는 도구 막대의 도구 옵션만 보인다. 조정은 패널에 늘 있다.
+        val railTool = activeTool?.takeIf { it in EditTool.railTools }
+        val railToolTitle = toolTitle?.takeIf { railTool != null }
+        val railToolOptions = toolOptions?.takeIf { railTool != null }
         // 자르기 중에는 캔버스 위에 테두리를 겹친다
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
@@ -223,11 +254,25 @@ fun EditScreen(
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
                         EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f))
+                        val showAdjust = panelTab == PanelTab.ADJUST && adjustControls != null
                         BottomPanel(
                             expanded = panelExpanded,
                             onToggle = { panelExpanded = !panelExpanded },
-                            toolTitle = toolTitle,
-                            toolOptions = toolOptions
+                            toolTitle = railToolTitle,
+                            toolOptions = railToolOptions,
+                            tab = panelTab,
+                            onTab = { panelTab = it },
+                            tabsEnabled = toolsEnabled,
+                            tabAction = if (showAdjust) {
+                                { ResetAllButton(checkNotNull(adjustControls)) }
+                            } else {
+                                null
+                            },
+                            tabContent = if (showAdjust) {
+                                { AdjustList(checkNotNull(adjustControls), twoColumns = true) }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -235,7 +280,12 @@ fun EditScreen(
                 WidthClass.Expanded -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f))
-                    SidePanel(toolTitle = toolTitle, toolOptions = toolOptions)
+                    SidePanel(
+                        toolTitle = railToolTitle,
+                        toolOptions = railToolOptions,
+                        adjustAction = adjustControls?.let { controls -> { ResetAllButton(controls) } },
+                        adjustContent = adjustControls?.let { controls -> { AdjustList(controls, twoColumns = false) } }
+                    )
                 }
             }
         }
@@ -368,6 +418,17 @@ private fun EditCanvas(
     val exportFailed = stringResource(R.string.edit_export_failed)
     val view = stringResource(R.string.action_view)
     val autosaveFailed = stringResource(R.string.edit_autosave_failed)
+    // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
+    // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
+    val busy = (state as? EditorState.Ready)?.busy == true
+    var showBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(busy) {
+        showBusy = false
+        if (busy) {
+            delay(BUSY_INDICATOR_DELAY_MILLIS)
+            showBusy = true
+        }
+    }
     LaunchedEffect(messages) {
         // 하나씩 보이고, 사라진 뒤 다음 것을 보인다
         messages.collect { message ->
@@ -408,7 +469,7 @@ private fun EditCanvas(
                 CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, overlay)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다.
                 if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize())
-                if (state.busy) {
+                if (showBusy) {
                     val working = stringResource(R.string.edit_working)
                     LinearProgressIndicator(
                         Modifier
@@ -441,6 +502,9 @@ private fun EditCanvas(
         }
     }
 }
+
+/** 바쁨이 이만큼(밀리초) 이어지면 처리 중 막대를 보인다 */
+private const val BUSY_INDICATOR_DELAY_MILLIS = 200L
 
 /** 문서를 열거나 만드는 동안 보이는 표시와 [message]. */
 @Composable

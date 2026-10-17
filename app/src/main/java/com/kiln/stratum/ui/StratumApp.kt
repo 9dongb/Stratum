@@ -70,6 +70,8 @@ fun StratumApp(editor: EditorViewModel) {
             BackHandler(onBack = goHome)
             val state by editor.state.collectAsState()
             val exportChoice by editor.exportChoice.collectAsState()
+            // 끄는 동안 자주 바뀌므로 State로 받아 두고, 보정 패널만 읽게 한다
+            val liveAdjustments = editor.liveAdjustments.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -82,7 +84,9 @@ fun StratumApp(editor: EditorViewModel) {
                 onEdit = editor::edit,
                 exportChoice = exportChoice,
                 onExport = editor::export,
-                shareRequests = editor.shareRequests
+                shareRequests = editor.shareRequests,
+                liveAdjustments = { liveAdjustments.value },
+                adjust = editor.adjustActions
             )
         }
     }

@@ -31,6 +31,11 @@ object EditScreenTags {
     const val TOOL_TAB_BAR = "toolTabBar"
     const val BOTTOM_PANEL = "bottomPanel"
     const val SIDE_PANEL = "sidePanel"
+    const val ADJUST_PANEL = "adjustPanel"
+    const val ADJUST_RESET_ALL = "adjustResetAll"
+    const val CURVE_EDITOR = "curveEditor"
+    const val CURVE_RESET = "curveReset"
+    const val CURVE_DELETE_POINT = "curveDeletePoint"
 
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"
@@ -43,6 +48,15 @@ object EditScreenTags {
 
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
+
+    /** 아래 패널의 [tab] 탭 */
+    fun panelTab(tab: PanelTab): String = "panelTab_${tab.name}"
+
+    /** 보정 패널의 [item] 슬라이더 줄 */
+    fun adjustSlider(item: AdjustItem): String = "adjustSlider_${item.name}"
+
+    /** 커버 화면 보정 옵션의 [item] 칩 */
+    fun adjustChip(item: AdjustItem): String = "adjustChip_${item.name}"
 
     /** 자르기 비율 [ratio] 칩 */
     fun cropRatio(ratio: CropRatio): String = "cropRatio_${ratio.name}"

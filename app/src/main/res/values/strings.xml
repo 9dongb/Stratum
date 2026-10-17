@@ -122,4 +122,19 @@
     <string name="large_photo_message_no_memory">This photo is %1$d MP, which is too big to open at full size on this device. Opening it smaller doesn\'t change the original file.</string>
     <string name="large_photo_open_original">Full size (%1$d MP)</string>
     <string name="large_photo_open_reduced">Smaller (%1$d MP)</string>
+
+    <!-- 보정(조정) 패널 -->
+    <string name="adjust_exposure">Exposure</string>
+    <string name="adjust_brightness">Brightness</string>
+    <string name="adjust_contrast">Contrast</string>
+    <string name="adjust_highlights">Highlights</string>
+    <string name="adjust_shadows">Shadows</string>
+    <string name="adjust_temperature">Temperature</string>
+    <string name="adjust_saturation">Saturation</string>
+    <string name="adjust_curve">Curve</string>
+    <string name="adjust_reset_all">Reset all</string>
+    <string name="adjust_reset_item">Reset %1$s</string>
+    <string name="adjust_curve_reset">Reset curve</string>
+    <string name="adjust_curve_delete_point">Delete point</string>
+    <string name="adjust_curve_editor">Tone curve, %1$d points. Drag to bend it, tap to add a point.</string>
 </resources>

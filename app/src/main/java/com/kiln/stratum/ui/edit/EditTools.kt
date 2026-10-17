@@ -34,7 +34,7 @@ enum class SubTool(
 }
 
 /**
- * 1단계 편집 도구(CLAUDE.md 8장). 자르기·변형만 켜져 있고, 나머지는 기능이 생길 때까지 비활성이다.
+ * 1단계 편집 도구(CLAUDE.md 8장). 자르기·변형과 조정이 켜져 있고, 나머지는 기능이 생길 때까지 비활성이다.
  * 2·3단계 도구(반창고·제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
@@ -57,7 +57,8 @@ enum class EditTool(
         subTools = listOf(SubTool.CROP, SubTool.ROTATE, SubTool.RESIZE),
         available = true
     ),
-    Adjust(R.drawable.ic_tune, R.string.tool_adjust),
+    /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
+    Adjust(R.drawable.ic_tune, R.string.tool_adjust, available = true),
     Brush(R.drawable.ic_brush, R.string.tool_brush),
     Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser),
     Text(R.drawable.ic_text_fields, R.string.tool_text),

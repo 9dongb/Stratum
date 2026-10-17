@@ -120,4 +120,19 @@
     <string name="large_photo_message_no_memory">이 사진은 %1$dMP라 이 기기에서는 원본 크기로 열 수 없어요. 줄여서 열어도 원본 파일은 바뀌지 않아요.</string>
     <string name="large_photo_open_original">원본 크기 (%1$dMP)</string>
     <string name="large_photo_open_reduced">줄여서 (%1$dMP)</string>
+
+    <!-- 보정(조정) 패널 -->
+    <string name="adjust_exposure">노출</string>
+    <string name="adjust_brightness">밝기</string>
+    <string name="adjust_contrast">대비</string>
+    <string name="adjust_highlights">하이라이트</string>
+    <string name="adjust_shadows">그림자</string>
+    <string name="adjust_temperature">색온도</string>
+    <string name="adjust_saturation">채도</string>
+    <string name="adjust_curve">곡선</string>
+    <string name="adjust_reset_all">모두 초기화</string>
+    <string name="adjust_reset_item">%1$s 초기화</string>
+    <string name="adjust_curve_reset">곡선 초기화</string>
+    <string name="adjust_curve_delete_point">점 지우기</string>
+    <string name="adjust_curve_editor">곡선, 점 %1$d개. 끌어서 휘고, 톡 눌러 점을 더해요.</string>
 </resources>

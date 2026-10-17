@@ -237,6 +237,27 @@ class EditorViewModel(
     /** [liveDocument]를 그리는 작업 */
     private var liveJob: Job? = null
 
+    /** 축소본이 미리 보기(기록하지 않은 문서)를 보이고 있는지 */
+    private var liveShown = false
+
+    private val _liveAdjustments = MutableStateFlow<Adjustments?>(null)
+
+    /**
+     * 끄는 동안의 보정 값(기록 전). 화면의 슬라이더는 이 값을, 없으면 고른 레이어의 기록된 값을 보인다.
+     * 기록하면(또는 바뀐 것이 없거나 기록하지 못하면) null로 돌아간다. 그래서 슬라이더가 적용되지 않은 값을 보이는 일이 없다.
+     */
+    val liveAdjustments: StateFlow<Adjustments?> = _liveAdjustments.asStateFlow()
+
+    /** 다른 편집을 처리하는 동안 놓은 보정. 그 편집이 끝나면 기록한다(놓은 값을 잃지 않게). */
+    private var adjustCommitPending = false
+
+    /** 보정 패널이 보내는 일 */
+    val adjustActions: AdjustActions = object : AdjustActions {
+        override fun preview(change: (Adjustments) -> Adjustments) = previewAdjustments(change)
+        override fun commit() = commitAdjustments()
+        override fun record(change: (Adjustments) -> Adjustments) = recordAdjustments(change)
+    }
+
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
     private var history: EditHistory? = null
 
@@ -433,14 +454,63 @@ class EditorViewModel(
     }
 
     /**
-     * 슬라이더를 끄는 동안 고른 레이어에 [adjustments]를 건 모습을 보인다. 기록하지 않는다(설계 메모 '슬라이더').
-     * 그리는 동안 또 바뀌면 가장 나중 값만 그린다. 픽셀은 그대로라 레이어별 축소본을 합치기만 해서 빠르다.
-     * 미리 보는 동안은 확대 그림(부분 그림)을 숨긴다. 편집을 처리하는 중이면 무시한다.
+     * 슬라이더를 끄는 동안 고른 레이어의 보정을 미리 본다. 기록하지 않는다(설계 메모 '슬라이더').
+     * [change]는 지금 값(미리 보는 값, 없으면 기록된 값)을 받아 새 값을 돌려준다. 그래서 화면이 한 박자 늦은 값을 들고 있어도
+     * 다른 항목을 덮어쓰지 않는다. 픽셀은 그대로라 레이어별 축소본을 합치기만 해서 빠르다. 미리 보는 동안은 확대 그림을 숨긴다.
+     * 다른 편집을 처리하는 중이면 값만 받아 두고, 끝나면 그린다. 놓았던 값을 아직 기록하지 못했으면 이번 끌기와 합쳐 한 단계로 기록한다.
      */
-    fun previewAdjustments(adjustments: Adjustments) {
+    fun previewAdjustments(change: (Adjustments) -> Adjustments) {
+        val current = currentAdjustments() ?: return
+        _liveAdjustments.value = change(current).normalized()
+        adjustCommitPending = false
+        if (!editing) showLiveAdjustments()
+    }
+
+    /**
+     * 미리 보던 보정 값을 고른 레이어에 기록한다(실행 취소 한 단계, 슬라이더를 놓을 때). 미리 보던 값이 없으면 아무것도 하지 않는다.
+     * 기록된 값과 같으면 기록하지 않고, 미리 보기를 보였으면 기록된 문서로 다시 그린다.
+     * 다른 편집을 처리하는 중이면 그 편집이 끝난 뒤 기록한다.
+     */
+    fun commitAdjustments() {
+        val adjustments = _liveAdjustments.value ?: return
+        if (editing) {
+            adjustCommitPending = true
+            return
+        }
+        val layer = activeLayer
+        if (layer == null || history == null || _state.value !is EditorState.Ready) {
+            _liveAdjustments.value = null
+            return
+        }
+        liveDocument = null
+        runEdit(SetLayerAdjustments(layer, adjustments)) {
+            // 그사이 다시 끌기 시작했으면 그 값은 남긴다(끝나면 그린다)
+            if (_liveAdjustments.value == adjustments) _liveAdjustments.value = null
+        }
+    }
+
+    /** 지금 보정 값에 [change]를 걸어 바로 기록한다(초기화·점 지우기 버튼). */
+    fun recordAdjustments(change: (Adjustments) -> Adjustments) {
+        val current = currentAdjustments() ?: return
+        _liveAdjustments.value = change(current).normalized()
+        adjustCommitPending = false
+        commitAdjustments()
+    }
+
+    /** 고른 레이어의 지금 보정 값: 미리 보는 값, 없으면 기록된 값. 문서가 없으면 null. */
+    private fun currentAdjustments(): Adjustments? {
+        if (_state.value !is EditorState.Ready) return null
+        val document = history?.document ?: return null
+        val index = activeLayer?.let { document.indexOfLayer(it) } ?: return null
+        if (index < 0) return null
+        return _liveAdjustments.value ?: document.layers[index].adjustments
+    }
+
+    /** 미리 보는 보정 값을 고른 레이어에 건 문서를 그린다. 그리는 동안 또 바뀌면 가장 나중 것만 그린다. */
+    private fun showLiveAdjustments() {
         val history = history ?: return
         val layer = activeLayer ?: return
-        if (editing || _state.value !is EditorState.Ready) return
+        val adjustments = _liveAdjustments.value ?: return
         liveDocument = SetLayerAdjustments(layer, adjustments).applyTo(history.document)
         detailJob?.cancel()
         if (liveJob?.isActive == true) return
@@ -451,23 +521,31 @@ class EditorViewModel(
                 val bitmap = renderMutex.withLock {
                     withContext(Dispatchers.Default) { layerPreviews.render(document, level) { ensureActive() } }
                 }
-                // 그사이 놓았으면(기록) 그쪽이 그린다
+                // 그사이 놓았거나(기록) 다른 편집이 새 축소본을 그렸으면 그쪽을 따른다
                 if (liveDocument == null) break
                 val ready = _state.value as? EditorState.Ready ?: break
                 if (bitmap != null) {
                     val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
                     _state.value = ready.copy(base = PreviewImage(bitmap, region), detail = null)
+                    liveShown = true
                 }
                 if (liveDocument === document) break
             }
         }
     }
 
-    /** 슬라이더를 놓으면 고른 레이어의 보정 값을 [adjustments]로 기록한다(실행 취소 한 단계). */
-    fun commitAdjustments(adjustments: Adjustments) {
-        val layer = activeLayer ?: return
-        liveDocument = null
-        edit(SetLayerAdjustments(layer, adjustments))
+    /**
+     * 편집이 끝난 뒤 기다리던 보정을 이어서 한다. 처리하는 동안 놓은 값이 있으면 기록하고,
+     * 아직 끄는 중이면 그 값으로 미리 보기를 그린다.
+     */
+    private fun runPendingAdjustments() {
+        if (editing) return
+        if (adjustCommitPending) {
+            adjustCommitPending = false
+            commitAdjustments()
+        } else if (_liveAdjustments.value != null && liveDocument == null) {
+            showLiveAdjustments()
+        }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -543,7 +621,13 @@ class EditorViewModel(
      * 다른 편집·실행 취소·다시 실행을 처리하는 중이면 무시한다(두 번 눌러도 한 번만 된다).
      * 메모리가 모자라면 오래된 실행 취소 단계부터 버리고, 그래도 모자라면 편집하지 않고 알린다.
      */
-    fun edit(command: EditCommand) {
+    fun edit(command: EditCommand) = runEdit(command)
+
+    /**
+     * [edit]과 같고, 편집이 끝나면(기록했거나, 바뀐 것이 없거나, 하지 못했으면) 화면 상태를 바꾸는 바로 그때 [onFinished]를 부른다.
+     * 바뀐 것이 없는데 미리 보기를 보이고 있었으면 기록된 문서로 다시 그린다.
+     */
+    private fun runEdit(command: EditCommand, onFinished: () -> Unit = {}) {
         val history = history ?: return
         if (editing || _state.value !is EditorState.Ready) return
         startEditing()
@@ -559,19 +643,24 @@ class EditorViewModel(
                 }
             } catch (e: NotEnoughMemoryException) {
                 Log.w(TAG, "Not enough memory for $command", e)
+                onFinished()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
                 return@launch
             }
             if (!history.commit(command, before, after)) {
-                // 바뀐 것이 없다
-                finishEditing()
+                // 바뀐 것이 없다. 슬라이더를 처음 값으로 되돌려 놓았으면 축소본이 아직 미리 보기라 다시 그린다.
+                onFinished()
+                if (liveShown && showPreview(before, finishEdit = true)) runPendingAdjustments() else finishEditing()
                 return@launch
             }
             if (showPreview(after, finishEdit = true)) {
+                onFinished()
                 scheduleSave()
+                runPendingAdjustments()
             } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
+                onFinished()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
             }
         }
@@ -656,6 +745,7 @@ class EditorViewModel(
         editJob = viewModelScope.launch {
             if (showPreview(document, finishEdit = true)) {
                 scheduleSave()
+                runPendingAdjustments()
             } else {
                 revert(history)
                 finishEditing(EditorMessage.EditNotEnoughMemory)
@@ -680,6 +770,7 @@ class EditorViewModel(
         if (message != null) _messages.trySend(message)
         // 미리 보느라 숨긴 부분 그림을 다시 그린다
         planDetail()
+        runPendingAdjustments()
     }
 
     /**
@@ -768,6 +859,7 @@ class EditorViewModel(
             if (finishEdit) editing = false
             // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
             liveDocument = null
+            liveShown = false
             _state.value = EditorState.Ready(
                 base = PreviewImage(preview, PreviewLevels.wholeRegion(size, level)),
                 documentSize = size,
@@ -862,7 +954,10 @@ class EditorViewModel(
         shownDocument = null
         activeLayer = null
         liveDocument = null
+        liveShown = false
         liveJob?.cancel()
+        _liveAdjustments.value = null
+        adjustCommitPending = false
         layerPreviews.clear()
     }
 

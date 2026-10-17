@@ -55,9 +55,13 @@ class CropControls(
  * 고른 도구의 옵션. 커버 화면은 캔버스와 탭 줄 사이, 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널에 놓인다.
  * 줄은 가로로 지나가는 힌지의 띠를 피해 쌓는다(CLAUDE.md 6장).
  *
+ * 조정은 커버 화면에서만 도구 옵션으로 보인다. 메인 화면에서는 패널에 늘 있다(편집 화면).
+ *
  * @param busy 편집을 처리하는 중이면 편집 버튼을 막는다.
  * @param onEdit 엔진에 보낼 편집 명령
  * @param crop 자르기 중이면 그 테두리와 할 일. 자르기를 시작하기 전(첫 프레임)에는 null일 수 있다.
+ * @param adjust 조정 옵션이 쓰는 값과 할 일. 문서가 없으면 null이다.
+ * @param adjustItem 커버 화면 조정 옵션에서 고른 항목
  */
 @Composable
 fun ToolOptions(
@@ -66,10 +70,14 @@ fun ToolOptions(
     onEdit: (EditCommand) -> Unit,
     onChoose: (SubTool) -> Unit,
     modifier: Modifier = Modifier,
-    crop: CropControls? = null
+    crop: CropControls? = null,
+    adjust: AdjustControls? = null,
+    adjustItem: AdjustItem = AdjustItem.EXPOSURE,
+    onAdjustItem: (AdjustItem) -> Unit = {}
 ) {
     when (selection.active) {
         EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
+        EditTool.Adjust -> if (adjust != null) AdjustCompact(adjust, adjustItem, onAdjustItem, modifier)
         else -> Unit
     }
 }
