@@ -163,4 +163,16 @@ class HingePlacementTest {
         // 띠가 줄을 다 덮으면 줄을 그대로 돌려준다
         assertEquals(Span(0, 1000), widestFreeSpan(Span(0, 1000), listOf(Span(-10, 1010))))
     }
+
+    @Test
+    fun insetsAvoiding_shrinksTheSideNextToTheBand() {
+        val band = Span(990, 1022)
+
+        // 띠가 칸의 끝 쪽에 걸치면 끝을 줄이고, 시작 쪽에 걸치면 시작을 줄인다
+        assertEquals(0 to 20, insetsAvoiding(Span(800, 1010), listOf(band)))
+        assertEquals(12 to 0, insetsAvoiding(Span(1010, 1200), listOf(band)))
+        // 겹치지 않으면 그대로
+        assertEquals(0 to 0, insetsAvoiding(Span(1022, 1200), listOf(band)))
+        assertEquals(0 to 0, insetsAvoiding(Span(800, 1010), emptyList()))
+    }
 }

@@ -6,6 +6,11 @@
     <string name="home_new_canvas">New canvas</string>
     <string name="home_recent_projects">Recent projects</string>
     <string name="home_recent_projects_empty">No projects yet. Open a photo or start a new canvas, and it will show up here.</string>
+    <string name="home_project_description">Project edited %1$s, %2$d × %3$d px</string>
+    <string name="home_project_size">%1$d × %2$d</string>
+    <string name="home_project_menu">More options</string>
+    <string name="home_delete_title">Delete this project?</string>
+    <string name="home_delete_message">You can\'t undo this. Photos you exported to the gallery stay.</string>
 
     <!-- 버튼 이름. 아이콘만 있는 버튼은 화면 읽기 기능이 이 이름을 읽어 준다. -->
     <string name="action_settings">Settings</string>
@@ -18,6 +23,7 @@
     <string name="action_share">Share</string>
     <string name="action_save">Save</string>
     <string name="action_view">View</string>
+    <string name="action_delete">Delete</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">Background</string>

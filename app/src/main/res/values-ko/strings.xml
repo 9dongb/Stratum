@@ -7,6 +7,11 @@
     <string name="home_new_canvas">새 캔버스</string>
     <string name="home_recent_projects">최근 프로젝트</string>
     <string name="home_recent_projects_empty">아직 프로젝트가 없어요. 사진을 열거나 새 캔버스를 만들면 여기에 나타나요.</string>
+    <string name="home_project_description">프로젝트, %1$s 수정, %2$d × %3$d px</string>
+    <string name="home_project_size">%1$d × %2$d</string>
+    <string name="home_project_menu">더보기</string>
+    <string name="home_delete_title">프로젝트를 지울까요?</string>
+    <string name="home_delete_message">지운 프로젝트는 되돌릴 수 없어요. 갤러리로 내보낸 사진은 그대로예요.</string>
 
     <!-- 버튼 이름. 아이콘만 있는 버튼은 화면 읽기 기능이 이 이름을 읽어 준다. -->
     <string name="action_settings">설정</string>
@@ -19,6 +24,7 @@
     <string name="action_share">공유</string>
     <string name="action_save">저장</string>
     <string name="action_view">보기</string>
+    <string name="action_delete">지우기</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">배경</string>

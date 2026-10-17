@@ -66,6 +66,26 @@ fun splitAround(width: Int, childWidth: Int, band: Span?): Pair<Int, Int> {
     return (band.start - childWidth).coerceIn(0, last) to band.end.coerceIn(0, last)
 }
 
+/**
+ * 구간 [cell](예: 격자 칸의 x 구간)이 띠 [bands](같은 좌표)와 겹치면, 띠를 비켜나도록 시작·끝 쪽에서 얼마나 줄일지(픽셀).
+ * 띠의 가운데가 칸의 가운데보다 앞이면 시작 쪽을, 아니면 끝 쪽을 줄인다. 겹치지 않으면 (0, 0)이다.
+ * 홈의 최근 프로젝트 격자처럼 칸 자리가 정해진 것을 세로 힌지에서 비켜 놓을 때 쓴다.
+ */
+fun insetsAvoiding(cell: Span, bands: List<Span>): Pair<Int, Int> {
+    var start = 0
+    var end = 0
+    for (band in bands) {
+        if (band.end <= cell.start || band.start >= cell.end) continue
+        // 두 배로 비교해 나눗셈을 피한다
+        if (band.start + band.end < cell.start + cell.end) {
+            start = maxOf(start, band.end - cell.start)
+        } else {
+            end = maxOf(end, cell.end - band.start)
+        }
+    }
+    return start to end
+}
+
 /** 화면 안의 사각형 영역(픽셀). 왼쪽·위는 들어가고 오른쪽·아래는 들어가지 않는다. */
 data class Region(val left: Int, val top: Int, val right: Int, val bottom: Int) {
     val width: Int

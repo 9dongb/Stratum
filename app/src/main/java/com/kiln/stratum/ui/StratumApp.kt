@@ -41,18 +41,27 @@ fun StratumApp(editor: EditorViewModel) {
     }
 
     when (screen) {
-        AppScreen.Home -> HomeScreen(
-            onOpenPhoto = {
-                pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            },
-            onCreateCanvas = { width, height, fill ->
-                editor.newCanvas(width, height, fill)
-                screen = AppScreen.Edit
-            }
-        )
+        AppScreen.Home -> {
+            val projects by editor.projects.collectAsState()
+            HomeScreen(
+                onOpenPhoto = {
+                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onCreateCanvas = { width, height, fill ->
+                    editor.newCanvas(width, height, fill)
+                    screen = AppScreen.Edit
+                },
+                projects = projects,
+                onOpenProject = { id ->
+                    editor.openProject(id)
+                    screen = AppScreen.Edit
+                },
+                onDeleteProject = editor::deleteProject
+            )
+        }
 
         AppScreen.Edit -> {
-            // 홈으로 갈 때 문서를 닫아 메모리를 비운다. 자동 저장은 아직 없다.
+            // 홈으로 갈 때 문서를 닫아 메모리를 비운다. 마지막 작업은 자동 저장된다.
             val goHome = {
                 editor.close()
                 screen = AppScreen.Home

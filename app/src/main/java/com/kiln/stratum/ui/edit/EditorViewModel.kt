@@ -389,6 +389,12 @@ class EditorViewModel(
         }
     }
 
+    /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
+    fun deleteProject(id: String) {
+        if (id == project?.id || !ProjectLibrary.isValidId(id)) return
+        library.delete(id)
+    }
+
     /** 앱이 화면에서 사라질 때(onStop) 부른다. 기다리지 않고 지금 문서를 저장한다. */
     fun flush() = saveNow()
 
