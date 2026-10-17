@@ -70,6 +70,32 @@ class TransformPlanTest {
     }
 
     @Test
+    fun affine_putsEachSourcePixelOntoItsTargetPixel() {
+        val size = PixelSize(601, 301)
+        val plans = Orientation.entries.map { TransformPlan.orient(size, it) } + TransformPlan.crop(size, PixelRect(100, 50, 400, 250))
+        for (plan in plans) {
+            for (tile in plan.targets) {
+                for (part in tile.parts) {
+                    val m = part.affine(plan.orientation)
+                    for (y in part.targetRect.top until part.targetRect.bottom) {
+                        for (x in part.targetRect.left until part.targetRect.right) {
+                            // 원본 픽셀의 가운데가 대상 픽셀의 가운데로 가야 한다
+                            val source = part.sourcePixel(x, y, plan.orientation)
+                            val sx = source.x + 0.5
+                            val sy = source.y + 0.5
+                            val tx = m[0] * sx + m[1] * sy + m[2]
+                            val ty = m[3] * sx + m[4] * sy + m[5]
+                            if (tx != x + 0.5 || ty != y + 0.5) {
+                                fail("${plan.orientation} $part: ($x, $y) <- $source lands on ($tx, $ty)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun crop_rejectsEmptyOrOutsideRect() {
         val source = PixelSize(100, 50)
 

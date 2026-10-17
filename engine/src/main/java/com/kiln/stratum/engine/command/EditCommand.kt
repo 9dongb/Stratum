@@ -15,3 +15,17 @@ import com.kiln.stratum.engine.document.Document
 interface EditCommand {
     fun applyTo(document: Document): Document
 }
+
+/**
+ * 오래 걸리는 편집(큰 이미지의 픽셀을 옮기거나 다시 계산하는 일). 화면은 백그라운드에서 취소 확인과 함께 부른다.
+ * [checkCanceled]는 타일 사이마다 부르며, 취소됐으면 예외를 던지게 한다(사진 열기·축소본 그리기와 같은 방식).
+ * 메모리가 모자라 편집하지 못하면 [NotEnoughMemoryException]을 던진다.
+ */
+interface CancellableCommand : EditCommand {
+    fun applyTo(document: Document, checkCanceled: () -> Unit): Document
+
+    override fun applyTo(document: Document): Document = applyTo(document) {}
+}
+
+/** 편집에 쓸 메모리가 모자라 편집하지 못했다. "변화 없음"(같은 문서를 돌려줌)과 구별하려고 따로 둔다. */
+class NotEnoughMemoryException(cause: Throwable? = null) : RuntimeException("Not enough memory for the edit", cause)

@@ -88,9 +88,36 @@ class TransformPlan private constructor(
 
 /**
  * 조각 안의 대상 픽셀 ([x], [y])(대상 타일 안 좌표)에 오는 원본 픽셀의 원본 타일 안 좌표.
- * 조각 사각형 안에서 [orientation]을 되돌린다. 플랫폼 코드가 같은 방법으로 조각을 그린다.
+ * 조각 사각형 안에서 [orientation]을 되돌린다. 플랫폼 코드는 같은 결과가 나오는 [affine]으로 조각을 그린다.
  */
 fun TilePart.sourcePixel(x: Int, y: Int, orientation: Orientation): PixelPoint {
     val local = orientation.inverse.mapPixel(x - targetRect.left, y - targetRect.top, targetRect.width, targetRect.height)
     return PixelPoint(sourceRect.left + local.x, sourceRect.top + local.y)
+}
+
+/**
+ * 조각의 원본 타일 안 좌표를 대상 타일 안 좌표로 옮기는 정수 변환 `[a, b, c, d, e, f]`.
+ * x' = a·x + b·y + c, y' = d·x + e·y + f이고, 픽셀 가장자리를 기준으로 한 좌표다.
+ * 계수가 모두 정수라, 플랫폼 코드가 그대로 그리기 행렬로 쓰면 픽셀이 반올림 없이 옮겨진다.
+ */
+fun TilePart.affine(orientation: Orientation): IntArray {
+    val w = sourceRect.width
+    val h = sourceRect.height
+    // 조각 안 좌표 X = x - 원본 왼쪽. 좌우로 뒤집으면 X → w - X
+    val sign = if (orientation.mirrored) -1 else 1
+    val flip = if (orientation.mirrored) w else 0
+    val sl = sourceRect.left
+    val st = sourceRect.top
+    val tl = targetRect.left
+    val tt = targetRect.top
+    return when (orientation.quarterTurns) {
+        // (X, Y)
+        0 -> intArrayOf(sign, 0, -sign * sl + flip + tl, 0, 1, -st + tt)
+        // (h - Y, X)
+        1 -> intArrayOf(0, -1, h + st + tl, sign, 0, -sign * sl + flip + tt)
+        // (w - X, h - Y)
+        2 -> intArrayOf(-sign, 0, w + sign * sl - flip + tl, 0, -1, h + st + tt)
+        // (Y, w - X)
+        else -> intArrayOf(0, 1, -st + tl, -sign, 0, w + sign * sl - flip + tt)
+    }
 }
