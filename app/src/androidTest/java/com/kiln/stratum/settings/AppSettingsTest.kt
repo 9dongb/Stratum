@@ -13,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -24,8 +25,12 @@ class AppSettingsTest {
 
     private fun preferences(): SharedPreferences = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
+    @Before
     @After
     fun deletePreferences() {
+        // 저장은 비동기(apply)라, 빈 commit으로 앞 저장이 디스크에 다 써질 때까지 기다린 뒤 지운다.
+        // 그러지 않으면 지운 뒤에 늦게 써진 값을 다음 테스트가 읽는다.
+        preferences().edit().commit()
         context.deleteSharedPreferences(FILE)
     }
 
