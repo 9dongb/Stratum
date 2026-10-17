@@ -25,4 +25,8 @@ internal class BitmapTilePixels(val bitmap: Bitmap) : TilePixels {
     // getPixel은 알파를 미리 곱하지 않은 값으로 바꿔 돌려준다
     override fun pixelAt(x: Int, y: Int): Int =
         if (x < bitmap.width && y < bitmap.height) bitmap.getPixel(x, y) else 0
+
+    // 끝 타일은 캔버스 안쪽 크기만 담아 꽉 찬 타일보다 작다
+    override val byteCount: Int
+        get() = bitmap.allocationByteCount
 }

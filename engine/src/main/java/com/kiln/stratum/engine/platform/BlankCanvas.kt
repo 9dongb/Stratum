@@ -48,7 +48,8 @@ object BlankCanvas {
             scratch.eraseColor(argb)
             // 비트맵을 바꿀 수 없게 하는 공개 함수가 없어서 copy(…, false)로 복사본을 만든다
             val bitmap = scratch.copy(Bitmap.Config.ARGB_8888, false) ?: return null
-            return Tile.of(BitmapTilePixels(bitmap))
+            // 한 가지 색이라고 표시해 두면, 돌리거나 잘라도 이 타일 한 장을 그대로 쓴다
+            return Tile.of(BitmapTilePixels(bitmap), solidColor = argb)
         } finally {
             scratch.recycle()
         }

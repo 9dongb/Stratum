@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.raster
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -48,6 +49,20 @@ class RasterTest {
         assertEquals(3 * 1000 + 4, tile.pixelAt(3, 4))
         // 범위 검사는 저장소가 아니라 타일이 맡는다
         assertThrows(IllegalArgumentException::class.java) { tile.pixelAt(TILE_SIZE, 0) }
+    }
+
+    @Test
+    fun solidTile_knowsItsColor_andOtherTilesDoNot() {
+        val tile = Tile.solid(0xFF336699.toInt())
+
+        assertEquals(0xFF336699.toInt(), tile.solidColor)
+        assertEquals(0xFF336699.toInt(), tile.pixelAt(TILE_SIZE - 1, TILE_SIZE - 1))
+        assertNull(Tile.of(IntArray(TILE_PIXEL_COUNT)).solidColor)
+    }
+
+    @Test
+    fun byteCount_isAFullTileByDefault() {
+        assertEquals(TILE_PIXEL_COUNT * 4, Tile.of(IntArray(TILE_PIXEL_COUNT)).byteCount)
     }
 
     @Test

@@ -12,6 +12,10 @@ interface TilePixels {
      * 좌표가 0 until [TILE_SIZE] 안인지는 [Tile]이 확인하고 넘긴다.
      */
     fun pixelAt(x: Int, y: Int): Int
+
+    /** 픽셀이 차지하는 메모리(바이트). 기본은 꽉 찬 타일 한 장(ARGB 4바이트)이다. */
+    val byteCount: Int
+        get() = TILE_PIXEL_COUNT * Int.SIZE_BYTES
 }
 
 /** 자바 힙의 배열에 담는 픽셀. 테스트와 작은 데이터용이다. 받은 배열을 복사해 두므로 나중에 바뀌지 않는다. */
