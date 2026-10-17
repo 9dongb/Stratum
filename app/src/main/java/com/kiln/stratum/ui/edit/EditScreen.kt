@@ -66,6 +66,8 @@ fun EditScreen(
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
+    // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
+    val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
 
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -78,21 +80,21 @@ fun EditScreen(
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, onCanvasSize, WindowInsetsSides.Horizontal, Modifier.weight(1f))
+                    EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.Horizontal, Modifier.weight(1f))
                     ToolTabBar()
                 }
 
                 WidthClass.Medium -> Row(body) {
                     ToolRail()
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, onCanvasSize, WindowInsetsSides.End, Modifier.weight(1f))
+                        EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.End, Modifier.weight(1f))
                         BottomPanel(expanded = panelExpanded, onToggle = { panelExpanded = !panelExpanded })
                     }
                 }
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail()
-                    EditCanvas(state, onCanvasSize, WindowInsetsSides.Bottom, Modifier.weight(1f))
+                    EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.Bottom, Modifier.weight(1f))
                     SidePanel()
                 }
             }
@@ -149,12 +151,14 @@ private fun EditTopBar(onBack: () -> Unit) {
 }
 
 /**
- * 캔버스 영역. 엔진이 그린 축소본을 화면에 맞춰 보여 준다. 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
+ * 캔버스 영역. 엔진이 그린 축소본을 보기 상태([viewState])대로 보여 주고, 두 손가락으로 확대·이동한다.
+ * 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
  * 배경은 영역 끝까지 칠하고, 안의 내용만 [insetSides] 쪽 시스템 바·카메라 구멍을 피한다.
  */
 @Composable
 private fun EditCanvas(
     state: EditorState,
+    viewState: CanvasViewState,
     onCanvasSize: (width: Int, height: Int) -> Unit,
     insetSides: WindowInsetsSides,
     modifier: Modifier = Modifier
@@ -172,7 +176,7 @@ private fun EditCanvas(
             EditorState.Empty, is EditorState.AskSize -> Unit
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
-            is EditorState.Ready -> CanvasImage(state, view = { CanvasView.Fit }, Modifier.fillMaxSize())
+            is EditorState.Ready -> CanvasViewport(state, viewState, Modifier.fillMaxSize())
             is EditorState.Failed -> Text(
                 text = stringResource(
                     when (state.reason) {

@@ -1,0 +1,75 @@
+package com.kiln.stratum.ui.edit
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import com.kiln.stratum.engine.raster.PixelSize
+
+/**
+ * 캔버스 보기 상태를 들고 있는 곳. 두 손가락으로 움직이는 동안 자주 바뀌므로, 그리는 쪽은 그리는 순간에 읽는다.
+ */
+@Stable
+class CanvasViewState(initial: CanvasView) {
+    var view: CanvasView by mutableStateOf(initial)
+
+    companion object {
+        /** 접기·펼치기나 백그라운드 종료 뒤에도 남긴다. 맞춤은 빈 배열이다. */
+        val Saver: Saver<CanvasViewState, DoubleArray> = Saver(
+            save = { it.view.toSaved().toDoubleArray() },
+            restore = { CanvasViewState(canvasViewFromSaved(it.toList())) }
+        )
+    }
+}
+
+/**
+ * 문서 크기가 [documentSize]인 문서의 보기 상태. 처음에는 맞춤이고, 다른 문서가 열리면 맞춤으로 돌아간다.
+ * 화면 폭에 따라 배치가 바뀌어도 이어지도록, 배치를 고르기 전(편집 화면 맨 위)에서 부른다.
+ */
+@Composable
+fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
+    rememberSaveable(documentSize, saver = CanvasViewState.Saver) { CanvasViewState(CanvasView.Fit) }
+
+/**
+ * 캔버스 영역: 보기 상태대로 문서를 그리고, 두 손가락으로 확대·이동한다.
+ * [onViewChanged]는 두 손가락 조작을 마쳤을 때 부른다(선명하게 다시 그릴 영역을 정하는 데 쓴다).
+ */
+@Composable
+fun CanvasViewport(
+    state: EditorState.Ready,
+    viewState: CanvasViewState,
+    modifier: Modifier = Modifier,
+    onViewChanged: () -> Unit = {}
+) {
+    // 조작 도중에 문서·콜백이 바뀌어도 터치 처리를 다시 시작하지 않는다
+    val documentSize by rememberUpdatedState(state.documentSize)
+    val viewChanged by rememberUpdatedState(onViewChanged)
+    CanvasImage(
+        state = state,
+        view = { viewState.view },
+        modifier = modifier.pointerInput(viewState) {
+            detectTwoFingerTransform(
+                onTransform = { centroid, pan, zoom ->
+                    if (size.width > 0 && size.height > 0) {
+                        viewState.view = viewState.view.transformedBy(
+                            panX = pan.x.toDouble(),
+                            panY = pan.y.toDouble(),
+                            zoom = zoom.toDouble(),
+                            centroidX = centroid.x.toDouble(),
+                            centroidY = centroid.y.toDouble(),
+                            area = PixelSize(size.width, size.height),
+                            document = documentSize
+                        )
+                    }
+                },
+                onEnd = { viewChanged() }
+            )
+        }
+    )
+}
