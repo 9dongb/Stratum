@@ -1,5 +1,8 @@
 package com.kiln.stratum.ui.edit
 
+import com.kiln.stratum.engine.export.ExportFormat
+import com.kiln.stratum.engine.export.ExportSize
+
 /** 화면 테스트가 편집 화면의 부분을 찾을 때 쓰는 이름표(testTag). 화면에는 보이지 않는다. */
 object EditScreenTags {
     const val CANVAS = "editCanvas"
@@ -20,6 +23,10 @@ object EditScreenTags {
     const val RESIZE_HEIGHT = "resizeHeight"
     const val RESIZE_LOCK = "resizeLock"
     const val RESIZE_APPLY = "resizeApply"
+    const val EXPORT = "export"
+    const val EXPORT_QUALITY = "exportQuality"
+    const val EXPORT_SHARE = "exportShare"
+    const val EXPORT_SAVE = "exportSave"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
     const val BOTTOM_PANEL = "bottomPanel"
@@ -42,4 +49,14 @@ object EditScreenTags {
 
     /** 크기 변경 창의 [unit] 단위 버튼 */
     fun resizeUnit(unit: ResizeUnit): String = "resizeUnit_${unit.name}"
+
+    /** 내보내기 창의 [format] 형식 버튼 */
+    fun exportFormat(format: ExportFormat): String = "exportFormat_${format.name}"
+
+    /** 내보내기 창의 [size] 크기 버튼. 원본은 `exportSize_original`, 긴 변은 `exportSize_2048`처럼 픽셀이다. */
+    fun exportSize(size: ExportSize): String =
+        when (size) {
+            ExportSize.Original -> "exportSize_original"
+            is ExportSize.LongEdge -> "exportSize_${size.pixels}"
+        }
 }

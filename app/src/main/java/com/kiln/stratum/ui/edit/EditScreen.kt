@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -54,11 +55,15 @@ import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.theme.StratumTheme
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -77,6 +82,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param onChooseSize 큰 사진 선택 창에서 고른 크기. true면 원본 크기, false면 줄여서 연다.
  * @param messages 잠깐 알릴 일. 캔버스 아래쪽에 알림 막대로 하나씩 보인다.
  * @param onEdit 엔진에 보낼 편집 명령(회전·뒤집기 등)
+ * @param exportChoice 마지막으로 내보낸 고르기. 내보내기 창이 이것으로 시작한다.
+ * @param onExport 내보내기 창에서 고른 것과 내보낼 곳(갤러리·공유)
+ * @param shareRequests 공유 창으로 보낼 사진. 앱이 화면에 있을 때 공유 창을 띄운다.
  */
 @Composable
 fun EditScreen(
@@ -89,7 +97,10 @@ fun EditScreen(
     onUndo: () -> Unit = {},
     onRedo: () -> Unit = {},
     messages: Flow<EditorMessage> = emptyFlow(),
-    onEdit: (EditCommand) -> Unit = {}
+    onEdit: (EditCommand) -> Unit = {},
+    exportChoice: ExportChoice = ExportChoice(),
+    onExport: (ExportChoice, ExportTarget) -> Unit = { _, _ -> },
+    shareRequests: Flow<ShareRequest> = emptyFlow()
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -117,6 +128,18 @@ fun EditScreen(
             ready?.let { resizeInput = ResizeInput.start(it.documentSize) }
         } else {
             selection.choose(subTool)
+        }
+    }
+    // 내보내기 창에서 고르던 것. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
+    var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
+    // 공유 창은 앱이 화면에 있을 때만 띄운다. 뒤로 가 있는 동안 끝난 것은 돌아왔을 때 띄운다.
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(shareRequests, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            shareRequests.collect { request ->
+                context.startActivity(ExportStorage.shareChooser(request.uri, request.mimeType))
+            }
         }
     }
     LaunchedEffect(cropMode, ready?.revision) {
@@ -176,7 +199,10 @@ fun EditScreen(
                     canUndo = ready?.canUndo == true && !ready.busy,
                     canRedo = ready?.canRedo == true && !ready.busy,
                     onUndo = onUndo,
-                    onRedo = onRedo
+                    onRedo = onRedo,
+                    // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
+                    canExport = ready != null && !ready.busy && !cropMode,
+                    onExport = { exportDraft = exportChoice }
                 )
             },
             // 시스템 바·카메라 구멍은 영역마다 바깥쪽만 비켜 두므로, Scaffold는 상단 바 높이만 비운다
@@ -228,6 +254,21 @@ fun EditScreen(
                 }
             )
         }
+        val draft = exportDraft
+        if (draft != null && ready != null) {
+            ExportPrompt(
+                choice = draft,
+                documentSize = ready.documentSize,
+                widthClass = widthClass,
+                busy = ready.busy,
+                onChoiceChange = { exportDraft = it },
+                onDismiss = { exportDraft = null },
+                onExport = { target ->
+                    onExport(draft, target)
+                    exportDraft = null
+                }
+            )
+        }
     }
 }
 
@@ -248,7 +289,7 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit) {
     }
 }
 
-/** 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, 내보내기(아직 비활성) */
+/** 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, 내보내기 */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -257,7 +298,9 @@ private fun EditTopBar(
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
-    onRedo: () -> Unit
+    onRedo: () -> Unit,
+    canExport: Boolean,
+    onExport: () -> Unit
 ) {
     TopAppBar(
         title = {},
@@ -282,8 +325,7 @@ private fun EditTopBar(
                     contentDescription = stringResource(R.string.action_redo)
                 )
             }
-            // 내보내기는 아직 기능이 없어서, 자리만 두고 누를 수 없게 한다
-            IconButton(onClick = {}, enabled = false) {
+            IconButton(onClick = onExport, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
                 Icon(
                     painter = painterResource(R.drawable.ic_ios_share),
                     contentDescription = stringResource(R.string.action_export)

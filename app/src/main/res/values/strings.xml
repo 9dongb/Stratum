@@ -15,6 +15,8 @@
     <string name="action_export">Export</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_apply">Apply</string>
+    <string name="action_share">Share</string>
+    <string name="action_save">Save</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">Background</string>
@@ -51,6 +53,15 @@
     <string name="edit_export_saved">Saved to Pictures/Stratum.</string>
     <string name="edit_export_not_enough_memory">Not enough memory to export. Try a smaller size.</string>
     <string name="edit_export_failed">Couldn\'t export the image.</string>
+    <string name="export_format_jpeg">JPEG</string>
+    <string name="export_format_png">PNG</string>
+    <string name="export_format_webp">WebP</string>
+    <string name="export_quality">Quality</string>
+    <string name="export_lossless">PNG saves without losing quality.</string>
+    <string name="export_size_original">Original</string>
+    <string name="export_size_long_edge">Long edge %1$d px</string>
+    <string name="export_result">Exports at %1$d × %2$d px.</string>
+    <string name="export_result_jpeg">Exports at %1$d × %2$d px. Transparent areas become white.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">Zoom %1$s%%. Tap to fit to screen.</string>

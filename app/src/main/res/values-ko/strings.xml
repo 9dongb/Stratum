@@ -16,6 +16,8 @@
     <string name="action_export">내보내기</string>
     <string name="action_cancel">취소</string>
     <string name="action_apply">적용</string>
+    <string name="action_share">공유</string>
+    <string name="action_save">저장</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">배경</string>
@@ -52,6 +54,15 @@
     <string name="edit_export_saved">사진/Stratum에 저장했어요.</string>
     <string name="edit_export_not_enough_memory">메모리가 부족해서 내보내지 못했어요. 더 작은 크기를 골라 보세요.</string>
     <string name="edit_export_failed">내보내지 못했어요.</string>
+    <string name="export_format_jpeg">JPEG</string>
+    <string name="export_format_png">PNG</string>
+    <string name="export_format_webp">WebP</string>
+    <string name="export_quality">품질</string>
+    <string name="export_lossless">PNG는 화질 손실 없이 저장해요.</string>
+    <string name="export_size_original">원본</string>
+    <string name="export_size_long_edge">긴 변 %1$d px</string>
+    <string name="export_result">%1$d × %2$d px로 내보내요.</string>
+    <string name="export_result_jpeg">%1$d × %2$d px로 내보내요. 투명한 곳은 흰색이 돼요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
 

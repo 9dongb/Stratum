@@ -60,6 +60,7 @@ fun StratumApp(editor: EditorViewModel) {
             // 시스템 뒤로(버튼·제스처)도 상단 바의 뒤로 버튼과 똑같이 홈으로 돌아간다
             BackHandler(onBack = goHome)
             val state by editor.state.collectAsState()
+            val exportChoice by editor.exportChoice.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -69,7 +70,10 @@ fun StratumApp(editor: EditorViewModel) {
                 onUndo = editor::undo,
                 onRedo = editor::redo,
                 messages = editor.messages,
-                onEdit = editor::edit
+                onEdit = editor::edit,
+                exportChoice = exportChoice,
+                onExport = editor::export,
+                shareRequests = editor.shareRequests
             )
         }
     }
