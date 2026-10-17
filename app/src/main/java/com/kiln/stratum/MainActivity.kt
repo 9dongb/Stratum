@@ -7,8 +7,11 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.CompositionLocalProvider
 import com.kiln.stratum.ui.StratumApp
 import com.kiln.stratum.ui.edit.EditorViewModel
+import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.rememberWindowHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 
 class MainActivity : ComponentActivity() {
@@ -24,8 +27,11 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
         setContent {
-            StratumTheme {
-                StratumApp(editor)
+            // 접히는 부분(힌지) 정보를 화면 어디서나 읽을 수 있게 넘긴다(LocalHinges)
+            CompositionLocalProvider(LocalHinges provides rememberWindowHinges(this)) {
+                StratumTheme {
+                    StratumApp(editor)
+                }
             }
         }
     }
