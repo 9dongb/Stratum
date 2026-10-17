@@ -107,7 +107,10 @@ class NewCanvasInput(width: String, height: String, background: CanvasBackground
     }
 }
 
-/** 새 캔버스 입력값. 처음에는 정사각형 프리셋, 흰 배경이다. 창을 닫았다 다시 열면 마지막 값이 남아 있다. */
+/**
+ * 새 캔버스 입력값. 처음에는 정사각형 프리셋, 흰 배경이다.
+ * 홈에 있는 동안 창을 닫았다 다시 열면 마지막 값이 남고, 편집 화면에 다녀오면 홈이 새로 그려져 처음 값으로 돌아간다.
+ */
 @Composable
 fun rememberNewCanvasInput(): NewCanvasInput =
     rememberSaveable(saver = NewCanvasInput.Saver) {

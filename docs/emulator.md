@@ -69,7 +69,9 @@
 - 접기 `adb emu fold`, 펼치기 `adb emu unfold`
 - 지금 상태 보기: `adb shell cmd device_state state`
 - 접고 펼 때마다 Activity가 다시 만들어진다.
-- 접고 펴면 시스템이 회전 값(`user_rotation`)을 0으로 되돌린다. 돌린 방향을 다시 보려면 다시 돌린다.
+- 접고 펴면 회전 값(`accelerometer_rotation`·`user_rotation`)이 바뀐다. 접은 상태와 편 상태가 값을 따로 기억하는 것으로 보인다(2026-10-17).
+  - 돌린 방향을 다시 보려면 다시 돌린다.
+  - 끝나면 펼친 상태에서 원래 값으로 되돌렸는지 다시 확인한다.
 - 앱이 받은 힌지 정보는 `adb logcat -s WindowHinges`로 본다(2026-10-17 확인).
   - 안쪽 화면 기본 방향: `Rect(1104, 0 - 1104, 1840) VERTICAL FLAT`(두께 0인 세로선)
   - 안쪽 화면을 돌린 방향: `Rect(0, 1104 - 1840, 1104) HORIZONTAL FLAT`
