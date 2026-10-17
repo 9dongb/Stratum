@@ -1,8 +1,6 @@
 package com.kiln.stratum.ui.home
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -74,37 +73,42 @@ fun HomeScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 넓은 화면에서 버튼이 너무 길게 늘어나지 않게 폭을 제한한다. 화면 크기별 레이아웃은 다음 작업에서 정한다.
+            // 넓은 화면에서 버튼이 너무 길게 늘어나지 않게 폭을 제한한다.
+            // 화면 크기별 배치(최근 프로젝트 썸네일 2열·4열)는 최근 프로젝트를 만들 때 정한다(기획서 화면 목록).
             Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
-                // 버튼 안 아이콘은 글자가 버튼 이름을 말해 주므로 따로 이름(contentDescription)을 붙이지 않는다
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = onOpenPhoto,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_photo_library),
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text(stringResource(R.string.home_open_photo))
-                    }
-                    FilledTonalButton(
-                        onClick = onNewCanvas,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_add),
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text(stringResource(R.string.home_new_canvas))
-                    }
-                }
+                // 버튼 안 아이콘은 글자가 버튼 이름을 말해 주므로 따로 이름(contentDescription)을 붙이지 않는다.
+                // 펼친 화면 가운데의 접히는 부분(힌지)이 버튼 줄을 지나면, 두 버튼을 힌지 양쪽에 하나씩 놓는다.
+                HingeSplitRow(
+                    first = {
+                        Button(
+                            onClick = onOpenPhoto,
+                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_photo_library),
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize)
+                            )
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text(stringResource(R.string.home_open_photo))
+                        }
+                    },
+                    second = {
+                        FilledTonalButton(
+                            onClick = onNewCanvas,
+                            contentPadding = ButtonDefaults.ButtonWithIconContentPadding
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_add),
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize)
+                            )
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text(stringResource(R.string.home_new_canvas))
+                        }
+                    },
+                    gap = 12.dp
+                )
 
                 Spacer(Modifier.height(32.dp))
                 Text(

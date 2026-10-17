@@ -22,8 +22,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     2. 편집 화면 세 배치(도구 막대·탭 줄·패널 자리, 모두 비활성), 아이콘 8개, 문구
     3. 힌지 피하기(도구 막대, 홈 버튼)와 화면 테스트
     4. 에뮬레이터 확인, 자기 검토, 기록
-  - 한 일: 계획 승인, 1~2단계
-  - 남은 일: 3~4단계(에뮬레이터로 화면은 아직 보지 않았다)
+  - 한 일: 계획 승인, 1~3단계
+  - 남은 일: 4단계(에뮬레이터로 화면 보기, 자기 검토, 기록 마무리)
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -131,6 +131,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - **축소본:** `PreviewRenderer`가 화면 크기에 맞는 1/2^k 단계로 GPU에서 그린다. 지금은 표준 합성과 불투명도만 쓴다. 혼합 모드는 레이어 합성 작업 때 여기에 더한다.
 - **캐시:** 썸네일·GPU 텍스처는 `LayerId`가 아니라 `Raster`·`Tile` 객체를 기준으로 한다. 실행 취소 뒤 레이어 번호가 다시 쓰이기 때문이다.
 - **홈 최근 프로젝트:** 썸네일 격자는 `LazyVerticalGrid`로 만든다. 지금의 세로 스크롤 `Column` 안에 넣으면 높이가 무한대라 오류가 난다.
+  - 썸네일도 힌지(가로·세로 모두)를 피한다. 지금 홈은 화면 위쪽 버튼 줄만 세로 힌지를 피한다(`HingeSplitRow`).
 
 ## 기술 주의점
 
@@ -145,6 +146,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - `Bitmap.createBitmap(원본, x, y, w, h)`는 바꿀 수 있는 비트맵을 돌려준다. 비트맵을 바꿀 수 없게 하는 공개 함수가 없으므로, 바꿀 수 없는 복사본은 `copy(ARGB_8888, false)`로 만든다(메모리가 없으면 null).
 - `Bitmap.createBitmap(Picture, …, HARDWARE)`는 null이 아니라고 적혀 있지만, GPU가 실패하면 null을 돌려줄 수 있다.
 - `connectedDebugAndroidTest`는 앱 설치에 실패해도 `BUILD SUCCESSFUL`로 끝날 수 있다. 결과 XML의 테스트 수로 확인한다(`docs/emulator.md`).
+- Compose 화면 테스트는 Espresso 3.7.0 이상이 필요하다. 3.5.1은 API 37에서 없어진 `InputManager.getInstance`를 불러, 화면 테스트가 모두 바로 실패한다.
+- 화면 테스트의 화면 크기는 `DeviceConfigurationOverride.ForcedSize`로 정한다. 정한 크기가 기기 화면보다 크면 밀도를 낮춰 맞추므로, 테스트에서 dp를 픽셀로 바꿀 때는 노드의 밀도(`layoutInfo.density`)를 쓴다.
 
 ## 확인 방법
 

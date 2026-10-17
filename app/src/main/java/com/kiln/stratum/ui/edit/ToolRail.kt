@@ -1,7 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,15 +12,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 
 /**
  * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 도구는 아직 기능이 없어 누를 수 없다.
  * 배경은 아래 끝까지 칠하고, 버튼만 시스템 바·카메라 구멍을 피한다.
+ * 가로로 지나가는 힌지가 막대를 지나면, 그 자리의 버튼을 힌지 띠 아래로 비켜 놓는다(CLAUDE.md 6장).
  */
 @Composable
 fun ToolRail(modifier: Modifier = Modifier) {
@@ -30,13 +29,12 @@ fun ToolRail(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxHeight().testTag(EditScreenTags.TOOL_RAIL),
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        Column(
+        HingeAvoidingColumn(
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                 .width(72.dp)
                 .padding(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            gap = 4.dp
         ) {
             for (tool in EditTool.railTools) {
                 IconButton(
