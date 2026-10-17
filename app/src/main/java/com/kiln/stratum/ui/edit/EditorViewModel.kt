@@ -8,12 +8,14 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.history.EditHistory
 import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportPlan
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
+import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.preview.PreviewLevels
@@ -28,14 +30,29 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 편집 화면에 보여 줄 실패 까닭. 화면이 알맞은 문구를 고른다. */
+enum class EditorFailure {
+    /** 사진 파일을 읽을 수 없다. */
+    PHOTO_UNREADABLE,
+
+    /** 메모리가 부족해 사진을 열 수 없다. */
+    PHOTO_NOT_ENOUGH_MEMORY,
+
+    /** 메모리가 부족해 새 캔버스를 만들 수 없다. */
+    CANVAS_NOT_ENOUGH_MEMORY
+}
+
 /** 편집 화면에 보여 줄 상태. */
 sealed interface EditorState {
 
-    /** 열린 문서가 없다(새 캔버스는 아직 없고, 백그라운드 종료 뒤 돌아와도 이렇다). */
+    /** 열린 문서가 없다(백그라운드 종료 뒤 돌아오면 이렇다. 자동 저장 때 해결). */
     data object Empty : EditorState
 
     /** 사진을 여는 중이다. */
     data object Opening : EditorState
+
+    /** 새 캔버스를 만드는 중이다. */
+    data object Creating : EditorState
 
     /**
      * 큰 사진이라 원본 크기로 열지 줄여서 열지 묻는다.
@@ -47,11 +64,14 @@ sealed interface EditorState {
         val reducedMegapixels: Int
     ) : EditorState
 
-    /** 사진을 열었다. [preview]는 엔진이 그린 화면용 축소본(하드웨어 비트맵)이다. */
-    data class Ready(val preview: Bitmap) : EditorState
+    /**
+     * 문서가 열렸다. [preview]는 엔진이 그린 화면용 축소본(하드웨어 비트맵)이다.
+     * 축소본은 크기를 올림해서 줄이므로, 화면에 맞출 때는 문서의 원래 크기 [documentSize]를 쓴다.
+     */
+    data class Ready(val preview: Bitmap, val documentSize: PixelSize) : EditorState
 
-    /** 사진을 열지 못했다. */
-    data class Failed(val reason: ImportFailure) : EditorState
+    /** 문서를 열거나 만들지 못했다. */
+    data class Failed(val reason: EditorFailure) : EditorState
 }
 
 /**
@@ -83,6 +103,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     /** 지금 보이는 축소본의 단계. 없으면 -1. */
     private var previewLevel = -1
 
+    /** 축소본을 그릴 GPU 메모리가 없을 때 보여 줄 까닭. 사진을 열었는지, 새 캔버스를 만들었는지에 따라 다르다. */
+    private var memoryFailure = EditorFailure.PHOTO_NOT_ENOUGH_MEMORY
+
     private class PendingPhoto(val source: ImageDecoder.Source, val plan: ImportPlan)
 
     /** [uri] 사진을 연다. 열려 있던 문서는 닫는다. */
@@ -94,11 +117,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             // 앞 작업의 해독은 중간에 멈출 수 없어서, 끝날 때까지 기다린 뒤 시작한다
             previous?.cancelAndJoin()
             release()
+            memoryFailure = EditorFailure.PHOTO_NOT_ENOUGH_MEMORY
             _state.value = EditorState.Opening
             val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
             val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
             if (info == null) {
-                _state.value = EditorState.Failed(ImportFailure.UNREADABLE)
+                _state.value = EditorState.Failed(EditorFailure.PHOTO_UNREADABLE)
                 return@launch
             }
             val plan = ImportSizing.plan(
@@ -108,7 +132,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 maxDecodeBytes = PhotoImporter.decodeLimitBytes
             )
             when {
-                plan.cannotOpen -> _state.value = EditorState.Failed(ImportFailure.NOT_ENOUGH_MEMORY)
+                plan.cannotOpen -> _state.value = EditorState.Failed(EditorFailure.PHOTO_NOT_ENOUGH_MEMORY)
                 plan.needsChoice -> {
                     pendingPhoto = PendingPhoto(source, plan)
                     _state.value = EditorState.AskSize(
@@ -133,6 +157,31 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             previous?.join()
             _state.value = EditorState.Opening
             importAndShow(photo.source, sampleSize)
+        }
+    }
+
+    /**
+     * [width]×[height] 빈 새 캔버스를 [fill]로 채워 연다. 열려 있던 문서는 닫는다.
+     * 크기는 CanvasLimits 안이어야 한다(새 캔버스 창이 검사하고 넘긴다).
+     */
+    fun newCanvas(width: Int, height: Int, fill: CanvasFill) {
+        previewJob?.cancel()
+        pendingPhoto = null
+        val previous = openJob
+        openJob = viewModelScope.launch {
+            // 앞에서 사진을 여는 중이면 해독이 끝날 때까지 기다려 메모리가 겹치지 않게 한다
+            previous?.cancelAndJoin()
+            release()
+            memoryFailure = EditorFailure.CANVAS_NOT_ENOUGH_MEMORY
+            _state.value = EditorState.Creating
+            val layerName = getApplication<Application>().getString(R.string.layer_background)
+            val document = withContext(Dispatchers.Default) { BlankCanvas.create(width, height, fill, layerName) }
+            if (document == null) {
+                _state.value = EditorState.Failed(EditorFailure.CANVAS_NOT_ENOUGH_MEMORY)
+                return@launch
+            }
+            history = EditHistory(document)
+            showPreview(document)
         }
     }
 
@@ -163,7 +212,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             PhotoImporter.import(source, layerName, sampleSize) { ensureActive() }
         }
         when (result) {
-            is ImportResult.Failure -> _state.value = EditorState.Failed(result.reason)
+            is ImportResult.Failure -> _state.value = EditorState.Failed(
+                when (result.reason) {
+                    ImportFailure.NOT_ENOUGH_MEMORY -> EditorFailure.PHOTO_NOT_ENOUGH_MEMORY
+                    ImportFailure.UNREADABLE -> EditorFailure.PHOTO_UNREADABLE
+                }
+            )
             is ImportResult.Success -> {
                 history = EditHistory(result.document)
                 showPreview(result.document)
@@ -178,14 +232,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (preview == null) {
             // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
-            _state.value = EditorState.Failed(ImportFailure.NOT_ENOUGH_MEMORY)
+            _state.value = EditorState.Failed(memoryFailure)
             return
         }
         previewLevel = level
         // 접기·펼치기로 축소본을 다시 그리는지 확인할 수 있게 남긴다(adb logcat -s EditorViewModel)
         Log.d(TAG, "Preview level $level: ${preview.width}x${preview.height} for ${document.width}x${document.height}")
         // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
-        _state.value = EditorState.Ready(preview)
+        _state.value = EditorState.Ready(preview, PixelSize(document.width, document.height))
     }
 
     private companion object {

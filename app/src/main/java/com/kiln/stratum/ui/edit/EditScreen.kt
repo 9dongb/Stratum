@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -174,7 +173,8 @@ private fun EditCanvas(
     ) {
         when (state) {
             EditorState.Empty, is EditorState.AskSize -> Unit
-            EditorState.Opening -> OpeningIndicator()
+            EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
+            EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             is EditorState.Ready -> {
                 // 축소본이 바뀔 때만 Compose용 이미지로 감싼다
                 val image = remember(state.preview) { state.preview.asImageBitmap() }
@@ -188,8 +188,9 @@ private fun EditCanvas(
             is EditorState.Failed -> Text(
                 text = stringResource(
                     when (state.reason) {
-                        ImportFailure.NOT_ENOUGH_MEMORY -> R.string.edit_open_failed_memory
-                        ImportFailure.UNREADABLE -> R.string.edit_open_failed
+                        EditorFailure.PHOTO_UNREADABLE -> R.string.edit_open_failed
+                        EditorFailure.PHOTO_NOT_ENOUGH_MEMORY -> R.string.edit_open_failed_memory
+                        EditorFailure.CANVAS_NOT_ENOUGH_MEMORY -> R.string.edit_create_failed_memory
                     }
                 ),
                 modifier = Modifier.padding(24.dp),
@@ -201,15 +202,16 @@ private fun EditCanvas(
     }
 }
 
+/** 문서를 열거나 만드는 동안 보이는 표시와 [message]. */
 @Composable
-private fun OpeningIndicator() {
+private fun ProgressIndicator(message: String) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CircularProgressIndicator()
         Text(
-            text = stringResource(R.string.edit_opening_photo),
+            text = message,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )

@@ -17,10 +17,12 @@
 
     <!-- 편집 화면 -->
     <string name="layer_background">Background</string>
-    <string name="edit_canvas_description">Photo being edited</string>
+    <string name="edit_canvas_description">Image being edited</string>
     <string name="edit_opening_photo">Opening photo…</string>
     <string name="edit_open_failed">Couldn\'t open this photo.</string>
     <string name="edit_open_failed_memory">Not enough memory to open this photo.</string>
+    <string name="edit_creating_canvas">Creating canvas…</string>
+    <string name="edit_create_failed_memory">Not enough memory to create this canvas.</string>
 
     <!-- 편집 도구. _short는 커버 화면 탭 줄에 보이는 짧은 이름이고, 나머지는 화면 읽기 기능이 읽는 이름이다. -->
     <string name="tool_transform">Crop and transform</string>
