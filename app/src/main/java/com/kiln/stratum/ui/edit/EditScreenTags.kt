@@ -16,6 +16,10 @@ object EditScreenTags {
     const val CROP_SWAP = "cropSwap"
     const val CROP_CANCEL = "cropCancel"
     const val CROP_APPLY = "cropApply"
+    const val RESIZE_WIDTH = "resizeWidth"
+    const val RESIZE_HEIGHT = "resizeHeight"
+    const val RESIZE_LOCK = "resizeLock"
+    const val RESIZE_APPLY = "resizeApply"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
     const val BOTTOM_PANEL = "bottomPanel"
@@ -35,4 +39,7 @@ object EditScreenTags {
 
     /** 자르기 비율 [ratio] 칩 */
     fun cropRatio(ratio: CropRatio): String = "cropRatio_${ratio.name}"
+
+    /** 크기 변경 창의 [unit] 단위 버튼 */
+    fun resizeUnit(unit: ResizeUnit): String = "resizeUnit_${unit.name}"
 }

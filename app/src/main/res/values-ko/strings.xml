@@ -15,6 +15,7 @@
     <string name="action_redo">다시 실행</string>
     <string name="action_export">내보내기</string>
     <string name="action_cancel">취소</string>
+    <string name="action_apply">적용</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">배경</string>
@@ -40,7 +41,13 @@
     <string name="crop_ratio_original">원본</string>
     <string name="crop_ratio_format">%1$d:%2$d</string>
     <string name="crop_swap">가로·세로 바꾸기</string>
-    <string name="crop_apply">적용</string>
+    <string name="resize_current">지금 크기: %1$d × %2$d px</string>
+    <string name="resize_unit_pixels">픽셀</string>
+    <string name="resize_unit_percent">퍼센트</string>
+    <string name="resize_percent_suffix">%</string>
+    <string name="resize_keep_ratio">비율 유지</string>
+    <string name="resize_result">새 크기: %1$d × %2$d px</string>
+    <string name="resize_error_too_large">너무 커요. %1$dMP까지 바꿀 수 있어요.</string>
     <string name="edit_not_enough_memory">메모리가 부족해서 편집할 수 없어요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>

@@ -53,7 +53,7 @@ fun Modifier.longPressFirst(onLongPress: () -> Unit): Modifier {
 
 /**
  * [tool]의 하위 도구를 고르는 메뉴. 도구 버튼을 길게 누르면 그 버튼 옆에 뜬다.
- * 지금 쓰는 하위 도구([current])는 선택된 것으로 알린다. 크기 변경은 창이 생길 때까지 누를 수 없다.
+ * 지금 쓰는 하위 도구([current])는 선택된 것으로 알린다.
  */
 @Composable
 fun SubToolMenu(
@@ -69,8 +69,6 @@ fun SubToolMenu(
                 text = { Text(stringResource(subTool.label)) },
                 onClick = { onChoose(subTool) },
                 leadingIcon = { Icon(painterResource(subTool.icon), contentDescription = null) },
-                // TODO(크기 변경 창 단계): 창이 생기면 켠다
-                enabled = !subTool.oneShot,
                 modifier = Modifier
                     .testTag(EditScreenTags.subTool(subTool))
                     .semantics { selected = subTool == current }

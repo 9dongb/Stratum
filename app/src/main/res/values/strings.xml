@@ -14,6 +14,7 @@
     <string name="action_redo">Redo</string>
     <string name="action_export">Export</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_apply">Apply</string>
 
     <!-- 편집 화면 -->
     <string name="layer_background">Background</string>
@@ -39,7 +40,13 @@
     <string name="crop_ratio_original">Original</string>
     <string name="crop_ratio_format">%1$d:%2$d</string>
     <string name="crop_swap">Swap width and height</string>
-    <string name="crop_apply">Apply</string>
+    <string name="resize_current">Current size: %1$d × %2$d px</string>
+    <string name="resize_unit_pixels">Pixels</string>
+    <string name="resize_unit_percent">Percent</string>
+    <string name="resize_percent_suffix">%</string>
+    <string name="resize_keep_ratio">Keep proportions</string>
+    <string name="resize_result">New size: %1$d × %2$d px</string>
+    <string name="resize_error_too_large">Too large. You can resize up to %1$d MP.</string>
     <string name="edit_not_enough_memory">Not enough memory to apply this edit.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>

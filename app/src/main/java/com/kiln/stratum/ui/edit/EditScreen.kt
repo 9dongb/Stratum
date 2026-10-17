@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
+import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
@@ -104,6 +105,20 @@ fun EditScreen(
     // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
     var cropFrame by rememberSaveable(ready?.revision, stateSaver = CropFrameSaver) { mutableStateOf<CropFrame?>(null) }
     val cropMode = ready != null && selection.active == EditTool.Transform && selection.transformMode == SubTool.CROP
+    // 크기 변경 창의 입력. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
+    var resizeInput by rememberSaveable(stateSaver = ResizeInput.Saver) { mutableStateOf<ResizeInput?>(null) }
+    // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다
+    LaunchedEffect(ready?.documentSize) {
+        if (resizeInput?.document != ready?.documentSize) resizeInput = null
+    }
+    // 하위 도구 고르기. 크기 변경은 한 번 하고 끝나는 일이라 도구를 바꾸지 않고 창만 띄운다.
+    val chooseSubTool: (SubTool) -> Unit = { subTool ->
+        if (subTool == SubTool.RESIZE) {
+            ready?.let { resizeInput = ResizeInput.start(it.documentSize) }
+        } else {
+            selection.choose(subTool)
+        }
+    }
     LaunchedEffect(cropMode, ready?.revision) {
         if (cropMode && ready != null) {
             // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 화면에 맞춘다
@@ -138,7 +153,7 @@ fun EditScreen(
             )
         }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
-            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = selection::choose, crop = crop) }
+            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = chooseSubTool, crop = crop) }
         }
         // 자르기 중에는 캔버스 위에 테두리를 겹친다
         val overlay: @Composable BoxScope.() -> Unit = {
@@ -172,11 +187,11 @@ fun EditScreen(
                 WidthClass.Compact -> Column(body) {
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f))
                     if (toolOptions != null) ToolOptionsSheet(toolOptions)
-                    ToolTabBar(selection, enabled = toolsEnabled, onChoose = selection::choose)
+                    ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
 
                 WidthClass.Medium -> Row(body) {
-                    ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
+                    ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
                         EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f))
                         BottomPanel(
@@ -189,7 +204,7 @@ fun EditScreen(
                 }
 
                 WidthClass.Expanded -> Row(body) {
-                    ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
+                    ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f))
                     SidePanel(toolTitle = toolTitle, toolOptions = toolOptions)
                 }
@@ -199,6 +214,19 @@ fun EditScreen(
         // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
         if (state is EditorState.AskSize) {
             LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)
+        }
+        val input = resizeInput
+        if (input != null && ready != null) {
+            ResizePrompt(
+                input = input,
+                widthClass = widthClass,
+                busy = ready.busy,
+                onDismiss = { resizeInput = null },
+                onApply = { width, height ->
+                    onEdit(ResizeImage(width, height))
+                    resizeInput = null
+                }
+            )
         }
     }
 }

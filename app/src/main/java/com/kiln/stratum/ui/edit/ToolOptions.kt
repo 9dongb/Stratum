@@ -140,7 +140,7 @@ private fun CropActionRow(crop: CropControls, busy: Boolean) {
             enabled = crop.canApply && !busy,
             modifier = Modifier.testTag(EditScreenTags.CROP_APPLY)
         ) {
-            Text(stringResource(R.string.crop_apply))
+            Text(stringResource(R.string.action_apply))
         }
     }
 }
@@ -179,10 +179,8 @@ private fun SubToolRow(mode: SubTool, onChoose: (SubTool) -> Unit) {
                 }
             }
         }
-        // TODO(크기 변경 창 단계): 창이 생기면 켠다
         TextButton(
             onClick = { onChoose(SubTool.RESIZE) },
-            enabled = false,
             modifier = Modifier.testTag(EditScreenTags.subToolOption(SubTool.RESIZE))
         ) {
             Text(stringResource(SubTool.RESIZE.shortLabel), maxLines = 1, softWrap = false)
