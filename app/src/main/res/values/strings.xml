@@ -13,4 +13,19 @@
     <string name="action_undo">Undo</string>
     <string name="action_redo">Redo</string>
     <string name="action_export">Export</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- 편집 화면 -->
+    <string name="layer_background">Background</string>
+    <string name="edit_canvas_description">Photo being edited</string>
+    <string name="edit_opening_photo">Opening photo…</string>
+    <string name="edit_open_failed">Couldn\'t open this photo.</string>
+    <string name="edit_open_failed_memory">Not enough memory to open this photo.</string>
+
+    <!-- 큰 사진 선택 창. %1$d는 화소 수(MP)다. -->
+    <string name="large_photo_title">Large photo</string>
+    <string name="large_photo_message">This photo is %1$d MP. Opening it at full size uses a lot of memory and can be slow. Opening it smaller doesn\'t change the original file.</string>
+    <string name="large_photo_message_no_memory">This photo is %1$d MP, which is too big to open at full size on this device. Opening it smaller doesn\'t change the original file.</string>
+    <string name="large_photo_open_original">Full size (%1$d MP)</string>
+    <string name="large_photo_open_reduced">Smaller (%1$d MP)</string>
 </resources>
