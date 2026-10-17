@@ -26,6 +26,9 @@ data class PixelRect(val left: Int, val top: Int, val right: Int, val bottom: In
     operator fun contains(other: PixelRect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
+    /** 가로로 [dx], 세로로 [dy]만큼 옮긴 사각형. */
+    fun offset(dx: Int, dy: Int): PixelRect = PixelRect(left + dx, top + dy, right + dx, bottom + dy)
+
     companion object {
         /** [size] 문서 전체. */
         fun of(size: PixelSize): PixelRect = PixelRect(0, 0, size.width, size.height)

@@ -27,6 +27,11 @@ class PixelRectTest {
     }
 
     @Test
+    fun offset_movesBothCorners() {
+        assertEquals(PixelRect(-5, 13, 95, 63), PixelRect(0, 0, 100, 50).offset(-5, 13))
+    }
+
+    @Test
     fun rejectsInvertedRect() {
         assertThrows(IllegalArgumentException::class.java) { PixelRect(10, 0, 5, 10) }
     }
