@@ -22,8 +22,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     4. 엔진: 축소본 그리기(타일 8×8 묶음씩 GPU로 반씩 줄임)
     5. 앱: 사진 선택기, 큰 사진 선택 창, 편집 화면 표시(`EditorViewModel`)
     6. 에뮬레이터 확인, 자기 검토, 기록
-  - 한 일: A 결정과 문장 수정, 1~4단계
-  - 남은 일: 5~6단계
+  - 한 일: A 결정과 문장 수정, 1~4단계, 해독기 한도(API 37) 반영
+  - 남은 일: 5단계(앱 화면) 커밋과 기록 마무리. 코드와 에뮬레이터 확인은 끝났다.
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -116,6 +116,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 손을 떼면 `history.execute`를 한 번 부른다.
 - **브러시:** `EditHistory`에 메모리(바이트) 한도를 더한다. 단계 수 제한만으로는 메모리 사용량이 묶이지 않는다.
 - **타일 메모리:** 레이어가 많아지면 쓰지 않는 타일을 앱 저장 공간으로 내보내 메모리를 아낀다. 레이어·브러시 작업 때 만든다.
+- **큰 사진 조각 해독:** 사진을 띠 모양 조각으로 해독하면(`BitmapRegionDecoder`) 해독기 한도를 피하고, 여는 순간 메모리(지금 해독본의 2.5배)도 줄어 200MP 원본을 열 수 있다. EXIF 방향은 직접 돌려야 한다.
 - **축소본:** `PreviewRenderer`가 화면 크기에 맞는 1/2^k 단계로 GPU에서 그린다. 지금은 표준 합성과 불투명도만 쓴다. 혼합 모드는 레이어 합성 작업 때 여기에 더한다.
 - **캐시:** 썸네일·GPU 텍스처는 `LayerId`가 아니라 `Raster`·`Tile` 객체를 기준으로 한다. 실행 취소 뒤 레이어 번호가 다시 쓰이기 때문이다.
 - **홈 최근 프로젝트:** 썸네일 격자는 `LazyVerticalGrid`로 만든다. 지금의 세로 스크롤 `Column` 안에 넣으면 높이가 무한대라 오류가 난다.
@@ -126,6 +127,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - 아이콘은 Android Studio 'Vector Asset'의 Material Icons 파일을 쓰고, `android:tint="?attr/colorControlNormal"` 줄은 뺀다. 이 프로젝트에는 AppCompat이 없어서 그 줄이 있으면 빌드가 실패한다.
 - `List.removeFirst()`·`removeLast()`는 안드로이드 13·14 기기에서 오류가 나므로 `removeAt(0)` 등을 쓴다.
 - Gradle 9.6은 JDK 25로 실행한다. PC의 기본 java가 오래되었으면, 명령마다 `JAVA_HOME`을 Android Studio 내장 JDK(`jbr` 폴더)로 지정한다.
+- API 37부터 `ImageDecoder`는 사진 하나를 푸는 데 약 0.5GiB(536,900,000바이트)까지만 쓴다.
+  - EXIF로 돌려 보여 주는 사진은 같은 크기의 임시 버퍼를 하나 더 쓰고, 그것도 한도에 들어간다.
+  - 한도를 바꾸는 `setAllocationLimit`은 SDK 소스에는 있지만 공개 SDK(android.jar)에는 없어 앱이 쓸 수 없다.
+  - 그래서 8비트 사진은 약 134MP(회전이면 약 67MP)보다 크면 원본 크기로 못 연다(`ImportSizing.decodeBytes`, `PhotoImporter.decodeLimitBytes`).
 - `Bitmap.createBitmap(원본, x, y, w, h)`는 바꿀 수 있는 비트맵을 돌려준다. 비트맵을 바꿀 수 없게 하는 공개 함수가 없으므로, 바꿀 수 없는 복사본은 `copy(ARGB_8888, false)`로 만든다(메모리가 없으면 null).
 - `Bitmap.createBitmap(Picture, …, HARDWARE)`는 null이 아니라고 적혀 있지만, GPU가 실패하면 null을 돌려줄 수 있다.
 - `connectedDebugAndroidTest`는 앱 설치에 실패해도 `BUILD SUCCESSFUL`로 끝날 수 있다. 결과 XML의 테스트 수로 확인한다(`docs/emulator.md`).

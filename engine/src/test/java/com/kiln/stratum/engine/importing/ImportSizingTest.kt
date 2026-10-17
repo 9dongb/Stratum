@@ -109,6 +109,43 @@ class ImportSizingTest {
         assertTrue(plan.cannotOpen)
     }
 
+    /** API 37 해독기의 기본 한도(약 0.5GiB) */
+    private val decoderLimit = 536_900_000L
+
+    @Test
+    fun decodeBytes_doublesForFormatsThatMayBeRotated() {
+        // JPEG는 방향 정보로 돌릴 때 임시 버퍼를 하나 더 쓸 수 있어 두 배, PNG는 16비트일 수 있어 8바이트
+        assertEquals(399_513_600L, ImportSizing.decodeBytes(fold8Photo, "image/jpeg"))
+        assertEquals(399_513_600L, ImportSizing.decodeBytes(fold8Photo, "image/png"))
+    }
+
+    @Test
+    fun plan_keepsFold8PhotoWithinDecoderLimit() {
+        val plan = ImportSizing.plan(fold8Photo, "image/jpeg", plenty, decoderLimit)
+
+        assertTrue(plan.originalFits)
+        assertFalse(plan.needsChoice)
+    }
+
+    @Test
+    fun plan_disablesOriginalAboveDecoderLimitEvenWithPlentyOfMemory() {
+        // 200MP를 풀려면 약 1.6GB가 들어 한도를 넘는다. 1/2(50MP, 약 400MB)은 한도 안이다.
+        val plan = ImportSizing.plan(photo200MP, "image/jpeg", plenty, decoderLimit)
+
+        assertFalse(plan.originalFits)
+        assertTrue(plan.needsChoice)
+        assertEquals(2, plan.reducedSampleSize)
+    }
+
+    @Test
+    fun plan_allowsOriginalJustUnderDecoderLimit() {
+        // 64MP JPEG는 약 513MB라 한도(약 537MB) 안이다
+        val plan = ImportSizing.plan(PixelSize(9248, 6936), "image/jpeg", plenty, decoderLimit)
+
+        assertTrue(plan.originalFits)
+        assertTrue(plan.needsChoice)
+    }
+
     @Test
     fun plan_needsMoreMemoryForPng() {
         // 같은 크기라도 PNG는 16비트일 수 있어 두 배로 잡는다

@@ -7,6 +7,8 @@ import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.Rect
+import android.os.Build
+import android.util.Log
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportResult
@@ -28,6 +30,15 @@ data class PhotoInfo(val size: PixelSize, val mimeType: String?)
  * 원본 파일은 읽기만 하고 바꾸지 않는다. 오래 걸리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PhotoImporter {
+
+    /**
+     * 이 기기의 해독기가 사진 하나를 푸는 동안 쓸 수 있는 최대 메모리(바이트). ImportSizing.plan에 넘긴다.
+     *
+     * API 37(CINNAMON_BUN)부터 ImageDecoder는 기본으로 약 0.5GiB까지만 쓰고, 넘으면 IOException을 던진다(SDK 소스로 확인).
+     * 이 한도를 바꾸는 함수(setAllocationLimit)는 아직 앱에 공개되지 않았다. 그 전 버전에는 한도가 없다.
+     */
+    val decodeLimitBytes: Long
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) 536_900_000L else Long.MAX_VALUE
 
     /** 픽셀을 풀지 않고 사진의 크기와 형식만 읽는다. 읽을 수 없으면 null. */
     fun readInfo(source: ImageDecoder.Source): PhotoInfo? {
@@ -73,19 +84,21 @@ object PhotoImporter {
                 decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
                 if (sampleSize > 1) decoder.setTargetSampleSize(sampleSize)
             }
-        } catch (_: OutOfMemoryError) {
-            return ImportResult.Failure(ImportFailure.NOT_ENOUGH_MEMORY)
-        } catch (_: IOException) {
-            return ImportResult.Failure(ImportFailure.UNREADABLE)
-        } catch (_: SecurityException) {
-            return ImportResult.Failure(ImportFailure.UNREADABLE)
+        } catch (e: OutOfMemoryError) {
+            return failure(ImportFailure.NOT_ENOUGH_MEMORY, e)
+        } catch (e: IOException) {
+            // 해독기 안의 메모리 부족과 한도 초과도 IOException으로 온다(에뮬레이터에서 확인)
+            val outOfMemory = e.message?.let { "out of memory" in it || "allocation limit" in it } == true
+            return failure(if (outOfMemory) ImportFailure.NOT_ENOUGH_MEMORY else ImportFailure.UNREADABLE, e)
+        } catch (e: SecurityException) {
+            return failure(ImportFailure.UNREADABLE, e)
         }
         try {
             val raster = splitIntoTiles(decoded, checkCanceled)
-                ?: return ImportResult.Failure(ImportFailure.NOT_ENOUGH_MEMORY)
+                ?: return failure(ImportFailure.NOT_ENOUGH_MEMORY, null)
             return ImportResult.Success(Document.create(decoded.width, decoded.height, layerName, raster))
-        } catch (_: OutOfMemoryError) {
-            return ImportResult.Failure(ImportFailure.NOT_ENOUGH_MEMORY)
+        } catch (e: OutOfMemoryError) {
+            return failure(ImportFailure.NOT_ENOUGH_MEMORY, e)
         } finally {
             // 해독본은 타일로 옮긴 뒤에는 쓰지 않으므로 바로 메모리를 돌려준다(타일은 돌려주지 않는다)
             decoded.recycle()
@@ -128,6 +141,14 @@ object PhotoImporter {
             scratch.recycle()
         }
     }
+
+    /** 불러오기 실패. 화면에는 [reason]만 보이므로, 까닭을 찾을 수 있게 [cause]를 로그에 남긴다. */
+    private fun failure(reason: ImportFailure, cause: Throwable?): ImportResult.Failure {
+        Log.w(TAG, "Photo import failed: $reason", cause)
+        return ImportResult.Failure(reason)
+    }
+
+    private const val TAG = "PhotoImporter"
 
     /** 머리 정보만 읽고 해독을 멈추려고 던지는 예외. 밖으로 나가지 않으므로 호출 위치는 기록하지 않는다. */
     private class HeaderRead : RuntimeException() {

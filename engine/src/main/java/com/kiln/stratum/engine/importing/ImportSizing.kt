@@ -9,8 +9,8 @@ const val LARGE_PHOTO_PIXELS: Long = 50_000_000L
  * 사진을 어떻게 열지 정한 결과.
  *
  * @property original 원본 크기
- * @property originalFits 원본 크기로 열어도 메모리 예산 안인지
- * @property reducedSampleSize 줄여서 열 때의 단계(2, 4, 8…: 1/2, 1/4, 1/8 크기). 예산 안에서 줄일 방법이 없으면 null
+ * @property originalFits 원본 크기로 열 수 있는지. 메모리 예산과 해독기 한도 안이어야 한다.
+ * @property reducedSampleSize 줄여서 열 때의 단계(2, 4, 8…: 1/2, 1/4, 1/8 크기). 예산·한도 안에서 줄일 방법이 없으면 null
  */
 data class ImportPlan(
     val original: PixelSize,
@@ -21,7 +21,7 @@ data class ImportPlan(
     val reducedSize: PixelSize?
         get() = reducedSampleSize?.let { ImportSizing.sampledSize(original, it) }
 
-    /** 사용자에게 고르게 해야 하는지. 50MP보다 크거나, 원본으로는 메모리가 모자랄 때다. */
+    /** 사용자에게 고르게 해야 하는지. 50MP보다 크거나, 원본 크기로는 열 수 없을 때다. */
     val needsChoice: Boolean
         get() = original.pixelCount > LARGE_PHOTO_PIXELS || !originalFits
 
@@ -46,6 +46,19 @@ object ImportSizing {
         }
 
     /**
+     * 해독기가 사진 하나를 푸는 동안 쓰는 메모리(바이트).
+     * 방향 정보(EXIF)로 돌려 보여 주는 사진은 해독기가 같은 크기의 임시 버퍼를 하나 더 쓴다(에뮬레이터에서 확인).
+     * 미리 알 수 없으므로 방향 정보를 담을 수 있는 형식은 두 배로 본다. PNG·GIF는 거의 담지 않아 한 배로 본다.
+     */
+    fun decodeBytes(size: PixelSize, mimeType: String?): Long {
+        val rotationFactor = when (mimeType?.lowercase()) {
+            "image/png", "image/gif" -> 1
+            else -> 2
+        }
+        return size.pixelCount * bytesPerPixel(mimeType) * rotationFactor
+    }
+
+    /**
      * 사진 하나를 여는 동안 잠깐 필요한 최대 메모리(바이트).
      * 해독본과 타일이 함께 있을 때가 가장 크고, 방향을 돌릴 때 드는 임시 버퍼와 여유를 더해 해독본의 2.5배로 잡는다.
      */
@@ -62,15 +75,24 @@ object ImportSizing {
     /**
      * [original] 크기의 사진을 쓸 수 있는 메모리 [budgetBytes] 안에서 어떻게 열지 정한다.
      * [mimeType]은 사진 형식(예: image/jpeg)이고, 모르면 null이다.
+     * [maxDecodeBytes]는 해독기가 사진 하나를 푸는 동안 쓸 수 있는 최대 메모리다. 안드로이드 버전마다 다르다.
      */
-    fun plan(original: PixelSize, mimeType: String?, budgetBytes: Long): ImportPlan {
+    fun plan(
+        original: PixelSize,
+        mimeType: String?,
+        budgetBytes: Long,
+        maxDecodeBytes: Long = Long.MAX_VALUE
+    ): ImportPlan {
         val bytesPerPixel = bytesPerPixel(mimeType)
-        val originalFits = peakBytes(original, bytesPerPixel) <= budgetBytes
-        // 1/2부터 시작해, 50MP 이하이면서 예산 안에 드는 가장 큰 크기를 찾는다
+        val fits = { size: PixelSize ->
+            peakBytes(size, bytesPerPixel) <= budgetBytes && decodeBytes(size, mimeType) <= maxDecodeBytes
+        }
+        val originalFits = fits(original)
+        // 1/2부터 시작해, 50MP 이하이면서 예산·한도 안에 드는 가장 큰 크기를 찾는다
         var sampleSize = 2
         while (sampleSize <= MAX_SAMPLE_SIZE) {
             val size = sampledSize(original, sampleSize)
-            if (size.pixelCount <= LARGE_PHOTO_PIXELS && peakBytes(size, bytesPerPixel) <= budgetBytes) {
+            if (size.pixelCount <= LARGE_PHOTO_PIXELS && fits(size)) {
                 return ImportPlan(original, originalFits, sampleSize)
             }
             sampleSize *= 2
