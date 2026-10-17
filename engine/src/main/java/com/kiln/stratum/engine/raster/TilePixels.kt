@@ -26,4 +26,7 @@ internal class HeapTilePixels(pixels: IntArray) : TilePixels {
     }
 
     override fun pixelAt(x: Int, y: Int): Int = pixels[y * TILE_SIZE + x]
+
+    /** 픽셀 배열의 복사본. 화면용 축소본을 그릴 때 잠깐 비트맵으로 바꾸는 데 쓴다. */
+    fun toIntArray(): IntArray = pixels.copyOf()
 }
