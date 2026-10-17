@@ -94,6 +94,32 @@ class PreviewRendererTest {
     }
 
     @Test
+    fun render_oddSizeKeepsLastRowAndColumn() {
+        // 1001×521은 끝 타일이 233×9px라, 반씩 줄이면 끝 픽셀이 반만 덮인다. 그래도 끝 줄·끝 칸까지 칠해져야 한다.
+        // 에뮬레이터의 GPU(소프트웨어)는 홀수 크기에서 일부 타일 경계 한 줄에 1/255쯤 이웃 색이 섞인다.
+        // 예전 그리기 방식에서도 같은 자리에 생기고 눈에 보이지 않는 차이라, 불투명한지와 색이 거의 같은지만 본다.
+        val document = checkerDocument(1001, 521)
+
+        for (level in 1..3) {
+            val preview = checkNotNull(PreviewRenderer.render(document, level)).readable()
+            val tilePixels = TILE_SIZE shr level
+            for (y in 0 until preview.height) {
+                for (x in 0 until preview.width) {
+                    val expected = if ((x / tilePixels + y / tilePixels) % 2 == 0) Color.RED else Color.BLUE
+                    val actual = preview.getPixel(x, y)
+                    val close = Color.alpha(actual) == 255 &&
+                        abs(Color.red(actual) - Color.red(expected)) <= 2 &&
+                        abs(Color.green(actual) - Color.green(expected)) <= 2 &&
+                        abs(Color.blue(actual) - Color.blue(expected)) <= 2
+                    if (!close) {
+                        fail("level $level ($x, $y): expected ${Integer.toHexString(expected)} but was ${Integer.toHexString(actual)}")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun render_appliesLayerOpacity() {
         val document = checkerDocument(256, 256)
         val halfTransparent = SetLayerOpacity(document.layers.single().id, 0.5f).applyTo(document)

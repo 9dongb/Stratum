@@ -31,6 +31,7 @@
 - 에뮬레이터를 켠 뒤 `./gradlew :app:connectedDebugAndroidTest`
 - 앱 설치에 실패해도 `BUILD SUCCESSFUL`로 끝날 수 있다. 결과는 `app/build/outputs/androidTest-results/connected/debug/`의 XML에서 테스트 수와 실패 수로 확인한다(파일 이름에 띄어쓰기가 있다).
 - 테스트 클래스 하나만: `./gradlew :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=<패키지.클래스>"`
+  - 쉼표로 여러 클래스를 주면 첫 클래스만 돈다(2026-10-17 확인). 하나씩 돌린다. 메서드 하나는 `<패키지.클래스>#<메서드>`
 - 끝나면 테스트 앱을 지운다. `adb shell am instrument`로 직접 돌리려면 먼저 `./gradlew installDebug installDebugAndroidTest`
 - 화면 테스트(Compose)는 하나에 25~40초 걸릴 수 있다. 멈춘 것이 아니다.
   - 이 PC(2026-10-17)의 에뮬레이터는 그래픽을 GPU가 아니라 CPU로 그려서(켤 때 로그의 `lavapipe`·`swangle`) 시스템 화면까지 느리다.

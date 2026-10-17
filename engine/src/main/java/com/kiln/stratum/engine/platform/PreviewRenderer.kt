@@ -1,9 +1,12 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
-import android.graphics.RectF
+import android.graphics.Shader
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewBlock
@@ -13,6 +16,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.TilePixels
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
@@ -23,13 +27,11 @@ import kotlin.math.roundToInt
  * 한 번에 GPU에 올리는 타일이 묶음 하나(약 16MB)뿐이라, 50MP 사진(약 200MB)을 통째로 올리지 않는다.
  *
  * 반씩 줄이면 GPU의 1/2 축소가 정확히 2×2 평균이라 화질이 고르고, 타일·묶음 경계가 정수 픽셀에 맞아 이음매가 없다.
+ * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
  * 이번에는 표준 합성과 불투명도만 쓴다. 혼합 모드는 레이어 합성 작업에서 더한다.
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
-
-    /** 타일을 줄여 그릴 때 쓰는 붓. 이웃 픽셀을 섞어(쌍선형) 줄인다. */
-    private val filterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     /**
      * [document]를 [level] 단계(1/2^level 크기)로 그린 하드웨어 비트맵. GPU가 그리지 못하면 null.
@@ -80,7 +82,6 @@ object PreviewRenderer {
         val height = if (halve) (block.height + 1) / 2 else block.height
         val picture = Picture()
         val canvas = picture.beginRecording(width, height)
-        val target = RectF()
         // 힙에 담긴 타일(테스트·작은 데이터)은 그리는 동안만 비트맵으로 바꿔 쓴다
         val temporary = ArrayList<Bitmap>()
         try {
@@ -101,8 +102,7 @@ object PreviewRenderer {
                         val bitmap = bitmapOf(tile.pixels, temporary)
                         val left = (column - block.firstColumn) * TILE_SIZE * scale
                         val top = (row - block.firstRow) * TILE_SIZE * scale
-                        target.set(left, top, left + bitmap.width * scale, top + bitmap.height * scale)
-                        canvas.drawBitmap(bitmap, null, target, filterPaint)
+                        drawScaled(canvas, bitmap, left, top, scale)
                     }
                 }
                 if (saved != null) canvas.restoreToCount(saved)
@@ -120,9 +120,30 @@ object PreviewRenderer {
         val height = (bitmap.height + 1) / 2
         val picture = Picture()
         val canvas = picture.beginRecording(width, height)
-        canvas.drawBitmap(bitmap, null, RectF(0f, 0f, bitmap.width / 2f, bitmap.height / 2f), filterPaint)
+        drawScaled(canvas, bitmap, 0f, 0f, 0.5f)
         picture.endRecording()
         return drawOnGpu(picture, width, height)
+    }
+
+    /**
+     * [bitmap]을 [scale]배 크기로 ([left], [top])에 그린다. 이웃 픽셀을 섞어(쌍선형) 줄인다.
+     *
+     * 그리는 크기는 올림해서 끝 픽셀까지 덮는다. 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮여서,
+     * 사각형 그대로 그리면 그 줄이 투명하게 빠진다(에뮬레이터 테스트로 확인).
+     * 그래서 셰이더로 그리고, 비트맵 밖은 가장자리 픽셀을 늘여(CLAMP) 채운다.
+     * 짝수 크기 타일 안쪽은 지금처럼 정확히 2×2 평균이고, 늘인 픽셀은 끝 줄에만 쓰인다.
+     */
+    private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scale: Float) {
+        val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+            filterMode = BitmapShader.FILTER_MODE_LINEAR
+            setLocalMatrix(Matrix().apply {
+                setScale(scale, scale)
+                postTranslate(left, top)
+            })
+        }
+        val right = left + ceil(bitmap.width * scale)
+        val bottom = top + ceil(bitmap.height * scale)
+        canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = shader })
     }
 
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */

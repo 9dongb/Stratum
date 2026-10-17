@@ -22,8 +22,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     5. 힌지를 피하는 창, 큰 사진 선택 창 옮기기
     6. 새 캔버스 시트·창과 홈 연결
     7. 에뮬레이터 확인, 자기 검토, 기록
-  - 한 일: 계획 승인, 1단계
-  - 남은 일: 2~7단계
+  - 한 일: 계획 승인, 1단계, 2단계 중 축소본 끝 줄 고침
+  - 남은 일: 2단계의 빈 캔버스 만들기, 3~7단계
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -154,6 +154,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - `Bitmap.createBitmap(원본, x, y, w, h)`는 바꿀 수 있는 비트맵을 돌려준다. 비트맵을 바꿀 수 없게 하는 공개 함수가 없으므로, 바꿀 수 없는 복사본은 `copy(ARGB_8888, false)`로 만든다(메모리가 없으면 null).
 - `Bitmap.createBitmap(Picture, …, HARDWARE)`는 null이 아니라고 적혀 있지만, GPU가 실패하면 null을 돌려줄 수 있다.
 - `connectedDebugAndroidTest`는 앱 설치에 실패해도 `BUILD SUCCESSFUL`로 끝날 수 있다. 결과 XML의 테스트 수로 확인한다(`docs/emulator.md`).
+- 비트맵을 반 크기로 그릴 때 홀수 크기면 끝 픽셀이 반만 덮여 투명하게 빠진다. `PreviewRenderer.drawScaled`처럼 셰이더(CLAMP)로 올림한 크기를 채운다.
 - Compose 화면 테스트는 Espresso 3.7.0 이상이 필요하다. 3.5.1은 API 37에서 없어진 `InputManager.getInstance`를 불러, 화면 테스트가 모두 바로 실패한다.
 - 화면 테스트의 화면 크기는 `DeviceConfigurationOverride.ForcedSize`로 정한다. 정한 크기가 기기 화면보다 크면 밀도를 낮춰 맞추므로, 테스트에서 dp를 픽셀로 바꿀 때는 노드의 밀도(`layoutInfo.density`)를 쓴다.
 
