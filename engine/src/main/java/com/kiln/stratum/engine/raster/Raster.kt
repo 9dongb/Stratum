@@ -30,5 +30,12 @@ class Raster private constructor(
     companion object {
         /** 타일이 하나도 없는(완전 투명한) 래스터. */
         val EMPTY = Raster(emptyMap())
+
+        /**
+         * [grid]의 모든 자리에 같은 [tile] 객체를 놓은 래스터. 한 가지 색으로 채운 새 캔버스에 쓴다.
+         * 타일 한 장만 메모리를 쓰고, 나중에 칠하면 그 자리 타일만 새로 생긴다.
+         * 오른쪽·아래 끝 자리에도 꽉 찬 타일이 놓이고, 캔버스 밖 부분은 쓰지 않는다.
+         */
+        fun filled(grid: TileGrid, tile: Tile): Raster = Raster(grid.keys().associateWith { tile })
     }
 }

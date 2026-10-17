@@ -89,6 +89,34 @@ class RasterTest {
     }
 
     @Test
+    fun filled_putsSameTileAtEveryGridKey() {
+        val tile = solidTile(1)
+        // 600×300은 3×2 타일이고, 오른쪽·아래 끝은 캔버스 밖으로 조금 넘친다
+        val grid = TileGrid(600, 300)
+
+        val raster = Raster.filled(grid, tile)
+
+        assertEquals(grid.keys().toSet(), raster.tiles.keys)
+        // 타일을 복사하지 않고 모든 자리가 한 객체를 함께 쓴다
+        for (key in grid.keys()) assertSame(tile, raster.tiles[key])
+    }
+
+    @Test
+    fun filled_changingOneKeyKeepsTheSharedTileElsewhere() {
+        val shared = solidTile(1)
+        val painted = solidTile(2)
+        val raster = Raster.filled(TileGrid(512, 512), shared)
+
+        val edited = raster.withTiles(mapOf(TileKey(1, 0) to painted))
+
+        assertSame(painted, edited.tiles[TileKey(1, 0)])
+        assertSame(shared, edited.tiles[TileKey(0, 0)])
+        assertSame(shared, edited.tiles[TileKey(1, 1)])
+        // 원래 래스터의 그 자리는 그대로다
+        assertSame(shared, raster.tiles[TileKey(1, 0)])
+    }
+
+    @Test
     fun withTiles_returnsSameRasterWhenNothingChanges() {
         val key = TileKey(0, 0)
         val tile = solidTile(1)
