@@ -19,6 +19,7 @@ import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.preview.PreviewLevels
+import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +42,12 @@ enum class EditorFailure {
     /** 메모리가 부족해 새 캔버스를 만들 수 없다. */
     CANVAS_NOT_ENOUGH_MEMORY
 }
+
+/**
+ * 엔진이 그린 축소본 한 장과, 그것이 덮는 문서 영역·단계. 비트맵 픽셀 하나가 문서 픽셀 2^단계개다.
+ * [bitmap]은 하드웨어 비트맵이고, 화면이 그리고 있을 수 있어 ViewModel이 버릴 때 recycle()하지 않는다.
+ */
+data class PreviewImage(val bitmap: Bitmap, val region: PreviewRegion)
 
 /** 편집 화면에 보여 줄 상태. */
 sealed interface EditorState {
@@ -65,10 +72,15 @@ sealed interface EditorState {
     ) : EditorState
 
     /**
-     * 문서가 열렸다. [preview]는 엔진이 그린 화면용 축소본(하드웨어 비트맵)이다.
+     * 문서가 열렸다. [base]는 엔진이 그린 문서 전체 축소본이다.
      * 축소본은 크기를 올림해서 줄이므로, 화면에 맞출 때는 문서의 원래 크기 [documentSize]를 쓴다.
+     * [detail]은 확대해서 볼 때 보이는 곳만 선명하게 다시 그린 그림이다. 없으면 [base]만 그린다.
      */
-    data class Ready(val preview: Bitmap, val documentSize: PixelSize) : EditorState
+    data class Ready(
+        val base: PreviewImage,
+        val documentSize: PixelSize,
+        val detail: PreviewImage? = null
+    ) : EditorState
 
     /** 문서를 열거나 만들지 못했다. */
     data class Failed(val reason: EditorFailure) : EditorState
@@ -239,7 +251,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // 접기·펼치기로 축소본을 다시 그리는지 확인할 수 있게 남긴다(adb logcat -s EditorViewModel)
         Log.d(TAG, "Preview level $level: ${preview.width}x${preview.height} for ${document.width}x${document.height}")
         // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
-        _state.value = EditorState.Ready(preview, PixelSize(document.width, document.height))
+        val size = PixelSize(document.width, document.height)
+        _state.value = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(size, level)), size)
     }
 
     private companion object {

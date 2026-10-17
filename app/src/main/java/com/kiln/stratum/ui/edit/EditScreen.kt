@@ -172,7 +172,7 @@ private fun EditCanvas(
             EditorState.Empty, is EditorState.AskSize -> Unit
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
-            is EditorState.Ready -> CanvasImage(state, Modifier.fillMaxSize())
+            is EditorState.Ready -> CanvasImage(state, view = { CanvasView.Fit }, Modifier.fillMaxSize())
             is EditorState.Failed -> Text(
                 text = stringResource(
                     when (state.reason) {
