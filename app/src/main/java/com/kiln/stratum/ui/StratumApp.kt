@@ -68,7 +68,8 @@ fun StratumApp(editor: EditorViewModel) {
                 onChooseSize = editor::chooseSize,
                 onUndo = editor::undo,
                 onRedo = editor::redo,
-                messages = editor.messages
+                messages = editor.messages,
+                onEdit = editor::edit
             )
         }
     }

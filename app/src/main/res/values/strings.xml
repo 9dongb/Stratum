@@ -24,6 +24,16 @@
     <string name="edit_creating_canvas">Creating canvas…</string>
     <string name="edit_create_failed_memory">Not enough memory to create this canvas.</string>
     <string name="edit_working">Working…</string>
+    <string name="subtool_crop">Crop</string>
+    <string name="subtool_rotate">Rotate and flip</string>
+    <string name="subtool_resize">Resize image</string>
+    <string name="subtool_menu">Choose sub-tool</string>
+    <string name="subtool_rotate_short">Rotate</string>
+    <string name="subtool_resize_short">Resize</string>
+    <string name="rotate_left">Left 90°</string>
+    <string name="rotate_right">Right 90°</string>
+    <string name="flip_horizontal">Flip horizontal</string>
+    <string name="flip_vertical">Flip vertical</string>
     <string name="edit_not_enough_memory">Not enough memory to apply this edit.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>

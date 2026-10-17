@@ -13,13 +13,14 @@ import kotlin.math.roundToInt
  * 세로로 차례로 쌓되, 가로로 지나가는 힌지의 띠(양쪽 [HingeMargin])에 걸리는 것은 띠 아래로 비켜 놓는다.
  *
  * 배치하는 순간 자기 위치(창 좌표)를 읽어(PlacementScope.coordinates) 한 프레임 늦거나 흔들리지 않는다.
- * 자기 크기는 힌지와 상관없이 정한다. 폭은 가장 넓은 것이고, 높이는 받은 최대 높이다(정해지지 않았으면 쌓은 높이).
+ * 자기 크기는 힌지와 상관없이 정한다. 폭은 가장 넓은 것이고, 높이는 받은 최대 높이다(정해지지 않았거나 [fillHeight]가 false면 쌓은 높이).
  * 아래로 비켜 놓은 것이 영역 밖으로 나가지 않을 만큼 높이가 충분할 때 쓴다.
  */
 @Composable
 fun HingeAvoidingColumn(
     modifier: Modifier = Modifier,
     gap: Dp = 0.dp,
+    fillHeight: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val hinges = LocalHinges.current
@@ -30,7 +31,11 @@ fun HingeAvoidingColumn(
         val width = (placeables.maxOfOrNull { it.width } ?: 0).coerceIn(constraints.minWidth, constraints.maxWidth)
         val stackedHeight = placeables.sumOf { it.height } + gapPx * (placeables.size - 1).coerceAtLeast(0)
         val height =
-            if (constraints.hasBoundedHeight) constraints.maxHeight else stackedHeight.coerceAtLeast(constraints.minHeight)
+            if (fillHeight && constraints.hasBoundedHeight) {
+                constraints.maxHeight
+            } else {
+                stackedHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
+            }
         layout(width, height) {
             // 정렬선을 재는 단계에서는 위치를 몰라(null) 띠 없이 놓고, 곧 이어지는 배치에서 다시 놓는다
             val origin = coordinates?.positionInWindow()

@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,12 +41,19 @@ private val SidePanelWidth = 320.dp
 
 /**
  * 메인 세로(Medium) 아래 접이식 패널. 레이어·조정 탭은 아직 기능이 없어 누를 수 없고, 접기·펼치기만 된다.
+ * 도구를 고르면([toolOptions]가 있으면) 탭 대신 그 도구의 이름([toolTitle])과 옵션을 보인다.
  *
  * 탭은 왼쪽에 붙이고 접기 버튼은 오른쪽 끝에 둔다. 가운데를 지나는 세로 힌지에 닿지 않는다.
  * 왼쪽에는 도구 막대가 있어, 오른쪽과 아래 시스템 바만 피한다.
  */
 @Composable
-fun BottomPanel(expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+fun BottomPanel(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    toolTitle: String? = null,
+    toolOptions: (@Composable () -> Unit)? = null
+) {
     Surface(
         modifier = modifier.fillMaxWidth().testTag(EditScreenTags.BOTTOM_PANEL),
         color = MaterialTheme.colorScheme.surfaceContainerLow
@@ -57,8 +65,12 @@ fun BottomPanel(expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Mo
                 modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PanelTab(R.string.tool_layers)
-                PanelTab(R.string.tool_adjust)
+                if (toolOptions != null && toolTitle != null) {
+                    PanelTitle(toolTitle)
+                } else {
+                    PanelTab(R.string.tool_layers)
+                    PanelTab(R.string.tool_adjust)
+                }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onToggle) {
                     Icon(
@@ -68,8 +80,14 @@ fun BottomPanel(expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Mo
                 }
             }
             if (expanded) {
-                // 레이어 목록·조정 슬라이더가 들어갈 자리
-                Spacer(Modifier.fillMaxWidth().height(BottomPanelBodyHeight))
+                if (toolOptions != null) {
+                    Box(Modifier.fillMaxWidth().height(BottomPanelBodyHeight).padding(horizontal = 12.dp)) {
+                        toolOptions()
+                    }
+                } else {
+                    // 레이어 목록·조정 슬라이더가 들어갈 자리
+                    Spacer(Modifier.fillMaxWidth().height(BottomPanelBodyHeight))
+                }
             }
         }
     }
@@ -85,10 +103,15 @@ private fun PanelTab(@StringRes label: Int) {
 
 /**
  * 메인 가로(Expanded) 오른쪽 고정 패널. CLAUDE.md 6장대로 조정과 레이어를 위아래로 함께 보여 준다.
- * 내용은 아직 없고 제목만 있다. 누를 것이 없어 힌지를 피할 것도 없다(내용을 넣을 때 피하게 한다).
+ * 도구를 고르면([toolOptions]가 있으면) 맨 위에 그 도구의 이름([toolTitle])과 옵션을 보인다.
+ * 조정·레이어 내용은 아직 없고 제목만 있다. 옵션은 가로로 지나가는 힌지의 띠를 피해 쌓는다.
  */
 @Composable
-fun SidePanel(modifier: Modifier = Modifier) {
+fun SidePanel(
+    modifier: Modifier = Modifier,
+    toolTitle: String? = null,
+    toolOptions: (@Composable () -> Unit)? = null
+) {
     Surface(
         modifier = modifier.fillMaxHeight().width(SidePanelWidth).testTag(EditScreenTags.SIDE_PANEL),
         color = MaterialTheme.colorScheme.surfaceContainerLow
@@ -96,11 +119,29 @@ fun SidePanel(modifier: Modifier = Modifier) {
         Column(
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
         ) {
+            if (toolOptions != null && toolTitle != null) {
+                PanelTitle(toolTitle, Modifier.padding(horizontal = 8.dp))
+                Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                    toolOptions()
+                }
+                HorizontalDivider()
+            }
             PanelSection(R.string.tool_adjust, Modifier.weight(1f))
             HorizontalDivider()
             PanelSection(R.string.tool_layers, Modifier.weight(1f))
         }
     }
+}
+
+/** 고른 도구의 이름. 패널 위쪽에 탭 대신 보인다. */
+@Composable
+private fun PanelTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 12.dp).semantics { heading() },
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.titleSmall
+    )
 }
 
 /** 오른쪽 패널의 한 칸(제목과 내용 자리). */

@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
@@ -62,12 +64,14 @@ import kotlinx.coroutines.flow.emptyFlow
  * - Medium(메인 세로): 왼쪽 도구 막대, 캔버스, 아래 접이식 패널
  * - Expanded(메인 가로): 왼쪽 도구 막대, 캔버스, 오른쪽 고정 패널
  *
- * 도구와 패널 탭은 아직 기능이 없어 비활성이다.
+ * 도구는 자르기·변형만 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
+ * 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널 맨 위에 보인다. 패널 탭(레이어·조정)은 아직 비활성이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
  * @param onViewport 확대·이동으로 보기가 바뀌면 보이는 문서 영역을 알린다. 엔진이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
  * @param onChooseSize 큰 사진 선택 창에서 고른 크기. true면 원본 크기, false면 줄여서 연다.
  * @param messages 잠깐 알릴 일. 캔버스 아래쪽에 알림 막대로 하나씩 보인다.
+ * @param onEdit 엔진에 보낼 편집 명령(회전·뒤집기 등)
  */
 @Composable
 fun EditScreen(
@@ -79,17 +83,31 @@ fun EditScreen(
     modifier: Modifier = Modifier,
     onUndo: () -> Unit = {},
     onRedo: () -> Unit = {},
-    messages: Flow<EditorMessage> = emptyFlow()
+    messages: Flow<EditorMessage> = emptyFlow(),
+    onEdit: (EditCommand) -> Unit = {}
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
+    // 고른 도구. 커버에서 고른 도구가 펼친 뒤에도 그대로 이어지도록 배치를 고르기 전에 둔다.
+    val selection = rememberToolSelection()
+    // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
+    LaunchedEffect(selection.active) {
+        if (selection.active != null) panelExpanded = true
+    }
 
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthClass = widthClassOf(maxWidth.value)
         val ready = state as? EditorState.Ready
+        // 문서가 열려 있어야 도구를 쓴다. 고른 도구가 있으면 그 옵션을 보인다.
+        val toolsEnabled = ready != null
+        val activeTool = selection.active.takeIf { toolsEnabled }
+        val toolTitle = activeTool?.let { stringResource(it.label) }
+        val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
+            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = selection::choose) }
+        }
         Scaffold(
             topBar = {
                 EditTopBar(
@@ -108,21 +126,27 @@ fun EditScreen(
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.Horizontal, Modifier.weight(1f))
-                    ToolTabBar()
+                    if (toolOptions != null) ToolOptionsSheet(toolOptions)
+                    ToolTabBar(selection, enabled = toolsEnabled, onChoose = selection::choose)
                 }
 
                 WidthClass.Medium -> Row(body) {
-                    ToolRail()
+                    ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
                     Column(Modifier.weight(1f)) {
                         EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.End, Modifier.weight(1f))
-                        BottomPanel(expanded = panelExpanded, onToggle = { panelExpanded = !panelExpanded })
+                        BottomPanel(
+                            expanded = panelExpanded,
+                            onToggle = { panelExpanded = !panelExpanded },
+                            toolTitle = toolTitle,
+                            toolOptions = toolOptions
+                        )
                     }
                 }
 
                 WidthClass.Expanded -> Row(body) {
-                    ToolRail()
+                    ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.Bottom, Modifier.weight(1f))
-                    SidePanel()
+                    SidePanel(toolTitle = toolTitle, toolOptions = toolOptions)
                 }
             }
         }
@@ -130,6 +154,23 @@ fun EditScreen(
         // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
         if (state is EditorState.AskSize) {
             LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)
+        }
+    }
+}
+
+/**
+ * 커버 화면(Compact)에서 캔버스와 탭 줄 사이에 놓는 도구 옵션 자리. 캔버스를 가리지 않고 그 아래를 차지한다.
+ * 커버 화면에는 접히는 부분이 없고, 옆쪽 시스템 바·카메라 구멍만 피한다.
+ */
+@Composable
+private fun ToolOptionsSheet(options: @Composable () -> Unit) {
+    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Box(
+            Modifier
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            options()
         }
     }
 }

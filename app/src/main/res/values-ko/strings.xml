@@ -25,6 +25,16 @@
     <string name="edit_creating_canvas">캔버스를 만드는 중…</string>
     <string name="edit_create_failed_memory">메모리가 부족해서 캔버스를 만들 수 없어요.</string>
     <string name="edit_working">처리 중…</string>
+    <string name="subtool_crop">자르기</string>
+    <string name="subtool_rotate">회전·뒤집기</string>
+    <string name="subtool_resize">크기 변경</string>
+    <string name="subtool_menu">하위 도구 고르기</string>
+    <string name="subtool_rotate_short">회전·뒤집기</string>
+    <string name="subtool_resize_short">크기 변경</string>
+    <string name="rotate_left">왼쪽 90°</string>
+    <string name="rotate_right">오른쪽 90°</string>
+    <string name="flip_horizontal">좌우 뒤집기</string>
+    <string name="flip_vertical">상하 뒤집기</string>
     <string name="edit_not_enough_memory">메모리가 부족해서 편집할 수 없어요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
