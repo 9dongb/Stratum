@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 
 /**
- * 하위 도구. 지금은 자르기·변형 도구의 것뿐이다.
+ * 하위 도구. 자르기·변형 도구와 선택 도구의 것이다. 어느 도구의 것인지는 [EditTool.subTools]가 정한다.
  *
  * @property shortLabel 옵션 위쪽 버튼에 보이는 짧은 이름. 커버 화면 폭에 한 줄로 들어가게 따로 둔다.
  * @property oneShot 고르면 창을 띄워 한 번 하고 끝나는 하위 도구(크기 변경). 도구를 다시 눌렀을 때 시작할 하위 도구로 기억하지 않는다.
@@ -30,12 +30,24 @@ enum class SubTool(
 ) {
     CROP(R.string.subtool_crop, R.drawable.ic_crop),
     ROTATE(R.string.subtool_rotate, R.drawable.ic_rotate_90_degrees_cw, R.string.subtool_rotate_short),
-    RESIZE(R.string.subtool_resize, R.drawable.ic_photo_size_select_large, R.string.subtool_resize_short, oneShot = true)
+    RESIZE(R.string.subtool_resize, R.drawable.ic_photo_size_select_large, R.string.subtool_resize_short, oneShot = true),
+
+    /** 사각형 선택: 끌어서 사각형으로 고른다 */
+    SELECT_RECT(R.string.subtool_select_rect, R.drawable.ic_crop_square),
+
+    /** 원형 선택: 끌어서 타원으로 고른다 */
+    SELECT_ELLIPSE(R.string.subtool_select_ellipse, R.drawable.ic_panorama_fish_eye),
+
+    /** 올가미: 손가락으로 둘러 그린 모양으로 고른다 */
+    SELECT_LASSO(R.string.subtool_select_lasso, R.drawable.ic_gesture),
+
+    /** 자동 선택(마술봉): 누른 곳과 비슷한 색을 고른다 */
+    SELECT_WAND(R.string.subtool_select_wand, R.drawable.ic_auto_fix_high, R.string.subtool_select_wand_short)
 }
 
 /**
- * 1단계 편집 도구(CLAUDE.md 8장). 모두 켜져 있다.
- * 2·3단계 도구(반창고·제거 등)는 넣지 않는다(숨김).
+ * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 선택 도구가 켜져 있다.
+ * 아직 만들지 않은 도구(제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
  * @property shortLabel 커버 화면 탭 줄에 보이는 짧은 이름. 6칸이 좁아 따로 둔다.
@@ -59,6 +71,13 @@ enum class EditTool(
     ),
     /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
     Adjust(R.drawable.ic_tune, R.string.tool_adjust, available = true),
+    /** 선택. 하위 도구는 사각형 / 원형 / 올가미 / 자동 선택이다. 고른 곳에만 브러시·지우개가 그려진다. */
+    Select(
+        R.drawable.ic_highlight_alt,
+        R.string.tool_select,
+        subTools = listOf(SubTool.SELECT_RECT, SubTool.SELECT_ELLIPSE, SubTool.SELECT_LASSO, SubTool.SELECT_WAND),
+        available = true
+    ),
     /** 브러시. 고르면 캔버스를 한 손가락으로 끌어 고른 레이어에 그린다. */
     Brush(R.drawable.ic_brush, R.string.tool_brush, available = true),
 
@@ -75,10 +94,13 @@ enum class EditTool(
 
     companion object {
         /** 메인 화면 왼쪽 도구 막대의 도구. 조정·레이어는 패널에 있다. */
-        val railTools: List<EditTool> = listOf(Transform, Brush, Eraser, Text)
+        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Text)
 
         /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. */
-        val tabTools: List<EditTool> = listOf(Transform, Adjust, Brush, Eraser, Text, Layers)
+        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Text, Layers)
+
+        /** [subTool]이 속한 도구 */
+        fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }
     }
 }
 

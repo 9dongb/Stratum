@@ -190,4 +190,33 @@
     <string name="settings_privacy_description">Stratum does not use the internet. Your photos and projects stay on this device. There are no ads, accounts or analytics.</string>
     <string name="settings_licenses">Open-source licenses</string>
     <string name="settings_licenses_text">Stratum uses these open-source components under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0):\n• AndroidX and Jetpack Compose (Google)\n• Kotlin and kotlinx.coroutines (JetBrains)\n• Material Icons and Material Symbols (Google)</string>
+
+    <!-- 선택 도구 -->
+    <string name="tool_select">Select</string>
+    <string name="subtool_select_rect">Rectangle</string>
+    <string name="subtool_select_ellipse">Ellipse</string>
+    <string name="subtool_select_lasso">Lasso</string>
+    <string name="subtool_select_wand">Magic wand</string>
+    <string name="subtool_select_wand_short">Wand</string>
+    <string name="selection_mode_replace">New</string>
+    <string name="selection_mode_add">Add</string>
+    <string name="selection_mode_subtract">Subtract</string>
+    <string name="selection_mode_intersect">Intersect</string>
+    <string name="selection_feather">Feather</string>
+    <string name="selection_feather_value">%1$d px</string>
+    <string name="selection_tolerance">Tolerance</string>
+    <string name="selection_contiguous">Contiguous</string>
+    <string name="selection_all">All</string>
+    <string name="selection_all_description">Select all</string>
+    <string name="selection_none">Deselect</string>
+    <string name="selection_invert">Invert</string>
+    <string name="selection_delete">Delete</string>
+    <string name="selection_delete_description">Delete the selected pixels</string>
+    <string name="selection_copy">Copy</string>
+    <string name="selection_copy_description">Copy to a new layer</string>
+    <string name="selection_cut">Cut</string>
+    <string name="selection_cut_description">Cut to a new layer</string>
+    <string name="selection_hint_drag">Drag on the canvas to select. Brushes and the eraser only paint inside the selection.</string>
+    <string name="selection_hint_lasso">Draw around the area to select. Brushes and the eraser only paint inside the selection.</string>
+    <string name="selection_hint_wand">Tap a color to select similar colors on the chosen layer.</string>
 </resources>

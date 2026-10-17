@@ -69,7 +69,7 @@ fun ToolTabBar(
                                 SubToolMenu(
                                     tool = tool,
                                     expanded = menuOpen,
-                                    current = selection.transformMode,
+                                    current = selection.modeOf(tool),
                                     onDismiss = { menuOpen = false },
                                     onChoose = {
                                         menuOpen = false

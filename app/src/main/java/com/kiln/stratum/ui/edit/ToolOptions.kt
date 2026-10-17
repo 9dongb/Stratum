@@ -65,6 +65,7 @@ class CropControls(
  * @param layers 레이어 옵션이 쓰는 값과 할 일. 문서가 없으면 null이다.
  * @param brush 고른 도구(브러시·지우개)의 설정과 바꾸기
  * @param text 글자 도구의 모양과 바꾸기
+ * @param select 선택 도구의 설정과 할 일
  */
 @Composable
 fun ToolOptions(
@@ -79,7 +80,8 @@ fun ToolOptions(
     onAdjustItem: (AdjustItem) -> Unit = {},
     layers: LayerControls? = null,
     brush: BrushControls? = null,
-    text: TextControls? = null
+    text: TextControls? = null,
+    select: SelectionControls? = null
 ) {
     when (selection.active) {
         EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
@@ -87,6 +89,9 @@ fun ToolOptions(
         EditTool.Layers -> if (layers != null) LayerCompact(layers, modifier)
         EditTool.Brush, EditTool.Eraser -> if (brush != null) BrushOptions(brush, modifier)
         EditTool.Text -> if (text != null) TextOptions(text, modifier)
+        EditTool.Select -> if (select != null) {
+            SelectionToolOptions(checkNotNull(selection.modeOf(EditTool.Select)), select, onChoose, modifier)
+        }
         else -> Unit
     }
 }
@@ -110,7 +115,8 @@ private fun TransformOptions(
                 CropRatioRow(crop)
                 CropActionRow(crop, busy)
             }
-            SubTool.RESIZE -> Unit
+            // 크기 변경은 창을 띄우는 일이고, 선택 하위 도구는 이 옵션에 오지 않는다
+            else -> Unit
         }
     }
 }
@@ -174,7 +180,7 @@ private fun SubToolRow(mode: SubTool, onChoose: (SubTool) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically
     ) {
-        val modes = SubTool.entries.filter { !it.oneShot }
+        val modes = EditTool.Transform.subTools.filter { !it.oneShot }
         SingleChoiceSegmentedButtonRow {
             modes.forEachIndexed { index, subTool ->
                 SegmentedButton(

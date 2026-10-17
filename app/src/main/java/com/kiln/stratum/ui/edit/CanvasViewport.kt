@@ -99,6 +99,8 @@ fun CanvasViewport(
         }
     ) {
         CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize())
+        // 선택 영역 윤곽선은 어떤 도구를 골라도 보인다(도구 화면 아래)
+        SelectionAnts(state.selection, state.selectionDetail, view = { viewState.view }, document = state.documentSize, modifier = Modifier.fillMaxSize())
         overlay()
     }
 }

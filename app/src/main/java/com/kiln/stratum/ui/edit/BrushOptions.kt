@@ -93,7 +93,7 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
 
 /** 이름·가는 슬라이더(0..1)·숫자 한 줄. 끄는 대로 바로 바꾼다(그리기 전 설정이라 미리 보기·기록이 따로 없다). */
 @Composable
-private fun OptionSlider(label: String, shown: String, fraction: Float, onFraction: (Float) -> Unit, tag: String) {
+internal fun OptionSlider(label: String, shown: String, fraction: Float, onFraction: (Float) -> Unit, tag: String) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,

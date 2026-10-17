@@ -34,6 +34,14 @@ import com.kiln.stratum.engine.importing.ImportPlan
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.platform.BlankCanvas
+import com.kiln.stratum.engine.platform.CopySelectedToLayer
+import com.kiln.stratum.engine.platform.DeleteSelected
+import com.kiln.stratum.engine.platform.Deselect
+import com.kiln.stratum.engine.platform.InvertSelection
+import com.kiln.stratum.engine.platform.SelectAll
+import com.kiln.stratum.engine.platform.SelectShape
+import com.kiln.stratum.engine.platform.SelectSimilarColor
+import com.kiln.stratum.engine.platform.SelectionPreview
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.LayerPreviewCache
@@ -45,6 +53,8 @@ import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
@@ -174,6 +184,8 @@ sealed interface EditorState {
      * @property busy 편집을 계산하거나 그 결과를 그리는 중이다. 화면은 편집 버튼을 막고 처리 중 표시를 보인다.
      * @property layers 레이어들(아래부터). 보정 값처럼 화면이 보일 속성만 담는다.
      * @property activeLayer 고른 레이어. 보정은 이 레이어에 한다.
+     * @property selection 선택 영역 윤곽선(문서 전체, 줄인 마스크에서 찾음). 없으면 고른 곳이 없다(모든 곳을 편집한다).
+     * @property selectionDetail 확대해 볼 때 [detail]과 같은 자리에서 더 정확하게 다시 찾은 윤곽선. 없으면 [selection]만 그린다.
      */
     data class Ready(
         val base: PreviewImage,
@@ -184,7 +196,9 @@ sealed interface EditorState {
         val canRedo: Boolean = false,
         val busy: Boolean = false,
         val layers: List<LayerSummary> = emptyList(),
-        val activeLayer: LayerId? = null
+        val activeLayer: LayerId? = null,
+        val selection: SelectionOutline? = null,
+        val selectionDetail: SelectionOutline? = null
     ) : EditorState {
 
         /** 고른 레이어의 속성 */
@@ -319,12 +333,12 @@ class EditorViewModel internal constructor(
     /** 글자 크기를 직접 골랐는지 */
     private var textSizeChosen = false
 
-    /** 획 하나: 그릴 레이어, 설정, 지우개인지, 지금까지 놓은 자국 */
-    private class Stroke(val layer: LayerId, val settings: BrushSettings, val erase: Boolean) {
+    /** 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국 */
+    private class Stroke(val layer: LayerId, val settings: BrushSettings, val erase: Boolean, val selection: Selection?) {
         val dabs = StrokeDabs(settings.spacing)
 
         /** 그리는 동안 바뀌지 않는 미리 보기용 사본 */
-        fun live(): LiveStroke = LiveStroke(layer, ArrayList(dabs.dabs), settings, erase)
+        fun live(): LiveStroke = LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection)
     }
 
     /** 끄는 중인 획 */
@@ -353,6 +367,28 @@ class EditorViewModel internal constructor(
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
     }
+
+    private val _selectionOptions = MutableStateFlow(SelectionOptions())
+
+    /** 선택 도구 설정(합치는 방법·페더·허용치·인접). 앱을 끌 때까지 남는다(다른 문서를 열어도). */
+    val selectionOptions: StateFlow<SelectionOptions> = _selectionOptions.asStateFlow()
+
+    /** 선택 도구(캔버스 손가락과 옵션 버튼)가 보내는 일 */
+    val selectionActions: SelectionActions = object : SelectionActions {
+        override fun shape(shape: SelectionShape) = selectShape(shape)
+        override fun similar(x: Float, y: Float) = selectSimilar(x, y)
+        override fun all() = edit(SelectAll)
+        override fun none() = edit(Deselect)
+        override fun invert() = edit(InvertSelection)
+        override fun delete() = deleteSelected()
+        override fun copyToLayer(cut: Boolean) = copySelectionToLayer(cut)
+    }
+
+    /** 마지막으로 윤곽선을 찾은 선택 영역과 그 윤곽선(문서 전체). 선택 영역이 그대로면 다시 찾지 않는다. */
+    private var outlined: Pair<Selection, SelectionOutline>? = null
+
+    /** 부분 윤곽선([EditorState.Ready.selectionDetail])을 찾은 선택 영역 */
+    private var detailOutlined: Selection? = null
 
     /** 레이어 패널이 보내는 일 */
     val layerActions: LayerActions = object : LayerActions {
@@ -563,6 +599,42 @@ class EditorViewModel internal constructor(
         (_state.value as? EditorState.Ready)?.let { _state.value = it.copy(activeLayer = id) }
     }
 
+    /** 선택 도구 설정을 바꾼다 */
+    fun setSelectionOptions(options: SelectionOptions) {
+        _selectionOptions.value = options
+    }
+
+    /** [shape]로 고른다(선택 도구 설정의 합치는 방법·페더, 실행 취소 한 단계). 다른 편집을 처리하는 중이면 무시한다. */
+    fun selectShape(shape: SelectionShape) {
+        val options = _selectionOptions.value
+        edit(SelectShape(shape, options.mode, options.feather))
+    }
+
+    /** 고른 레이어에서 문서 좌표 ([x], [y])의 색과 비슷한 곳을 고른다(자동 선택, 실행 취소 한 단계). */
+    fun selectSimilar(x: Float, y: Float) {
+        val document = history?.document ?: return
+        val options = _selectionOptions.value
+        edit(SelectSimilarColor(activeLayerIn(document), x, y, options.tolerance, options.contiguous, options.mode))
+    }
+
+    /** 고른 레이어에서 고른 곳의 픽셀을 지운다(투명하게, 실행 취소 한 단계). 선택 영역이 없으면 무시한다. */
+    fun deleteSelected() {
+        val document = history?.document ?: return
+        if (document.selection == null) return
+        edit(DeleteSelected(activeLayerIn(document)))
+    }
+
+    /**
+     * 고른 레이어에서 고른 곳을 바로 위의 새 레이어로 복사하고([cut]이면 잘라 내고) 새 레이어를 고른다(실행 취소 한 단계).
+     * 이름은 '레이어 N'이다. 선택 영역이 없거나 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun copySelectionToLayer(cut: Boolean) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || document.selection == null) return
+        val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
+        runEdit(CopySelectedToLayer(activeLayerIn(document), name, cut), select = LayerId(document.nextLayerId))
+    }
+
     /**
      * 고른 레이어 바로 위에 빈 레이어를 더하고 그 레이어를 고른다(실행 취소 한 단계).
      * 이름은 '레이어 N'이다(N은 문서의 다음 레이어 번호라 지우고 더해도 겹치지 않는다). 다른 편집을 처리하는 중이면 무시한다.
@@ -655,7 +727,7 @@ class EditorViewModel internal constructor(
         val ready = _state.value as? EditorState.Ready ?: return
         if (drawing != null || hasLiveValues || (editing && !strokeCommitting)) return
         val layer = currentLayer() ?: return
-        val stroke = Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase)
+        val stroke = Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection)
         stroke.dabs.add(point)
         drawing = stroke
         if (detailStrokes.isEmpty()) detailBeforeStroke = ready.detail
@@ -1199,9 +1271,17 @@ class EditorViewModel internal constructor(
         renderMutex.withLock {
             // 기록을 기다리거나 끄는 획은 그대로 보이게 얹는다
             val strokes = liveStrokes()
-            val preview = withContext(Dispatchers.Default) {
+            val shownBefore = _state.value as? EditorState.Ready
+            // 선택 영역만 바뀌었으면(픽셀은 같음) 보이던 축소본을 그대로 쓴다.
+            // 끄는 동안의 미리 보기(보정·불투명도·획)를 보이고 있었으면 그 그림은 기록된 문서가 아니라 다시 그린다.
+            val reusable = shownBefore?.base?.takeIf {
+                !liveShown && strokes.isEmpty() && it.region.level == level && samePixels(shownDocument, document)
+            }
+            val preview = reusable?.bitmap ?: withContext(Dispatchers.Default) {
                 layerPreviews.render(document, level, strokes) { ensureActive() }
             }
+            // 선택 영역 윤곽선. 선택 영역이 바뀐 때만 새로 찾는다.
+            val outline = withContext(Dispatchers.Default) { outlineOf(document) }
             // 레이어 패널의 작은 그림. 바뀐 레이어만 새로 만든다.
             val thumbnails = withContext(Dispatchers.Default) { layerPreviews.thumbnails(document, level) { ensureActive() } }
             if (preview == null) {
@@ -1217,14 +1297,18 @@ class EditorViewModel internal constructor(
             Log.d(TAG, "Preview level $level: ${preview.width}x${preview.height} for ${document.width}x${document.height}")
             val size = PixelSize(document.width, document.height)
             val shown = _state.value as? EditorState.Ready
-            val sameDocument = shown != null && document === shownDocument
+            val previous = shownDocument
+            val sameDocument = shown != null && document === previous
+            val sameImage = shown != null && samePixels(previous, document)
             if (!sameDocument) {
                 revision++
                 shownDocument = document
             }
             // 화면 크기가 바뀌어 같은 문서를 다시 그린 것이면, 부분 그림이 새 축소본보다 선명할 때만 남긴다.
-            // 문서가 바뀌었으면(뒤집기처럼 크기가 같아도) 버린다.
-            val detail = if (sameDocument) shown?.detail?.takeIf { it.region.level < level } else null
+            // 문서가 바뀌었으면(뒤집기처럼 크기가 같아도) 버린다. 선택 영역만 바뀌었으면 남긴다(픽셀이 같다).
+            val detail = if (sameDocument || sameImage) shown?.detail?.takeIf { it.region.level < level } else null
+            // 부분 윤곽선은 같은 선택 영역의 것만 남긴다. 바뀌었으면 부분 그림을 계획할 때 다시 찾는다.
+            val selectionDetail = shown?.selectionDetail?.takeIf { detail != null && detailOutlined === document.selection }
             if (finishEdit) editing = false
             // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
             liveDocument = null
@@ -1239,7 +1323,9 @@ class EditorViewModel internal constructor(
                 canRedo = history.canRedo,
                 busy = editing,
                 layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id]) },
-                activeLayer = activeLayerIn(document)
+                activeLayer = activeLayerIn(document),
+                selection = outline,
+                selectionDetail = selectionDetail
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다
@@ -1276,27 +1362,54 @@ class EditorViewModel internal constructor(
         else PreviewLevels.detailRegion(size, ready.base.region.level, viewport.scale, viewport.visible)
         val current = ready.detail
         if (planned == null) {
-            if (current != null) _state.value = ready.copy(detail = null)
+            if (current != null || ready.selectionDetail != null) _state.value = ready.copy(detail = null, selectionDetail = null)
             return
         }
-        if (current != null && PreviewLevels.canReuse(current.region, planned, size, viewport.visible)) return
-        val bitmap = withContext(Dispatchers.Default) {
-            PreviewRenderer.renderRegion(document, planned) { ensureActive() }
+        val selection = document.selection
+        val reuse = current != null && PreviewLevels.canReuse(current.region, planned, size, viewport.visible)
+        val region = if (reuse) checkNotNull(current).region else planned
+        // 부분 윤곽선은 부분 그림과 같은 자리에서, 같은 선택 영역으로 찾은 것이면 그대로 쓴다
+        val outlineReady = selection == null ||
+            (detailOutlined === selection && ready.selectionDetail?.region == region.rect)
+        if (reuse && outlineReady) return
+        val bitmap = if (reuse) {
+            null
+        } else {
+            withContext(Dispatchers.Default) { PreviewRenderer.renderRegion(document, planned) { ensureActive() } }
+                ?: run {
+                    Log.w(TAG, "Could not render detail level ${planned.level} at ${planned.rect}")
+                    return
+                }
         }
-        if (bitmap == null) {
-            Log.w(TAG, "Could not render detail level ${planned.level} at ${planned.rect}")
-            return
+        val outline = when {
+            selection == null -> null
+            outlineReady -> ready.selectionDetail
+            else -> withContext(Dispatchers.Default) { SelectionOutline(SelectionPreview.outline(selection, region), region.rect) }
         }
         // 그리는 동안 문서를 닫았거나 다른 문서를 열었으면 버린다. 화면에 보인 적 없는 그림이라 바로 비운다.
         val latest = _state.value
         if (latest !is EditorState.Ready || history?.document !== document) {
-            bitmap.recycle()
+            bitmap?.recycle()
             return
         }
-        Log.d(TAG, "Detail level ${planned.level}: ${bitmap.width}x${bitmap.height} at ${planned.rect}")
+        if (bitmap != null) Log.d(TAG, "Detail level ${planned.level}: ${bitmap.width}x${bitmap.height} at ${planned.rect}")
+        detailOutlined = selection
         // 앞 부분 그림은 화면이 아직 그리고 있을 수 있어 recycle()하지 않는다
-        _state.value = latest.copy(detail = PreviewImage(bitmap, planned))
+        _state.value = latest.copy(detail = if (bitmap != null) PreviewImage(bitmap, planned) else latest.detail, selectionDetail = outline)
     }
+
+    /** [document]의 선택 영역 윤곽선(문서 전체). 선택 영역이 없으면 null. 같은 선택 영역이면 앞에 찾은 것을 쓴다. */
+    private fun outlineOf(document: Document): SelectionOutline? {
+        val selection = document.selection ?: return null
+        outlined?.let { (source, outline) -> if (source === selection) return outline }
+        val size = PixelSize(document.width, document.height)
+        val region = PreviewLevels.wholeRegion(size, SelectionPreview.outlineLevel(size))
+        return SelectionOutline(SelectionPreview.outline(selection, region)).also { outlined = selection to it }
+    }
+
+    /** 두 문서의 픽셀(크기·레이어)이 같은지. 선택 영역만 바꾼 편집은 레이어 목록을 그대로 함께 쓴다. */
+    private fun samePixels(a: Document?, b: Document): Boolean =
+        a != null && a.layers === b.layers && a.width == b.width && a.height == b.height
 
     internal companion object {
         private const val TAG = "EditorViewModel"
@@ -1352,6 +1465,8 @@ class EditorViewModel internal constructor(
         detailStrokes.clear()
         strokeJob?.cancel()
         layerPreviews.clear()
+        outlined = null
+        detailOutlined = null
     }
 
     /** 레이어 요약을 [document]의 레이어 순서로. 레이어가 서로 다르면(더하거나 지움) 그대로 둔다. */

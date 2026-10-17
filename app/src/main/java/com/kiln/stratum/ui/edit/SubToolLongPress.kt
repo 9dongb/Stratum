@@ -59,7 +59,7 @@ fun Modifier.longPressFirst(onLongPress: () -> Unit): Modifier {
 fun SubToolMenu(
     tool: EditTool,
     expanded: Boolean,
-    current: SubTool,
+    current: SubTool?,
     onDismiss: () -> Unit,
     onChoose: (SubTool) -> Unit
 ) {

@@ -95,6 +95,7 @@ fun StratumApp(editor: EditorViewModel) {
             val brush by editor.brush.collectAsState()
             val eraser by editor.eraser.collectAsState()
             val textStyle by editor.textStyle.collectAsState()
+            val selectionOptions by editor.selectionOptions.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -120,7 +121,10 @@ fun StratumApp(editor: EditorViewModel) {
                 textStyle = textStyle,
                 onTextStyle = editor::setTextStyle,
                 onAddText = editor::addText,
-                twoFingerTapUndo = settingsValues.twoFingerTapUndo
+                twoFingerTapUndo = settingsValues.twoFingerTapUndo,
+                selectionOptions = selectionOptions,
+                onSelectionOptions = editor::setSelectionOptions,
+                selectionActions = editor.selectionActions
             )
         }
     }

@@ -188,4 +188,33 @@
     <string name="settings_privacy_description">Stratum은 인터넷을 쓰지 않아요. 사진과 프로젝트는 이 기기 안에만 있어요. 광고·로그인·분석이 없어요.</string>
     <string name="settings_licenses">오픈소스 라이선스</string>
     <string name="settings_licenses_text">Stratum은 아래 오픈소스를 Apache License 2.0(https://www.apache.org/licenses/LICENSE-2.0)에 따라 써요.\n• AndroidX, Jetpack Compose (Google)\n• Kotlin, kotlinx.coroutines (JetBrains)\n• Material Icons, Material Symbols (Google)</string>
+
+    <!-- 선택 도구 -->
+    <string name="tool_select">선택</string>
+    <string name="subtool_select_rect">사각형</string>
+    <string name="subtool_select_ellipse">원형</string>
+    <string name="subtool_select_lasso">올가미</string>
+    <string name="subtool_select_wand">자동 선택</string>
+    <string name="subtool_select_wand_short">자동</string>
+    <string name="selection_mode_replace">새로</string>
+    <string name="selection_mode_add">더하기</string>
+    <string name="selection_mode_subtract">빼기</string>
+    <string name="selection_mode_intersect">교차</string>
+    <string name="selection_feather">페더</string>
+    <string name="selection_feather_value">%1$d px</string>
+    <string name="selection_tolerance">허용치</string>
+    <string name="selection_contiguous">이어진 곳만</string>
+    <string name="selection_all">모두</string>
+    <string name="selection_all_description">모두 선택</string>
+    <string name="selection_none">해제</string>
+    <string name="selection_invert">반전</string>
+    <string name="selection_delete">지우기</string>
+    <string name="selection_delete_description">고른 곳의 픽셀 지우기</string>
+    <string name="selection_copy">복사</string>
+    <string name="selection_copy_description">새 레이어로 복사</string>
+    <string name="selection_cut">잘라내기</string>
+    <string name="selection_cut_description">새 레이어로 잘라내기</string>
+    <string name="selection_hint_drag">캔버스를 끌어서 고르세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
+    <string name="selection_hint_lasso">고를 곳을 손가락으로 둘러 그리세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
+    <string name="selection_hint_wand">색을 누르면 고른 레이어에서 비슷한 색을 골라요.</string>
 </resources>

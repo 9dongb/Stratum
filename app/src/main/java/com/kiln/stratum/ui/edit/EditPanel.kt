@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,8 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +49,9 @@ private val BottomPanelBodyHeight = 240.dp
 
 /** 메인 가로 오른쪽 패널의 폭 */
 private val SidePanelWidth = 320.dp
+
+/** 오른쪽 패널에서 도구 옵션이 차지할 수 있는 높이의 비율 */
+private const val SIDE_TOOL_MAX_FRACTION = 0.45f
 
 /** 메인 세로(Medium) 아래 패널의 탭 */
 enum class PanelTab(@get:StringRes val label: Int) {
@@ -115,7 +121,9 @@ fun BottomPanel(
             if (expanded) {
                 val content = if (showingTool) toolOptions else tabContent
                 if (content != null) {
-                    Box(Modifier.fillMaxWidth().height(BottomPanelBodyHeight).padding(horizontal = 12.dp)) {
+                    // 도구 옵션이 칸보다 길면(선택 도구 등) 칸 안에서 위아래로 밀어 본다. 탭 내용은 스스로 밀어 보므로 두지 않는다.
+                    val scroll = if (showingTool) Modifier.verticalScroll(rememberScrollState()) else Modifier
+                    Box(Modifier.fillMaxWidth().height(BottomPanelBodyHeight).then(scroll).padding(horizontal = 12.dp)) {
                         content()
                     }
                 } else {
@@ -195,35 +203,45 @@ fun SidePanel(
         modifier = modifier.fillMaxHeight().width(SidePanelWidth).testTag(EditScreenTags.SIDE_PANEL),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(
+        BoxWithConstraints(
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
         ) {
-            if (showingTool) {
-                PanelTitle(checkNotNull(toolTitle), Modifier.padding(horizontal = 8.dp))
-                Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
-                    checkNotNull(toolOptions)()
+            // 도구 옵션은 패널 높이의 일부까지만 차지하고(길면 그 안에서 밀어 봄), 아래 레이어 칸에 목록 자리를 남긴다
+            val toolMaxHeight = maxHeight * SIDE_TOOL_MAX_FRACTION
+            Column {
+                if (showingTool) {
+                    PanelTitle(checkNotNull(toolTitle), Modifier.padding(horizontal = 8.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = toolMaxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                    ) {
+                        checkNotNull(toolOptions)()
+                    }
+                    HorizontalDivider()
                 }
+                PanelSection(
+                    title = R.string.tool_adjust,
+                    open = adjustExpanded,
+                    onToggle = { if (showingTool) adjustOpenWithTool = !adjustOpenWithTool else adjustOpen = !adjustOpen },
+                    modifier = if (adjustExpanded) Modifier.weight(1f) else Modifier,
+                    action = adjustAction,
+                    content = adjustContent,
+                    tag = EditScreenTags.SIDE_ADJUST
+                )
                 HorizontalDivider()
+                PanelSection(
+                    title = R.string.tool_layers,
+                    open = layersOpen,
+                    onToggle = { layersOpen = !layersOpen },
+                    modifier = if (layersOpen) Modifier.weight(1f) else Modifier,
+                    action = layersAction,
+                    content = layersContent,
+                    tag = EditScreenTags.SIDE_LAYERS
+                )
             }
-            PanelSection(
-                title = R.string.tool_adjust,
-                open = adjustExpanded,
-                onToggle = { if (showingTool) adjustOpenWithTool = !adjustOpenWithTool else adjustOpen = !adjustOpen },
-                modifier = if (adjustExpanded) Modifier.weight(1f) else Modifier,
-                action = adjustAction,
-                content = adjustContent,
-                tag = EditScreenTags.SIDE_ADJUST
-            )
-            HorizontalDivider()
-            PanelSection(
-                title = R.string.tool_layers,
-                open = layersOpen,
-                onToggle = { layersOpen = !layersOpen },
-                modifier = if (layersOpen) Modifier.weight(1f) else Modifier,
-                action = layersAction,
-                content = layersContent,
-                tag = EditScreenTags.SIDE_LAYERS
-            )
         }
     }
 }

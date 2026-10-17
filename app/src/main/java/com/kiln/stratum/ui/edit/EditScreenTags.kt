@@ -70,6 +70,27 @@ object EditScreenTags {
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
 
+    /** 선택 도구 옵션 */
+    const val SELECTION_OPTIONS = "selectionOptions"
+    const val SELECTION_FEATHER = "selectionFeather"
+    const val SELECTION_TOLERANCE = "selectionTolerance"
+    const val SELECTION_CONTIGUOUS = "selectionContiguous"
+    const val SELECTION_ALL = "selectionAll"
+    const val SELECTION_NONE = "selectionNone"
+    const val SELECTION_INVERT = "selectionInvert"
+    const val SELECTION_DELETE = "selectionDelete"
+    const val SELECTION_COPY = "selectionCopy"
+    const val SELECTION_CUT = "selectionCut"
+
+    /** 선택 도구를 고르면 캔버스 위에 겹치는 터치 자리 */
+    const val SELECTION_OVERLAY = "selectionOverlay"
+
+    /** 선택 영역 윤곽선(개미 행렬) */
+    const val SELECTION_OUTLINE = "selectionOutline"
+
+    /** 선택 도구 옵션의 합치는 방법 [mode] 버튼 */
+    fun selectionMode(mode: com.kiln.stratum.engine.selection.SelectionMode): String = "selectionMode_${mode.name}"
+
     /** 아래 패널의 [tab] 탭 */
     fun panelTab(tab: PanelTab): String = "panelTab_${tab.name}"
 

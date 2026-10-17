@@ -109,7 +109,7 @@ private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Bo
             SubToolMenu(
                 tool = tool,
                 expanded = menuOpen,
-                current = selection.transformMode,
+                current = selection.modeOf(tool),
                 onDismiss = { menuOpen = false },
                 onChoose = {
                     menuOpen = false

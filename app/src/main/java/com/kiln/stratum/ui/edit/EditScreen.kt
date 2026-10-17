@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -52,24 +55,25 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
-import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.theme.StratumTheme
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -103,6 +107,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param textStyle 글자 모양, [onTextStyle]로 바꾼다
  * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위)
  * @param twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소한다(설정). 상단 바의 실행 취소 버튼이 켜져 있을 때만 된다.
+ * @param selectionOptions 선택 도구 설정, [onSelectionOptions]로 바꾼다
+ * @param selectionActions 선택 도구가 캔버스와 옵션 버튼에서 보내는 일
  */
 @Composable
 fun EditScreen(
@@ -131,7 +137,10 @@ fun EditScreen(
     textStyle: TextStyle = TextStyle(),
     onTextStyle: (TextStyle) -> Unit = {},
     onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
-    twoFingerTapUndo: Boolean = false
+    twoFingerTapUndo: Boolean = false,
+    selectionOptions: SelectionOptions = SelectionOptions(),
+    onSelectionOptions: (SelectionOptions) -> Unit = {},
+    selectionActions: SelectionActions = SelectionActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -201,6 +210,8 @@ fun EditScreen(
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthClass = widthClassOf(maxWidth.value)
+        // 커버 화면 옵션 자리의 최대 높이를 정하는 창 높이
+        val windowHeight = maxHeight
         // 문서가 열려 있어야 도구를 쓴다. 고른 도구가 있으면 그 옵션을 보인다.
         val toolsEnabled = ready != null
         val activeTool = selection.active.takeIf { toolsEnabled }
@@ -234,6 +245,9 @@ fun EditScreen(
             else -> null
         }
         val textControls = TextControls(textStyle, onTextStyle).takeIf { activeTool == EditTool.Text }
+        val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
+            SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
+        }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -247,7 +261,8 @@ fun EditScreen(
                     onAdjustItem = { adjustItem = it },
                     layers = layerControls,
                     brush = brushControls,
-                    text = textControls
+                    text = textControls,
+                    select = selectionControls
                 )
             }
         }
@@ -264,6 +279,16 @@ fun EditScreen(
                     document = ready.documentSize,
                     erase = activeTool == EditTool.Eraser,
                     actions = strokeActions,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && activeTool == EditTool.Select) {
+                SelectionOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    mode = checkNotNull(selection.modeOf(EditTool.Select)),
+                    options = selectionOptions,
+                    actions = selectionActions,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -312,7 +337,7 @@ fun EditScreen(
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
                     EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f), twoFingerUndo)
-                    if (toolOptions != null) ToolOptionsSheet(toolOptions)
+                    if (toolOptions != null) ToolOptionsSheet(toolOptions, maxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
 
@@ -417,12 +442,15 @@ fun EditScreen(
 /**
  * 커버 화면(Compact)에서 캔버스와 탭 줄 사이에 놓는 도구 옵션 자리. 캔버스를 가리지 않고 그 아래를 차지한다.
  * 커버 화면에는 접히는 부분이 없고, 옆쪽 시스템 바·카메라 구멍만 피한다.
+ * 옵션이 길면(선택 도구 등) [maxHeight]까지만 차지하고 그 안에서 위아래로 밀어 본다. 작은 폰에서도 캔버스가 남는다.
  */
 @Composable
-private fun ToolOptionsSheet(options: @Composable () -> Unit) {
+private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp) {
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Box(
             Modifier
+                .heightIn(max = maxHeight)
+                .verticalScroll(rememberScrollState())
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
@@ -595,6 +623,9 @@ private fun EditCanvas(
 
 /** 바쁨이 이만큼(밀리초) 이어지면 처리 중 막대를 보인다 */
 private const val BUSY_INDICATOR_DELAY_MILLIS = 200L
+
+/** 커버 화면에서 도구 옵션 자리가 차지할 수 있는 화면 높이의 비율 */
+private const val COMPACT_OPTIONS_MAX_FRACTION = 0.45f
 
 /** 문서를 열거나 만드는 동안 보이는 표시와 [message]. */
 @Composable
