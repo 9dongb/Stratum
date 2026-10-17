@@ -36,6 +36,16 @@ object EditScreenTags {
     const val CURVE_EDITOR = "curveEditor"
     const val CURVE_RESET = "curveReset"
     const val CURVE_DELETE_POINT = "curveDeletePoint"
+    const val SIDE_ADJUST = "sideAdjust"
+    const val SIDE_LAYERS = "sideLayers"
+    const val LAYER_PANEL = "layerPanel"
+    const val LAYER_LIST = "layerList"
+    const val LAYER_ADD = "layerAdd"
+    const val LAYER_DELETE = "layerDelete"
+    const val LAYER_UP = "layerUp"
+    const val LAYER_DOWN = "layerDown"
+    const val LAYER_OPACITY = "layerOpacity"
+    const val LAYER_BLEND = "layerBlend"
 
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"
@@ -54,6 +64,15 @@ object EditScreenTags {
 
     /** 보정 패널의 [item] 슬라이더 줄 */
     fun adjustSlider(item: AdjustItem): String = "adjustSlider_${item.name}"
+
+    /** 레이어 목록의 [id] 레이어 줄 */
+    fun layerRow(id: com.kiln.stratum.engine.document.LayerId): String = "layerRow_${id.value}"
+
+    /** 레이어 줄의 순서 손잡이 */
+    fun layerHandle(id: com.kiln.stratum.engine.document.LayerId): String = "layerHandle_${id.value}"
+
+    /** 혼합 모드 메뉴의 [mode] 항목 */
+    fun blendMode(mode: com.kiln.stratum.engine.document.BlendMode): String = "blendMode_${mode.name}"
 
     /** 커버 화면 보정 옵션의 [item] 칩 */
     fun adjustChip(item: AdjustItem): String = "adjustChip_${item.name}"

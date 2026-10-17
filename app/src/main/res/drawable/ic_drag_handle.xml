@@ -1,0 +1,10 @@
+<!-- Material Icons 'drag_handle' (Apache License 2.0). google/material-design-icons의 SVG 경로를 Android Studio 'Vector Asset'과 같은 형식으로 옮겼다(tint 줄 없음). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M20 9H4v2h16V9zM4 15h16v-2H4v2z"/>
+</vector>

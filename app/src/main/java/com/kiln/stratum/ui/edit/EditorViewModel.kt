@@ -11,12 +11,19 @@ import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.CancellableCommand
+import com.kiln.stratum.engine.command.DeleteLayer
 import com.kiln.stratum.engine.command.EditCommand
+import com.kiln.stratum.engine.command.EditSequence
+import com.kiln.stratum.engine.command.MoveLayer
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.command.SetLayerAdjustments
+import com.kiln.stratum.engine.command.SetLayerBlendMode
+import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.history.EditHistory
 import com.kiln.stratum.engine.importing.ImportFailure
@@ -100,13 +107,18 @@ sealed interface EditorMessage {
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
 data class ShareRequest(val uri: Uri, val mimeType: String)
 
-/** 화면에 보일 레이어 하나의 속성(보정·레이어 패널). 아래 레이어부터의 순서로 [EditorState.Ready.layers]에 담는다. */
+/**
+ * 화면에 보일 레이어 하나의 속성(보정·레이어 패널). 아래 레이어부터의 순서로 [EditorState.Ready.layers]에 담는다.
+ *
+ * @property thumbnail 레이어 목록의 작은 그림(보정을 건 레이어 픽셀, 하드웨어 비트맵). 빈 레이어는 null이다.
+ */
 data class LayerSummary(
     val id: LayerId,
     val name: String,
     val opacity: Float,
     val blendMode: BlendMode,
-    val adjustments: Adjustments
+    val adjustments: Adjustments,
+    val thumbnail: Bitmap? = null
 )
 
 /**
@@ -248,14 +260,30 @@ class EditorViewModel(
      */
     val liveAdjustments: StateFlow<Adjustments?> = _liveAdjustments.asStateFlow()
 
-    /** 다른 편집을 처리하는 동안 놓은 보정. 그 편집이 끝나면 기록한다(놓은 값을 잃지 않게). */
-    private var adjustCommitPending = false
+    private val _liveOpacity = MutableStateFlow<Float?>(null)
+
+    /** 끄는 동안의 불투명도(기록 전). [liveAdjustments]와 같은 방식이다. */
+    val liveOpacity: StateFlow<Float?> = _liveOpacity.asStateFlow()
+
+    /** 다른 편집을 처리하는 동안 놓은 값(보정·불투명도). 그 편집이 끝나면 기록한다(놓은 값을 잃지 않게). */
+    private var liveCommitPending = false
 
     /** 보정 패널이 보내는 일 */
     val adjustActions: AdjustActions = object : AdjustActions {
         override fun preview(change: (Adjustments) -> Adjustments) = previewAdjustments(change)
-        override fun commit() = commitAdjustments()
+        override fun commit() = commitLive()
         override fun record(change: (Adjustments) -> Adjustments) = recordAdjustments(change)
+    }
+
+    /** 레이어 패널이 보내는 일 */
+    val layerActions: LayerActions = object : LayerActions {
+        override fun select(id: LayerId) = selectLayer(id)
+        override fun add() = addLayer()
+        override fun delete() = deleteLayer()
+        override fun move(id: LayerId, toIndex: Int) = moveLayer(id, toIndex)
+        override fun previewOpacity(opacity: Float) = this@EditorViewModel.previewOpacity(opacity)
+        override fun commitOpacity() = commitLive()
+        override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
     }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
@@ -445,12 +473,61 @@ class EditorViewModel(
         }
     }
 
-    /** [id] 레이어를 고른다. 보정은 고른 레이어에 한다. 없는 레이어면 무시한다. */
+    /**
+     * [id] 레이어를 고른다. 보정·불투명도는 고른 레이어에 한다. 없는 레이어면 무시한다.
+     * 슬라이더를 끄는 중이거나 놓은 값을 기록하는 중이면 무시한다(그 값은 앞 레이어의 것이다).
+     */
     fun selectLayer(id: LayerId) {
         val document = history?.document ?: return
-        if (document.indexOfLayer(id) < 0) return
+        if (document.indexOfLayer(id) < 0 || hasLiveValues) return
         activeLayer = id
         (_state.value as? EditorState.Ready)?.let { _state.value = it.copy(activeLayer = id) }
+    }
+
+    /**
+     * 고른 레이어 바로 위에 빈 레이어를 더하고 그 레이어를 고른다(실행 취소 한 단계).
+     * 이름은 '레이어 N'이다(N은 문서의 다음 레이어 번호라 지우고 더해도 겹치지 않는다). 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun addLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
+        runEdit(AddLayer(name, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * 고른 레이어를 지우고(실행 취소 한 단계) 그 아래 레이어를, 맨 아래였으면 새 맨 아래 레이어를 고른다.
+     * 레이어가 하나뿐이면 지우지 않는다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun deleteLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || document.layers.size < 2) return
+        val index = activeIndexIn(document)
+        val next = document.layers[if (index > 0) index - 1 else 1].id
+        runEdit(DeleteLayer(document.layers[index].id), select = next)
+    }
+
+    /**
+     * [id] 레이어를 [toIndex](0이 맨 아래) 자리로 옮긴다(실행 취소 한 단계). 고른 레이어는 그대로다.
+     * 화면의 레이어 목록은 바로 새 순서로 보인다(끌어서 놓은 줄이 앞 자리로 튀었다 돌아오지 않게).
+     * 기록하면 같은 순서로 다시 그려지고, 하지 못하면 [finishEditing]이 기록된 순서로 되돌린다.
+     */
+    fun moveLayer(id: LayerId, toIndex: Int) {
+        val document = history?.document ?: return
+        // 다른 편집을 처리하는 중이면 옮기지 않는다(목록도 그대로 둔다)
+        if (editing || hasLiveValues || toIndex !in document.layers.indices) return
+        edit(MoveLayer(id, toIndex))
+        val ready = _state.value as? EditorState.Ready ?: return
+        val from = ready.layers.indexOfFirst { it.id == id }
+        if (!editing || from < 0 || from == toIndex) return
+        _state.value = ready.copy(layers = ready.layers.toMutableList().apply { add(toIndex, removeAt(from)) })
+    }
+
+    /** 고른 레이어의 혼합 모드를 [mode]로 바꾼다(실행 취소 한 단계). */
+    fun setBlendMode(mode: BlendMode) {
+        val layer = currentLayer() ?: return
+        if (hasLiveValues) return
+        edit(SetLayerBlendMode(layer.id, mode))
     }
 
     /**
@@ -460,58 +537,90 @@ class EditorViewModel(
      * 다른 편집을 처리하는 중이면 값만 받아 두고, 끝나면 그린다. 놓았던 값을 아직 기록하지 못했으면 이번 끌기와 합쳐 한 단계로 기록한다.
      */
     fun previewAdjustments(change: (Adjustments) -> Adjustments) {
-        val current = currentAdjustments() ?: return
-        _liveAdjustments.value = change(current).normalized()
-        adjustCommitPending = false
-        if (!editing) showLiveAdjustments()
+        val layer = currentLayer() ?: return
+        _liveAdjustments.value = change(_liveAdjustments.value ?: layer.adjustments).normalized()
+        afterLiveChange()
+    }
+
+    /** 불투명도 슬라이더를 끄는 동안 고른 레이어의 불투명도를 [opacity](0..1)로 미리 본다. 보정 미리 보기와 같은 방식이다. */
+    fun previewOpacity(opacity: Float) {
+        currentLayer() ?: return
+        _liveOpacity.value = opacity.coerceIn(0f, 1f) + 0f
+        afterLiveChange()
     }
 
     /**
-     * 미리 보던 보정 값을 고른 레이어에 기록한다(실행 취소 한 단계, 슬라이더를 놓을 때). 미리 보던 값이 없으면 아무것도 하지 않는다.
+     * 끄던 값(보정·불투명도)을 고른 레이어에 기록한다(실행 취소 한 단계, 슬라이더를 놓을 때). 끄던 값이 없으면 아무것도 하지 않는다.
      * 기록된 값과 같으면 기록하지 않고, 미리 보기를 보였으면 기록된 문서로 다시 그린다.
      * 다른 편집을 처리하는 중이면 그 편집이 끝난 뒤 기록한다.
      */
-    fun commitAdjustments() {
-        val adjustments = _liveAdjustments.value ?: return
+    fun commitLive() {
+        val adjustments = _liveAdjustments.value
+        val opacity = _liveOpacity.value
+        if (adjustments == null && opacity == null) return
         if (editing) {
-            adjustCommitPending = true
+            liveCommitPending = true
             return
         }
         val layer = activeLayer
         if (layer == null || history == null || _state.value !is EditorState.Ready) {
             _liveAdjustments.value = null
+            _liveOpacity.value = null
             return
         }
         liveDocument = null
-        runEdit(SetLayerAdjustments(layer, adjustments)) {
+        val commands = liveCommands(layer)
+        runEdit(commands.singleOrNull() ?: EditSequence(commands)) {
             // 그사이 다시 끌기 시작했으면 그 값은 남긴다(끝나면 그린다)
             if (_liveAdjustments.value == adjustments) _liveAdjustments.value = null
+            if (_liveOpacity.value == opacity) _liveOpacity.value = null
         }
     }
 
     /** 지금 보정 값에 [change]를 걸어 바로 기록한다(초기화·점 지우기 버튼). */
     fun recordAdjustments(change: (Adjustments) -> Adjustments) {
-        val current = currentAdjustments() ?: return
-        _liveAdjustments.value = change(current).normalized()
-        adjustCommitPending = false
-        commitAdjustments()
+        val layer = currentLayer() ?: return
+        _liveAdjustments.value = change(_liveAdjustments.value ?: layer.adjustments).normalized()
+        liveCommitPending = false
+        commitLive()
     }
 
-    /** 고른 레이어의 지금 보정 값: 미리 보는 값, 없으면 기록된 값. 문서가 없으면 null. */
-    private fun currentAdjustments(): Adjustments? {
+    /** 끄는 동안의 값이 있는지(놓은 값을 아직 기록하지 못한 것 포함) */
+    private val hasLiveValues: Boolean
+        get() = _liveAdjustments.value != null || _liveOpacity.value != null
+
+    /** 끄는 값이 바뀌었다. 놓았던 값은 이번 끌기와 합쳐 기록하고, 편집 중이 아니면 바로 그린다. */
+    private fun afterLiveChange() {
+        liveCommitPending = false
+        if (!editing) showLive()
+    }
+
+    /** 고른 레이어(기록된 문서의 것). 문서가 없거나 고른 레이어가 없으면 null. */
+    private fun currentLayer(): Layer? {
         if (_state.value !is EditorState.Ready) return null
         val document = history?.document ?: return null
         val index = activeLayer?.let { document.indexOfLayer(it) } ?: return null
-        if (index < 0) return null
-        return _liveAdjustments.value ?: document.layers[index].adjustments
+        return document.layers.getOrNull(index)
     }
 
-    /** 미리 보는 보정 값을 고른 레이어에 건 문서를 그린다. 그리는 동안 또 바뀌면 가장 나중 것만 그린다. */
-    private fun showLiveAdjustments() {
+    /** [document]에서 고른 레이어의 자리. 고른 레이어가 없으면 맨 위다. */
+    private fun activeIndexIn(document: Document): Int =
+        activeLayer?.let { document.indexOfLayer(it) }?.takeIf { it >= 0 } ?: document.layers.lastIndex
+
+    /** 끄는 값을 [layer]에 거는 명령들(보정, 불투명도 순) */
+    private fun liveCommands(layer: LayerId): List<EditCommand> =
+        listOfNotNull(
+            _liveAdjustments.value?.let { SetLayerAdjustments(layer, it) },
+            _liveOpacity.value?.let { SetLayerOpacity(layer, it) }
+        )
+
+    /** 끄는 값을 고른 레이어에 건 문서를 그린다. 그리는 동안 또 바뀌면 가장 나중 것만 그린다. */
+    private fun showLive() {
         val history = history ?: return
         val layer = activeLayer ?: return
-        val adjustments = _liveAdjustments.value ?: return
-        liveDocument = SetLayerAdjustments(layer, adjustments).applyTo(history.document)
+        val commands = liveCommands(layer)
+        if (commands.isEmpty()) return
+        liveDocument = commands.fold(history.document) { document, command -> command.applyTo(document) }
         detailJob?.cancel()
         if (liveJob?.isActive == true) return
         liveJob = viewModelScope.launch {
@@ -535,16 +644,16 @@ class EditorViewModel(
     }
 
     /**
-     * 편집이 끝난 뒤 기다리던 보정을 이어서 한다. 처리하는 동안 놓은 값이 있으면 기록하고,
+     * 편집이 끝난 뒤 기다리던 일을 이어서 한다. 처리하는 동안 놓은 값이 있으면 기록하고,
      * 아직 끄는 중이면 그 값으로 미리 보기를 그린다.
      */
-    private fun runPendingAdjustments() {
+    private fun runPendingLive() {
         if (editing) return
-        if (adjustCommitPending) {
-            adjustCommitPending = false
-            commitAdjustments()
-        } else if (_liveAdjustments.value != null && liveDocument == null) {
-            showLiveAdjustments()
+        if (liveCommitPending) {
+            liveCommitPending = false
+            commitLive()
+        } else if (hasLiveValues && liveDocument == null) {
+            showLive()
         }
     }
 
@@ -626,8 +735,9 @@ class EditorViewModel(
     /**
      * [edit]과 같고, 편집이 끝나면(기록했거나, 바뀐 것이 없거나, 하지 못했으면) 화면 상태를 바꾸는 바로 그때 [onFinished]를 부른다.
      * 바뀐 것이 없는데 미리 보기를 보이고 있었으면 기록된 문서로 다시 그린다.
+     * [select]가 있으면 기록한 문서에서 그 레이어를 고른다(레이어를 더하거나 지울 때). 기록을 되돌리면 앞 레이어로 돌아간다.
      */
-    private fun runEdit(command: EditCommand, onFinished: () -> Unit = {}) {
+    private fun runEdit(command: EditCommand, select: LayerId? = null, onFinished: () -> Unit = {}) {
         val history = history ?: return
         if (editing || _state.value !is EditorState.Ready) return
         startEditing()
@@ -650,16 +760,19 @@ class EditorViewModel(
             if (!history.commit(command, before, after)) {
                 // 바뀐 것이 없다. 슬라이더를 처음 값으로 되돌려 놓았으면 축소본이 아직 미리 보기라 다시 그린다.
                 onFinished()
-                if (liveShown && showPreview(before, finishEdit = true)) runPendingAdjustments() else finishEditing()
+                if (liveShown && showPreview(before, finishEdit = true)) runPendingLive() else finishEditing()
                 return@launch
             }
+            val previousActive = activeLayer
+            if (select != null) activeLayer = select
             if (showPreview(after, finishEdit = true)) {
                 onFinished()
                 scheduleSave()
-                runPendingAdjustments()
+                runPendingLive()
             } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
+                activeLayer = previousActive
                 onFinished()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
             }
@@ -745,7 +858,7 @@ class EditorViewModel(
         editJob = viewModelScope.launch {
             if (showPreview(document, finishEdit = true)) {
                 scheduleSave()
-                runPendingAdjustments()
+                runPendingLive()
             } else {
                 revert(history)
                 finishEditing(EditorMessage.EditNotEnoughMemory)
@@ -765,12 +878,17 @@ class EditorViewModel(
         editing = false
         val history = history
         (_state.value as? EditorState.Ready)?.let {
-            _state.value = it.copy(busy = false, canUndo = history?.canUndo == true, canRedo = history?.canRedo == true)
+            _state.value = it.copy(
+                busy = false,
+                canUndo = history?.canUndo == true,
+                canRedo = history?.canRedo == true,
+                layers = it.layers.inOrderOf(history?.document)
+            )
         }
         if (message != null) _messages.trySend(message)
         // 미리 보느라 숨긴 부분 그림을 다시 그린다
         planDetail()
-        runPendingAdjustments()
+        runPendingLive()
     }
 
     /**
@@ -835,6 +953,8 @@ class EditorViewModel(
             val preview = withContext(Dispatchers.Default) {
                 layerPreviews.render(document, level) { ensureActive() }
             }
+            // 레이어 패널의 작은 그림. 바뀐 레이어만 새로 만든다.
+            val thumbnails = withContext(Dispatchers.Default) { layerPreviews.thumbnails(document, level) { ensureActive() } }
             if (preview == null) {
                 // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
                 Log.w(TAG, "Could not render preview level $level for ${document.width}x${document.height}")
@@ -868,7 +988,7 @@ class EditorViewModel(
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
                 busy = editing,
-                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments) },
+                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id]) },
                 activeLayer = activeLayerIn(document)
             )
         }
@@ -957,8 +1077,16 @@ class EditorViewModel(
         liveShown = false
         liveJob?.cancel()
         _liveAdjustments.value = null
-        adjustCommitPending = false
+        _liveOpacity.value = null
+        liveCommitPending = false
         layerPreviews.clear()
+    }
+
+    /** 레이어 요약을 [document]의 레이어 순서로. 레이어가 서로 다르면(더하거나 지움) 그대로 둔다. */
+    private fun List<LayerSummary>.inOrderOf(document: Document?): List<LayerSummary> {
+        if (document == null || size != document.layers.size) return this
+        val byId = associateBy { it.id }
+        return document.layers.map { byId[it.id] ?: return this }
     }
 
     /** [document]에서 고른 레이어. 고른 레이어가 없거나 없어졌으면 맨 위 레이어를 고른다. */

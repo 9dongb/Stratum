@@ -34,7 +34,7 @@ enum class SubTool(
 }
 
 /**
- * 1단계 편집 도구(CLAUDE.md 8장). 자르기·변형과 조정이 켜져 있고, 나머지는 기능이 생길 때까지 비활성이다.
+ * 1단계 편집 도구(CLAUDE.md 8장). 자르기·변형, 조정, 레이어가 켜져 있고, 나머지는 기능이 생길 때까지 비활성이다.
  * 2·3단계 도구(반창고·제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
@@ -62,7 +62,8 @@ enum class EditTool(
     Brush(R.drawable.ic_brush, R.string.tool_brush),
     Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser),
     Text(R.drawable.ic_text_fields, R.string.tool_text),
-    Layers(R.drawable.ic_layers, R.string.tool_layers);
+    /** 레이어. 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
+    Layers(R.drawable.ic_layers, R.string.tool_layers, available = true);
 
     /** 하위 도구가 있는지. */
     val hasSubTools: Boolean
@@ -72,7 +73,7 @@ enum class EditTool(
         /** 메인 화면 왼쪽 도구 막대의 도구. 조정·레이어는 패널에 있다. */
         val railTools: List<EditTool> = listOf(Transform, Brush, Eraser, Text)
 
-        /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 기능이 생기면 시트로 열린다. */
+        /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. */
         val tabTools: List<EditTool> = listOf(Transform, Adjust, Brush, Eraser, Text, Layers)
     }
 }

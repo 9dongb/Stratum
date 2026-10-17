@@ -26,6 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -43,14 +47,10 @@ private val BottomPanelBodyHeight = 240.dp
 /** 메인 가로 오른쪽 패널의 폭 */
 private val SidePanelWidth = 320.dp
 
-/**
- * 메인 세로(Medium) 아래 패널의 탭.
- *
- * @property available 기능이 있어 누를 수 있는지. 레이어는 레이어 패널 작업(5번)에서 켠다.
- */
-enum class PanelTab(@get:StringRes val label: Int, val available: Boolean) {
-    LAYERS(R.string.tool_layers, available = false),
-    ADJUST(R.string.tool_adjust, available = true)
+/** 메인 세로(Medium) 아래 패널의 탭 */
+enum class PanelTab(@get:StringRes val label: Int) {
+    LAYERS(R.string.tool_layers),
+    ADJUST(R.string.tool_adjust)
 }
 
 /**
@@ -62,7 +62,7 @@ enum class PanelTab(@get:StringRes val label: Int, val available: Boolean) {
  *
  * @param tab 고른 탭
  * @param tabsEnabled 탭을 누를 수 있는지(문서가 열려 있는지)
- * @param tabAction 고른 탭의 내용에 딸린 버튼(조정의 '모두 초기화'). 탭 줄 오른쪽, 접기 버튼 앞에 놓인다.
+ * @param tabAction 고른 탭의 내용에 딸린 버튼(조정의 '모두 초기화', 레이어의 버튼 줄). 탭 줄 오른쪽, 접기 버튼 앞에 놓인다.
  * @param tabContent 고른 탭의 내용. 없으면 빈 자리다.
  */
 @Composable
@@ -97,7 +97,7 @@ fun BottomPanel(
                         PanelTabButton(
                             label = stringResource(entry.label),
                             selected = entry == tab,
-                            enabled = tabsEnabled && entry.available,
+                            enabled = tabsEnabled,
                             onClick = { onTab(entry) },
                             modifier = Modifier.testTag(EditScreenTags.panelTab(entry))
                         )
@@ -119,7 +119,7 @@ fun BottomPanel(
                         content()
                     }
                 } else {
-                    // 내용이 없는 탭(레이어는 5번에서)
+                    // 문서가 없으면 빈 자리다
                     Spacer(Modifier.fillMaxWidth().height(BottomPanelBodyHeight))
                 }
             }
@@ -166,10 +166,13 @@ private fun PanelTabButton(label: String, selected: Boolean, enabled: Boolean, o
 /**
  * 메인 가로(Expanded) 오른쪽 고정 패널. CLAUDE.md 6장대로 조정과 레이어를 위아래로 함께 보여 준다.
  * 도구를 고르면([toolOptions]가 있으면) 맨 위에 그 도구의 이름([toolTitle])과 옵션을 보인다. 옵션은 가로로 지나가는 힌지의 띠를 피해 쌓는다.
- * 조정 칸이 남는 높이를 쓰고 그 안에서 밀어 본다. 레이어 칸은 아직 제목뿐이다(5번에서 내용과 나누기를 다시 정한다).
+ * 조정 칸과 레이어 칸은 남는 높이를 반씩 나눠 쓰고, 제목 줄의 접기 버튼으로 접으면 다른 칸이 그 자리를 쓴다
+ * (CLAUDE.md 6장 '조정은 넣었다 뺄 수 있다'). 접은 상태는 접기·펼치기에도 남는다.
  *
  * @param adjustAction 조정 칸 제목 줄 오른쪽의 버튼('모두 초기화')
  * @param adjustContent 조정 칸의 내용. 문서가 없으면 null이다.
+ * @param layersAction 레이어 칸 제목 줄 오른쪽의 버튼 줄(더하기·지우기·위로·아래로)
+ * @param layersContent 레이어 칸의 내용. 문서가 없으면 null이다.
  */
 @Composable
 fun SidePanel(
@@ -177,8 +180,12 @@ fun SidePanel(
     toolTitle: String? = null,
     toolOptions: (@Composable () -> Unit)? = null,
     adjustAction: (@Composable () -> Unit)? = null,
-    adjustContent: (@Composable () -> Unit)? = null
+    adjustContent: (@Composable () -> Unit)? = null,
+    layersAction: (@Composable () -> Unit)? = null,
+    layersContent: (@Composable () -> Unit)? = null
 ) {
+    var adjustOpen by rememberSaveable { mutableStateOf(true) }
+    var layersOpen by rememberSaveable { mutableStateOf(true) }
     Surface(
         modifier = modifier.fillMaxHeight().width(SidePanelWidth).testTag(EditScreenTags.SIDE_PANEL),
         color = MaterialTheme.colorScheme.surfaceContainerLow
@@ -193,9 +200,25 @@ fun SidePanel(
                 }
                 HorizontalDivider()
             }
-            PanelSection(R.string.tool_adjust, Modifier.weight(1f), action = adjustAction, content = adjustContent)
+            PanelSection(
+                title = R.string.tool_adjust,
+                open = adjustOpen,
+                onToggle = { adjustOpen = !adjustOpen },
+                modifier = if (adjustOpen) Modifier.weight(1f) else Modifier,
+                action = adjustAction,
+                content = adjustContent,
+                tag = EditScreenTags.SIDE_ADJUST
+            )
             HorizontalDivider()
-            PanelSection(R.string.tool_layers)
+            PanelSection(
+                title = R.string.tool_layers,
+                open = layersOpen,
+                onToggle = { layersOpen = !layersOpen },
+                modifier = if (layersOpen) Modifier.weight(1f) else Modifier,
+                action = layersAction,
+                content = layersContent,
+                tag = EditScreenTags.SIDE_LAYERS
+            )
         }
     }
 }
@@ -211,28 +234,41 @@ private fun PanelTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** 오른쪽 패널의 한 칸: 제목(과 오른쪽 버튼), 그 아래 내용. 내용은 칸에 남는 높이를 쓴다. */
+/**
+ * 오른쪽 패널의 한 칸: 제목, 오른쪽 버튼, 접기 버튼, 그 아래 내용. 내용은 칸에 남는 높이를 쓴다.
+ * 접으면 제목 줄만 남고 버튼도 숨긴다.
+ */
 @Composable
 private fun PanelSection(
     @StringRes title: Int,
+    open: Boolean,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null,
-    content: (@Composable () -> Unit)? = null
+    content: (@Composable () -> Unit)? = null,
+    tag: String
 ) {
-    Column(modifier.fillMaxWidth()) {
+    val name = stringResource(title)
+    Column(modifier.fillMaxWidth().testTag(tag)) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = stringResource(title),
+                text = name,
                 modifier = Modifier.weight(1f).semantics { heading() },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.titleSmall
             )
-            action?.invoke()
+            if (open) action?.invoke()
+            IconButton(onClick = onToggle) {
+                Icon(
+                    painter = painterResource(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
+                    contentDescription = stringResource(if (open) R.string.section_collapse else R.string.section_expand, name)
+                )
+            }
         }
-        if (content != null) {
+        if (open && content != null) {
             Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp)) {
                 content()
             }

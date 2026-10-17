@@ -236,8 +236,6 @@ private fun AdjustChip(item: AdjustItem, selected: Boolean, changed: Boolean, en
  * 슬라이더 한 줄: 이름, 슬라이더, 숫자. 끄는 동안 미리 보고, 놓으면 기록한다.
  * 이름을 두 번 누르면 그 항목만 0으로 돌린다(라이트룸과 같은 방식). 화면 읽기 기능에서는 '초기화' 동작으로 한다.
  */
-// 손잡이·막대를 바꾸는 Slider는 아직 실험 기능이라 opt-in이 필요하다
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
     val value = item.valueIn(controls.adjustments)
@@ -264,18 +262,13 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
-        val interactionSource = remember { MutableInteractionSource() }
-        Slider(
+        ThinSlider(
             value = value,
             onValueChange = { newValue -> actions.preview { item.applyTo(it, newValue) } },
             onValueChangeFinished = actions::commit,
             valueRange = item.min..item.max,
             enabled = controls.enabled,
-            interactionSource = interactionSource,
-            thumb = {
-                SliderDefaults.Thumb(interactionSource = interactionSource, enabled = controls.enabled, thumbSize = ThumbSize)
-            },
-            track = { state -> CenteredTrack(state, controls.enabled) },
+            centered = true,
             modifier = Modifier
                 .weight(1f)
                 .semantics {
@@ -303,25 +296,55 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
 }
 
 /**
- * 0을 가운데에 둔 슬라이더 막대. 0에서 지금 값까지 칠하고, 0 자리에 짧은 눈금을 둔다.
+ * 패널에 여러 줄 쌓는 가는 슬라이더(보정·불투명도). 기본 슬라이더보다 막대가 가늘고 손잡이가 낮다.
+ * [centered]면 0을 가운데에 두고 0에서 지금 값까지 칠한다(양쪽으로 바꾸는 보정 값). 아니면 왼쪽 끝부터 칠한다(불투명도).
+ */
+// 손잡이·막대를 바꾸는 Slider는 아직 실험 기능이라 opt-in이 필요하다
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ThinSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    centered: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        valueRange = valueRange,
+        enabled = enabled,
+        interactionSource = interactionSource,
+        thumb = { SliderDefaults.Thumb(interactionSource = interactionSource, enabled = enabled, thumbSize = ThumbSize) },
+        track = { state -> ThinTrack(state, enabled, centered) },
+        modifier = modifier
+    )
+}
+
+/**
+ * 가는 슬라이더 막대. [centered]면 0 자리에 짧은 눈금을 두고 0에서 지금 값까지, 아니면 왼쪽 끝에서 지금 값까지 칠한다.
  * 보정은 양쪽으로 바꾸는 값이라, 왼쪽 끝부터 칠하는 기본 막대보다 얼마나 바꿨는지 잘 보인다(라이트룸과 같다).
  * 손잡이 가운데가 막대의 같은 비율 자리에 오도록 슬라이더가 막대를 놓으므로, 비율대로 그리면 손잡이와 맞는다.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CenteredTrack(state: SliderState, enabled: Boolean) {
+private fun ThinTrack(state: SliderState, enabled: Boolean, centered: Boolean) {
     val colors = MaterialTheme.colorScheme
     val active = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f)
     val inactive = if (enabled) colors.secondaryContainer else colors.onSurface.copy(alpha = 0.12f)
     val tick = if (enabled) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f)
     Canvas(Modifier.fillMaxWidth().height(TrackHeight)) {
         val range = state.valueRange
-        val zero = ((0f - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f) * size.width
+        val origin = if (centered) ((0f - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f) * size.width else 0f
         val value = state.coercedValueAsFraction * size.width
         val middle = size.height / 2
         drawLine(inactive, Offset(0f, middle), Offset(size.width, middle), strokeWidth = size.height, cap = StrokeCap.Round)
-        drawLine(active, Offset(minOf(zero, value), middle), Offset(maxOf(zero, value), middle), strokeWidth = size.height)
-        drawLine(tick, Offset(zero, -2.dp.toPx()), Offset(zero, size.height + 2.dp.toPx()), strokeWidth = 2.dp.toPx())
+        drawLine(active, Offset(minOf(origin, value), middle), Offset(maxOf(origin, value), middle), strokeWidth = size.height, cap = if (centered) StrokeCap.Butt else StrokeCap.Round)
+        if (centered) drawLine(tick, Offset(origin, -2.dp.toPx()), Offset(origin, size.height + 2.dp.toPx()), strokeWidth = 2.dp.toPx())
     }
 }
 

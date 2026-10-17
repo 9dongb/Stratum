@@ -137,4 +137,23 @@
     <string name="adjust_curve_reset">Reset curve</string>
     <string name="adjust_curve_delete_point">Delete point</string>
     <string name="adjust_curve_editor">Tone curve, %1$d points. Drag to bend it, tap to add a point.</string>
+
+    <!-- 레이어 패널 -->
+    <string name="layer_new_name">Layer %1$d</string>
+    <string name="layer_add">Add layer</string>
+    <string name="layer_delete">Delete layer</string>
+    <string name="layer_move_up">Move layer up</string>
+    <string name="layer_move_down">Move layer down</string>
+    <string name="layer_opacity">Opacity</string>
+    <string name="layer_blend_mode">Blend</string>
+    <string name="layer_percent">%1$d%%</string>
+    <string name="layer_row_detail">%1$s · %2$d%%</string>
+    <string name="layer_row_description">%1$s, %2$s, opacity %3$d%%</string>
+    <string name="layer_selected">Selected</string>
+    <string name="blend_normal">Normal</string>
+    <string name="blend_multiply">Multiply</string>
+    <string name="blend_screen">Screen</string>
+    <string name="blend_overlay">Overlay</string>
+    <string name="section_expand">Expand %1$s</string>
+    <string name="section_collapse">Collapse %1$s</string>
 </resources>

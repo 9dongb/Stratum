@@ -19,7 +19,8 @@
 - 요청: 다음 후보 5번. 승인 없이 이어서 하라는 요청은 progress.md '진행 중'에 있다.
 - 의도: 말하지 않음
 - 커밋:
-  - "레이어 합성에 혼합 모드(곱하기·스크린·오버레이)를 더하고, 레이어 패널용 작은 그림과 명령 묶음을 만듦"
+  - aa397d1 "레이어 합성에 혼합 모드(곱하기·스크린·오버레이)를 더하고, 레이어 패널용 작은 그림과 명령 묶음을 만듦"
+  - "레이어 패널(목록·더하기·지우기·순서·불투명도·혼합 모드)을 커버 탭·메인 패널에 만들고 레이어 도구를 켬"
 - 바꾼 것:
   - 1단계(엔진):
     - `document/BlendMath.kt`(새): 혼합 모드 계산 기준(알파를 미리 곱한 sRGB, W3C·포토샵 공식). 단위 테스트 4개(교과서 값, 투명한 쪽은 다른 쪽 그대로, 불투명도는 '섞은 결과와 아래를 잇기'와 같음, 알파)
@@ -28,9 +29,25 @@
     - `platform/LayerPreviewCache.kt`: 레이어 축소본을 합칠 때 혼합 모드를 건다. 레이어 작은 그림(`thumbnails`, 긴 변 128px, 보정을 건 픽셀)을 레이어 축소본을 반씩 줄여 만들고, 래스터·보정 값이 같으면 다시 쓴다. 숨긴 레이어의 축소본도 남긴다.
     - `command/EditSequence.kt`(새): 명령 여럿을 실행 취소 한 단계로. 단위 테스트 2개
     - 에뮬레이터 테스트: `BlendModeTest` 4개(축소본·레이어별 축소본·내보내기가 기준 계산과 ±2 안, 네 모드와 불투명도 1·0.5, JPEG 흰 바탕은 섞은 뒤에 깖), `LayerThumbnailTest` 2개(비율·숨긴 레이어·빈 레이어, 다시 쓰기·보정 반영)
+  - 2단계(앱):
+    - `EditorViewModel.kt`:
+      - 레이어 더하기(`addLayer`: 고른 레이어 위, '레이어 N', 새 레이어를 고름), 지우기(`deleteLayer`: 아래 레이어를 고름, 마지막 한 장은 남김), 옮기기(`moveLayer`: 목록은 기록을 기다리지 않고 바로 새 순서), 혼합 모드(`setBlendMode`)
+      - 끄는 동안의 값을 보정과 불투명도로 넓혔다(`liveOpacity`, `previewOpacity`, `commitLive`). 둘을 함께 놓으면 `EditSequence`로 한 단계다.
+      - 화면 상태의 레이어 요약에 작은 그림(`LayerSummary.thumbnail`)을 담는다.
+      - 슬라이더를 끄거나 놓은 값을 기록하는 동안에는 다른 레이어를 고르지 않는다(그 값은 앞 레이어의 것이다).
+    - `ui/edit/LayerPanel.kt`(새): 레이어 패널(`LayerActions`, `LayerControls`)
+      - 버튼 줄(더하기·지우기·위로·아래로), 목록(위 레이어가 위, 작은 그림·이름·혼합 모드·불투명도, 손잡이를 끌어 순서 바꾸기, 화면 읽기 기능의 위로·아래로 동작), 불투명도 슬라이더, 혼합 모드 메뉴
+      - 커버용(`LayerCompact`), 메인 세로용(`LayerTwoColumns`), 메인 가로용(`LayerColumn`)
+      - 작은 그림은 그림 자리에만 체크 무늬를 깐다(사진 비율과 칸 비율이 다른 남는 자리를 투명한 픽셀로 보지 않게).
+    - `EditPanel.kt`: 아래 패널의 레이어 탭을 켜고, 오른쪽 패널의 조정·레이어 칸이 높이를 반씩 나누며 칸마다 접기 버튼을 둔다.
+    - `EditScreen.kt`·`ToolOptions.kt`·`EditTools.kt`·`StratumApp.kt`: 레이어 도구를 켜고 세 배치에 잇는다.
+    - `AdjustPanel.kt`: 가는 슬라이더(`ThinSlider`)를 보정과 불투명도가 함께 쓴다(불투명도는 왼쪽 끝부터 칠함).
+    - 문구(영어·한국어) 17개, 아이콘 4개(Material Icons arrow_upward·arrow_downward·drag_handle·check)
+    - 테스트: 에뮬레이터 `EditorLayersTest` 6개(더하기·지우기·옮기기·불투명도·혼합 모드·끄는 동안 고르기 막음), `LayerPanelTest` 8개(목록 순서·고르기, 버튼 켜짐, 불투명도, 혼합 메뉴, 손잡이 끌기, 화면 읽기 동작, 메인 세로 탭·힌지, 메인 가로 칸 접기·힌지). `EditorAdjustTest`는 새 이름(`commitLive`)으로 고쳤다.
 - 정한 것(Claude 판단, progress.md 결정 기록 '레이어 패널'): 배치, 목록 순서, 순서 바꾸기, 새 레이어·지우기, 불투명도·혼합 모드, 혼합 계산, 작은 그림
 - 확인한 것:
   - 1단계: 빌드와 단위 테스트, 에뮬레이터에서 `BlendModeTest` 4개·`LayerThumbnailTest` 2개가 통과했다.
+  - 2단계: 빌드와 단위 테스트, 에뮬레이터에서 `LayerPanelTest` 8개, `EditorLayersTest` 6개, `EditorAdjustTest` 5개, `AdjustPanelTest` 11개, `EditToolsTest`, `EditScreenLayoutTest`가 통과했다.
 
 ## 2026-10-18 · 기본 보정
 

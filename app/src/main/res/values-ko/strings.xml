@@ -135,4 +135,23 @@
     <string name="adjust_curve_reset">곡선 초기화</string>
     <string name="adjust_curve_delete_point">점 지우기</string>
     <string name="adjust_curve_editor">곡선, 점 %1$d개. 끌어서 휘고, 톡 눌러 점을 더해요.</string>
+
+    <!-- 레이어 패널 -->
+    <string name="layer_new_name">레이어 %1$d</string>
+    <string name="layer_add">레이어 추가</string>
+    <string name="layer_delete">레이어 삭제</string>
+    <string name="layer_move_up">레이어를 위로</string>
+    <string name="layer_move_down">레이어를 아래로</string>
+    <string name="layer_opacity">불투명도</string>
+    <string name="layer_blend_mode">혼합 모드</string>
+    <string name="layer_percent">%1$d%%</string>
+    <string name="layer_row_detail">%1$s · %2$d%%</string>
+    <string name="layer_row_description">%1$s, %2$s, 불투명도 %3$d%%</string>
+    <string name="layer_selected">선택됨</string>
+    <string name="blend_normal">표준</string>
+    <string name="blend_multiply">곱하기</string>
+    <string name="blend_screen">스크린</string>
+    <string name="blend_overlay">오버레이</string>
+    <string name="section_expand">%1$s 펼치기</string>
+    <string name="section_collapse">%1$s 접기</string>
 </resources>

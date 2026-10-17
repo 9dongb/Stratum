@@ -79,9 +79,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * - Medium(메인 세로): 왼쪽 도구 막대, 캔버스, 아래 접이식 패널
  * - Expanded(메인 가로): 왼쪽 도구 막대, 캔버스, 오른쪽 고정 패널
  *
- * 도구는 자르기·변형과 조정이 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
+ * 도구는 자르기·변형, 조정, 레이어가 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
  * 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널 맨 위에 보인다.
- * 조정은 커버 화면에서는 탭(도구)이고, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. 레이어 탭은 아직 비활성이다.
+ * 조정·레이어는 커버 화면에서는 탭(도구)이고, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
  * @param onViewport 확대·이동으로 보기가 바뀌면 보이는 문서 영역을 알린다. 엔진이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
@@ -93,6 +93,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param shareRequests 공유 창으로 보낼 사진. 앱이 화면에 있을 때 공유 창을 띄운다.
  * @param liveAdjustments 보정 슬라이더를 끄는 동안의 값(없으면 null). 보정 패널만 읽도록 함수로 받는다.
  * @param adjust 보정 패널이 보내는 일(미리 보기·기록)
+ * @param liveOpacity 불투명도 슬라이더를 끄는 동안의 값(없으면 null). 레이어 패널만 읽도록 함수로 받는다.
+ * @param layerActions 레이어 패널이 보내는 일(고르기·더하기·지우기·옮기기·불투명도·혼합 모드)
  */
 @Composable
 fun EditScreen(
@@ -110,7 +112,9 @@ fun EditScreen(
     onExport: (ExportChoice, ExportTarget) -> Unit = { _, _ -> },
     shareRequests: Flow<ShareRequest> = emptyFlow(),
     liveAdjustments: () -> Adjustments? = { null },
-    adjust: AdjustActions = AdjustActions.None
+    adjust: AdjustActions = AdjustActions.None,
+    liveOpacity: () -> Float? = { null },
+    layerActions: LayerActions = LayerActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -118,7 +122,7 @@ fun EditScreen(
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
     // 고른 도구. 커버에서 고른 도구가 펼친 뒤에도 그대로 이어지도록 배치를 고르기 전에 둔다.
     val selection = rememberToolSelection()
-    // 메인 세로 아래 패널의 탭. 커버에서 조정을 고른 채 펼치면 조정 탭을 보인다.
+    // 메인 세로 아래 패널의 탭. 커버에서 조정·레이어를 고른 채 펼치면 그 탭을 보인다.
     var panelTab by rememberSaveable { mutableStateOf(PanelTab.ADJUST) }
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
@@ -126,6 +130,7 @@ fun EditScreen(
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
         if (selection.active == EditTool.Adjust) panelTab = PanelTab.ADJUST
+        if (selection.active == EditTool.Layers) panelTab = PanelTab.LAYERS
     }
     val ready = state as? EditorState.Ready
     // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
@@ -194,6 +199,10 @@ fun EditScreen(
         val adjustControls = ready?.active?.let { layer ->
             AdjustControls(committed = layer.adjustments, live = liveAdjustments, enabled = !cropMode, actions = adjust)
         }
+        // 레이어 목록과 고른 레이어. 자르기 중에는 막는다(보정과 같은 까닭).
+        val layerControls = ready?.let {
+            LayerControls(it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions)
+        }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -204,11 +213,12 @@ fun EditScreen(
                     crop = crop,
                     adjust = adjustControls,
                     adjustItem = adjustItem,
-                    onAdjustItem = { adjustItem = it }
+                    onAdjustItem = { adjustItem = it },
+                    layers = layerControls
                 )
             }
         }
-        // 메인 화면의 패널 위쪽에는 도구 막대의 도구 옵션만 보인다. 조정은 패널에 늘 있다.
+        // 메인 화면의 패널 위쪽에는 도구 막대의 도구 옵션만 보인다. 조정·레이어는 패널에 늘 있다.
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
         val railToolTitle = toolTitle?.takeIf { railTool != null }
         val railToolOptions = toolOptions?.takeIf { railTool != null }
@@ -254,7 +264,8 @@ fun EditScreen(
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
                         EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f))
-                        val showAdjust = panelTab == PanelTab.ADJUST && adjustControls != null
+                        val adjustTab = adjustControls?.takeIf { panelTab == PanelTab.ADJUST }
+                        val layersTab = layerControls?.takeIf { panelTab == PanelTab.LAYERS }
                         BottomPanel(
                             expanded = panelExpanded,
                             onToggle = { panelExpanded = !panelExpanded },
@@ -263,15 +274,23 @@ fun EditScreen(
                             tab = panelTab,
                             onTab = { panelTab = it },
                             tabsEnabled = toolsEnabled,
-                            tabAction = if (showAdjust) {
-                                { ResetAllButton(checkNotNull(adjustControls)) }
-                            } else {
-                                null
+                            tabAction = when {
+                                adjustTab != null -> {
+                                    { ResetAllButton(adjustTab) }
+                                }
+                                layersTab != null -> {
+                                    { LayerToolbar(layersTab) }
+                                }
+                                else -> null
                             },
-                            tabContent = if (showAdjust) {
-                                { AdjustList(checkNotNull(adjustControls), twoColumns = true) }
-                            } else {
-                                null
+                            tabContent = when {
+                                adjustTab != null -> {
+                                    { AdjustList(adjustTab, twoColumns = true) }
+                                }
+                                layersTab != null -> {
+                                    { LayerTwoColumns(layersTab) }
+                                }
+                                else -> null
                             }
                         )
                     }
@@ -284,7 +303,9 @@ fun EditScreen(
                         toolTitle = railToolTitle,
                         toolOptions = railToolOptions,
                         adjustAction = adjustControls?.let { controls -> { ResetAllButton(controls) } },
-                        adjustContent = adjustControls?.let { controls -> { AdjustList(controls, twoColumns = false) } }
+                        adjustContent = adjustControls?.let { controls -> { AdjustList(controls, twoColumns = false) } },
+                        layersAction = layerControls?.let { controls -> { LayerToolbar(controls) } },
+                        layersContent = layerControls?.let { controls -> { LayerColumn(controls) } }
                     )
                 }
             }

@@ -77,7 +77,7 @@ class EditorAdjustTest {
         assertEquals(Adjustments(exposure = 1f), viewModel.liveAdjustments.value)
 
         // 놓으면 실행 취소 한 단계로 기록하고, 끄는 값은 지운다
-        onMain { viewModel.commitAdjustments() }
+        onMain { viewModel.commitLive() }
         val committed = awaitReady { !it.busy && it.revision > opened.revision }
         assertTrue(committed.canUndo)
         assertEquals(Adjustments(exposure = 1f), committed.active?.adjustments)
@@ -101,7 +101,7 @@ class EditorAdjustTest {
         awaitReady { centerRed(it) > before + 20 }
         onMain {
             viewModel.previewAdjustments { it.copy(exposure = 0f) }
-            viewModel.commitAdjustments()
+            viewModel.commitLive()
         }
 
         // 기록은 없고, 그림은 미리 보기가 아니라 기록된 문서다
@@ -122,7 +122,7 @@ class EditorAdjustTest {
         onMain {
             viewModel.edit(FlipImage(horizontal = true))
             viewModel.previewAdjustments { it.copy(contrast = 0.3f) }
-            viewModel.commitAdjustments()
+            viewModel.commitLive()
         }
 
         val done = awaitReady { !it.busy && it.active?.adjustments == Adjustments(contrast = 0.3f) }
@@ -140,7 +140,7 @@ class EditorAdjustTest {
         openGrayCanvas()
         onMain {
             viewModel.previewAdjustments { it.copy(saturation = 0.5f) }
-            viewModel.commitAdjustments()
+            viewModel.commitLive()
         }
         val saturated = awaitReady { !it.busy && it.active?.adjustments == Adjustments(saturation = 0.5f) }
 
