@@ -30,7 +30,7 @@ import kotlin.math.roundToInt
  *
  * 반씩 줄이면 GPU의 1/2 축소가 정확히 2×2 평균이라 화질이 고르고, 타일·묶음 경계가 정수 픽셀에 맞아 이음매가 없다.
  * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
- * 이번에는 표준 합성과 불투명도만 쓴다. 혼합 모드는 레이어 합성 작업에서 더한다.
+ * 이번에는 표준 합성과 불투명도, 기본 보정만 쓴다. 혼합 모드는 레이어 합성 작업에서 더한다.
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
@@ -103,6 +103,8 @@ object PreviewRenderer {
                 val raster = (layer.content as? RasterContent)?.raster ?: continue
                 if (layer.opacity == 0f) continue
                 // TODO(레이어 합성 작업): 혼합 모드. 지금은 모든 레이어를 표준으로 합성한다.
+                // 보정 값이 있으면 타일마다 보정 셰이더를 건다(이웃 픽셀을 보지 않아 레이어 전체에 건 것과 같다)
+                val adjust = AdjustShader.of(layer.adjustments)
                 // 불투명도가 1보다 작으면 레이어를 따로 그린 뒤 그만큼 투명하게 얹는다
                 val saved = if (layer.opacity < 1f) {
                     canvas.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), (layer.opacity * 255).roundToInt())
@@ -116,7 +118,7 @@ object PreviewRenderer {
                         val bitmap = bitmapOf(tile.pixels, temporary)
                         val left = (column - block.firstColumn) * TILE_SIZE * scale
                         val top = (row - block.firstRow) * TILE_SIZE * scale
-                        drawScaled(canvas, bitmap, left, top, scale)
+                        drawScaled(canvas, bitmap, left, top, scale, scale, adjust)
                     }
                 }
                 if (saved != null) canvas.restoreToCount(saved)
@@ -164,8 +166,16 @@ object PreviewRenderer {
     private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scale: Float) =
         drawScaled(canvas, bitmap, left, top, scale, scale)
 
-    /** [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. */
-    private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scaleX: Float, scaleY: Float) {
+    /** [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. [adjust]가 있으면 보정해서 그린다. */
+    private fun drawScaled(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        left: Float,
+        top: Float,
+        scaleX: Float,
+        scaleY: Float,
+        adjust: AdjustShader? = null
+    ) {
         val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
             filterMode = BitmapShader.FILTER_MODE_LINEAR
             setLocalMatrix(Matrix().apply {
@@ -175,7 +185,7 @@ object PreviewRenderer {
         }
         val right = left + ceil(bitmap.width * scaleX)
         val bottom = top + ceil(bitmap.height * scaleY)
-        canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = shader })
+        canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = adjust?.wrap(shader) ?: shader })
     }
 
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */

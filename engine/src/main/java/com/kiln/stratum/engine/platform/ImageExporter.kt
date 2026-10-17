@@ -63,11 +63,14 @@ object ImageExporter {
         }
     }
 
-    /** 타일을 그대로 베껴도 되면 그 레이어의 래스터. 원본 크기·보이는 레이어 하나(불투명도 1)·투명을 담는 형식일 때다. */
+    /**
+     * 타일을 그대로 베껴도 되면 그 레이어의 래스터.
+     * 원본 크기, 보이는 레이어 하나(불투명도 1, 보정 없음), 투명을 담는 형식일 때다.
+     */
     private fun exactRaster(document: Document, settings: ExportSettings): Raster? {
         if (settings.size != PixelSize(document.width, document.height) || !settings.format.keepsTransparency) return null
         val visible = document.layers.filter { it.opacity > 0f }
-        val layer = visible.singleOrNull()?.takeIf { it.opacity == 1f } ?: return null
+        val layer = visible.singleOrNull()?.takeIf { it.opacity == 1f && it.adjustments.isIdentity } ?: return null
         return (layer.content as? RasterContent)?.raster
     }
 
