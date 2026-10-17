@@ -94,6 +94,13 @@ fun dialogRegion(area: Region, verticalBands: List<Span>, horizontalBands: List<
     return pieces.filter { score(it) * 100 >= best * 98 }.maxWith(compareBy({ it.left }, { -it.top }))
 }
 
+/**
+ * [range]에서 [bands]가 덮는 부분을 빼고 남은 구간 중 가장 긴 것. 길이가 같으면 앞의 것이다.
+ * 띠가 다 덮어 남는 구간이 없으면 [range]를 그대로 돌려준다.
+ */
+fun widestFreeSpan(range: Span, bands: List<Span>): Span =
+    subtract(range, bands).maxByOrNull { it.end - it.start } ?: range
+
 /** [range]에서 [bands]가 덮는 부분을 뺀 나머지 구간들. 길이가 0인 구간은 뺀다. */
 private fun subtract(range: Span, bands: List<Span>): List<Span> {
     var pieces = listOf(range).filter { it.end > it.start }

@@ -23,6 +23,8 @@
     <string name="edit_open_failed_memory">Not enough memory to open this photo.</string>
     <string name="edit_creating_canvas">Creating canvas…</string>
     <string name="edit_create_failed_memory">Not enough memory to create this canvas.</string>
+    <string name="edit_working">Working…</string>
+    <string name="edit_not_enough_memory">Not enough memory to apply this edit.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">Zoom %1$s%%. Tap to fit to screen.</string>

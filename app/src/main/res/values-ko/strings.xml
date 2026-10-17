@@ -24,6 +24,8 @@
     <string name="edit_open_failed_memory">메모리가 부족해서 사진을 열 수 없어요.</string>
     <string name="edit_creating_canvas">캔버스를 만드는 중…</string>
     <string name="edit_create_failed_memory">메모리가 부족해서 캔버스를 만들 수 없어요.</string>
+    <string name="edit_working">처리 중…</string>
+    <string name="edit_not_enough_memory">메모리가 부족해서 편집할 수 없어요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
 

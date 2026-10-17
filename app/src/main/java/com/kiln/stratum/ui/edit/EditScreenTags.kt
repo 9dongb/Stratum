@@ -4,6 +4,9 @@ package com.kiln.stratum.ui.edit
 object EditScreenTags {
     const val CANVAS = "editCanvas"
     const val ZOOM_CHIP = "zoomChip"
+    const val BUSY = "editBusy"
+    const val UNDO = "undo"
+    const val REDO = "redo"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
     const val BOTTOM_PANEL = "bottomPanel"

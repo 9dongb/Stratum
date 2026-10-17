@@ -25,6 +25,9 @@ interface CancellableCommand : EditCommand {
     fun applyTo(document: Document, checkCanceled: () -> Unit): Document
 
     override fun applyTo(document: Document): Document = applyTo(document) {}
+
+    /** [document]에 적용하면 새로 생길 픽셀 메모리(바이트)의 어림값. 편집 전에 메모리가 넉넉한지 보는 데 쓴다. */
+    fun estimateNewBytes(document: Document): Long = 0L
 }
 
 /** 편집에 쓸 메모리가 모자라 편집하지 못했다. "변화 없음"(같은 문서를 돌려줌)과 구별하려고 따로 둔다. */

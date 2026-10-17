@@ -153,4 +153,14 @@ class HingePlacementTest {
         // 띠가 영역을 다 덮으면 영역 그대로(버튼을 둘 곳이 없다)
         assertEquals(screen, dialogRegion(screen, listOf(Span(-10, 2010)), emptyList(), maxCardWidth = 600))
     }
+
+    @Test
+    fun widestFreeSpan_picksTheWiderSideOfTheBand() {
+        // 0~1000 줄을 600~680 띠가 나누면 왼쪽(0~600)이 더 넓다
+        assertEquals(Span(0, 600), widestFreeSpan(Span(0, 1000), listOf(Span(600, 680))))
+        // 띠가 줄 밖이면 줄 전체다
+        assertEquals(Span(0, 1000), widestFreeSpan(Span(0, 1000), listOf(Span(1200, 1280))))
+        // 띠가 줄을 다 덮으면 줄을 그대로 돌려준다
+        assertEquals(Span(0, 1000), widestFreeSpan(Span(0, 1000), listOf(Span(-10, 1010))))
+    }
 }

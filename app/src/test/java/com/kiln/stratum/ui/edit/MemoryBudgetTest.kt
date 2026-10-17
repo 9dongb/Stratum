@@ -15,4 +15,10 @@ class MemoryBudgetTest {
     fun budget_isZeroWhenAlreadyBelowLowMemoryLine() {
         assertEquals(0L, MemoryBudget.budgetFrom(150_000_000L, 200_000_000L))
     }
+
+    @Test
+    fun historyBudget_isAnEighthOfTotalMemory() {
+        // 12GB 기기는 1.5GB
+        assertEquals(1_500_000_000L, MemoryBudget.historyBudgetFrom(12_000_000_000L))
+    }
 }
