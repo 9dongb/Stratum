@@ -20,6 +20,15 @@
 - 느리거나 켜지지 않으면 가속을 확인한다: `emulator -accel-check`
   - Mac(Apple Silicon)은 따로 설치할 것이 없다. 원래 PC에서는 가속 드라이버를 설치했다.
 - 앱 설치: `./gradlew installDebug` (JDK는 `docs/progress.md`의 '기술 주의점' 참고)
+- PC 메모리를 많이 쓴다. API 37 에뮬레이터는 설정(2GB)과 달리 4GB로 켜진다(`hardware-qemu.ini`).
+  - PC 메모리가 모자라면 부팅이 10분 넘게 걸리고 adb가 `offline`으로 남는다.
+  - 켜진 뒤에도 안드로이드가 스스로 다시 시작해, 앱 설치가 "Can't find service: package"로 실패할 수 있다.
+  - Docker Desktop처럼 무거운 앱을 끄고 켠다(2026-10-17, 16GB Mac에서 겪음). adb만 `offline`이면 `adb reconnect offline`
+
+## 에뮬레이터 테스트
+
+- 에뮬레이터를 켠 뒤 `./gradlew :app:connectedDebugAndroidTest`
+- 앱 설치에 실패해도 `BUILD SUCCESSFUL`로 끝날 수 있다. 결과는 `app/build/outputs/androidTest-results/connected/debug/`의 XML에서 테스트 수와 실패 수로 확인한다(파일 이름에 띄어쓰기가 있다).
 
 ## adb·emulator 위치
 
