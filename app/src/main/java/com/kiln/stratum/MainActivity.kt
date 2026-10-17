@@ -35,4 +35,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStop() {
+        super.onStop()
+        // 앱이 화면에서 사라지면(홈 버튼, 다른 앱으로) 기다리지 않고 지금 작업을 저장한다
+        editor.flush()
+    }
 }

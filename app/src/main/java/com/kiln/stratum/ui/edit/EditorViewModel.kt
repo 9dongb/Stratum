@@ -6,6 +6,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasFill
@@ -28,6 +29,8 @@ import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
+import com.kiln.stratum.project.ProjectInfo
+import com.kiln.stratum.project.ProjectLibrary
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +61,13 @@ enum class EditorFailure {
     PHOTO_NOT_ENOUGH_MEMORY,
 
     /** 메모리가 부족해 새 캔버스를 만들 수 없다. */
-    CANVAS_NOT_ENOUGH_MEMORY
+    CANVAS_NOT_ENOUGH_MEMORY,
+
+    /** 저장한 프로젝트를 읽을 수 없다(망가졌거나 지워짐). */
+    PROJECT_UNREADABLE,
+
+    /** 메모리가 부족해 저장한 프로젝트를 열 수 없다. */
+    PROJECT_NOT_ENOUGH_MEMORY
 }
 
 /** 편집 화면에 잠깐 알릴 일. 화면이 알맞은 문구를 골라 알림 막대로 보여 준다. */
@@ -78,6 +87,9 @@ sealed interface EditorMessage {
 
     /** 파일을 쓰지 못해 내보내지 못했다. */
     data object ExportFailed : EditorMessage
+
+    /** 자동 저장하지 못했다(저장 공간 부족 등). 편집은 계속할 수 있다. */
+    data object AutosaveFailed : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -100,6 +112,9 @@ sealed interface EditorState {
 
     /** 새 캔버스를 만드는 중이다. */
     data object Creating : EditorState
+
+    /** 저장한 프로젝트를 여는 중이다. */
+    data object LoadingProject : EditorState
 
     /**
      * 큰 사진이라 원본 크기로 열지 줄여서 열지 묻는다.
@@ -140,7 +155,13 @@ sealed interface EditorState {
  * 편집 상태의 원본은 엔진의 [EditHistory]이고, 이 클래스는 그것을 들고 화면에 상태를 알려 주기만 한다.
  * 무거운 일(해독, 축소본 그리기)은 백그라운드에서 하고, [EditHistory]는 메인 스레드에서만 만들고 다룬다.
  */
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
+class EditorViewModel(
+    application: Application,
+    private val savedState: SavedStateHandle
+) : AndroidViewModel(application) {
+
+    /** 저장된 상태 없이 만든다(테스트). 앱에서는 안드로이드가 저장된 상태와 함께 만든다. */
+    constructor(application: Application) : this(application, SavedStateHandle())
 
     private val _state = MutableStateFlow<EditorState>(EditorState.Empty)
     val state: StateFlow<EditorState> = _state.asStateFlow()
@@ -162,6 +183,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     /** 지금 더 쓸 수 있는 메모리(바이트). 테스트가 메모리 부족을 흉내 낼 수 있게 바꿀 수 있다. */
     internal var availableMemory: () -> Long = { MemoryBudget.availableBytes(getApplication()) }
+
+    /** 앱 내부 저장소의 프로젝트들. 자동 저장은 여기서 끝까지 한다(편집 화면이 사라져도). */
+    private val library = ProjectLibrary.get(application)
+
+    /** 홈에 보일 최근 프로젝트 */
+    val projects: StateFlow<List<ProjectInfo>> = library.projects
+
+    /** 열려 있는 프로젝트: 번호와 처음 만든 시각 */
+    private class OpenProject(val id: String, val createdMillis: Long)
+
+    private var project: OpenProject? = null
+
+    /** 열려 있는 프로젝트 번호(테스트용) */
+    internal val projectId: String?
+        get() = project?.id
+
+    /** 편집이 멈추면 저장하는 작업. 편집할 때마다 앞 계획을 취소하고 다시 잡는다. */
+    private var autosaveJob: Job? = null
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
     private var history: EditHistory? = null
@@ -210,11 +249,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private class PendingPhoto(val source: ImageDecoder.Source, val plan: ImportPlan)
 
-    /** [uri] 사진을 연다. 열려 있던 문서는 닫는다. */
+    init {
+        library.refresh()
+        // 자동 저장하지 못하면 알린다(지금 연 프로젝트만)
+        viewModelScope.launch {
+            library.saveFailures.collect { id -> if (id == project?.id) _messages.trySend(EditorMessage.AutosaveFailed) }
+        }
+        // 안드로이드가 백그라운드에서 앱을 종료했다가 되살렸으면, 열려 있던 프로젝트를 다시 연다
+        savedState.get<String>(KEY_PROJECT)?.let { id ->
+            if (ProjectLibrary.isValidId(id)) openProject(id) else savedState.remove<String>(KEY_PROJECT)
+        }
+    }
+
+    /** [uri] 사진을 연다. 열려 있던 문서는 닫는다(저장은 끝까지 한다). 새 프로젝트가 된다. */
     fun openPhoto(uri: Uri) {
         previewJob?.cancel()
         detailJob?.cancel()
         pendingPhoto = null
+        closeProject()
         val previous = openJob
         val previousEdit = editJob
         openJob = viewModelScope.launch {
@@ -224,6 +276,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             release()
             memoryFailure = EditorFailure.PHOTO_NOT_ENOUGH_MEMORY
             _state.value = EditorState.Opening
+            // 앞 문서를 저장하던 것이 끝나야 메모리가 겹치지 않는다
+            library.awaitSaves()
             val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
             val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
             if (info == null) {
@@ -273,6 +327,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         previewJob?.cancel()
         detailJob?.cancel()
         pendingPhoto = null
+        closeProject()
         val previous = openJob
         val previousEdit = editJob
         openJob = viewModelScope.launch {
@@ -282,6 +337,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             release()
             memoryFailure = EditorFailure.CANVAS_NOT_ENOUGH_MEMORY
             _state.value = EditorState.Creating
+            library.awaitSaves()
             val layerName = getApplication<Application>().getString(R.string.layer_background)
             val document = withContext(Dispatchers.Default) { BlankCanvas.create(width, height, fill, layerName) }
             if (document == null) {
@@ -289,8 +345,90 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             history = newHistory(document)
+            startProject()
             showPreview(document)
         }
+    }
+
+    /**
+     * 저장한 [id] 프로젝트를 연다. 열려 있던 문서는 닫는다(저장은 끝까지 한다). 실행 취소 기록은 없이 시작한다.
+     * 읽을 수 없거나 메모리가 모자라면 실패 화면을 보인다.
+     */
+    fun openProject(id: String) {
+        previewJob?.cancel()
+        detailJob?.cancel()
+        pendingPhoto = null
+        closeProject()
+        val previous = openJob
+        val previousEdit = editJob
+        openJob = viewModelScope.launch {
+            previous?.cancelAndJoin()
+            previousEdit?.cancelAndJoin()
+            release()
+            memoryFailure = EditorFailure.PROJECT_NOT_ENOUGH_MEMORY
+            _state.value = EditorState.LoadingProject
+            val loaded = try {
+                library.open(id, availableMemory()) { ensureActive() }
+            } catch (e: NotEnoughMemoryException) {
+                Log.w(TAG, "Not enough memory to open project $id", e)
+                _state.value = EditorState.Failed(EditorFailure.PROJECT_NOT_ENOUGH_MEMORY)
+                return@launch
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to open project $id", e)
+                _state.value = EditorState.Failed(EditorFailure.PROJECT_NOT_ENOUGH_MEMORY)
+                return@launch
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not open project $id", e)
+                _state.value = EditorState.Failed(EditorFailure.PROJECT_UNREADABLE)
+                return@launch
+            }
+            history = newHistory(loaded.document)
+            project = OpenProject(id, loaded.createdMillis)
+            savedState[KEY_PROJECT] = id
+            showPreview(loaded.document)
+        }
+    }
+
+    /** 앱이 화면에서 사라질 때(onStop) 부른다. 기다리지 않고 지금 문서를 저장한다. */
+    fun flush() = saveNow()
+
+    /** 지금 문서로 새 프로젝트를 시작하고 바로 저장한다. 사진을 열거나 새 캔버스를 만든 직후에 부른다. */
+    private fun startProject() {
+        val id = library.newId()
+        project = OpenProject(id, System.currentTimeMillis())
+        savedState[KEY_PROJECT] = id
+        saveNow()
+    }
+
+    /** 편집이 [AUTOSAVE_DELAY_MILLIS] 동안 멈추면 저장한다. 그사이 또 편집하면 다시 기다린다. */
+    private fun scheduleSave() {
+        if (project == null) return
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch {
+            delay(AUTOSAVE_DELAY_MILLIS)
+            requestSave()
+        }
+    }
+
+    /** 기다리던 저장 계획을 지우고 지금 문서를 바로 저장한다. */
+    private fun saveNow() {
+        autosaveJob?.cancel()
+        autosaveJob = null
+        requestSave()
+    }
+
+    /** 지금 문서를 저장해 달라고 한다. 저장은 프로젝트 모음이 백그라운드에서 끝까지 한다. 이미 저장한 문서면 하지 않는다. */
+    private fun requestSave() {
+        val project = project ?: return
+        val document = history?.document ?: return
+        library.save(project.id, project.createdMillis, document)
+    }
+
+    /** 열려 있던 프로젝트를 저장하고 놓는다. 되살릴 번호도 지운다. */
+    private fun closeProject() {
+        saveNow()
+        project = null
+        savedState.remove<String>(KEY_PROJECT)
     }
 
     /** 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌었다. 축소본 단계가 달라지면 다시 그린다. */
@@ -342,7 +480,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 finishEditing()
                 return@launch
             }
-            if (!showPreview(after, finishEdit = true)) {
+            if (showPreview(after, finishEdit = true)) {
+                scheduleSave()
+            } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
@@ -427,7 +567,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         previewJob?.cancel()
         val document = history.document
         editJob = viewModelScope.launch {
-            if (!showPreview(document, finishEdit = true)) {
+            if (showPreview(document, finishEdit = true)) {
+                scheduleSave()
+            } else {
                 revert(history)
                 finishEditing(EditorMessage.EditNotEnoughMemory)
             }
@@ -465,8 +607,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (needed > available) throw NotEnoughMemoryException()
     }
 
-    /** 문서를 닫고 메모리를 비운다. 홈으로 돌아갈 때 부른다. */
+    /** 문서를 닫고 메모리를 비운다. 홈으로 돌아갈 때 부른다. 마지막 문서는 저장한다(백그라운드에서 끝까지). */
     fun close() {
+        closeProject()
         // 작업은 취소만 하고 지우지 않는다. 다음에 열 때 끝날 때까지 기다린다.
         openJob?.cancel()
         previewJob?.cancel()
@@ -493,6 +636,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
             is ImportResult.Success -> {
                 history = newHistory(result.document)
+                startProject()
                 showPreview(result.document)
             }
         }
@@ -596,8 +740,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.value = latest.copy(detail = PreviewImage(bitmap, planned))
     }
 
-    private companion object {
-        const val TAG = "EditorViewModel"
+    internal companion object {
+        private const val TAG = "EditorViewModel"
+
+        /** 저장된 상태에 둔 열린 프로젝트 번호. 백그라운드 종료 뒤 되살릴 때 쓴다. */
+        const val KEY_PROJECT = "projectId"
+
+        /** 편집이 이만큼(밀리초) 멈추면 자동 저장한다 */
+        const val AUTOSAVE_DELAY_MILLIS = 1_500L
     }
 
     private fun levelFor(document: Document): Int {

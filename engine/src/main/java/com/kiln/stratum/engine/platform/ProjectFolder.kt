@@ -15,6 +15,7 @@ import com.kiln.stratum.engine.project.TileEntry
 import com.kiln.stratum.engine.project.TileRef
 import com.kiln.stratum.engine.project.UnreadableProjectException
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
@@ -138,6 +139,27 @@ class ProjectFolder(val directory: File) {
         savedTiles.clear()
         savedTiles.putAll(loaded)
         return LoadedProject(document, manifest.createdMillis)
+    }
+
+    /**
+     * 불러오는 데 들 메모리(바이트)의 어림. 목차만 읽어, 타일 파일 수(같은 파일은 한 번)와 한 가지 색 수에 꽉 찬 타일 크기를 곱한다.
+     * 목차를 읽지 못하면 [load]와 같은 예외를 던진다.
+     */
+    fun estimatedBytes(): Long {
+        val manifest = BufferedInputStream(FileInputStream(manifestFile)).use { ProjectManifestCodec.read(it) }
+        val files = HashSet<String>()
+        val solids = HashSet<Int>()
+        for (layer in manifest.layers) {
+            when (val content = layer.content) {
+                is RasterEntry -> for (tile in content.tiles) {
+                    when (val ref = tile.ref) {
+                        is TileRef.File -> files += ref.name
+                        is TileRef.Solid -> solids += ref.argb
+                    }
+                }
+            }
+        }
+        return (files.size + solids.size).toLong() * TILE_PIXEL_COUNT * Int.SIZE_BYTES
     }
 
     /** 홈 목록용 작은 그림 [bitmap]을 쓴다(소프트웨어 비트맵). 임시 파일에 다 쓴 뒤 이름을 바꾼다. */

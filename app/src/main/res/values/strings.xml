@@ -27,6 +27,10 @@
     <string name="edit_open_failed_memory">Not enough memory to open this photo.</string>
     <string name="edit_creating_canvas">Creating canvas…</string>
     <string name="edit_create_failed_memory">Not enough memory to create this canvas.</string>
+    <string name="edit_opening_project">Opening project…</string>
+    <string name="edit_project_unreadable">Couldn\'t open this project.</string>
+    <string name="edit_project_failed_memory">Not enough memory to open this project.</string>
+    <string name="edit_autosave_failed">Couldn\'t save your work. Check your storage space.</string>
     <string name="edit_working">Working…</string>
     <string name="subtool_crop">Crop</string>
     <string name="subtool_rotate">Rotate and flip</string>

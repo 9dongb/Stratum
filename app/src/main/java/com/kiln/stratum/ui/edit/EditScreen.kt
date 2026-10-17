@@ -367,6 +367,7 @@ private fun EditCanvas(
     val exportNotEnoughMemory = stringResource(R.string.edit_export_not_enough_memory)
     val exportFailed = stringResource(R.string.edit_export_failed)
     val view = stringResource(R.string.action_view)
+    val autosaveFailed = stringResource(R.string.edit_autosave_failed)
     LaunchedEffect(messages) {
         // 하나씩 보이고, 사라진 뒤 다음 것을 보인다
         messages.collect { message ->
@@ -385,6 +386,7 @@ private fun EditCanvas(
                 EditorMessage.EditNotEnoughMemory -> snackbarHostState.showSnackbar(notEnoughMemory)
                 EditorMessage.ExportNotEnoughMemory -> snackbarHostState.showSnackbar(exportNotEnoughMemory)
                 EditorMessage.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
+                EditorMessage.AutosaveFailed -> snackbarHostState.showSnackbar(autosaveFailed)
             }
         }
     }
@@ -401,6 +403,7 @@ private fun EditCanvas(
             EditorState.Empty, is EditorState.AskSize -> Unit
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
+            EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
                 CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, overlay)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다.
@@ -422,6 +425,8 @@ private fun EditCanvas(
                         EditorFailure.PHOTO_UNREADABLE -> R.string.edit_open_failed
                         EditorFailure.PHOTO_NOT_ENOUGH_MEMORY -> R.string.edit_open_failed_memory
                         EditorFailure.CANVAS_NOT_ENOUGH_MEMORY -> R.string.edit_create_failed_memory
+                        EditorFailure.PROJECT_UNREADABLE -> R.string.edit_project_unreadable
+                        EditorFailure.PROJECT_NOT_ENOUGH_MEMORY -> R.string.edit_project_failed_memory
                     }
                 ),
                 modifier = Modifier.padding(24.dp),
