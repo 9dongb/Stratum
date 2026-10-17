@@ -2,10 +2,12 @@ package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -91,34 +93,56 @@ fun ResizePrompt(
     }
 }
 
-/** 지금 크기, 단위, 가로·세로 칸, 비율 유지, (퍼센트면) 새 크기와 한도 안내 */
+/** 단위와 비율 유지, 안내 한 줄, 가로·세로 칸 */
 @Composable
 private fun ResizeForm(input: ResizeInput) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = stringResource(R.string.resize_current, input.document.width, input.document.height),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ResizeUnit.entries.forEachIndexed { index, unit ->
-                SegmentedButton(
-                    selected = input.unit == unit,
-                    onClick = { input.changeUnit(unit) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ResizeUnit.entries.size),
-                    modifier = Modifier.testTag(EditScreenTags.resizeUnit(unit))
-                ) {
-                    Text(
-                        stringResource(
-                            when (unit) {
-                                ResizeUnit.PIXELS -> R.string.resize_unit_pixels
-                                ResizeUnit.PERCENT -> R.string.resize_unit_percent
-                            }
+        // 단위와 비율 유지를 한 줄에 둔다. 펼친 화면을 세로로 들면 창이 접히는 선 위쪽 절반에 들어가 높이가 모자라서다.
+        // 폭이 좁으면(커버 화면, 메인 가로의 오른쪽 절반) 비율 유지가 다음 줄로 내려간다.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
+        ) {
+            SingleChoiceSegmentedButtonRow {
+                ResizeUnit.entries.forEachIndexed { index, unit ->
+                    SegmentedButton(
+                        selected = input.unit == unit,
+                        onClick = { input.changeUnit(unit) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ResizeUnit.entries.size),
+                        icon = {},
+                        modifier = Modifier.testTag(EditScreenTags.resizeUnit(unit))
+                    ) {
+                        Text(
+                            stringResource(
+                                when (unit) {
+                                    ResizeUnit.PIXELS -> R.string.resize_unit_pixels
+                                    ResizeUnit.PERCENT -> R.string.resize_unit_percent
+                                }
+                            ),
+                            modifier = Modifier.width(IntrinsicSize.Max),
+                            maxLines = 1,
+                            softWrap = false
                         )
-                    )
+                    }
                 }
             }
+            // 줄 어디를 눌러도 켜고 끈다. 스위치만으로는 32dp라 누르는 높이를 48dp로 맞춘다.
+            Row(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .toggleable(value = input.locked, role = Role.Switch, onValueChange = input::changeLocked)
+                    .testTag(EditScreenTags.RESIZE_LOCK),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.resize_keep_ratio), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = input.locked, onCheckedChange = null)
+            }
         }
+        // 안내는 칸 바로 위 한 줄이다. 창이 낮아 내용이 스크롤되어도(키보드가 열리면 고치는 칸이 보이게 스크롤된다)
+        // 칸과 함께 보이고, 안내가 바뀌어도 칸이 움직이지 않는다.
+        ResizeStatus(input)
         val check = input.check
         val suffix = stringResource(if (input.unit == ResizeUnit.PIXELS) R.string.new_canvas_px else R.string.resize_percent_suffix)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -143,45 +167,35 @@ private fun ResizeForm(input: ResizeInput) {
                 modifier = Modifier.weight(1f).testTag(EditScreenTags.RESIZE_HEIGHT)
             )
         }
-        // 줄 어디를 눌러도 켜고 끈다
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .toggleable(value = input.locked, role = Role.Switch, onValueChange = input::changeLocked)
-                .testTag(EditScreenTags.RESIZE_LOCK),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.resize_keep_ratio), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.width(12.dp))
-            Switch(checked = input.locked, onCheckedChange = null)
-        }
-        val width = input.targetWidth()
-        val height = input.targetHeight()
-        if (input.unit == ResizeUnit.PERCENT && width != null && height != null) {
-            Text(
-                text = stringResource(R.string.resize_result, width, height),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-        val error = when (check) {
-            CanvasSizeCheck.OK -> null
-            CanvasSizeCheck.SIDE_OUT_OF_RANGE -> stringResource(R.string.new_canvas_error_range, MAX_CANVAS_SIDE)
-            CanvasSizeCheck.TOO_MANY_PIXELS -> stringResource(
-                R.string.resize_error_too_large,
-                (maxOf(MAX_CANVAS_PIXELS, input.document.pixelCount) / 1_000_000).toInt()
-            )
-        }
-        if (error != null) {
-            Text(
-                text = error,
-                // 고쳐 쓰는 동안 바뀌는 까닭을 화면 읽기 기능이 알려 준다
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
     }
+}
+
+/** 안내 한 줄. 한도를 벗어나면 그 까닭(오류 색), 퍼센트면 바뀔 픽셀 크기, 아니면 지금 크기다. */
+@Composable
+private fun ResizeStatus(input: ResizeInput) {
+    val error = when (input.check) {
+        CanvasSizeCheck.OK -> null
+        CanvasSizeCheck.SIDE_OUT_OF_RANGE -> stringResource(R.string.new_canvas_error_range, MAX_CANVAS_SIDE)
+        CanvasSizeCheck.TOO_MANY_PIXELS -> stringResource(
+            R.string.resize_error_too_large,
+            (maxOf(MAX_CANVAS_PIXELS, input.document.pixelCount) / 1_000_000).toInt()
+        )
+    }
+    val width = input.targetWidth()
+    val height = input.targetHeight()
+    val text = when {
+        error != null -> error
+        input.unit == ResizeUnit.PERCENT && width != null && height != null ->
+            stringResource(R.string.resize_result, width, height)
+        else -> stringResource(R.string.resize_current, input.document.width, input.document.height)
+    }
+    Text(
+        text = text,
+        // 고쳐 쓰는 동안 생긴 오류의 까닭을 화면 읽기 기능이 알려 준다
+        modifier = if (error != null) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier,
+        color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium
+    )
 }
 
 @Composable

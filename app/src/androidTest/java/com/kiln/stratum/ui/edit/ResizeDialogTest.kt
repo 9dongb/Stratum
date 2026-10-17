@@ -4,8 +4,11 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
@@ -156,6 +159,33 @@ class ResizeDialogTest {
 
         widthField.assertExists()
         composeRule.assertClickablesAvoid(hinge)
+    }
+
+    @Test
+    fun medium_statusAndControlsStayInViewAboveHorizontalHinge() {
+        // 폴드8 메인 세로처럼 가운데를 가로지르는 힌지가 있으면 창이 위쪽 절반에 들어간다
+        show(701, 841)
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        val centerY = screen.center.y.roundToInt()
+        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
+        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        openFromOptions()
+
+        // 비율 유지로 9000×6750(약 61MP)이 되어 50MP를 넘는다
+        widthField.performTextReplacement("9000")
+
+        // 스크롤하지 않아도 까닭과 고치는 칸이 다 보인다. 위의 단위·비율 유지 줄도 화면에 남는다
+        // (테스트 화면은 실제보다 몇 픽셀 낮아서, 고치는 칸을 보이려고 내용이 조금 올라갈 수 있다).
+        assertFullyVisible(composeRule.onNodeWithText(composeRule.activity.getString(R.string.resize_error_too_large, 50)))
+        assertFullyVisible(widthField)
+        composeRule.onNodeWithTag(EditScreenTags.RESIZE_LOCK).assertIsDisplayed()
+        composeRule.assertClickablesAvoid(hinge)
+    }
+
+    /** 노드 내용이 스크롤 영역 등 부모에 잘리지 않고 다 보이는지. 잘린 창 좌표의 높이와 원래 높이를 비교한다. */
+    private fun assertFullyVisible(interaction: SemanticsNodeInteraction) {
+        val coordinates = interaction.fetchSemanticsNode().layoutInfo.coordinates
+        assertEquals("visible height", coordinates.size.height.toFloat(), coordinates.boundsInWindow().height, 1f)
     }
 
     @Test
