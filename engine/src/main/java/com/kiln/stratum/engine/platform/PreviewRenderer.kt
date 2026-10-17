@@ -19,7 +19,6 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.TilePixels
 import kotlin.math.ceil
-import kotlin.math.roundToInt
 
 /**
  * 문서를 화면용 축소본으로 그린다(GPU).
@@ -30,7 +29,7 @@ import kotlin.math.roundToInt
  *
  * 반씩 줄이면 GPU의 1/2 축소가 정확히 2×2 평균이라 화질이 고르고, 타일·묶음 경계가 정수 픽셀에 맞아 이음매가 없다.
  * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
- * 이번에는 표준 합성과 불투명도, 기본 보정만 쓴다. 혼합 모드는 레이어 합성 작업에서 더한다.
+ * 레이어는 기본 보정을 걸어 그리고, 불투명도·혼합 모드(표준·곱하기·스크린·오버레이)로 아래에 얹는다.
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
@@ -102,12 +101,12 @@ object PreviewRenderer {
             for (layer in document.layers) {
                 val raster = (layer.content as? RasterContent)?.raster ?: continue
                 if (layer.opacity == 0f) continue
-                // TODO(레이어 합성 작업): 혼합 모드. 지금은 모든 레이어를 표준으로 합성한다.
                 // 보정 값이 있으면 타일마다 보정 셰이더를 건다(이웃 픽셀을 보지 않아 레이어 전체에 건 것과 같다)
                 val adjust = AdjustShader.of(layer.adjustments)
-                // 불투명도가 1보다 작으면 레이어를 따로 그린 뒤 그만큼 투명하게 얹는다
-                val saved = if (layer.opacity < 1f) {
-                    canvas.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), (layer.opacity * 255).roundToInt())
+                // 불투명도가 1보다 작거나 표준이 아니면 레이어를 따로 그린 뒤, 그 불투명도·혼합 모드로 아래에 얹는다.
+                // 타일은 서로 겹치지 않아 타일마다 섞어도 되지만, 불투명도는 레이어 전체에 한 번 걸어야 한다.
+                val saved = if (layer.needsOwnLayer) {
+                    canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), layerPaint(layer))
                 } else {
                     null
                 }
@@ -130,8 +129,8 @@ object PreviewRenderer {
         }
     }
 
-    /** [bitmap]을 반 크기로 줄인다. 홀수 크기는 올림한다. */
-    private fun halve(bitmap: Bitmap): Bitmap? {
+    /** [bitmap]을 반 크기로 줄인다(정확히 2×2 평균). 홀수 크기는 올림한다. GPU가 그리지 못하면 null. */
+    internal fun halve(bitmap: Bitmap): Bitmap? {
         val width = (bitmap.width + 1) / 2
         val height = (bitmap.height + 1) / 2
         val picture = Picture()
