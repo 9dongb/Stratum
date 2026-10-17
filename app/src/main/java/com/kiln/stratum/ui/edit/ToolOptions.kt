@@ -2,14 +2,20 @@ package com.kiln.stratum.ui.edit
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -32,11 +38,26 @@ import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 
 /**
+ * 자르기 옵션이 쓰는 지금 테두리와 할 일. 편집 화면이 자르기 테두리를 들고 있어 여기로 넘긴다.
+ *
+ * @property canApply 적용하면 바뀌는 것이 있는지(테두리가 사진 전체가 아닌지)
+ */
+class CropControls(
+    val frame: CropFrame,
+    val canApply: Boolean,
+    val onRatio: (CropRatio) -> Unit,
+    val onSwap: () -> Unit,
+    val onCancel: () -> Unit,
+    val onApply: () -> Unit
+)
+
+/**
  * 고른 도구의 옵션. 커버 화면은 캔버스와 탭 줄 사이, 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널에 놓인다.
  * 줄은 가로로 지나가는 힌지의 띠를 피해 쌓는다(CLAUDE.md 6장).
  *
  * @param busy 편집을 처리하는 중이면 편집 버튼을 막는다.
  * @param onEdit 엔진에 보낼 편집 명령
+ * @param crop 자르기 중이면 그 테두리와 할 일. 자르기를 시작하기 전(첫 프레임)에는 null일 수 있다.
  */
 @Composable
 fun ToolOptions(
@@ -44,10 +65,11 @@ fun ToolOptions(
     busy: Boolean,
     onEdit: (EditCommand) -> Unit,
     onChoose: (SubTool) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    crop: CropControls? = null
 ) {
     when (selection.active) {
-        EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, modifier)
+        EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
         else -> Unit
     }
 }
@@ -59,6 +81,7 @@ private fun TransformOptions(
     busy: Boolean,
     onEdit: (EditCommand) -> Unit,
     onChoose: (SubTool) -> Unit,
+    crop: CropControls?,
     modifier: Modifier = Modifier
 ) {
     // 패널 안에서 내용만큼만 차지한다. 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다.
@@ -66,8 +89,58 @@ private fun TransformOptions(
         SubToolRow(mode, onChoose)
         when (mode) {
             SubTool.ROTATE -> RotateButtons(enabled = !busy, onEdit = onEdit)
-            // TODO(자르기 화면 단계): 비율과 적용·취소
-            SubTool.CROP, SubTool.RESIZE -> Unit
+            SubTool.CROP -> if (crop != null) {
+                CropRatioRow(crop)
+                CropActionRow(crop, busy)
+            }
+            SubTool.RESIZE -> Unit
+        }
+    }
+}
+
+/** 자르기 비율 칩. 폭이 좁으면 옆으로 밀어 본다. 고른 비율이 선택된 것으로 보인다. */
+@Composable
+private fun CropRatioRow(crop: CropControls) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        for (ratio in CropRatio.entries) {
+            FilterChip(
+                selected = crop.frame.ratio == ratio,
+                onClick = { crop.onRatio(ratio) },
+                label = { Text(cropRatioLabel(ratio)) },
+                modifier = Modifier.testTag(EditScreenTags.cropRatio(ratio))
+            )
+        }
+    }
+}
+
+/** 비율 칩의 이름. 자유·원본은 말로, 나머지는 '가로:세로'로 보인다. */
+@Composable
+private fun cropRatioLabel(ratio: CropRatio): String =
+    when (ratio) {
+        CropRatio.FREE -> stringResource(R.string.crop_ratio_free)
+        CropRatio.ORIGINAL -> stringResource(R.string.crop_ratio_original)
+        else -> stringResource(R.string.crop_ratio_format, ratio.width, ratio.height)
+    }
+
+/** 가로·세로 바꾸기, 취소, 적용. 적용은 테두리가 사진 전체가 아니고 처리 중이 아닐 때만 누를 수 있다. */
+@Composable
+private fun CropActionRow(crop: CropControls, busy: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        IconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
+            Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
+        }
+        TextButton(onClick = crop.onCancel, modifier = Modifier.testTag(EditScreenTags.CROP_CANCEL)) {
+            Text(stringResource(R.string.action_cancel))
+        }
+        Button(
+            onClick = crop.onApply,
+            enabled = crop.canApply && !busy,
+            modifier = Modifier.testTag(EditScreenTags.CROP_APPLY)
+        ) {
+            Text(stringResource(R.string.crop_apply))
         }
     }
 }

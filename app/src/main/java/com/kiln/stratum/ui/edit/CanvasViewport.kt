@@ -1,5 +1,8 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -45,13 +48,17 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  * 캔버스 영역: 보기 상태대로 문서를 그리고, 두 손가락으로 확대·이동한다.
  * 보기·영역 크기·문서가 바뀔 때마다 [onViewport]로 지금 보이는 문서 영역을 알린다.
  * 엔진 쪽(ViewModel)은 그것으로 보이는 곳을 선명하게 다시 그린다.
+ *
+ * [overlay]는 문서 위에 겹치는 도구 화면(자르기 테두리 등)이다. 두 손가락 감지를 그 부모에 두어,
+ * 도구 화면이 터치를 받아도 두 손가락 확대·이동이 된다. 형제로 겹치면 위의 것만 터치를 받는다(소스로 확인).
  */
 @Composable
 fun CanvasViewport(
     state: EditorState.Ready,
     viewState: CanvasViewState,
     modifier: Modifier = Modifier,
-    onViewport: (Viewport) -> Unit = {}
+    onViewport: (Viewport) -> Unit = {},
+    overlay: @Composable BoxScope.() -> Unit = {}
 ) {
     // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
     val documentSize by rememberUpdatedState(state.documentSize)
@@ -64,10 +71,8 @@ fun CanvasViewport(
             if (size.width > 0 && size.height > 0) report(view.viewport(PixelSize(size.width, size.height), document))
         }
     }
-    CanvasImage(
-        state = state,
-        view = { viewState.view },
-        modifier = modifier.onSizeChanged { area = it }.pointerInput(viewState) {
+    Box(
+        modifier.onSizeChanged { area = it }.pointerInput(viewState) {
             detectTwoFingerTransform(
                 onTransform = { centroid, pan, zoom ->
                     if (size.width > 0 && size.height > 0) {
@@ -84,5 +89,8 @@ fun CanvasViewport(
                 }
             )
         }
-    )
+    ) {
+        CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize())
+        overlay()
+    }
 }

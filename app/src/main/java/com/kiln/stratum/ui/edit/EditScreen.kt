@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +51,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
+import com.kiln.stratum.engine.platform.CropImage
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
@@ -96,17 +100,58 @@ fun EditScreen(
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
     }
+    val ready = state as? EditorState.Ready
+    // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
+    var cropFrame by rememberSaveable(ready?.revision, stateSaver = CropFrameSaver) { mutableStateOf<CropFrame?>(null) }
+    val cropMode = ready != null && selection.active == EditTool.Transform && selection.transformMode == SubTool.CROP
+    LaunchedEffect(cropMode, ready?.revision) {
+        if (cropMode && ready != null) {
+            // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 화면에 맞춘다
+            if (cropFrame == null) {
+                cropFrame = CropFrame.whole(ready.documentSize)
+                viewState.view = CanvasView.Fit
+            }
+        } else {
+            cropFrame = null
+        }
+    }
 
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthClass = widthClassOf(maxWidth.value)
-        val ready = state as? EditorState.Ready
         // 문서가 열려 있어야 도구를 쓴다. 고른 도구가 있으면 그 옵션을 보인다.
         val toolsEnabled = ready != null
         val activeTool = selection.active.takeIf { toolsEnabled }
         val toolTitle = activeTool?.let { stringResource(it.label) }
+        val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
+            val document = checkNotNull(ready).documentSize
+            CropControls(
+                frame = frame,
+                canApply = frame.toPixelRect(document) != PixelRect.of(document),
+                onRatio = { ratio -> cropFrame = cropFrame?.withRatio(ratio, document) },
+                onSwap = { cropFrame = cropFrame?.swapped(document) },
+                onCancel = selection::close,
+                onApply = {
+                    cropFrame?.let { onEdit(CropImage(it.toPixelRect(document), document)) }
+                    selection.close()
+                }
+            )
+        }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
-            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = selection::choose) }
+            { ToolOptions(selection, busy = ready?.busy == true, onEdit = onEdit, onChoose = selection::choose, crop = crop) }
+        }
+        // 자르기 중에는 캔버스 위에 테두리를 겹친다
+        val overlay: @Composable BoxScope.() -> Unit = {
+            val frame = cropFrame
+            if (cropMode && frame != null && ready != null) {
+                CropOverlay(
+                    frame = frame,
+                    document = ready.documentSize,
+                    view = { viewState.view },
+                    onFrameChange = { cropFrame = it },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
         Scaffold(
             topBar = {
@@ -125,7 +170,7 @@ fun EditScreen(
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.Horizontal, Modifier.weight(1f))
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f))
                     if (toolOptions != null) ToolOptionsSheet(toolOptions)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = selection::choose)
                 }
@@ -133,7 +178,7 @@ fun EditScreen(
                 WidthClass.Medium -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.End, Modifier.weight(1f))
+                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f))
                         BottomPanel(
                             expanded = panelExpanded,
                             onToggle = { panelExpanded = !panelExpanded },
@@ -145,7 +190,7 @@ fun EditScreen(
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = selection::choose)
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, WindowInsetsSides.Bottom, Modifier.weight(1f))
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f))
                     SidePanel(toolTitle = toolTitle, toolOptions = toolOptions)
                 }
             }
@@ -237,6 +282,8 @@ private fun EditCanvas(
     messages: Flow<EditorMessage>,
     onCanvasSize: (width: Int, height: Int) -> Unit,
     onViewport: (Viewport) -> Unit,
+    overlay: @Composable BoxScope.() -> Unit,
+    showZoomChip: Boolean,
     insetSides: WindowInsetsSides,
     modifier: Modifier = Modifier
 ) {
@@ -265,9 +312,9 @@ private fun EditCanvas(
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport)
-                // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다.
-                CanvasZoomChip(viewState, Modifier.fillMaxSize())
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, overlay)
+                // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다.
+                if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize())
                 if (state.busy) {
                     val working = stringResource(R.string.edit_working)
                     LinearProgressIndicator(
@@ -373,3 +420,9 @@ private fun EditScreenOpeningPreview() {
         EditScreen(state = EditorState.Opening, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {})
     }
 }
+
+/** 자르기 테두리를 숫자 목록으로 저장한다. 테두리가 없으면 저장하지 않는다. */
+private val CropFrameSaver = Saver<CropFrame?, DoubleArray>(
+    save = { it?.toSaved()?.toDoubleArray() },
+    restore = { CropFrame.fromSaved(it.toList()) }
+)

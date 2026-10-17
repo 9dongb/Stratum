@@ -12,6 +12,10 @@ object EditScreenTags {
     const val ROTATE_RIGHT = "rotateRight"
     const val FLIP_HORIZONTAL = "flipHorizontal"
     const val FLIP_VERTICAL = "flipVertical"
+    const val CROP_OVERLAY = "cropOverlay"
+    const val CROP_SWAP = "cropSwap"
+    const val CROP_CANCEL = "cropCancel"
+    const val CROP_APPLY = "cropApply"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
     const val BOTTOM_PANEL = "bottomPanel"
@@ -28,4 +32,7 @@ object EditScreenTags {
 
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
+
+    /** 자르기 비율 [ratio] 칩 */
+    fun cropRatio(ratio: CropRatio): String = "cropRatio_${ratio.name}"
 }

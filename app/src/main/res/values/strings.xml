@@ -34,6 +34,12 @@
     <string name="rotate_right">Right 90°</string>
     <string name="flip_horizontal">Flip horizontal</string>
     <string name="flip_vertical">Flip vertical</string>
+    <string name="crop_frame_description">Crop frame. Drag the corners or edges to resize, or the inside to move.</string>
+    <string name="crop_ratio_free">Free</string>
+    <string name="crop_ratio_original">Original</string>
+    <string name="crop_ratio_format">%1$d:%2$d</string>
+    <string name="crop_swap">Swap width and height</string>
+    <string name="crop_apply">Apply</string>
     <string name="edit_not_enough_memory">Not enough memory to apply this edit.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>
