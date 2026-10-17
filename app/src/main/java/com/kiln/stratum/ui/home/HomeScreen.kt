@@ -60,7 +60,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     projects: List<ProjectInfo> = emptyList(),
     onOpenProject: (String) -> Unit = {},
-    onDeleteProject: (String) -> Unit = {}
+    onDeleteProject: (String) -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
     // 새 캔버스 창을 열었는지와 입력값. 접기·펼치기로 시트↔창이 바뀌어도 이어지도록 창 밖에서 기억한다.
     var showNewCanvas by rememberSaveable { mutableStateOf(false) }
@@ -77,8 +78,7 @@ fun HomeScreen(
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
                     actions = {
-                        // 설정 화면은 아직 없어서, 자리만 두고 누를 수 없게 한다
-                        IconButton(onClick = {}, enabled = false) {
+                        IconButton(onClick = onOpenSettings) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_settings),
                                 contentDescription = stringResource(R.string.action_settings)

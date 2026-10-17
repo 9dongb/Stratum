@@ -90,14 +90,15 @@ object PreviewLevels {
     /**
      * [document] 크기의 문서를 [canvas] 크기(픽셀) 화면에 맞춰 보여 줄 때 쓸 단계.
      * 화면에 보이는 크기보다 작아지지 않는 가장 작은 축소본을 고른다. 긴 변은 [MAX_PREVIEW_EDGE] 이하로 한다.
+     * [maxMagnification]이 1보다 크면 화면에서 그만큼까지 키워 보이는 더 작은 축소본을 고른다(미리 보기 '가볍게'는 2).
      */
-    fun levelFor(document: PixelSize, canvas: PixelSize): Int {
+    fun levelFor(document: PixelSize, canvas: PixelSize, maxMagnification: Double = 1.0): Int {
         // 화면에 맞췄을 때의 배율. 1보다 크면 문서가 화면보다 작아 줄이지 않는다.
         val fitScale = minOf(
             canvas.width.toDouble() / document.width,
             canvas.height.toDouble() / document.height
         )
-        var level = levelForScale(fitScale)
+        var level = levelForScale(fitScale, maxMagnification)
         while (level < MAX_PREVIEW_LEVEL && longEdge(previewSize(document, level)) > MAX_PREVIEW_EDGE) level++
         return level
     }

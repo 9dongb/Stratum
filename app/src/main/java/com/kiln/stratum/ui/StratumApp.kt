@@ -7,20 +7,24 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.ui.edit.EditScreen
 import com.kiln.stratum.ui.edit.EditorViewModel
 import com.kiln.stratum.ui.home.HomeScreen
+import com.kiln.stratum.ui.settings.SettingsScreen
 
 /**
  * 앱의 화면.
  *
- * 기획상 화면은 홈·편집(나중에 설정)뿐이다. 새 캔버스, 도구 옵션, 내보내기 같은 나머지는
+ * 기획상 화면은 홈·편집·설정뿐이다. 새 캔버스, 도구 옵션, 내보내기 같은 나머지는
  * 이 화면들 안의 시트·패널로 띄운다.
  */
-enum class AppScreen { Home, Edit }
+enum class AppScreen { Home, Edit, Settings }
 
 /** 앱 전체. 지금 보여 줄 화면을 고르고 화면 사이 이동을 맡는다. */
 @Composable
@@ -29,6 +33,10 @@ fun StratumApp(editor: EditorViewModel) {
     // rememberSaveable이라 접기·펼치기로 Activity가 다시 만들어지거나, 안드로이드가 백그라운드의 앱을
     // 종료했다가 되살려도 보던 화면이 그대로 나온다.
     var screen by rememberSaveable { mutableStateOf(AppScreen.Home) }
+    // 앱 설정. 설정 화면에서 바꾸면 편집 화면(두 손가락 톡)이 바로 따른다.
+    val context = LocalContext.current
+    val settings = remember(context) { AppSettings.get(context) }
+    val settingsValues by settings.values.collectAsState()
 
     // 안드로이드 사진 선택기(저장소 권한이 필요 없다, CLAUDE.md 5장).
     // 화면과 상관없이 늘 등록해 두어야, 선택기를 연 사이 Activity가 다시 만들어져도 고른 사진을 받는다.
@@ -56,8 +64,19 @@ fun StratumApp(editor: EditorViewModel) {
                     editor.openProject(id)
                     screen = AppScreen.Edit
                 },
-                onDeleteProject = editor::deleteProject
+                onDeleteProject = editor::deleteProject,
+                onOpenSettings = { screen = AppScreen.Settings }
             )
+        }
+
+        AppScreen.Settings -> {
+            // 시스템 뒤로도 상단 바의 뒤로 버튼과 똑같이 홈으로 돌아간다
+            val goHome = { screen = AppScreen.Home }
+            BackHandler(onBack = goHome)
+            val versionName = remember(context) {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+            }
+            SettingsScreen(values = settingsValues, onChange = settings::update, onBack = goHome, versionName = versionName)
         }
 
         AppScreen.Edit -> {
@@ -100,7 +119,8 @@ fun StratumApp(editor: EditorViewModel) {
                 strokeActions = editor.strokeActions,
                 textStyle = textStyle,
                 onTextStyle = editor::setTextStyle,
-                onAddText = editor::addText
+                onAddText = editor::addText,
+                twoFingerTapUndo = settingsValues.twoFingerTapUndo
             )
         }
     }

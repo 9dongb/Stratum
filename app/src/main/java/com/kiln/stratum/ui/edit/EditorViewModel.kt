@@ -50,6 +50,8 @@ import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
 import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectLibrary
+import com.kiln.stratum.settings.AppSettings
+import com.kiln.stratum.settings.PreviewQuality
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -60,9 +62,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -197,13 +202,17 @@ sealed interface EditorState {
  * 편집 상태의 원본은 엔진의 [EditHistory]이고, 이 클래스는 그것을 들고 화면에 상태를 알려 주기만 한다.
  * 무거운 일(해독, 축소본 그리기)은 백그라운드에서 하고, [EditHistory]는 메인 스레드에서만 만들고 다룬다.
  */
-class EditorViewModel(
+class EditorViewModel internal constructor(
     application: Application,
-    private val savedState: SavedStateHandle
+    private val savedState: SavedStateHandle,
+    private val appSettings: AppSettings
 ) : AndroidViewModel(application) {
 
-    /** 저장된 상태 없이 만든다(테스트). 앱에서는 안드로이드가 저장된 상태와 함께 만든다. */
-    constructor(application: Application) : this(application, SavedStateHandle())
+    /** 앱에서는 안드로이드가 저장된 상태와 함께 만든다. 설정은 앱 전체의 설정이다. */
+    constructor(application: Application, savedState: SavedStateHandle) : this(application, savedState, AppSettings.get(application))
+
+    /** 저장된 상태 없이, 기본 설정(저장하지 않음)으로 만든다(테스트). 테스트가 앱의 설정에 따라 달라지지 않는다. */
+    constructor(application: Application) : this(application, SavedStateHandle(), AppSettings.inMemory())
 
     private val _state = MutableStateFlow<EditorState>(EditorState.Empty)
     val state: StateFlow<EditorState> = _state.asStateFlow()
@@ -218,10 +227,18 @@ class EditorViewModel(
     /** 공유 창으로 보낼 사진. 화면이 하나씩 받아 공유 창을 띄운다. 화면이 없는 동안 온 것은 기다렸다가 전한다. */
     val shareRequests: Flow<ShareRequest> = _shareRequests.receiveAsFlow()
 
-    private val _exportChoice = MutableStateFlow(ExportChoice())
+    /** 이번 실행에서 마지막으로 내보낸 고르기. 아직 내보내지 않았으면 null이다. */
+    private val lastExportChoice = MutableStateFlow<ExportChoice?>(null)
 
-    /** 마지막으로 내보낸 고르기. 내보내기 창이 이것으로 시작한다. 앱을 끌 때까지 남는다(다른 문서를 열어도). */
-    val exportChoice: StateFlow<ExportChoice> = _exportChoice.asStateFlow()
+    /**
+     * 내보내기 창이 처음 보일 고르기. 이번 실행에서 내보낸 적이 있으면 마지막 고르기(앱을 끌 때까지, 다른 문서를 열어도),
+     * 아직 없으면 설정의 기본값이다(설정을 바꾸면 바로 따른다).
+     */
+    val exportChoice: StateFlow<ExportChoice> = combine(lastExportChoice, appSettings.values) { last, values -> last ?: values.export }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, appSettings.values.value.export)
+
+    /** 열린 문서의 미리 보기 화질. 문서를 열 때 설정에서 읽는다. */
+    private var previewQuality = PreviewQuality.STANDARD
 
     /** 지금 더 쓸 수 있는 메모리(바이트). 테스트가 메모리 부족을 흉내 낼 수 있게 바꿀 수 있다. */
     internal var availableMemory: () -> Long = { MemoryBudget.availableBytes(getApplication()) }
@@ -1020,7 +1037,7 @@ class EditorViewModel(
     fun export(choice: ExportChoice, target: ExportTarget) {
         val history = history ?: return
         if (editing || _state.value !is EditorState.Ready) return
-        _exportChoice.value = choice
+        lastExportChoice.value = choice
         val document = history.document
         val settings = choice.settingsFor(PixelSize(document.width, document.height))
         startEditing()
@@ -1253,7 +1270,10 @@ class EditorViewModel(
         val size = PixelSize(document.width, document.height)
         // 다른 문서를 보던 때의 보기는 쓰지 않는다
         if (viewport.documentSize != size || ready.documentSize != size) return
-        val planned = PreviewLevels.detailRegion(size, ready.base.region.level, viewport.scale, viewport.visible)
+        // '가볍게'는 맞춤(또는 더 작게) 볼 때 반 크기 전체 축소본을 그대로 보이고, 확대했을 때만 선명하게 다시 그린다
+        val atFit = viewport.scale <= viewport.fitScale * FIT_SCALE_TOLERANCE
+        val planned = if (previewQuality == PreviewQuality.LIGHT && atFit) null
+        else PreviewLevels.detailRegion(size, ready.base.region.level, viewport.scale, viewport.visible)
         val current = ready.detail
         if (planned == null) {
             if (current != null) _state.value = ready.copy(detail = null)
@@ -1286,17 +1306,28 @@ class EditorViewModel(
 
         /** 편집이 이만큼(밀리초) 멈추면 자동 저장한다 */
         const val AUTOSAVE_DELAY_MILLIS = 1_500L
+
+        /** '가볍게' 미리 보기에서 전체 축소본을 화면에서 키워 보여도 되는 정도 */
+        const val LIGHT_PREVIEW_MAGNIFICATION = 2.0
+
+        /** 맞춤 배율과 같다고 볼 오차(배율 계산의 반올림) */
+        private const val FIT_SCALE_TOLERANCE = 1.000001
     }
 
     private fun levelFor(document: Document): Int {
         val canvas = canvasSize ?: getApplication<Application>().resources.displayMetrics.let {
             PixelSize(it.widthPixels, it.heightPixels)
         }
-        return PreviewLevels.levelFor(PixelSize(document.width, document.height), canvas)
+        return PreviewLevels.levelFor(PixelSize(document.width, document.height), canvas, previewMagnification())
     }
 
-    /** 새 문서의 실행 취소 기록. 메모리 한도는 기기 메모리에 맞춘다. */
+    /** 전체 축소본을 화면에서 키워 보여도 되는 정도. '가볍게'는 두 배까지 키워 보여, 화면보다 큰 사진은 한 단계(반) 작게 그린다. */
+    private fun previewMagnification(): Double =
+        if (previewQuality == PreviewQuality.LIGHT) LIGHT_PREVIEW_MAGNIFICATION else 1.0
+
+    /** 새 문서의 실행 취소 기록. 메모리 한도는 기기 메모리에 맞춘다. 미리 보기 화질은 이때 설정에서 읽는다. */
     private fun newHistory(document: Document): EditHistory {
+        previewQuality = appSettings.values.value.previewQuality
         fitTextSize(document)
         return EditHistory(document, maxBytes = MemoryBudget.historyBudgetBytes(getApplication()))
     }

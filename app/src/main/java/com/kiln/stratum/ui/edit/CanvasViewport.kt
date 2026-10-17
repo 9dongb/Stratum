@@ -51,6 +51,9 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  *
  * [overlay]는 문서 위에 겹치는 도구 화면(자르기 테두리 등)이다. 두 손가락 감지를 그 부모에 두어,
  * 도구 화면이 터치를 받아도 두 손가락 확대·이동이 된다. 형제로 겹치면 위의 것만 터치를 받는다(소스로 확인).
+ *
+ * [onTwoFingerTap]이 있으면 캔버스를 두 손가락으로 톡 눌렀을 때 부른다(설정의 '두 손가락으로 톡: 실행 취소').
+ * 그 터치는 도구 화면이 한 손가락 톡으로 받지 않는다.
  */
 @Composable
 fun CanvasViewport(
@@ -58,11 +61,15 @@ fun CanvasViewport(
     viewState: CanvasViewState,
     modifier: Modifier = Modifier,
     onViewport: (Viewport) -> Unit = {},
+    onTwoFingerTap: (() -> Unit)? = null,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
     // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
     val documentSize by rememberUpdatedState(state.documentSize)
     val report by rememberUpdatedState(onViewport)
+    val twoFingerTap by rememberUpdatedState(onTwoFingerTap)
+    // 두 손가락 톡을 켜고 끌 때만 터치 처리를 다시 시작한다(켜져 있을 때만 그 터치를 소비한다)
+    val tapEnabled = onTwoFingerTap != null
     // 캔버스 영역의 크기(픽셀). 그리는 쪽이 쓰는 크기와 같다.
     var area by remember { mutableStateOf(IntSize.Zero) }
     LaunchedEffect(viewState) {
@@ -72,7 +79,7 @@ fun CanvasViewport(
         }
     }
     Box(
-        modifier.onSizeChanged { area = it }.pointerInput(viewState) {
+        modifier.onSizeChanged { area = it }.pointerInput(viewState, tapEnabled) {
             detectTwoFingerTransform(
                 onTransform = { centroid, pan, zoom ->
                     if (size.width > 0 && size.height > 0) {
@@ -86,7 +93,8 @@ fun CanvasViewport(
                             document = documentSize
                         )
                     }
-                }
+                },
+                onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null
             )
         }
     ) {

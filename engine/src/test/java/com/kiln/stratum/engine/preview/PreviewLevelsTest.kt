@@ -27,6 +27,20 @@ class PreviewLevelsTest {
     }
 
     @Test
+    fun levelFor_light_picksOneLevelSmaller_forPhotosLargerThanTheScreen() {
+        // 화면에서 두 배까지 키워 보여도 되면 한 단계 더 줄인다
+        assertEquals(2, PreviewLevels.levelFor(fold8Photo, PixelSize(2208, 1840), maxMagnification = 2.0))
+        assertEquals(3, PreviewLevels.levelFor(fold8Photo, PixelSize(1080, 1700), maxMagnification = 2.0))
+        // 화면보다 조금 큰 사진(맞춤 배율 0.9)도 반으로 그린다
+        assertEquals(1, PreviewLevels.levelFor(PixelSize(2000, 1500), PixelSize(1800, 2000), maxMagnification = 2.0))
+    }
+
+    @Test
+    fun levelFor_light_doesNotShrinkPhotoSmallerThanScreen() {
+        assertEquals(0, PreviewLevels.levelFor(PixelSize(1000, 800), PixelSize(2208, 1840), maxMagnification = 2.0))
+    }
+
+    @Test
     fun levelFor_halvesWhenExactlyTwiceTheScreen() {
         assertEquals(1, PreviewLevels.levelFor(PixelSize(4096, 2048), PixelSize(2048, 1024)))
     }

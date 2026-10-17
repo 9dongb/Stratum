@@ -102,6 +102,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param strokeActions 브러시·지우개를 고른 채 캔버스를 끌 때 보내는 일
  * @param textStyle 글자 모양, [onTextStyle]로 바꾼다
  * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위)
+ * @param twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소한다(설정). 상단 바의 실행 취소 버튼이 켜져 있을 때만 된다.
  */
 @Composable
 fun EditScreen(
@@ -129,7 +130,8 @@ fun EditScreen(
     strokeActions: StrokeActions = StrokeActions.None,
     textStyle: TextStyle = TextStyle(),
     onTextStyle: (TextStyle) -> Unit = {},
-    onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> }
+    onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
+    twoFingerTapUndo: Boolean = false
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -301,9 +303,15 @@ fun EditScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { innerPadding ->
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
+            // 두 손가락 톡: 실행 취소 버튼과 같은 조건(되돌릴 것이 있고 처리 중이 아님)일 때만 되돌린다
+            val twoFingerUndo: (() -> Unit)? = if (twoFingerTapUndo) {
+                { if (ready?.canUndo == true && !ready.busy) onUndo() }
+            } else {
+                null
+            }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f))
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f), twoFingerUndo)
                     if (toolOptions != null) ToolOptionsSheet(toolOptions)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
@@ -311,7 +319,7 @@ fun EditScreen(
                 WidthClass.Medium -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f))
+                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f), twoFingerUndo)
                         val adjustTab = adjustControls?.takeIf { panelTab == PanelTab.ADJUST }
                         val layersTab = layerControls?.takeIf { panelTab == PanelTab.LAYERS }
                         BottomPanel(
@@ -346,7 +354,7 @@ fun EditScreen(
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f))
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f), twoFingerUndo)
                     SidePanel(
                         toolTitle = railToolTitle,
                         toolOptions = railToolOptions,
@@ -489,7 +497,8 @@ private fun EditCanvas(
     overlay: @Composable BoxScope.() -> Unit,
     showZoomChip: Boolean,
     insetSides: WindowInsetsSides,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTwoFingerTap: (() -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -547,7 +556,7 @@ private fun EditCanvas(
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, overlay)
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, overlay)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다.
                 if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize())
                 if (showBusy) {

@@ -24,19 +24,39 @@ import kotlin.math.abs
  *
  * [onTransform]은 손가락 가운데(지금), 손가락 가운데가 옮긴 거리, 손가락 사이가 몇 배 벌어졌는지를 받는다.
  * [onEnd]는 두 손가락 조작이 시작됐다가 손가락을 모두 뗐을 때 부른다.
+ *
+ * [onTwoFingerTap]이 있으면 두 손가락으로 톡 누른 것도 알아챈다: 두 손가락이 닿았다가, 어느 손가락도 터치 허용 거리만큼
+ * 움직이지 않고, 처음 닿은 뒤 [TWO_FINGER_TAP_MILLIS] 안에 모두 뗐을 때다(설정의 '두 손가락으로 톡: 실행 취소').
+ * 그런 터치가 손을 떼는 순간은 소비해서, 도구(글자 자리 누르기 등)가 한 손가락 톡으로 받지 않게 한다.
  */
 suspend fun PointerInputScope.detectTwoFingerTransform(
     onTransform: (centroid: Offset, pan: Offset, zoom: Float) -> Unit,
-    onEnd: () -> Unit = {}
+    onEnd: () -> Unit = {},
+    onTwoFingerTap: (() -> Unit)? = null
 ) {
     awaitEachGesture {
         var transforming = false
         try {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var zoomSinceStart = 1f
             var panSinceStart = Offset.Zero
+            // 두 손가락 톡을 보기 위한 것: 손가락마다 닿은 자리, 함께 닿은 손가락 수의 최대, 움직였는지
+            val downAt = HashMap<Long, Offset>().apply { put(first.id.value, first.position) }
+            var mostFingers = 1
+            var moved = false
+            var lastTime = first.uptimeMillis
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                for (change in event.changes) {
+                    if (change.pressed && !change.previousPressed) downAt[change.id.value] = change.position
+                    val from = downAt[change.id.value]
+                    if (from != null && (change.position - from).getDistance() > viewConfiguration.touchSlop) moved = true
+                    lastTime = change.uptimeMillis
+                }
+                mostFingers = maxOf(mostFingers, event.changes.count { it.pressed })
+                if (onTwoFingerTap != null && mostFingers >= 2 && !transforming && !moved) {
+                    event.changes.forEach { if (!it.pressed && it.previousPressed) it.consume() }
+                }
                 val held = event.changes.count { it.type == PointerType.Touch && it.pressed && it.previousPressed }
                 if (held >= 2) {
                     val zoom = event.calculateZoom()
@@ -54,8 +74,14 @@ suspend fun PointerInputScope.detectTwoFingerTransform(
                 }
                 if (transforming) event.changes.forEach { it.consume() }
             } while (event.changes.any { it.pressed })
+            if (onTwoFingerTap != null && mostFingers == 2 && !transforming && !moved && lastTime - first.uptimeMillis <= TWO_FINGER_TAP_MILLIS) {
+                onTwoFingerTap()
+            }
         } finally {
             if (transforming) onEnd()
         }
     }
 }
+
+/** 두 손가락 톡으로 보는 가장 긴 시간(밀리초). 처음 손가락이 닿아서 모두 뗄 때까지다. */
+const val TWO_FINGER_TAP_MILLIS = 350L

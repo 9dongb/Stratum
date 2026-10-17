@@ -168,4 +168,26 @@
     <string name="text_prompt_title">Add text</string>
     <string name="text_prompt_label">Text</string>
     <string name="action_add">Add</string>
+
+    <!-- 설정 -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_export">Export</string>
+    <string name="settings_preview">Preview</string>
+    <string name="settings_gestures">Gestures</string>
+    <string name="settings_about">About</string>
+    <string name="settings_export_description">The export window starts with these every time you open the app. While you use the app, it keeps your last export choice.</string>
+    <string name="export_format">Format</string>
+    <string name="export_size">Size</string>
+    <string name="settings_export_size_description">Photos smaller than the chosen long edge are exported at their original size.</string>
+    <string name="settings_preview_standard">Standard</string>
+    <string name="settings_preview_standard_description">Sharp previews that match the screen.</string>
+    <string name="settings_preview_light">Light</string>
+    <string name="settings_preview_light_description">Photos larger than the screen are previewed at half size. Sliders and brushes feel lighter, and zooming in redraws the detail sharply.</string>
+    <string name="settings_two_finger_undo">Two-finger tap to undo</string>
+    <string name="settings_two_finger_undo_description">Tap the canvas with two fingers to undo the last edit.</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_privacy_description">Stratum does not use the internet. Your photos and projects stay on this device. There are no ads, accounts or analytics.</string>
+    <string name="settings_licenses">Open-source licenses</string>
+    <string name="settings_licenses_text">Stratum uses these open-source components under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0):\n• AndroidX and Jetpack Compose (Google)\n• Kotlin and kotlinx.coroutines (JetBrains)\n• Material Icons and Material Symbols (Google)</string>
 </resources>
