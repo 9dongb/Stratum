@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,13 +28,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -175,16 +171,7 @@ private fun EditCanvas(
             EditorState.Empty, is EditorState.AskSize -> Unit
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
-            is EditorState.Ready -> {
-                // 축소본이 바뀔 때만 Compose용 이미지로 감싼다
-                val image = remember(state.preview) { state.preview.asImageBitmap() }
-                Image(
-                    bitmap = image,
-                    contentDescription = stringResource(R.string.edit_canvas_description),
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            }
+            is EditorState.Ready -> CanvasImage(state, Modifier.fillMaxSize())
             is EditorState.Failed -> Text(
                 text = stringResource(
                     when (state.reason) {
