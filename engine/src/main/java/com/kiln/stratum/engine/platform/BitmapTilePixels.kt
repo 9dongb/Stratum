@@ -8,7 +8,8 @@ import com.kiln.stratum.engine.raster.TilePixels
  * 안드로이드 비트맵 한 장에 담은 타일 픽셀. 비트맵 픽셀은 자바 힙 밖 네이티브 메모리에 있다.
  *
  * [bitmap]은 바꿀 수 없는(immutable) ARGB_8888 비트맵이고, 알파를 미리 곱한 형식으로 저장된다.
- * 오른쪽·아래 끝 타일은 캔버스 안쪽 크기만 담고, 그 밖은 투명으로 읽는다.
+ * 불러온 사진의 오른쪽·아래 끝 타일은 캔버스 안쪽 크기만 담고, 그 밖은 투명으로 읽는다.
+ * 한 가지 색 캔버스는 꽉 찬 타일 한 장을 끝 자리에도 함께 쓰므로, 캔버스 밖 부분에도 픽셀이 있다(쓰지 않는다).
  * 여러 문서 상태와 실행 취소 기록이 같은 타일을 함께 쓰므로 recycle()하지 않는다.
  */
 internal class BitmapTilePixels(val bitmap: Bitmap) : TilePixels {
