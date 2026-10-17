@@ -22,7 +22,8 @@
 - 의도: 말하지 않음
 - 커밋:
   - 81cb99e "엔진에 내보내기 형식·크기 고르기·메모리 어림 계산 추가"
-  - "엔진에 문서를 내보낼 크기로 그려 JPEG·PNG·WebP로 압축하는 기능 추가"
+  - 1537c7d "엔진에 문서를 내보낼 크기로 그려 JPEG·PNG·WebP로 압축하는 기능 추가"
+  - "내보낸 사진을 갤러리 사진/Stratum 폴더에 저장하고 공유용 임시 파일을 만드는 기능 추가"
 - 바꾼 것:
   - 1단계(순수 Kotlin):
     - `export/ExportFormat.kt`(새): JPEG·PNG·WebP. 형식 이름(MIME), 확장자, 한 변 한도(JPEG 65500, WebP 16383), 품질을 쓰는지, 투명을 담는지, 압축기가 더 쓰는 메모리
@@ -42,6 +43,14 @@
     - `platform/CanvasTileComposer.kt`: 타일을 비트맵으로 바꾸기와 그대로 베끼는 붓을 내보내기와 함께 쓴다.
     - `raster/Raster.kt`: 사각형에 걸친 타일이 있는지(`hasTilesIn`). 크기 변경에 있던 것을 옮겼다.
     - 테스트 추가: 단위 1개(`hasTilesIn`), 에뮬레이터 7개(`ImageExporterTest`: PNG 레이어 하나는 알파를 미리 곱한 값까지 그대로, 레이어 둘·불투명도 합성이 축소본 0단계와 같음, JPEG 흰 바탕·반투명은 분홍·EXIF 없음, 투명 캔버스는 JPEG 흰색·PNG 투명, 긴 변 2048 이음매 없음, WebP 읽기, 그리기·쓰기 취소)
+  - 3단계(앱, 저장 위치):
+    - `export/ExportStorage.kt`(새):
+      - 갤러리 저장(`saveToGallery`): 미디어 저장소의 '사진/Stratum' 폴더에 항목을 만들고 다 쓸 때까지 '쓰는 중'(IS_PENDING)으로 둔다. 쓰다가 실패하거나 취소되면 항목을 지운다. 권한이 필요 없다.
+      - 공유 파일(`writeShareFile`): 앱 임시 폴더(cache/shared)에 파일 하나를 만들고 앞 공유 파일은 지운다. 실패하면 쓰다 만 파일을 지운다.
+      - 공유 창(`shareChooser`): 받는 앱에 읽기 권한을 직접 주는 공유 창
+    - `export/ExportFileName.kt`(새): `Stratum_날짜_시각.확장자`(기기 시간, 숫자만)
+    - `export/ShareFileProvider.kt`(새), `res/xml/share_paths.xml`(새), 매니페스트 provider(다른 앱이 직접 열 수 없고, 넘겨준 파일만 읽는다)
+    - 테스트 추가: 단위 1개(파일 이름), 에뮬레이터 5개(`ExportStorageTest`: 저장한 항목이 '쓰는 중'이 아니고 Pictures/Stratum에 있음, 실패하면 남지 않음, 공유 파일을 읽을 수 있고 앞 파일은 지움, 실패하면 파일이 남지 않음, 공유 창의 내용과 읽기 권한)
 - 정한 것:
   - 사용자(모두 추천 수용, progress.md 결정 기록 '내보내기'):
     - 저장과 공유를 둘 다 둔다.
@@ -61,6 +70,7 @@
 - 확인한 것:
   - 1단계: 빌드와 단위 테스트 207개가 통과했다.
   - 2단계: 빌드, 단위 테스트 208개, Pixel_Fold 에뮬레이터에서 `ImageExporterTest` 7개와 바꾼 코드를 쓰는 `ImageResizerTest` 8개·`TransformCommandsTest` 8개가 통과했다.
+  - 3단계: 빌드, 단위 테스트 209개, 에뮬레이터에서 `ExportStorageTest` 5개가 통과했다. 테스트가 갤러리에 만든 항목은 지웠다.
 
 ## 2026-10-17~18 · 자르기·회전·뒤집기·크기 변경
 

@@ -23,6 +23,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 내보내기의 '공유': 앱 임시 폴더의 파일을 받는 앱이 읽을 수 있게 한다. 다른 앱이 직접 열 수는 없다. -->
+        <provider
+            android:name=".export.ShareFileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
     </application>
 
 </manifest>
