@@ -11,7 +11,9 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewBlock
 import com.kiln.stratum.engine.preview.PreviewLevels
+import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.HeapTilePixels
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
@@ -37,25 +39,37 @@ object PreviewRenderer {
      * [document]를 [level] 단계(1/2^level 크기)로 그린 하드웨어 비트맵. GPU가 그리지 못하면 null.
      * [checkCanceled]는 묶음 사이마다 부르며, 취소됐으면 예외를 던지게 한다.
      */
-    fun render(document: Document, level: Int, checkCanceled: () -> Unit = {}): Bitmap? {
+    fun render(document: Document, level: Int, checkCanceled: () -> Unit = {}): Bitmap? =
+        renderRegion(document, PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level), checkCanceled)
+
+    /**
+     * [document]의 [region] 부분만 그 단계로 그린 하드웨어 비트맵. 크기는 region.previewWidth×previewHeight다.
+     * 확대해서 볼 때 보이는 곳만 선명하게 그리는 데 쓴다. 영역이 단계 격자에 맞춰져 있어,
+     * 전체 축소본([render])의 같은 자리와 픽셀이 같다. GPU가 그리지 못하면 null.
+     *
+     * 한 번에 GPU에 넘기는 양은 묶음 하나(2048×2048px)다. GPU 작업은 화면 그리기와 같은 줄에서 돌아,
+     * 큰 영역을 한꺼번에 넘기면 그동안 화면이 멈칫한다.
+     */
+    fun renderRegion(document: Document, region: PreviewRegion, checkCanceled: () -> Unit = {}): Bitmap? {
         val size = PixelSize(document.width, document.height)
-        val previewSize = PreviewLevels.previewSize(size, level)
-        val blocks = PreviewLevels.blocks(size, level)
+        require(region.rect in PixelRect.of(size)) { "Region outside document: ${region.rect} in $size" }
+        val level = region.level
+        val blocks = PreviewLevels.blocks(region)
         val rendered = ArrayList<Pair<PreviewBlock, Bitmap>>(blocks.size)
         try {
             for (block in blocks) {
                 checkCanceled()
                 rendered += block to (renderBlock(document, block, level) ?: return null)
             }
-            // 묶음이 하나뿐이면 그대로 축소본이다
+            // 묶음이 하나뿐이면 그대로 결과다
             if (rendered.size == 1) return rendered.removeAt(0).second
             val picture = Picture()
-            val canvas = picture.beginRecording(previewSize.width, previewSize.height)
+            val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
             for ((block, bitmap) in rendered) {
                 canvas.drawBitmap(bitmap, block.previewLeft.toFloat(), block.previewTop.toFloat(), null)
             }
             picture.endRecording()
-            return drawOnGpu(picture, previewSize.width, previewSize.height)
+            return drawOnGpu(picture, region.previewWidth, region.previewHeight)
         } finally {
             // GPU 그리기는 끝날 때까지 기다리므로, 이어 붙인 뒤에는 묶음 비트맵을 바로 돌려준다
             for ((_, bitmap) in rendered) bitmap.recycle()

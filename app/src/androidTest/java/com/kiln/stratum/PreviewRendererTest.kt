@@ -9,6 +9,9 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
+import com.kiln.stratum.engine.preview.PreviewLevels
+import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
@@ -117,6 +120,51 @@ class PreviewRendererTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun renderRegion_matchesSameAreaOfWholeRender() {
+        // 2048px 묶음 경계를 넘는 영역. 에뮬레이터 GPU는 전체 그림 쪽에서도 1/255쯤 반올림 차이를 내서(0단계 포함)
+        // ±2까지 같다고 본다. 자리가 어긋나면 빨강·파랑이 바뀌어 255만큼 달라지므로 이것으로 충분하다.
+        val size = PixelSize(2600, 520)
+        val document = checkerDocument(size.width, size.height)
+
+        for (level in 0..2) {
+            val region = checkNotNull(PreviewLevels.region(size, level, PixelRect(1900, 100, 2300, 400)))
+            val whole = checkNotNull(PreviewRenderer.render(document, level)).readable()
+            val part = checkNotNull(PreviewRenderer.renderRegion(document, region)).readable()
+
+            assertEquals(region.previewWidth, part.width)
+            assertEquals(region.previewHeight, part.height)
+            val tolerance = 2
+            for (y in 0 until part.height) {
+                for (x in 0 until part.width) {
+                    val expected = whole.getPixel(region.previewLeft + x, region.previewTop + y)
+                    val actual = part.getPixel(x, y)
+                    val close = abs(Color.alpha(actual) - Color.alpha(expected)) <= tolerance &&
+                        abs(Color.red(actual) - Color.red(expected)) <= tolerance &&
+                        abs(Color.green(actual) - Color.green(expected)) <= tolerance &&
+                        abs(Color.blue(actual) - Color.blue(expected)) <= tolerance
+                    if (!close) {
+                        fail("level $level ($x, $y): expected ${Integer.toHexString(expected)} but was ${Integer.toHexString(actual)}")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun renderRegion_isOnGpuAndKeepsOddEdgeOpaque() {
+        // 1001×521 문서의 오른쪽 아래 구석. 끝 타일이 233×9px라 반으로 줄이면 끝 픽셀이 반만 덮인다.
+        val document = checkerDocument(1001, 521)
+        val region = checkNotNull(PreviewLevels.region(PixelSize(1001, 521), 1, PixelRect(800, 400, 1001, 521)))
+
+        val preview = checkNotNull(PreviewRenderer.renderRegion(document, region))
+
+        assertEquals(Bitmap.Config.HARDWARE, preview.config)
+        val readable = preview.readable()
+        for (x in 0 until readable.width) assertEquals(255, Color.alpha(readable.getPixel(x, readable.height - 1)))
+        for (y in 0 until readable.height) assertEquals(255, Color.alpha(readable.getPixel(readable.width - 1, y)))
     }
 
     @Test
