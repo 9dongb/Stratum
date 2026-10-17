@@ -23,6 +23,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -248,6 +249,9 @@ class AdjustPanelTest {
         composeRule.onNodeWithTag(EditScreenTags.panelTab(PanelTab.ADJUST)).assertIsSelected()
         composeRule.onNode(hasTestTag(EditScreenTags.ADJUST_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
             .assertIsDisplayed()
+        // 고른 탭이 탭 줄을 다 차지하지 않아, 오른쪽의 '모두 초기화'와 접기 버튼이 보인다
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.kiln.stratum.R.string.panel_collapse)).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.SATURATION)).performScrollTo().assertIsDisplayed()
 

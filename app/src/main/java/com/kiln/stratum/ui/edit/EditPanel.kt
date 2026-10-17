@@ -148,13 +148,17 @@ private fun PanelTabButton(label: String, selected: Boolean, enabled: Boolean, o
     ) {
         Text(text = label, color = color, style = MaterialTheme.typography.titleSmall)
         if (selected && enabled) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .background(colors.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-            )
+            // 막대는 글자 폭만큼 그린다. 탭의 크기를 정하지 않게(matchParentSize) 해야 한다.
+            // fillMaxWidth로 재면 고른 탭이 줄의 남은 폭을 모두 차지해 오른쪽 버튼이 사라진다.
+            Box(Modifier.matchParentSize()) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(colors.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                )
+            }
         }
     }
 }
