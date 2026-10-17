@@ -45,13 +45,13 @@ class EditScreenLayoutTest {
     /** 가짜 힌지. 테스트 중에 바꾸면 화면이 다시 배치된다. */
     private val hinges = mutableStateOf(emptyList<Hinge>())
 
-    private fun showEditScreen(widthDp: Int, heightDp: Int) {
+    private fun showEditScreen(widthDp: Int, heightDp: Int, state: EditorState = EditorState.Empty) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
                     StratumTheme {
                         EditScreen(
-                            state = EditorState.Empty,
+                            state = state,
                             onBack = {},
                             onCanvasSize = { _, _ -> },
                             onChooseSize = {}
@@ -129,5 +129,18 @@ class EditScreenLayoutTest {
         assertEquals(bounds.map { it.top }.sorted(), bounds.map { it.top })
         val rail = composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("${bounds.last()} is outside the rail $rail", bounds.last().bottom <= rail.bottom)
+    }
+
+    @Test
+    fun largePhotoDialog_avoidsVerticalHinge() {
+        // 펼친 폴드의 안쪽 화면처럼 세로 힌지가 가운데를 지날 때, 큰 사진 선택 창의 버튼이 힌지에 놓이지 않는다
+        showEditScreen(930, 700, EditorState.AskSize(originalMegapixels = 200, originalAllowed = false, reducedMegapixels = 50))
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        val centerX = screen.center.x.roundToInt()
+        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
+
+        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+
+        composeRule.assertClickablesAvoid(hinge)
     }
 }

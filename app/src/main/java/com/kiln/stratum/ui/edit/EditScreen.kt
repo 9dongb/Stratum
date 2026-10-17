@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -97,10 +97,11 @@ fun EditScreen(
                 }
             }
         }
-    }
 
-    if (state is EditorState.AskSize) {
-        LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)
+        // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
+        if (state is EditorState.AskSize) {
+            LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)
+        }
     }
 }
 
@@ -208,6 +209,7 @@ private fun ProgressIndicator(message: String) {
 /**
  * 큰 사진을 원본 크기로 열지 줄여서 열지 고르는 창. 취소하면 홈으로 돌아간다.
  * 기기 메모리로 원본 크기가 무리면 '원본 크기'를 누를 수 없게 하고 까닭을 알려 준다.
+ * 펼친 화면 가운데의 힌지를 피해 뜬다.
  */
 @Composable
 private fun LargePhotoDialog(
@@ -215,20 +217,12 @@ private fun LargePhotoDialog(
     onChooseSize: (original: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    HingeAwareDialog(
         onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.large_photo_title)) },
-        text = {
-            Text(
-                stringResource(
-                    if (state.originalAllowed) R.string.large_photo_message else R.string.large_photo_message_no_memory,
-                    state.originalMegapixels
-                )
-            )
-        },
+        title = stringResource(R.string.large_photo_title),
         // 버튼 세 개가 한 줄에 다 들어가지 않으면 순서가 뒤섞여 줄바꿈되므로, 처음부터 세로로 쌓는다.
         // 위에서부터 메모리를 덜 쓰는 '줄여서', '원본 크기', '취소'
-        confirmButton = {
+        buttons = {
             Column(horizontalAlignment = Alignment.End) {
                 TextButton(onClick = { onChooseSize(false) }) {
                     Text(stringResource(R.string.large_photo_open_reduced, state.reducedMegapixels))
@@ -241,7 +235,14 @@ private fun LargePhotoDialog(
                 }
             }
         }
-    )
+    ) {
+        Text(
+            stringResource(
+                if (state.originalAllowed) R.string.large_photo_message else R.string.large_photo_message_no_memory,
+                state.originalMegapixels
+            )
+        )
+    }
 }
 
 // 화면 폭별 배치 미리보기(폴드8 커버·메인 세로·메인 가로와 비슷한 크기)
