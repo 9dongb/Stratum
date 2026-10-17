@@ -24,6 +24,7 @@
   - PC 메모리가 모자라면 부팅이 10분 넘게 걸리고 adb가 `offline`으로 남는다.
   - 켜진 뒤에도 안드로이드가 스스로 다시 시작해, 앱 설치가 "Can't find service: package"로 실패할 수 있다.
   - Docker Desktop처럼 무거운 앱을 끄고 켠다(2026-10-17, 16GB Mac에서 겪음). adb만 `offline`이면 `adb reconnect offline`
+  - 빠른 부팅으로 켠 뒤 앱을 설치할 때마다 안드로이드가 다시 시작하면(`Can't find service: package`가 되풀이됨), 끄고 `emulator -avd <이름> -no-snapshot-load`로 처음부터 켠다. 데이터는 그대로다(2026-10-17 Medium_Phone에서 겪음).
 
 ## 에뮬레이터 테스트
 
@@ -67,6 +68,11 @@
 - 접기 `adb emu fold`, 펼치기 `adb emu unfold`
 - 지금 상태 보기: `adb shell cmd device_state state`
 - 접고 펼 때마다 Activity가 다시 만들어진다.
+- 접고 펴면 시스템이 회전 값(`user_rotation`)을 0으로 되돌린다. 돌린 방향을 다시 보려면 다시 돌린다.
+- 앱이 받은 힌지 정보는 `adb logcat -s WindowHinges`로 본다(2026-10-17 확인).
+  - 안쪽 화면 기본 방향: `Rect(1104, 0 - 1104, 1840) VERTICAL FLAT`(두께 0인 세로선)
+  - 안쪽 화면을 돌린 방향: `Rect(0, 1104 - 1840, 1104) HORIZONTAL FLAT`
+  - 접은 상태(바깥 화면): 빈 목록
 - 화면이 둘이라 캡처할 화면을 고른다: `adb exec-out screencap -p -d <디스플레이 id> > screen.png`
   - id는 `adb shell dumpsys SurfaceFlinger --display-id`로 찾는다. port 0이 안쪽, port 1이 바깥이다.
 - 화면 크기에 맞춰 축소본을 다시 그렸는지는 `adb logcat -s EditorViewModel`의 "Preview level" 줄로 본다.
@@ -93,4 +99,5 @@
 ## 자주 뜨는 시스템 창
 
 - "Pixel Launcher isn't responding" 같은 창은 PC 메모리가 부족해서 뜬다(앱 문제 아님). Wait로 안 풀리면 Close app을 누른다.
+  - "Process system isn't responding"·"System UI isn't responding"도 같다. 먼저 Wait를 누른다(Close app은 안드로이드를 다시 시작시킨다).
 - Pixel_Fold 안쪽 화면에서 처음 실행할 때 위쪽에 뜨는 "Tap handle to access menu…" 말풍선은 시스템 안내다.
