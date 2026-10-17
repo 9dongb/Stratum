@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.canvas
 
 import com.kiln.stratum.engine.importing.LARGE_PHOTO_PIXELS
+import com.kiln.stratum.engine.raster.PixelSize
 
 /** 새 캔버스 한 변의 최대 픽셀 수. WebP로 내보낼 수 있는 가장 큰 크기다. */
 const val MAX_CANVAS_SIDE = 16383
@@ -24,10 +25,19 @@ enum class CanvasSizeCheck {
 object CanvasLimits {
 
     /** [width]×[height] 캔버스를 만들 수 있는지. */
-    fun check(width: Int, height: Int): CanvasSizeCheck =
+    fun check(width: Int, height: Int): CanvasSizeCheck = check(width, height, MAX_CANVAS_PIXELS)
+
+    /**
+     * 지금 [current] 크기 이미지를 [width]×[height]로 바꿀 수 있는지. 한도는 새 캔버스와 같되,
+     * 지금 이미지가 이미 [MAX_CANVAS_PIXELS]보다 크면(원본 크기로 연 큰 사진) 지금 크기까지는 된다.
+     */
+    fun checkResize(current: PixelSize, width: Int, height: Int): CanvasSizeCheck =
+        check(width, height, maxOf(MAX_CANVAS_PIXELS, current.pixelCount))
+
+    private fun check(width: Int, height: Int, maxPixels: Long): CanvasSizeCheck =
         when {
             width !in 1..MAX_CANVAS_SIDE || height !in 1..MAX_CANVAS_SIDE -> CanvasSizeCheck.SIDE_OUT_OF_RANGE
-            width.toLong() * height > MAX_CANVAS_PIXELS -> CanvasSizeCheck.TOO_MANY_PIXELS
+            width.toLong() * height > maxPixels -> CanvasSizeCheck.TOO_MANY_PIXELS
             else -> CanvasSizeCheck.OK
         }
 }

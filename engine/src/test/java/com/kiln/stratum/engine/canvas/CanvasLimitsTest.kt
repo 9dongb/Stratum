@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.canvas
 
+import com.kiln.stratum.engine.raster.PixelSize
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -32,5 +33,17 @@ class CanvasLimitsTest {
         // 정확히 5천만 화소는 된다
         assertEquals(CanvasSizeCheck.OK, CanvasLimits.check(10000, 5000))
         assertEquals(CanvasSizeCheck.TOO_MANY_PIXELS, CanvasLimits.check(MAX_CANVAS_SIDE, MAX_CANVAS_SIDE))
+    }
+
+    @Test
+    fun resize_usesTheCanvasLimitsOrTheCurrentSizeIfLarger() {
+        val small = PixelSize(4000, 3000)
+        assertEquals(CanvasSizeCheck.OK, CanvasLimits.checkResize(small, 8000, 6000))
+        assertEquals(CanvasSizeCheck.TOO_MANY_PIXELS, CanvasLimits.checkResize(small, 9000, 6000))
+        assertEquals(CanvasSizeCheck.SIDE_OUT_OF_RANGE, CanvasLimits.checkResize(small, 0, 100))
+        // 원본 크기로 연 100MP 사진은 지금 크기까지 된다
+        val large = PixelSize(12000, 8400)
+        assertEquals(CanvasSizeCheck.OK, CanvasLimits.checkResize(large, 12000, 8400))
+        assertEquals(CanvasSizeCheck.TOO_MANY_PIXELS, CanvasLimits.checkResize(large, 12001, 8400))
     }
 }

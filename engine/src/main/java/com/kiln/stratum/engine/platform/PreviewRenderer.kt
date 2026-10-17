@@ -140,6 +140,20 @@ object PreviewRenderer {
     }
 
     /**
+     * [bitmap]을 한 축만 반으로 줄인다([horizontal]이면 가로). 다른 축은 그대로다. 홀수 크기는 올림한다.
+     * 크기를 바꿀 때 가로·세로 배율이 달라, 한쪽만 더 줄여야 할 때 쓴다. 정확히 이웃 두 픽셀의 평균이다.
+     */
+    internal fun halveAxis(bitmap: Bitmap, horizontal: Boolean): Bitmap? {
+        val width = if (horizontal) (bitmap.width + 1) / 2 else bitmap.width
+        val height = if (horizontal) bitmap.height else (bitmap.height + 1) / 2
+        val picture = Picture()
+        val canvas = picture.beginRecording(width, height)
+        drawScaled(canvas, bitmap, 0f, 0f, if (horizontal) 0.5f else 1f, if (horizontal) 1f else 0.5f)
+        picture.endRecording()
+        return drawOnGpu(picture, width, height)
+    }
+
+    /**
      * [bitmap]을 [scale]배 크기로 ([left], [top])에 그린다. 이웃 픽셀을 섞어(쌍선형) 줄인다.
      *
      * 그리는 크기는 올림해서 끝 픽셀까지 덮는다. 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮여서,
@@ -147,16 +161,20 @@ object PreviewRenderer {
      * 그래서 셰이더로 그리고, 비트맵 밖은 가장자리 픽셀을 늘여(CLAMP) 채운다.
      * 짝수 크기 타일 안쪽은 지금처럼 정확히 2×2 평균이고, 늘인 픽셀은 끝 줄에만 쓰인다.
      */
-    private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scale: Float) {
+    private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scale: Float) =
+        drawScaled(canvas, bitmap, left, top, scale, scale)
+
+    /** [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. */
+    private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scaleX: Float, scaleY: Float) {
         val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
             filterMode = BitmapShader.FILTER_MODE_LINEAR
             setLocalMatrix(Matrix().apply {
-                setScale(scale, scale)
+                setScale(scaleX, scaleY)
                 postTranslate(left, top)
             })
         }
-        val right = left + ceil(bitmap.width * scale)
-        val bottom = top + ceil(bitmap.height * scale)
+        val right = left + ceil(bitmap.width * scaleX)
+        val bottom = top + ceil(bitmap.height * scaleY)
         canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = shader })
     }
 
@@ -175,6 +193,6 @@ object PreviewRenderer {
      * 함수에는 null이 아니라고 적혀 있지만, GPU가 실패하면 null을 돌려줄 수 있다(설계 검토에서 확인).
      */
     @Suppress("USELESS_CAST")
-    private fun drawOnGpu(picture: Picture, width: Int, height: Int): Bitmap? =
+    internal fun drawOnGpu(picture: Picture, width: Int, height: Int): Bitmap? =
         Bitmap.createBitmap(picture, width, height, Bitmap.Config.HARDWARE) as Bitmap?
 }
