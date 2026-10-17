@@ -40,8 +40,8 @@ object BlankCanvas {
         return Document.create(width, height, layerName, raster)
     }
 
-    /** [argb] 한 색으로 칠한 꽉 찬 타일. 바꿀 수 없는 복사본을 만들 메모리가 없으면 null. */
-    private fun solidTile(argb: Int): Tile? {
+    /** [argb] 한 색으로 칠한 꽉 찬 타일. 바꿀 수 없는 복사본을 만들 메모리가 없으면 null. 프로젝트를 불러올 때도 쓴다. */
+    internal fun solidTile(argb: Int): Tile? {
         val scratch = Bitmap.createBitmap(TILE_SIZE, TILE_SIZE, Bitmap.Config.ARGB_8888)
         try {
             // 안드로이드 내부 채우기라 CPU로 픽셀을 하나씩 돌지 않는다
