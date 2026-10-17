@@ -54,6 +54,7 @@ class CanvasImageTest {
                         state = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document),
                         onBack = {},
                         onCanvasSize = { _, _ -> },
+                        onViewport = {},
                         onChooseSize = {}
                     )
                 }

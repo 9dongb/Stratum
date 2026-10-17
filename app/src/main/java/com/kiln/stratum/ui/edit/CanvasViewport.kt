@@ -1,15 +1,20 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import com.kiln.stratum.engine.raster.PixelSize
 
 /**
@@ -38,22 +43,31 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
 
 /**
  * 캔버스 영역: 보기 상태대로 문서를 그리고, 두 손가락으로 확대·이동한다.
- * [onViewChanged]는 두 손가락 조작을 마쳤을 때 부른다(선명하게 다시 그릴 영역을 정하는 데 쓴다).
+ * 보기·영역 크기·문서가 바뀔 때마다 [onViewport]로 지금 보이는 문서 영역을 알린다.
+ * 엔진 쪽(ViewModel)은 그것으로 보이는 곳을 선명하게 다시 그린다.
  */
 @Composable
 fun CanvasViewport(
     state: EditorState.Ready,
     viewState: CanvasViewState,
     modifier: Modifier = Modifier,
-    onViewChanged: () -> Unit = {}
+    onViewport: (Viewport) -> Unit = {}
 ) {
-    // 조작 도중에 문서·콜백이 바뀌어도 터치 처리를 다시 시작하지 않는다
+    // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
     val documentSize by rememberUpdatedState(state.documentSize)
-    val viewChanged by rememberUpdatedState(onViewChanged)
+    val report by rememberUpdatedState(onViewport)
+    // 캔버스 영역의 크기(픽셀). 그리는 쪽이 쓰는 크기와 같다.
+    var area by remember { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(viewState) {
+        // 두 손가락으로 움직이는 동안에는 매 프레임 알린다. 엔진 쪽이 움직임이 멈춘 뒤에만 그린다.
+        snapshotFlow { Triple(area, viewState.view, documentSize) }.collect { (size, view, document) ->
+            if (size.width > 0 && size.height > 0) report(view.viewport(PixelSize(size.width, size.height), document))
+        }
+    }
     CanvasImage(
         state = state,
         view = { viewState.view },
-        modifier = modifier.pointerInput(viewState) {
+        modifier = modifier.onSizeChanged { area = it }.pointerInput(viewState) {
             detectTwoFingerTransform(
                 onTransform = { centroid, pan, zoom ->
                     if (size.width > 0 && size.height > 0) {
@@ -67,8 +81,7 @@ fun CanvasViewport(
                             document = documentSize
                         )
                     }
-                },
-                onEnd = { viewChanged() }
+                }
             )
         }
     )

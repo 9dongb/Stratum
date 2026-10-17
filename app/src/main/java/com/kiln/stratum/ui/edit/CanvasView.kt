@@ -125,6 +125,16 @@ fun CanvasView.visibleRect(area: PixelSize, document: PixelSize): PixelRect {
     )
 }
 
+/**
+ * 화면이 엔진 쪽(ViewModel)에 알리는 지금 보기. [documentSize] 문서를 배율 [scale]로 볼 때,
+ * 캔버스 영역에 보이는 문서 영역이 [visible]이다(문서 밖으로 나갈 수 있다). 엔진 쪽이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
+ */
+data class Viewport(val documentSize: PixelSize, val scale: Double, val visible: PixelRect)
+
+/** [area] 크기 캔버스 영역에서 이 보기로 [document]를 볼 때의 [Viewport]. */
+fun CanvasView.viewport(area: PixelSize, document: PixelSize): Viewport =
+    Viewport(document, scale(area, document), visibleRect(area, document))
+
 /** 비율 표시의 숫자(배율 × 100). 10% 미만은 소수 첫째 자리까지, 그 위는 정수로 보인다. */
 fun zoomPercentText(scale: Double): String {
     val percent = scale * 100

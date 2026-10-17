@@ -54,6 +54,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 도구와 패널 탭은 아직 기능이 없어 비활성이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
+ * @param onViewport 확대·이동으로 보기가 바뀌면 보이는 문서 영역을 알린다. 엔진이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
  * @param onChooseSize 큰 사진 선택 창에서 고른 크기. true면 원본 크기, false면 줄여서 연다.
  */
 @Composable
@@ -61,6 +62,7 @@ fun EditScreen(
     state: EditorState,
     onBack: () -> Unit,
     onCanvasSize: (width: Int, height: Int) -> Unit,
+    onViewport: (Viewport) -> Unit,
     onChooseSize: (original: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -80,21 +82,21 @@ fun EditScreen(
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.Horizontal, Modifier.weight(1f))
+                    EditCanvas(state, viewState, onCanvasSize, onViewport, WindowInsetsSides.Horizontal, Modifier.weight(1f))
                     ToolTabBar()
                 }
 
                 WidthClass.Medium -> Row(body) {
                     ToolRail()
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.End, Modifier.weight(1f))
+                        EditCanvas(state, viewState, onCanvasSize, onViewport, WindowInsetsSides.End, Modifier.weight(1f))
                         BottomPanel(expanded = panelExpanded, onToggle = { panelExpanded = !panelExpanded })
                     }
                 }
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail()
-                    EditCanvas(state, viewState, onCanvasSize, WindowInsetsSides.Bottom, Modifier.weight(1f))
+                    EditCanvas(state, viewState, onCanvasSize, onViewport, WindowInsetsSides.Bottom, Modifier.weight(1f))
                     SidePanel()
                 }
             }
@@ -160,6 +162,7 @@ private fun EditCanvas(
     state: EditorState,
     viewState: CanvasViewState,
     onCanvasSize: (width: Int, height: Int) -> Unit,
+    onViewport: (Viewport) -> Unit,
     insetSides: WindowInsetsSides,
     modifier: Modifier = Modifier
 ) {
@@ -177,7 +180,7 @@ private fun EditCanvas(
             EditorState.Opening -> ProgressIndicator(stringResource(R.string.edit_opening_photo))
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize())
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다.
                 CanvasZoomChip(viewState, Modifier.fillMaxSize())
             }
@@ -260,7 +263,7 @@ private fun LargePhotoDialog(
 @Composable
 private fun EditScreenPreview() {
     StratumTheme {
-        EditScreen(state = EditorState.Empty, onBack = {}, onCanvasSize = { _, _ -> }, onChooseSize = {})
+        EditScreen(state = EditorState.Empty, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {})
     }
 }
 
@@ -268,6 +271,6 @@ private fun EditScreenPreview() {
 @Composable
 private fun EditScreenOpeningPreview() {
     StratumTheme {
-        EditScreen(state = EditorState.Opening, onBack = {}, onCanvasSize = { _, _ -> }, onChooseSize = {})
+        EditScreen(state = EditorState.Opening, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {})
     }
 }

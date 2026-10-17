@@ -64,6 +64,7 @@ fun StratumApp(editor: EditorViewModel) {
                 state = state,
                 onBack = goHome,
                 onCanvasSize = editor::onCanvasSize,
+                onViewport = editor::onViewport,
                 onChooseSize = editor::chooseSize
             )
         }

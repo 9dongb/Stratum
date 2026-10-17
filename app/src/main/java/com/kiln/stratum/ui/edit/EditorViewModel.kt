@@ -24,12 +24,18 @@ import com.kiln.stratum.engine.raster.PixelSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+/** 보기가 이만큼(밀리초) 멈춰 있으면 보이는 곳을 선명하게 다시 그린다. 움직이는 동안 그려 화면이 멈칫하지 않게 한다. */
+internal const val SHARPEN_DELAY_MILLIS = 150L
 
 /** 편집 화면에 보여 줄 실패 까닭. 화면이 알맞은 문구를 고른다. */
 enum class EditorFailure {
@@ -106,6 +112,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     /** 축소본을 다시 그리는 작업(화면 크기가 바뀔 때). */
     private var previewJob: Job? = null
 
+    /** 보이는 곳을 선명하게 다시 그리는 작업. 보기가 바뀔 때마다 앞 작업을 취소하고 새로 시작한다. */
+    private var detailJob: Job? = null
+
+    /**
+     * 축소본(전체·부분)은 한 번에 하나만 그린다. 취소된 작업도 그리던 묶음은 마치므로,
+     * 다음 작업은 그것이 끝날 때까지 기다려 GPU 메모리가 겹치지 않게 한다.
+     */
+    private val renderMutex = Mutex()
+
+    /** 화면이 마지막으로 알려 준 보기. 문서를 닫거나 새로 열면 지운다. */
+    private var viewport: Viewport? = null
+
     /** 사용자가 크기를 고르기를 기다리는 사진. */
     private var pendingPhoto: PendingPhoto? = null
 
@@ -123,6 +141,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     /** [uri] 사진을 연다. 열려 있던 문서는 닫는다. */
     fun openPhoto(uri: Uri) {
         previewJob?.cancel()
+        detailJob?.cancel()
         pendingPhoto = null
         val previous = openJob
         openJob = viewModelScope.launch {
@@ -178,6 +197,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun newCanvas(width: Int, height: Int, fill: CanvasFill) {
         previewJob?.cancel()
+        detailJob?.cancel()
         pendingPhoto = null
         val previous = openJob
         openJob = viewModelScope.launch {
@@ -208,11 +228,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         previewJob = viewModelScope.launch { showPreview(document) }
     }
 
+    /**
+     * 화면이 지금 보기를 알린다. 두 손가락으로 움직이는 동안에는 매 프레임, 화면 크기가 바뀌거나 맞춤으로 돌아갈 때도 알린다.
+     * 보기가 [SHARPEN_DELAY_MILLIS] 동안 그대로면 보이는 곳을 선명하게 다시 그린다. 그사이 또 바뀌면 앞 계획은 취소한다.
+     */
+    fun onViewport(viewport: Viewport) {
+        this.viewport = viewport
+        planDetail()
+    }
+
     /** 문서를 닫고 메모리를 비운다. 홈으로 돌아갈 때 부른다. */
     fun close() {
         // 작업은 취소만 하고 지우지 않는다. 다음에 열 때 끝날 때까지 기다린다.
         openJob?.cancel()
         previewJob?.cancel()
+        detailJob?.cancel()
         pendingPhoto = null
         release()
         _state.value = EditorState.Empty
@@ -239,20 +269,74 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun showPreview(document: Document) {
         val level = levelFor(document)
-        val preview = withContext(Dispatchers.Default) {
-            PreviewRenderer.render(document, level) { ensureActive() }
+        renderMutex.withLock {
+            val preview = withContext(Dispatchers.Default) {
+                PreviewRenderer.render(document, level) { ensureActive() }
+            }
+            if (preview == null) {
+                // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
+                _state.value = EditorState.Failed(memoryFailure)
+                return
+            }
+            previewLevel = level
+            // 접기·펼치기로 축소본을 다시 그리는지 확인할 수 있게 남긴다(adb logcat -s EditorViewModel)
+            Log.d(TAG, "Preview level $level: ${preview.width}x${preview.height} for ${document.width}x${document.height}")
+            val size = PixelSize(document.width, document.height)
+            // 화면 크기가 바뀌어 같은 문서를 다시 그린 것이면, 부분 그림이 새 축소본보다 선명할 때만 남긴다
+            val detail = (_state.value as? EditorState.Ready)
+                ?.takeIf { it.documentSize == size }
+                ?.detail
+                ?.takeIf { it.region.level < level }
+            // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
+            _state.value = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(size, level)), size, detail)
         }
-        if (preview == null) {
-            // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
-            _state.value = EditorState.Failed(memoryFailure)
+        // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다
+        planDetail()
+    }
+
+    /** 앞 계획을 취소하고, 보기가 [SHARPEN_DELAY_MILLIS] 동안 그대로면 부분 그림을 고친다. */
+    private fun planDetail() {
+        detailJob?.cancel()
+        detailJob = viewModelScope.launch {
+            delay(SHARPEN_DELAY_MILLIS)
+            renderMutex.withLock { updateDetail() }
+        }
+    }
+
+    /**
+     * 마지막 보기에 맞춰 보이는 곳을 선명하게 다시 그리거나, 필요 없으면 지운다. [renderMutex] 안에서 부른다.
+     * 지금 부분 그림이 보이는 곳을 이미 덮으면 그대로 둔다. 그리지 못하면(메모리 부족) 흐린 그림을 그대로 둔다.
+     */
+    private suspend fun updateDetail() {
+        val ready = _state.value as? EditorState.Ready ?: return
+        val document = history?.document ?: return
+        val viewport = viewport ?: return
+        val size = PixelSize(document.width, document.height)
+        // 다른 문서를 보던 때의 보기는 쓰지 않는다
+        if (viewport.documentSize != size || ready.documentSize != size) return
+        val planned = PreviewLevels.detailRegion(size, ready.base.region.level, viewport.scale, viewport.visible)
+        val current = ready.detail
+        if (planned == null) {
+            if (current != null) _state.value = ready.copy(detail = null)
             return
         }
-        previewLevel = level
-        // 접기·펼치기로 축소본을 다시 그리는지 확인할 수 있게 남긴다(adb logcat -s EditorViewModel)
-        Log.d(TAG, "Preview level $level: ${preview.width}x${preview.height} for ${document.width}x${document.height}")
-        // 앞 축소본은 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
-        val size = PixelSize(document.width, document.height)
-        _state.value = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(size, level)), size)
+        if (current != null && PreviewLevels.canReuse(current.region, planned, size, viewport.visible)) return
+        val bitmap = withContext(Dispatchers.Default) {
+            PreviewRenderer.renderRegion(document, planned) { ensureActive() }
+        }
+        if (bitmap == null) {
+            Log.w(TAG, "Could not render detail level ${planned.level} at ${planned.rect}")
+            return
+        }
+        // 그리는 동안 문서를 닫았거나 다른 문서를 열었으면 버린다. 화면에 보인 적 없는 그림이라 바로 비운다.
+        val latest = _state.value
+        if (latest !is EditorState.Ready || history?.document !== document) {
+            bitmap.recycle()
+            return
+        }
+        Log.d(TAG, "Detail level ${planned.level}: ${bitmap.width}x${bitmap.height} at ${planned.rect}")
+        // 앞 부분 그림은 화면이 아직 그리고 있을 수 있어 recycle()하지 않는다
+        _state.value = latest.copy(detail = PreviewImage(bitmap, planned))
     }
 
     private companion object {
@@ -269,5 +353,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun release() {
         history = null
         previewLevel = -1
+        viewport = null
     }
 }

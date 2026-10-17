@@ -20,6 +20,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.theme.StratumTheme
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -36,14 +37,14 @@ class CanvasViewportTest {
     private val document = PixelSize(2000, 1000)
     private val viewState = CanvasViewState(CanvasView.Fit)
 
-    private fun show() {
+    private fun show(onViewport: (Viewport) -> Unit = {}) {
         // 그림 내용은 보지 않으므로, 3단계(1/8) 크기의 빈 축소본이면 된다
         val preview = Bitmap.createBitmap(250, 125, Bitmap.Config.ARGB_8888)
         val ready = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 3)), document)
         composeRule.setContent {
             StratumTheme {
                 Box(Modifier.size(400.dp, 300.dp)) {
-                    CanvasViewport(ready, viewState, Modifier.fillMaxSize().testTag(TAG))
+                    CanvasViewport(ready, viewState, Modifier.fillMaxSize().testTag(TAG), onViewport)
                 }
             }
         }
@@ -139,6 +140,23 @@ class CanvasViewportTest {
             assertTrue(afterTwoFingers is CanvasView.Free)
             assertEquals(afterTwoFingers, viewState.view)
         }
+    }
+
+    @Test
+    fun reportsViewport_whenViewChanges() {
+        // 알림은 메인 스레드에서 오고, 확인은 테스트 스레드에서 한다
+        val reported = AtomicReference<Viewport?>(null)
+        show(onViewport = { reported.set(it) })
+        val area = area()
+
+        // 처음에는 맞춘 보기를 알린다
+        val fit = CanvasView.Fit.viewport(area, document)
+        composeRule.waitUntil(5_000) { reported.get() == fit }
+
+        val zoomed = CanvasView.Free(scale = 2.5, centerX = 300.0, centerY = 400.0)
+        composeRule.runOnIdle { viewState.view = zoomed }
+
+        composeRule.waitUntil(5_000) { reported.get() == zoomed.viewport(area, document) }
     }
 
     @Test

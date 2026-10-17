@@ -54,6 +54,7 @@ class EditScreenLayoutTest {
                             state = state,
                             onBack = {},
                             onCanvasSize = { _, _ -> },
+                            onViewport = {},
                             onChooseSize = {}
                         )
                     }
