@@ -43,7 +43,8 @@ data class AddTextLayer(
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         require(index in 0..document.layers.size) { "Layer index out of range: $index" }
         if (text.isBlank()) return document
-        val layout = layoutOf(text, style)
+        // sRGB로 고른 색을 문서 색 공간 값으로 바꿔 그린다(P3 문서에서도 같은 색으로 보임)
+        val layout = layoutOf(text, style.copy(color = DocumentColors.paintColor(style.color, document.colorSpace)))
         val bounds = boundsOf(layout, document) ?: return document
         val raster = try {
             TextTiles.draw(layout, x, y, bounds, TileGrid(document.width, document.height), checkCanceled)

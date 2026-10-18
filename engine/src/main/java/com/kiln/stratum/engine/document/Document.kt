@@ -15,13 +15,15 @@ import com.kiln.stratum.engine.selection.Selection
  * @property nextLayerId 다음에 만들 레이어의 번호. 지금 있는 모든 레이어 번호보다 크다.
  * @property selection 선택 영역. 없으면 null(모든 곳을 편집한다). 비어 있는 선택 영역은 두지 않는다([withSelection]).
  *   실행 취소 기록에는 남지만 프로젝트 파일에는 저장하지 않는다(결정 기록 '선택 도구').
+ * @property colorSpace 픽셀 값이 뜻하는 색 공간. 넓은 색 사진은 Display P3, 그 밖은 sRGB다([DocumentColorSpace]).
  */
 data class Document(
     val width: Int,
     val height: Int,
     val layers: List<Layer>,
     val nextLayerId: Long,
-    val selection: Selection? = null
+    val selection: Selection? = null,
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }

@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
@@ -109,7 +110,7 @@ class LayerPreviewCache {
                     ?: renderLayer(size, raster, level)?.also { entries[raster] = Entry(level, it) }
                     ?: return null
             }
-            val bitmap = if (stroking) strokeOver(base, region, layerStrokes) ?: return null else checkNotNull(base)
+            val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace) ?: return null else checkNotNull(base)
             previews += layer to bitmap
         }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
@@ -247,8 +248,9 @@ class LayerPreviewCache {
      * 획에 선택 영역이 있으면 그 영역 안으로 자른다(기록할 때와 같다).
      * 복제 획([LiveStroke.clone])은 [image]에서 옮긴 자리를 베껴 보인다. 그림 밖에서 가져올 곳은 비워 둔다.
      * 명암 획([LiveStroke.tone])은 [image]를 닷지·번으로 바꾼 색을 획 모양으로 보인다.
+     * 칠하는 색은 [colorSpace](문서 색 공간) 값으로 바꿔 그린다(기록할 때와 같다).
      */
-    fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>): Bitmap? {
+    fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>, colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB): Bitmap? {
         val width = region.previewWidth
         val height = region.previewHeight
         val scale = 1f / (1 shl region.level)
@@ -268,8 +270,9 @@ class LayerPreviewCache {
                 tone != null && image != null -> ToneShader.of(BitmapShader(image, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), tone)
                 else -> null
             }
+            val settings = stroke.settings.copy(color = DocumentColors.paintColor(stroke.settings.color, colorSpace))
             BrushPainter.drawStroke(
-                canvas, stroke.dabs, stroke.settings, stroke.erase,
+                canvas, stroke.dabs, settings, stroke.erase,
                 scale = scale,
                 left = region.rect.left.toFloat(),
                 top = region.rect.top.toFloat(),

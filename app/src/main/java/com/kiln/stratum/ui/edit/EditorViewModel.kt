@@ -27,6 +27,7 @@ import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.history.EditHistory
@@ -199,6 +200,7 @@ sealed interface EditorState {
      * @property activeLayer 고른 레이어. 보정은 이 레이어에 한다.
      * @property selection 선택 영역 윤곽선(문서 전체, 줄인 마스크에서 찾음). 없으면 고른 곳이 없다(모든 곳을 편집한다).
      * @property selectionDetail 확대해 볼 때 [detail]과 같은 자리에서 더 정확하게 다시 찾은 윤곽선. 없으면 [selection]만 그린다.
+     * @property colorSpace 문서 색 공간. 축소본 값이 이 색 공간의 값이라, 화면은 그릴 때 그 꼬리표로 보이고 창을 넓은 색 모드로 둔다.
      */
     data class Ready(
         val base: PreviewImage,
@@ -211,7 +213,8 @@ sealed interface EditorState {
         val layers: List<LayerSummary> = emptyList(),
         val activeLayer: LayerId? = null,
         val selection: SelectionOutline? = null,
-        val selectionDetail: SelectionOutline? = null
+        val selectionDetail: SelectionOutline? = null,
+        val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
     ) : EditorState {
 
         /** 고른 레이어의 속성 */
@@ -776,7 +779,8 @@ class EditorViewModel internal constructor(
             strength = liquifyStrength,
             canUndo = session.undo.isNotEmpty(),
             changed = !session.mesh.isIdentity(),
-            busy = busy
+            busy = busy,
+            colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB
         )
     }
 
@@ -1342,7 +1346,7 @@ class EditorViewModel internal constructor(
                 val (base, detail) = renderMutex.withLock {
                     withContext(Dispatchers.Default) {
                         val base = layerPreviews.render(document, level, strokes) { ensureActive() }
-                        val detail = detailBase?.let { layerPreviews.strokeOver(it.bitmap, it.region, detailLive) }
+                        val detail = detailBase?.let { layerPreviews.strokeOver(it.bitmap, it.region, detailLive, document.colorSpace) }
                         base to detail
                     }
                 }
@@ -1733,7 +1737,8 @@ class EditorViewModel internal constructor(
                 layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id]) },
                 activeLayer = activeLayerIn(document),
                 selection = outline,
-                selectionDetail = selectionDetail
+                selectionDetail = selectionDetail,
+                colorSpace = document.colorSpace
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다

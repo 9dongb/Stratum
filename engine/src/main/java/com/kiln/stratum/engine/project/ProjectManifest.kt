@@ -4,6 +4,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.CurvePoint
 import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -22,6 +23,7 @@ const val PROJECT_FORMAT_VERSION = 1
  * @property nextLayerId 다음에 만들 레이어의 번호(Document.nextLayerId)
  * @property createdMillis 프로젝트를 처음 만든 시각(밀리초)
  * @property modifiedMillis 마지막으로 저장한 시각(밀리초). 홈의 최근 프로젝트 순서다.
+ * @property colorSpace 픽셀 값의 색 공간(Document.colorSpace). sRGB가 아니면 문서 덧붙임(꼬리표 1)에 적는다.
  */
 data class ProjectManifest(
     val width: Int,
@@ -29,7 +31,8 @@ data class ProjectManifest(
     val nextLayerId: Long,
     val createdMillis: Long,
     val modifiedMillis: Long,
-    val layers: List<LayerEntry>
+    val layers: List<LayerEntry>,
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }
@@ -96,6 +99,9 @@ object ProjectManifestCodec {
 
     /** 레이어 덧붙임 꼬리표: 기본 보정 값 */
     private const val EXTRA_ADJUSTMENTS = 1
+
+    /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
+    private const val EXTRA_COLOR_SPACE = 1
     private const val TILE_FILE: Byte = 0
     private const val TILE_SOLID: Byte = 1
 
@@ -143,8 +149,13 @@ object ProjectManifestCodec {
                 writeExtra(out, EXTRA_ADJUSTMENTS, adjustmentBytes(layer.adjustments))
             }
         }
-        // 문서 덧붙임(아직 없음)
-        out.writeInt(0)
+        // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)
+        if (manifest.colorSpace == DocumentColorSpace.SRGB) {
+            out.writeInt(0)
+        } else {
+            out.writeInt(1)
+            writeExtra(out, EXTRA_COLOR_SPACE, ByteArrayOutputStream().also { DataOutputStream(it).writeInt(colorSpaceCode(manifest.colorSpace)) }.toByteArray())
+        }
         out.flush()
     }
 
@@ -178,8 +189,11 @@ object ProjectManifestCodec {
                 data.readExtras { tag, bytes -> if (tag == EXTRA_ADJUSTMENTS) adjustments = adjustmentsOf(bytes) }
                 LayerEntry(id, name, opacity, blendMode, content, adjustments)
             }
-            data.readExtras { _, _ -> }
-            return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers)
+            var colorSpace = DocumentColorSpace.SRGB
+            data.readExtras { tag, bytes ->
+                if (tag == EXTRA_COLOR_SPACE) colorSpace = colorSpaceOf(DataInputStream(ByteArrayInputStream(bytes)).readInt())
+            }
+            return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers, colorSpace)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken project: ${e.message}")
         }
@@ -261,6 +275,20 @@ object ProjectManifestCodec {
             throw UnreadableProjectException("Broken adjustments: ${e.message}")
         }
     }
+
+    /** 색 공간의 고정 코드 */
+    private fun colorSpaceCode(space: DocumentColorSpace): Int =
+        when (space) {
+            DocumentColorSpace.SRGB -> 0
+            DocumentColorSpace.DISPLAY_P3 -> 1
+        }
+
+    private fun colorSpaceOf(code: Int): DocumentColorSpace =
+        when (code) {
+            0 -> DocumentColorSpace.SRGB
+            1 -> DocumentColorSpace.DISPLAY_P3
+            else -> throw UnreadableProjectException("Unknown color space $code")
+        }
 
     /** 혼합 모드의 고정 코드. 순서(ordinal)가 바뀌어도 저장한 파일이 그대로 읽힌다. */
     internal fun blendCode(mode: BlendMode): Int =

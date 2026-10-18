@@ -4,6 +4,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.CurvePoint
 import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -121,5 +122,15 @@ class ProjectManifestTest {
         assertEquals(adjusted, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(adjusted))))
         // 보정이 없는 레이어는 덧붙임을 쓰지 않아 크기가 그대로다
         assertTrue(bytesOf(adjusted).size > bytesOf(manifest).size)
+    }
+
+    @Test
+    fun colorSpace_roundTrips_andSrgbWritesNothingExtra() {
+        val wide = manifest.copy(colorSpace = DocumentColorSpace.DISPLAY_P3)
+
+        assertEquals(wide, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(wide))))
+        assertEquals(DocumentColorSpace.SRGB, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).colorSpace)
+        // 문서 덧붙임 하나(꼬리표·길이·코드)만큼 길다
+        assertEquals(bytesOf(manifest).size + 12, bytesOf(wide).size)
     }
 }

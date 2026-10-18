@@ -72,7 +72,9 @@ import androidx.compose.ui.unit.min
 import androidx.compose.ui.zIndex
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import kotlin.math.roundToInt
 
@@ -132,6 +134,7 @@ interface LayerActions {
  * @param liveOpacity 끄는 동안의 불투명도(없으면 null). 값을 읽는 패널만 다시 그려지도록 함수로 받는다.
  * @property enabled 바꿀 수 있는지. 자르기 중에는 막는다(보정 패널과 같은 까닭).
  * @property busy 편집을 처리하는 중이면 더하기·지우기·옮기기·혼합 모드를 막는다(다른 편집 버튼과 같다).
+ * @property colorSpace 문서 색 공간. 작은 그림을 그 꼬리표로 보인다.
  */
 @Stable
 class LayerControls(
@@ -140,7 +143,8 @@ class LayerControls(
     private val liveOpacity: () -> Float?,
     val enabled: Boolean,
     val busy: Boolean,
-    val actions: LayerActions
+    val actions: LayerActions,
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -393,7 +397,7 @@ private fun LayerRow(
         ) {
             // 작은 그림·이름: 길게 누르면 메뉴. 줄의 누르기(고르기)보다 먼저 알아채고, 길게 누른 뒤에는 누르기가 일어나지 않는다.
             Row(Modifier.weight(1f).fillMaxHeight().longPressFirst(openMenu), verticalAlignment = Alignment.CenterVertically) {
-                LayerThumbnail(layer.thumbnail, Modifier.size(ThumbnailSize))
+                LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -484,8 +488,8 @@ private fun LayerMenuItem(@StringRes label: Int, enabled: Boolean, tag: String, 
  * 빈 레이어(작은 그림 없음)는 칸 전체가 체크 무늬다.
  */
 @Composable
-private fun LayerThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
-    val image = remember(thumbnail) { thumbnail?.asImageBitmap() }
+private fun LayerThumbnail(thumbnail: Bitmap?, colorSpace: DocumentColorSpace, modifier: Modifier = Modifier) {
+    val image = remember(thumbnail, colorSpace) { thumbnail?.let { DocumentColors.forScreen(it, colorSpace).asImageBitmap() } }
     val colors = MaterialTheme.colorScheme
     Canvas(modifier.clip(RoundedCornerShape(4.dp))) {
         drawRect(colors.surfaceContainerHighest)

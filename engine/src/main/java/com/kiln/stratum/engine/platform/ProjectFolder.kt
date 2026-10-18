@@ -86,7 +86,8 @@ class ProjectFolder(val directory: File) {
             nextLayerId = document.nextLayerId,
             createdMillis = createdMillis,
             modifiedMillis = modifiedMillis,
-            layers = layers
+            layers = layers,
+            colorSpace = document.colorSpace
         )
         checkCanceled()
         writeAtomically(manifestFile) { ProjectManifestCodec.write(manifest, it) }
@@ -131,7 +132,7 @@ class ProjectFolder(val directory: File) {
             }
         }
         val document = try {
-            Document(manifest.width, manifest.height, layers, manifest.nextLayerId)
+            Document(manifest.width, manifest.height, layers, manifest.nextLayerId, colorSpace = manifest.colorSpace)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken document: ${e.message}")
         }

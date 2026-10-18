@@ -53,6 +53,8 @@ object ImageExporter {
             } else {
                 renderBlocks(document, settings.size, background, bitmap, checkCanceled)
             }
+            // 다 그린 뒤에 꼬리표를 문서 색 공간으로 바꾼다(그리기 전에 바꾸면 sRGB 꼬리표의 타일이 변환된다)
+            DocumentColors.tagForEncoding(bitmap, document.colorSpace)
             return RenderedImage(bitmap, settings)
         } catch (e: OutOfMemoryError) {
             bitmap.recycle()
@@ -128,7 +130,7 @@ object ImageExporter {
 
 /**
  * 내보낼 크기로 그린 이미지. [writeTo]로 압축해 쓰고, 다 쓰면 [close]한다.
- * 압축은 안드로이드 `Bitmap.compress`다. 사진 정보(EXIF)는 쓰지 않는다. 작은 sRGB 색 정보만 붙는다(소스 확인).
+ * 압축은 안드로이드 `Bitmap.compress`다. 사진 정보(EXIF)는 쓰지 않는다. 문서 색 공간(sRGB·Display P3)의 색 정보가 붙는다.
  */
 class RenderedImage internal constructor(
     private val bitmap: Bitmap,

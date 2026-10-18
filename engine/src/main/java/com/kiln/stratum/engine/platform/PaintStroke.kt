@@ -25,6 +25,7 @@ import com.kiln.stratum.engine.selection.Selection
  * 획이 닿는 타일만 새로 만들고 나머지는 앞 문서와 함께 쓴다. 빈 자리를 지우면 그대로 비워 둔다.
  * 선택 영역이 있으면 고른 곳에만 그린다(고르지 않은 타일은 건너뛴다).
  * 타일은 안드로이드 소프트웨어 그리기로 만든다(결정 기록 '브러시 기록은 안드로이드 내부 그리기'). 획이 닿지 않은 픽셀은 값이 그대로다.
+ * 색([BrushSettings.color])은 sRGB로 고른 색이라, 문서 색 공간 값으로 바꿔 칠한다(P3 문서에서도 같은 색으로 보임).
  * 없는 레이어거나 문서에 닿지 않는 획이면 문서를 그대로 돌려준다.
  */
 data class PaintStroke(
@@ -41,8 +42,9 @@ data class PaintStroke(
         val raster = (layer.content as? RasterContent)?.raster ?: return document
         val size = PixelSize(document.width, document.height)
         val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return document
+        val colored = settings.copy(color = DocumentColors.paintColor(settings.color, document.colorSpace))
         val painted = try {
-            BrushTiles.paint(raster, size, bounds, dabs, settings, erase, document.selection, checkCanceled)
+            BrushTiles.paint(raster, size, bounds, dabs, colored, erase, document.selection, checkCanceled)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }

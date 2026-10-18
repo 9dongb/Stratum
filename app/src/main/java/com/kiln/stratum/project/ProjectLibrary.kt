@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.platform.LoadedProject
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.ProjectFolder
@@ -194,6 +195,8 @@ class ProjectLibrary private constructor(context: Context) {
                 drawn.recycle()
             } ?: return
             try {
+                // 넓은 색 문서는 그 색 정보를 붙여 쓴다(홈에서 같은 색으로 보인다)
+                DocumentColors.tagForEncoding(pixels, document.colorSpace)
                 folder.writeThumbnail(pixels)
             } finally {
                 pixels.recycle()

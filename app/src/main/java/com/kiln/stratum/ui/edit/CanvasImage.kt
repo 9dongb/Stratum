@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.raster.PixelSize
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -59,10 +60,14 @@ internal val CanvasOutlineWidth = 1.dp
  */
 @Composable
 fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modifier = Modifier) {
-    // 그림이 바뀔 때만 Compose용 이미지로 감싼다
-    val base = remember(state.base.bitmap) { state.base.bitmap.asImageBitmap() }
+    // 그림이 바뀔 때만 Compose용 이미지로 감싼다. 넓은 색 문서는 그 색 공간의 꼬리표로 보인다(엔진 그림은 그대로 둔다).
+    val base = remember(state.base.bitmap, state.colorSpace) {
+        DocumentColors.forScreen(state.base.bitmap, state.colorSpace).asImageBitmap()
+    }
     val detailBitmap = state.detail?.bitmap
-    val detail = remember(detailBitmap) { detailBitmap?.asImageBitmap() }
+    val detail = remember(detailBitmap, state.colorSpace) {
+        detailBitmap?.let { DocumentColors.forScreen(it, state.colorSpace).asImageBitmap() }
+    }
     val checker = remember { checkerBitmap() }
     val outline = MaterialTheme.colorScheme.outlineVariant
     val description = stringResource(R.string.edit_canvas_description)

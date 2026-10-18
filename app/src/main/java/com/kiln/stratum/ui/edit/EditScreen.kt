@@ -1,6 +1,10 @@
 package com.kiln.stratum.ui.edit
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +69,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.command.EditCommand
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
@@ -217,6 +223,8 @@ fun EditScreen(
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
     // 공유 창은 앱이 화면에 있을 때만 띄운다. 뒤로 가 있는 동안 끝난 것은 돌아왔을 때 띄운다.
     val context = LocalContext.current
+    // 넓은 색 문서를 여는 동안 창을 넓은 색 모드로 둔다(진한 색이 깎이지 않게 보인다). 닫으면 되돌린다.
+    WindowColorMode(wideColor = ready?.colorSpace == DocumentColorSpace.DISPLAY_P3)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(shareRequests, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -266,7 +274,7 @@ fun EditScreen(
         }
         // 레이어 목록과 고른 레이어. 자르기 중에는 막는다(보정과 같은 까닭).
         val layerControls = ready?.let {
-            LayerControls(it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions)
+            LayerControls(it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace)
         }
         // 고른 브러시·지우개의 설정
         val brushControls = when (activeTool) {
@@ -708,6 +716,29 @@ private fun EditCanvas(
         }
     }
 }
+
+/**
+ * [wideColor]인 동안 창을 넓은 색 모드(`COLOR_MODE_WIDE_COLOR_GAMUT`)로 둔다. 화면이 넓은 색을 지원하지 않으면 안드로이드가 무시한다.
+ * 화면을 떠나거나 끄면 기본 모드로 되돌린다.
+ */
+@Composable
+private fun WindowColorMode(wideColor: Boolean) {
+    val window = LocalContext.current.findActivity()?.window
+    DisposableEffect(window, wideColor) {
+        if (window != null && wideColor) window.colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+        onDispose {
+            if (window != null && wideColor) window.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+        }
+    }
+}
+
+/** 이 화면을 띄운 Activity. Compose의 Context는 감싼 것일 수 있어 안쪽으로 찾아 들어간다. */
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
 
 /** 바쁨이 이만큼(밀리초) 이어지면 처리 중 막대를 보인다 */
 private const val BUSY_INDICATOR_DELAY_MILLIS = 200L

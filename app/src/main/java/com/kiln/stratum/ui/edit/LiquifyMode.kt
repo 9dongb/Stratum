@@ -52,6 +52,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
@@ -67,6 +68,7 @@ import kotlin.math.roundToInt
  * @property canUndo 작업 모드 안에서 한 획 되돌릴 수 있는지
  * @property changed 움직인 곳이 있는지(적용·모두 되돌리기를 켠다)
  * @property busy 적용하는 중이다
+ * @property colorSpace 문서 색 공간(미리 보기를 그 꼬리표로 보인다)
  */
 data class LiquifyState(
     val preview: PreviewImage,
@@ -76,7 +78,8 @@ data class LiquifyState(
     val strength: Float,
     val canUndo: Boolean,
     val changed: Boolean,
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
 )
 
 /** 픽셀 유동화 작업 모드가 보내는 일 */
@@ -211,7 +214,9 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
  */
 @Composable
 private fun LiquifyCanvas(state: LiquifyState, viewState: CanvasViewState, actions: LiquifyActions, showSize: Boolean, modifier: Modifier) {
-    val ready = remember(state.preview, state.documentSize) { EditorState.Ready(state.preview, state.documentSize) }
+    val ready = remember(state.preview, state.documentSize, state.colorSpace) {
+        EditorState.Ready(state.preview, state.documentSize, colorSpace = state.colorSpace)
+    }
     Box(
         modifier
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))

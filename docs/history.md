@@ -14,6 +14,26 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 넓은 색(Display P3) 사진의 색 유지(사용자 피드백 C1)
+
+- 요청: "내보내기 저장 시, 원본 사진과 색감이 달라지던데 원인이 무엇인가요? 동일한 색감을 유지할 수 있나요?" (사용자 피드백 세 가지 중 첫째)
+- 의도: 말하지 않음
+- 사용자 결정(추천 수용): "HDR·넓은 색 모두 유지". 이번 커밋은 넓은 색이고, HDR(게인맵)은 C2~C4에서 한다.
+- 원인(사용자에게 설명함): 사진을 열 때 8비트 sRGB로 바꾸며 넓은 색 영역의 진한 색을 깎고, HDR 사진의 밝기 정보(게인맵)를 버렸다.
+- 커밋:
+  - "넓은 색(Display P3) 사진을 P3 문서로 열어 진한 색을 지키고, 화면·내보내기·저장에 P3 색 정보를 씀"
+- 바꾼 것:
+  - 엔진: `DocumentColorSpace`(새, sRGB·Display P3)와 `Document.colorSpace`. `DocumentColors`(새, platform): 넓은 색 판단(원색 넓이), 화면용 P3 꼬리표(`forScreen`, 하드웨어 비트맵은 감싸기), 압축 전 꼬리표(`tagForEncoding`), sRGB 색 → P3 값(`paintColor`).
+  - `PhotoImporter`: 넓은 색 사진은 P3로 풀고 타일 값은 P3 그대로(꼬리표만 sRGB). `ImageExporter`: 다 그린 뒤 P3 꼬리표를 붙여 압축(JPEG·PNG·WebP). `PaintStroke`·`AddTextLayer`·`LayerPreviewCache`(끄는 동안의 획): sRGB로 고른 색을 P3 값으로 칠한다.
+  - 저장: 목차의 문서 덧붙임(꼬리표 1)에 색 공간(`ProjectManifestCodec`·`ProjectFolder`). 홈 작은 그림도 P3 색 정보(`ProjectLibrary`).
+  - 앱: `EditorState.Ready.colorSpace`·`LiquifyState.colorSpace`. 캔버스(`CanvasImage`)와 레이어 작은 그림이 그릴 때만 P3 꼬리표로 감싼다. 넓은 색 문서를 여는 동안 창을 넓은 색 모드로 둔다(`EditScreen`의 `WindowColorMode`).
+  - 테스트: 단위 테스트 1개(`ProjectManifestTest` 색 공간 저장), 에뮬레이터 `WideColorTest` 9개(P3 사진은 값 그대로 P3 문서, Adobe RGB는 P3로 바꿈, sRGB 사진은 sRGB, 내보낸 PNG·JPEG·WebP의 P3 색 정보와 값, 브러시 색, 끄는 동안의 미리 보기, 저장·불러오기, 화면 꼬리표), `WideColorScreenTest` 1개(창 넓은 색 모드 켜고 끄기)
+- 정한 것(Claude 판단, progress.md 결정 기록 '넓은 색'과 고친 '사진 불러오기')
+- 확인한 것:
+  - 빌드와 단위 테스트, 에뮬레이터(Pixel_Fold)에서 넓은 색 테스트와 들여오기·내보내기·저장·브러시·글자 테스트 42개가 통과했다.
+  - 처음 돌렸을 때 16비트 PNG 테스트가 깨졌다: 안드로이드의 '넓은 색 영역' 판정(`isWideGamut`)은 값의 범위만 넓은 extended sRGB도 참이라 P3로 열렸다. 원색 넓이로 판단하게 고쳤다(기술 주의점).
+  - 에뮬레이터 화면은 넓은 색이 아니라 진한 색이 보이는지는 폴드8에서 본다.
+
 ## 2026-10-18 · 레이어 길게 누르기 메뉴: 복제·병합·삭제(사용자 피드백 B)
 
 - 요청: "레이어에서 기존 레이어 복제, 삭제, 병합이 가능했으면 좋겠습니다. (레이어를 꾹 누르면 옵션이 보여지도록)" (사용자 피드백 세 가지 중 둘째)
