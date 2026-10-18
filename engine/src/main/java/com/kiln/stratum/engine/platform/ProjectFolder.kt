@@ -41,6 +41,7 @@ class LoadedProject(val document: Document, val createdMillis: Long)
  * - project.bin: 목차(ProjectManifest)
  * - tiles/: 타일 파일. 타일 객체마다 하나이고, 같은 객체를 여러 자리가 함께 쓰면 한 번만 쓴다.
  * - thumbnail.webp: 홈 목록용 작은 그림(앱이 그려서 넘긴다)
+ * - name.txt: 프로젝트 이름(UTF-8 글자). 없으면 이름이 없는 것('제목 없음')이다. 목차와 따로 두어 이름만 바꿀 때 목차를 다시 쓰지 않는다.
  *
  * - 타일은 한 번 만들면 바뀌지 않으므로, 이 폴더에 이미 쓴 타일 객체는 다시 쓰지 않는다. 그래서 바뀐 타일만 새로 쓴다.
  * - 한 가지 색 타일(새 캔버스)은 파일 없이 색만 적는다.
@@ -63,6 +64,10 @@ class ProjectFolder(val directory: File) {
     /** 홈 목록용 작은 그림 파일 */
     val thumbnailFile: File
         get() = File(directory, THUMBNAIL)
+
+    /** 프로젝트 이름 파일 */
+    val nameFile: File
+        get() = File(directory, NAME)
 
     /**
      * [document]를 저장한다. 바뀐 타일만 새로 쓰고, 목차를 한 번에 바꾼 뒤 더 쓰지 않는 타일 파일을 지운다.
@@ -193,6 +198,15 @@ class ProjectFolder(val directory: File) {
         }
     }
 
+    /**
+     * 프로젝트 이름 [name]을 쓴다(빈 글자는 이름이 없는 것). 폴더가 아직 없으면(첫 저장 전) 만든다.
+     * 임시 파일에 다 쓴 뒤 이름을 바꿔 한 번에 바꾼다.
+     */
+    fun writeName(name: String) {
+        directory.mkdirs()
+        writeAtomically(nameFile) { it.write(name.toByteArray(Charsets.UTF_8)) }
+    }
+
     /** 폴더째 지운다 */
     fun delete() {
         directory.deleteRecursively()
@@ -232,9 +246,35 @@ class ProjectFolder(val directory: File) {
     companion object {
         const val MANIFEST = "project.bin"
         const val THUMBNAIL = "thumbnail.webp"
+        const val NAME = "name.txt"
         private const val TILES = "tiles"
         private const val TILE_EXTENSION = ".tile"
         private const val THUMBNAIL_QUALITY = 80
+
+        /** 이름 파일에서 읽는 가장 긴 글자 수. 망가진 큰 파일을 다 읽지 않게 한다(앱이 쓰는 이름은 이보다 짧다). */
+        private const val MAX_NAME_BYTES = 1024
+
+        /** [directory] 프로젝트의 이름. 이름 파일이 없거나 읽을 수 없으면 null(이름이 없는 것). */
+        fun readName(directory: File): String? =
+            try {
+                val file = File(directory, NAME)
+                if (!file.isFile) {
+                    null
+                } else {
+                    FileInputStream(file).use { input ->
+                        val bytes = ByteArray(MAX_NAME_BYTES)
+                        var read = 0
+                        while (read < bytes.size) {
+                            val count = input.read(bytes, read, bytes.size - read)
+                            if (count < 0) break
+                            read += count
+                        }
+                        String(bytes, 0, read, Charsets.UTF_8)
+                    }
+                }
+            } catch (e: IOException) {
+                null
+            }
 
         /** [directory] 프로젝트의 머리말. 목차가 없거나 읽을 수 없으면 null(망가졌거나 저장하던 중). */
         fun readHeader(directory: File): ProjectHeader? =

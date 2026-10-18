@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
@@ -9,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectLibrary
 import java.io.File
@@ -60,11 +62,19 @@ class EditorProjectTest {
         withTimeout(30_000) { library.projects.first { list -> list.any { it.id == id } } }.first { it.id == id }
     }
 
-    private fun newCanvas(width: Int, height: Int): EditorViewModel {
+    private fun newCanvas(width: Int, height: Int, name: String = ""): EditorViewModel {
         val viewModel = closeAfter(EditorViewModel(context))
-        onMain { viewModel.newCanvas(width, height, CanvasFill.Solid(Color.WHITE)) }
+        onMain { viewModel.newCanvas(width, height, CanvasFill.Solid(Color.WHITE), name) }
         awaitReady(viewModel, width, height)
         return viewModel
+    }
+
+    /** [viewModel]의 프로젝트를 닫고 저장이 끝난 뒤 목록의 그 프로젝트 */
+    private fun closeAndAwait(viewModel: EditorViewModel): ProjectInfo {
+        val id = checkNotNull(viewModel.projectId)
+        onMain { viewModel.close() }
+        runBlocking { library.awaitSaves() }
+        return awaitProject(id)
     }
 
     @Test
@@ -154,5 +164,58 @@ class EditorProjectTest {
 
         assertTrue(library.projects.value.none { it.id == id })
         assertFalse(File(projectsRoot, id).exists())
+    }
+
+    @Test
+    fun newCanvas_savesItsName_cleaned() {
+        val info = closeAndAwait(newCanvas(320, 240, name = "  My \n canvas  "))
+
+        assertEquals("My canvas", info.name)
+    }
+
+    @Test
+    fun photo_isNamedAfterItsFile() {
+        // 사진 선택기처럼 표시 이름을 알려 주는 content:// 주소(앱의 공유 파일 공급자)
+        val uri = ExportStorage.writeShareFile(context, "Sunset_beach.png") { out ->
+            Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val viewModel = closeAfter(EditorViewModel(context))
+        onMain { viewModel.openPhoto(uri) }
+        awaitReady(viewModel, 64, 48)
+
+        assertEquals("Sunset_beach", closeAndAwait(viewModel).name)
+    }
+
+    @Test
+    fun rename_changesTheName_butNotTheOrder() {
+        val first = closeAndAwait(newCanvas(320, 240, name = "First"))
+        val second = closeAndAwait(newCanvas(320, 240, name = "Second"))
+        assertEquals(listOf(second.id, first.id), library.projects.value.map { it.id })
+
+        onMain { closeAfter(EditorViewModel(context)).renameProject(first.id, "Renamed") }
+        val renamed = runBlocking {
+            withTimeout(30_000) { library.projects.first { list -> list.any { it.id == first.id && it.name == "Renamed" } } }
+        }
+
+        assertEquals(listOf(second.id, first.id), renamed.map { it.id })
+        assertEquals(first.modifiedMillis, renamed.first { it.id == first.id }.modifiedMillis)
+    }
+
+    @Test
+    fun deleteProjects_removesTheChosenOnes_butNotTheOpenOne() {
+        val a = closeAndAwait(newCanvas(320, 240, name = "A"))
+        val b = closeAndAwait(newCanvas(320, 240, name = "B"))
+        val open = newCanvas(320, 240, name = "Open")
+        val openId = checkNotNull(open.projectId)
+        runBlocking { library.awaitSaves() }
+        awaitProject(openId)
+
+        onMain { open.deleteProjects(listOf(a.id, b.id, openId)) }
+        val left = runBlocking { withTimeout(30_000) { library.projects.first { list -> list.none { it.id == a.id || it.id == b.id } } } }
+
+        assertEquals(listOf(openId), left.map { it.id })
+        assertFalse(File(projectsRoot, a.id).exists())
+        assertFalse(File(projectsRoot, b.id).exists())
     }
 }

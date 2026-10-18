@@ -188,4 +188,19 @@ class ProjectFolderTest {
         val thumbnail = checkNotNull(BitmapFactory.decodeFile(folder.thumbnailFile.path))
         assertEquals(PixelSize(64, 48), PixelSize(thumbnail.width, thumbnail.height))
     }
+
+    @Test
+    fun name_roundTrips_andAMissingNameIsNull() {
+        assertEquals(null, ProjectFolder.readName(directory))
+        val folder = ProjectFolder(directory)
+
+        // 첫 저장 전(폴더가 없을 때)에도 쓸 수 있다
+        folder.writeName("바다 노을")
+        assertEquals("바다 노을", ProjectFolder.readName(directory))
+        folder.save(photo(40, 30) { _, _ -> Color.BLUE }, createdMillis = 1, modifiedMillis = 2)
+        folder.writeName("")
+        assertEquals("", ProjectFolder.readName(directory))
+        // 이름을 바꿔도 목차(고친 시각)는 그대로다
+        assertEquals(ProjectHeader(40, 30, 1, 2), ProjectFolder.readHeader(directory))
+    }
 }

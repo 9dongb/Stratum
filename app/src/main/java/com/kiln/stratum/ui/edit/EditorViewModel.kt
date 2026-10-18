@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
@@ -78,6 +79,7 @@ import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
 import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectLibrary
+import com.kiln.stratum.project.ProjectNames
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.RecentColors
@@ -619,7 +621,8 @@ class EditorViewModel internal constructor(
     /** 축소본을 그릴 GPU 메모리가 없을 때 보여 줄 까닭. 사진을 열었는지, 새 캔버스를 만들었는지에 따라 다르다. */
     private var memoryFailure = EditorFailure.PHOTO_NOT_ENOUGH_MEMORY
 
-    private class PendingPhoto(val source: ImageDecoder.Source, val plan: ImportPlan)
+    /** [name]은 새 프로젝트 이름(사진 파일 이름에서 확장자를 뺀 것, 모르면 빈 글자) */
+    private class PendingPhoto(val source: ImageDecoder.Source, val plan: ImportPlan, val name: String)
 
     init {
         library.refresh()
@@ -651,6 +654,8 @@ class EditorViewModel internal constructor(
             // 앞 문서를 저장하던 것이 끝나야 메모리가 겹치지 않는다
             library.awaitSaves()
             val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+            // 새 프로젝트 이름은 사진 파일 이름(확장자 뺌)이다(결정 기록 '프로젝트 이름')
+            val name = withContext(Dispatchers.IO) { ProjectNames.fromFileName(displayNameOf(uri)) }
             val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
             if (info == null) {
                 _state.value = EditorState.Failed(EditorFailure.PHOTO_UNREADABLE)
@@ -665,14 +670,14 @@ class EditorViewModel internal constructor(
             when {
                 plan.cannotOpen -> _state.value = EditorState.Failed(EditorFailure.PHOTO_NOT_ENOUGH_MEMORY)
                 plan.needsChoice -> {
-                    pendingPhoto = PendingPhoto(source, plan)
+                    pendingPhoto = PendingPhoto(source, plan, name)
                     _state.value = EditorState.AskSize(
                         originalMegapixels = plan.original.megapixels,
                         originalAllowed = plan.originalFits,
                         reducedMegapixels = checkNotNull(plan.reducedSize).megapixels
                     )
                 }
-                else -> importAndShow(source, sampleSize = 1)
+                else -> importAndShow(source, sampleSize = 1, name = name)
             }
         }
     }
@@ -687,15 +692,15 @@ class EditorViewModel internal constructor(
         openJob = viewModelScope.launch {
             previous?.join()
             _state.value = EditorState.Opening
-            importAndShow(photo.source, sampleSize)
+            importAndShow(photo.source, sampleSize, photo.name)
         }
     }
 
     /**
-     * [width]×[height] 빈 새 캔버스를 [fill]로 채워 연다. 열려 있던 문서는 닫는다.
+     * [width]×[height] 빈 새 캔버스를 [fill]로 채워 연다. 열려 있던 문서는 닫는다. [name]은 새 프로젝트 이름이다(빈 글자는 '제목 없음').
      * 크기는 CanvasLimits 안이어야 한다(새 캔버스 창이 검사하고 넘긴다).
      */
-    fun newCanvas(width: Int, height: Int, fill: CanvasFill) {
+    fun newCanvas(width: Int, height: Int, fill: CanvasFill, name: String = "") {
         previewJob?.cancel()
         detailJob?.cancel()
         pendingPhoto = null
@@ -717,7 +722,7 @@ class EditorViewModel internal constructor(
                 return@launch
             }
             history = newHistory(document)
-            startProject()
+            startProject(name)
             showPreview(document)
         }
     }
@@ -1550,21 +1555,47 @@ class EditorViewModel internal constructor(
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
-    fun deleteProject(id: String) {
-        if (id == project?.id || !ProjectLibrary.isValidId(id)) return
-        library.delete(id)
+    fun deleteProject(id: String) = deleteProjects(listOf(id))
+
+    /** 홈의 '선택'으로 고른 [ids] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트와 잘못된 번호는 건너뛴다. */
+    fun deleteProjects(ids: Collection<String>) {
+        val targets = ids.filter { it != project?.id && ProjectLibrary.isValidId(it) }
+        if (targets.isNotEmpty()) library.delete(targets)
+    }
+
+    /** 홈에서 [id] 프로젝트의 이름을 [name]으로 바꾼다(다듬어 쓰고, 비면 '제목 없음'). */
+    fun renameProject(id: String, name: String) {
+        if (!ProjectLibrary.isValidId(id)) return
+        library.rename(id, ProjectNames.clean(name))
     }
 
     /** 앱이 화면에서 사라질 때(onStop) 부른다. 기다리지 않고 지금 문서를 저장한다. */
     fun flush() = saveNow()
 
-    /** 지금 문서로 새 프로젝트를 시작하고 바로 저장한다. 사진을 열거나 새 캔버스를 만든 직후에 부른다. */
-    private fun startProject() {
+    /**
+     * 지금 문서로 새 프로젝트를 시작하고 바로 저장한다. 사진을 열거나 새 캔버스를 만든 직후에 부른다.
+     * [name]은 프로젝트 이름(빈 글자는 '제목 없음')이고 첫 저장 때 함께 쓴다.
+     */
+    private fun startProject(name: String) {
         val id = library.newId()
-        project = OpenProject(id, System.currentTimeMillis())
+        val created = System.currentTimeMillis()
+        project = OpenProject(id, created)
         savedState[KEY_PROJECT] = id
-        saveNow()
+        autosaveJob?.cancel()
+        autosaveJob = null
+        history?.document?.let { library.save(id, created, it, ProjectNames.clean(name)) }
     }
+
+    /** 사진 선택기가 준 [uri]의 표시 이름(파일 이름). 알 수 없으면 null. */
+    private fun displayNameOf(uri: Uri): String? =
+        try {
+            getApplication<Application>().contentResolver
+                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        } catch (e: RuntimeException) {
+            // 사진 선택기·공급자가 이름을 주지 않으면 이름 없이 연다
+            null
+        }
 
     /** 편집이 [AUTOSAVE_DELAY_MILLIS] 동안 멈추면 저장한다. 그사이 또 편집하면 다시 기다린다. */
     private fun scheduleSave() {
@@ -1823,7 +1854,7 @@ class EditorViewModel internal constructor(
         _state.value = EditorState.Empty
     }
 
-    private suspend fun importAndShow(source: ImageDecoder.Source, sampleSize: Int) {
+    private suspend fun importAndShow(source: ImageDecoder.Source, sampleSize: Int, name: String) {
         val layerName = getApplication<Application>().getString(R.string.layer_background)
         val result = withContext(Dispatchers.Default) {
             PhotoImporter.import(source, layerName, sampleSize) { ensureActive() }
@@ -1837,7 +1868,7 @@ class EditorViewModel internal constructor(
             )
             is ImportResult.Success -> {
                 history = newHistory(result.document)
-                startProject()
+                startProject(name)
                 showPreview(result.document)
             }
         }

@@ -30,13 +30,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** 홈 목록에 보일 프로젝트 하나. [thumbnail]은 없을 수도 있다(아직 그리지 못함). */
+/**
+ * 홈 목록에 보일 프로젝트 하나. [thumbnail]은 없을 수도 있다(아직 그리지 못함).
+ * [name]이 비었으면 이름이 없는 것이고 화면에는 '제목 없음'으로 보인다(결정 기록 '프로젝트 이름').
+ */
 data class ProjectInfo(
     val id: String,
     val width: Int,
     val height: Int,
     val modifiedMillis: Long,
-    val thumbnail: File
+    val thumbnail: File,
+    val name: String = ""
 )
 
 /**
@@ -66,6 +70,15 @@ class ProjectLibrary private constructor(context: Context) {
     /** 저장하고 있거나 부탁받은 프로젝트. 목록을 정리할 때 아직 목차가 없는 새 폴더를 지우지 않게 한다. */
     private val active = HashSet<String>()
 
+    /**
+     * 새 프로젝트의 이름. 첫 저장을 부탁할 때 받아 두고, 실제로 저장하는 순간(목차를 쓰기 전) 이름 파일에 쓴다.
+     * 앞 저장이 더 나중 부탁에 밀려 건너뛰어도 이름은 그 나중 저장이 쓴다.
+     */
+    private val pendingNames = HashMap<String, String>()
+
+    /** 목록 다시 읽기를 한 번에 하나만(늦게 끝난 앞 읽기가 새 목록을 덮지 않게) */
+    private val refreshMutex = Mutex()
+
     /** 아직 끝나지 않은 저장 작업 */
     private val pending = HashSet<Job>()
 
@@ -84,12 +97,14 @@ class ProjectLibrary private constructor(context: Context) {
 
     /**
      * [id] 프로젝트에 [document]를 저장한다(백그라운드). [createdMillis]는 처음 만든 시각이다.
+     * [name]이 있으면(새 프로젝트의 첫 저장) 그 이름도 쓴다. 빈 글자는 이름이 없는 것이다.
      * 저장한 뒤 홈 목록용 작은 그림을 다시 그리고 목록을 고친다.
      */
-    fun save(id: String, createdMillis: Long, document: Document): Job {
+    fun save(id: String, createdMillis: Long, document: Document, name: String? = null): Job {
         synchronized(this) {
             requested[id] = document
             active += id
+            if (name != null) pendingNames[id] = name
         }
         // 끝나기 전에 [pending]에 넣어 두려고 바로 시작하지 않고 만든 뒤 시작한다
         val job = scope.launch(start = CoroutineStart.LAZY) {
@@ -141,13 +156,44 @@ class ProjectLibrary private constructor(context: Context) {
     }
 
     /** [id] 프로젝트를 지운다. */
-    fun delete(id: String): Job =
+    fun delete(id: String): Job = delete(listOf(id))
+
+    /**
+     * [ids] 프로젝트들을 지운다(홈의 '선택'). 아직 하지 않은 저장 부탁도 지워, 기다리던 저장이 지운 폴더를 다시 만들지 않게 한다.
+     */
+    fun delete(ids: Collection<String>): Job =
         scope.launch {
             mutex.withLock {
-                folder(id).delete()
-                synchronized(this@ProjectLibrary) {
-                    folders.remove(id)
-                    saved.remove(id)
+                for (id in ids) {
+                    synchronized(this@ProjectLibrary) {
+                        requested.remove(id)
+                        active -= id
+                        pendingNames.remove(id)
+                    }
+                    folder(id).delete()
+                    synchronized(this@ProjectLibrary) {
+                        folders.remove(id)
+                        saved.remove(id)
+                    }
+                }
+            }
+            refreshNow()
+        }
+
+    /**
+     * [id] 프로젝트의 이름을 [name]으로 바꾼다(빈 글자는 이름 없음). 목차는 다시 쓰지 않아 고친 시각(목록 순서)은 그대로다.
+     * 목차가 없는(지워졌거나 아직 저장하지 않은) 프로젝트는 그대로 둔다.
+     */
+    fun rename(id: String, name: String): Job =
+        scope.launch {
+            mutex.withLock {
+                val folder = folder(id)
+                if (folder.manifestFile.exists()) {
+                    try {
+                        folder.writeName(name)
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Could not rename project $id", e)
+                    }
                 }
             }
             refreshNow()
@@ -163,6 +209,8 @@ class ProjectLibrary private constructor(context: Context) {
     private suspend fun write(id: String, createdMillis: Long, document: Document) {
         val folder = folder(id)
         try {
+            // 새 프로젝트의 이름은 목차보다 먼저 써서, 목록에 처음 보일 때부터 이름이 있다
+            synchronized(this) { pendingNames.remove(id) }?.let { folder.writeName(it) }
             folder.save(document, createdMillis, System.currentTimeMillis())
             synchronized(this) { saved[id] = document }
         } catch (e: IOException) {
@@ -212,7 +260,7 @@ class ProjectLibrary private constructor(context: Context) {
      * 프로젝트 폴더를 읽어 목록을 고친다. 목차가 없는 폴더는 처음 저장하다 꺼진 것이라,
      * 지금 저장하는 중이 아니면 지운다. 망가져서 머리말을 읽을 수 없는 것은 목록에서 뺀다.
      */
-    private suspend fun refreshNow() {
+    private suspend fun refreshNow() = refreshMutex.withLock {
         val directories = withContext(Dispatchers.IO) { root.listFiles()?.filter { it.isDirectory && isValidId(it.name) } }
             ?: emptyList()
         val list = ArrayList<ProjectInfo>()
@@ -230,7 +278,8 @@ class ProjectLibrary private constructor(context: Context) {
                 width = header.width,
                 height = header.height,
                 modifiedMillis = header.modifiedMillis,
-                thumbnail = File(directory, ProjectFolder.THUMBNAIL)
+                thumbnail = File(directory, ProjectFolder.THUMBNAIL),
+                name = withContext(Dispatchers.IO) { ProjectFolder.readName(directory) }?.let(ProjectNames::clean).orEmpty()
             )
         }
         _projects.value = list.sortedByDescending { it.modifiedMillis }
