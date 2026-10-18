@@ -184,6 +184,8 @@ class ColorPaletteTest {
         val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        // 메인 화면은 띠의 색 칸을 눌러 연 옵션 창에 지금 색이 있다
+        composeRule.onNodeWithTag(EditScreenTags.strip("color")).performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
 

@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CanvasViewTest {
@@ -116,5 +117,25 @@ class CanvasViewTest {
 
         assertEquals(free, canvasViewFromSaved(free.toSaved()))
         assertEquals(CanvasView.Fit, canvasViewFromSaved(CanvasView.Fit.toSaved()))
+    }
+
+    @Test
+    fun fitInside_fitsTheDocumentRightOfTheStrip() {
+        // 1000×500 영역, 왼쪽 100px 띠. 1000×1000 문서는 남은 900×500에 맞춰 배율 0.5다.
+        val view = fitInside(PixelSize(1000, 500), PixelSize(1000, 1000), insetStart = 100)
+        assertEquals(0.5, view.scale, 1e-9)
+        val transform = view.transform(PixelSize(1000, 500), PixelSize(1000, 1000))
+        // 문서 가운데가 남은 자리(100..1000)의 가운데(550)에 온다
+        assertEquals(550.0, transform.toScreenX(500.0), 1e-6)
+        assertEquals(250.0, transform.toScreenY(500.0), 1e-6)
+        // 문서 왼쪽 끝이 띠 오른쪽에 있다
+        assertTrue(transform.toScreenX(0.0) >= 100.0 - 1e-6)
+    }
+
+    @Test
+    fun fitInside_withoutRoom_fallsBackToTheFitScale() {
+        val view = fitInside(PixelSize(100, 100), PixelSize(200, 200), insetStart = 100)
+        assertEquals(0.5, view.scale, 1e-9)
+        assertEquals(100.0, view.centerX, 1e-9)
     }
 }

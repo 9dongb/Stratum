@@ -104,10 +104,10 @@ class EditScreenBackTest {
     fun main_railTool_closesFirst() {
         show(MAIN_LANDSCAPE)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertExists()
 
         back()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(0, homeBacks) }
 
         back()
@@ -150,10 +150,10 @@ class EditScreenBackTest {
 
         back()
         composeRule.onNodeWithTag(EditScreenTags.EXPORT_SAVE).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertExists()
 
         back()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
         back()
         composeRule.runOnIdle { assertEquals(1, homeBacks) }
     }

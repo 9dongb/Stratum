@@ -114,11 +114,19 @@ private fun ToneRangeRow(range: ToneRange, onRange: (ToneRange) -> Unit) {
     }
 }
 
-private fun toneRangeLabel(range: ToneRange): Int =
+internal fun toneRangeLabel(range: ToneRange): Int =
     when (range) {
         ToneRange.SHADOWS -> R.string.tone_shadows
         ToneRange.MIDTONES -> R.string.tone_midtones
         ToneRange.HIGHLIGHTS -> R.string.tone_highlights
+    }
+
+/** 범위의 아이콘(메인 화면 띠의 범위 칸): 어두운 영역은 밝기 낮음, 중간은 반, 밝은 영역은 밝기 높음(Material Icons) */
+internal fun toneRangeIcon(range: ToneRange): Int =
+    when (range) {
+        ToneRange.SHADOWS -> R.drawable.ic_brightness_low
+        ToneRange.MIDTONES -> R.drawable.ic_brightness_medium
+        ToneRange.HIGHLIGHTS -> R.drawable.ic_brightness_high
     }
 
 /**

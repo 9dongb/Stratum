@@ -50,6 +50,28 @@ fun fitScale(area: PixelSize, document: PixelSize): Double =
     minOf(area.width.toDouble() / document.width, area.height.toDouble() / document.height)
 
 /**
+ * [area]에서 왼쪽 [insetStart]·오른쪽 [insetEnd]·위 [insetTop]·아래 [insetBottom](픽셀)을 뺀 자리에 [document]를 비율 그대로 맞춘 보기.
+ * 메인 화면에서 자르기를 시작할 때 테두리 손잡이가 왼쪽 도구 옵션 띠에 가리지 않게 띠를 뺀 자리에 맞춘다(결정 기록 '편집 화면 도구 배치').
+ * 남는 자리가 없으면 그냥 맞춘 보기와 같은 배율·가운데다.
+ */
+fun fitInside(area: PixelSize, document: PixelSize, insetStart: Int, insetEnd: Int = 0, insetTop: Int = 0, insetBottom: Int = 0): CanvasView.Free {
+    val width = area.width - insetStart - insetEnd
+    val height = area.height - insetTop - insetBottom
+    if (width <= 0 || height <= 0) {
+        return CanvasView.Free(fitScale(area, document), document.width / 2.0, document.height / 2.0)
+    }
+    val scale = minOf(width.toDouble() / document.width, height.toDouble() / document.height)
+    // 문서 가운데가 남은 자리의 가운데에 오도록, 캔버스 영역 가운데에 오는 문서 위치를 정한다
+    val centerX = document.width / 2.0 - (insetStart - insetEnd) / (2 * scale)
+    val centerY = document.height / 2.0 - (insetTop - insetBottom) / (2 * scale)
+    return CanvasView.Free(
+        scale = scale,
+        centerX = centerX.coerceIn(0.0, document.width.toDouble()),
+        centerY = centerY.coerceIn(0.0, document.height.toDouble())
+    )
+}
+
+/**
  * 이 보기로 그릴 때의 변환.
  * 맞춤은 [fitRect]의 정수 사각형을 그대로 써서, 지금까지의 표시(테두리·1px 최소)와 똑같다.
  */

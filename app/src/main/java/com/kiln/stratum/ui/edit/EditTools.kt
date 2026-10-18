@@ -151,7 +151,7 @@ fun ToolIcon(tool: EditTool, contentDescription: String?) {
 
 /** 하위 도구가 있다는 작은 삼각형. 아이콘과 같은 색(비활성이면 흐린 색)으로 그린다. */
 @Composable
-private fun SubToolMark(modifier: Modifier = Modifier) {
+internal fun SubToolMark(modifier: Modifier = Modifier) {
     val color = LocalContentColor.current
     Canvas(modifier.size(6.dp)) {
         val triangle = Path().apply {

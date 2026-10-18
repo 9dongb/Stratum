@@ -275,15 +275,36 @@ class SelectionToolTest {
     }
 
     @Test
-    fun mainPortrait_optionsInTheBottomPanel_avoidTheHorizontalHinge() {
+    fun mainPortrait_stripChangesTheSettings_andAvoidsTheHorizontalHinge() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
-        val options = composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_OPTIONS) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
-        options.assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertDoesNotExist()
 
-        // 옵션 한가운데를 가로로 지나는 힌지
-        val bounds = options.fetchSemanticsNode().layoutBoundsInWindow()
-        val y = bounds.center.y.roundToInt()
+        // 합치는 방법: 칸을 눌러 연 목록에서 고르면 창이 닫힌다
+        composeRule.onNodeWithTag(EditScreenTags.strip("mode")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.ADD)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
+        composeRule.runOnIdle {
+            assertEquals(SelectionMode.ADD, options.mode)
+            assertEquals(fractionToFeather(0.2f), options.feather, 0f)
+        }
+
+        // 자동 선택은 허용치 칸이고, 그 창에 '이어진 곳만'이 있다
+        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_WAND)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_CONTIGUOUS).performClick()
+        composeRule.runOnIdle {
+            assertEquals(128, options.tolerance)
+            assertEquals(false, options.contiguous)
+        }
+
+        // 합치는 방법 칸 한가운데를 가로로 지나는 힌지
+        val y = composeRule.onNodeWithTag(EditScreenTags.strip("mode")).fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
         val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
@@ -291,10 +312,23 @@ class SelectionToolTest {
     }
 
     @Test
-    fun expanded_optionsInTheSidePanel() {
+    fun expanded_stripActions_needASelection_andAreSent() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_OPTIONS) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
-            .assertIsDisplayed()
+        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
+            .assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_INVERT).assertIsNotEnabled()
+    }
+
+    @Test
+    fun expanded_withASelection_stripActionsAreSent() {
+        show(930, 700, outline = square)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+
+        for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_NONE)) {
+            composeRule.onNodeWithTag(tag).performScrollTo().performClick()
+        }
+
+        composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "none"), actions.calls) }
     }
 }

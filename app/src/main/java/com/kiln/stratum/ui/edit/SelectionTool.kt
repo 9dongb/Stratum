@@ -158,14 +158,7 @@ private fun SelectionModeRow(mode: SelectionMode, onMode: (SelectionMode) -> Uni
                 modifier = Modifier.testTag(EditScreenTags.selectionMode(entry))
             ) {
                 Text(
-                    stringResource(
-                        when (entry) {
-                            SelectionMode.REPLACE -> R.string.selection_mode_replace
-                            SelectionMode.ADD -> R.string.selection_mode_add
-                            SelectionMode.SUBTRACT -> R.string.selection_mode_subtract
-                            SelectionMode.INTERSECT -> R.string.selection_mode_intersect
-                        }
-                    ),
+                    stringResource(selectionModeLabel(entry)),
                     modifier = Modifier.width(IntrinsicSize.Max),
                     maxLines = 1,
                     softWrap = false
@@ -175,9 +168,18 @@ private fun SelectionModeRow(mode: SelectionMode, onMode: (SelectionMode) -> Uni
     }
 }
 
+/** 합치는 방법의 이름 */
+internal fun selectionModeLabel(mode: SelectionMode): Int =
+    when (mode) {
+        SelectionMode.REPLACE -> R.string.selection_mode_replace
+        SelectionMode.ADD -> R.string.selection_mode_add
+        SelectionMode.SUBTRACT -> R.string.selection_mode_subtract
+        SelectionMode.INTERSECT -> R.string.selection_mode_intersect
+    }
+
 /** 자동 선택의 '이어진 곳만' 스위치 줄. 줄 전체를 누를 수 있다(48dp). */
 @Composable
-private fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {
+internal fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

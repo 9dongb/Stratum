@@ -197,18 +197,20 @@ class BrushToolsTest {
     }
 
     @Test
-    fun mainScreens_showBrushOptionsInThePanels() {
+    fun mainScreens_showBrushOptionsInTheStrip() {
+        // 메인 화면은 패널이 아니라 도구 막대 오른쪽 띠에 보인다(자세한 것은 OptionStripTest)
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.BRUSH_OPTIONS) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
+        composeRule.onNode(hasTestTag(EditScreenTags.strip("size")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
     }
 
     @Test
-    fun expanded_brushOptionsInTheSidePanel() {
+    fun expanded_eraserOptionsInTheStrip() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Eraser)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.BRUSH_OPTIONS) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
+        composeRule.onNode(hasTestTag(EditScreenTags.strip("hardness")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
     }
 }

@@ -132,20 +132,44 @@ private fun CropRatioRow(crop: CropControls) {
         modifier = Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        for (ratio in CropRatio.entries) {
-            StratumFilterChip(
-                selected = crop.frame.ratio == ratio,
-                onClick = { crop.onRatio(ratio) },
-                label = { Text(cropRatioLabel(ratio)) },
-                modifier = Modifier.testTag(EditScreenTags.cropRatio(ratio))
-            )
-        }
+        CropRatioChips(crop)
+    }
+}
+
+/**
+ * 자르기 비율 칩들(자유·원본·1:1…). 커버는 한 줄로 밀어 보고, 메인 화면 띠의 옵션 창은 접어 쌓는다([CropRatioFlow]).
+ * 누르면 [onChosen]도 부른다(옵션 창을 닫는다).
+ */
+@Composable
+private fun CropRatioChips(crop: CropControls, onChosen: () -> Unit = {}) {
+    for (ratio in CropRatio.entries) {
+        StratumFilterChip(
+            selected = crop.frame.ratio == ratio,
+            onClick = {
+                crop.onRatio(ratio)
+                onChosen()
+            },
+            label = { Text(cropRatioLabel(ratio)) },
+            modifier = Modifier.testTag(EditScreenTags.cropRatio(ratio))
+        )
+    }
+}
+
+/** 메인 화면 띠의 비율 옵션 창: 비율 칩을 좁은 폭에 접어 쌓는다 */
+@Composable
+internal fun CropRatioFlow(crop: CropControls, onChosen: () -> Unit) {
+    FlowRow(
+        modifier = Modifier.width(FlyoutSliderWidth),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        CropRatioChips(crop, onChosen)
     }
 }
 
 /** 비율 칩의 이름. 자유·원본은 말로, 나머지는 '가로:세로'로 보인다. */
 @Composable
-private fun cropRatioLabel(ratio: CropRatio): String =
+internal fun cropRatioLabel(ratio: CropRatio): String =
     when (ratio) {
         CropRatio.FREE -> stringResource(R.string.crop_ratio_free)
         CropRatio.ORIGINAL -> stringResource(R.string.crop_ratio_original)

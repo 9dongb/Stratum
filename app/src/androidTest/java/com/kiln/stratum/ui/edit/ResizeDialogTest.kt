@@ -80,6 +80,8 @@ class ResizeDialogTest {
         val tab = EditScreenTags.tabTool(EditTool.Transform)
         val onCover = composeRule.onAllNodes(hasTestTag(tab)).fetchSemanticsNodes().isNotEmpty()
         composeRule.onNodeWithTag(if (onCover) tab else EditScreenTags.railTool(EditTool.Transform)).performClick()
+        // 메인 화면은 도구 옵션 띠의 하위 도구 칸을 눌러 연 목록에서 고른다
+        if (!onCover) composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).performClick()
     }
 

@@ -10,6 +10,14 @@ object EditScreenTags {
     /** 제스처 알림(두 손가락·세 손가락 톡의 짧은 알림) */
     const val GESTURE_TOAST = "gestureToast"
 
+    /** 메인 화면의 도구 옵션 띠, 칸을 누르면 뜨는 옵션 창, 떠 있는 동안 캔버스를 덮어 누르면 닫는 바탕 */
+    const val OPTION_STRIP = "optionStrip"
+    const val OPTION_FLYOUT = "optionFlyout"
+    const val FLOATING_DISMISS = "floatingDismiss"
+
+    /** 도구 옵션 띠의 [key] 칸 */
+    fun strip(key: String): String = "strip_$key"
+
     /** 칠하는 손가락 자리의 브러시 커서(크기 원) */
     const val BRUSH_CURSOR = "brushCursor"
 

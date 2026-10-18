@@ -69,3 +69,30 @@ fun StratumIconToggleButton(
         content = content
     )
 }
+
+/**
+ * 파란 채움 아이콘 버튼(주요 동작, 모서리 8dp 사각형 40dp). 도구 옵션 띠처럼 글자 버튼이 들어가지 않는 좁은 자리의 '적용'에 쓴다.
+ * 꺼지면 바탕을 비활성 색으로 옅게 칠한다(주요 버튼과 같다).
+ */
+@Composable
+fun AccentIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val colors = StratumTheme.colors
+    IconButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = colors.accent,
+            contentColor = colors.onAccent,
+            disabledContainerColor = colors.divider,
+            disabledContentColor = colors.textDisabled
+        ),
+        shape = StratumShapes.Control,
+        content = content
+    )
+}

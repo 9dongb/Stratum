@@ -115,6 +115,39 @@ fun dialogRegion(area: Region, verticalBands: List<Span>, horizontalBands: List<
 }
 
 /**
+ * [range]에서 [bands]가 덮는 부분을 뺀 조각 중 [at]이 든 조각. [at]이 띠 위나 [range] 밖이면 [at] 뒤의 첫 조각, 그것도 없으면 마지막 조각이다.
+ * 띠가 다 덮어 남는 조각이 없으면 [range]를 그대로 돌려준다.
+ */
+fun pieceAt(range: Span, bands: List<Span>, at: Int): Span {
+    val pieces = subtract(range, bands)
+    return pieces.firstOrNull { at >= it.start && at < it.end }
+        ?: pieces.firstOrNull { it.start >= at }
+        ?: pieces.lastOrNull()
+        ?: range
+}
+
+/**
+ * 도구 옵션 띠의 칸 [anchor] 오른쪽에 붙여 띄우는 옵션 창이 들어갈 수 있는 영역(모두 창 좌표).
+ * [area](옵션 창을 띄울 영역)에서 힌지 띠를 뺀 조각 가운데, 가로로는 칸 오른쪽에서 [gap]만큼 띈 자리가 든 조각,
+ * 세로로는 칸 가운데가 든 조각이다. 그래서 옵션 창이 접히는 선을 넘지 않고 칸이 있는 쪽에 뜬다.
+ */
+fun flyoutRegion(anchor: Region, area: Region, verticalBands: List<Span>, horizontalBands: List<Span>, gap: Int): Region {
+    val columns = pieceAt(Span(area.left, area.right), verticalBands, anchor.right + gap)
+    val rows = pieceAt(Span(area.top, area.bottom), horizontalBands, (anchor.top + anchor.bottom) / 2)
+    return Region(columns.start, rows.start, columns.end, rows.end)
+}
+
+/**
+ * 크기가 [width]×[height]인 옵션 창을 칸 [anchor] 오른쪽([gap]만큼 띄움)에, 위 끝을 칸 위 끝에 맞춰 놓을 왼쪽 위 자리.
+ * [region] 밖으로 나가면 안으로 민다. 옵션 창이 [region]보다 크면 왼쪽·위 끝에 맞춘다.
+ */
+fun flyoutOffset(anchor: Region, width: Int, height: Int, region: Region, gap: Int): Pair<Int, Int> {
+    val x = (anchor.right + gap).coerceAtMost(region.right - width).coerceAtLeast(region.left)
+    val y = anchor.top.coerceAtMost(region.bottom - height).coerceAtLeast(region.top)
+    return x to y
+}
+
+/**
  * [range]에서 [bands]가 덮는 부분을 빼고 남은 구간 중 가장 긴 것. 길이가 같으면 앞의 것이다.
  * 띠가 다 덮어 남는 구간이 없으면 [range]를 그대로 돌려준다.
  */

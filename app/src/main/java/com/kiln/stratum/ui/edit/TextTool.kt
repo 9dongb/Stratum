@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,18 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.QuietButton
-import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAwareDialog
@@ -64,9 +56,6 @@ class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit, val 
  */
 @Composable
 fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
-    val style = controls.style
-    val label = stringResource(R.string.brush_size)
-    val shown = stringResource(R.string.brush_size_value, style.size.roundToInt())
     // 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.TEXT_OPTIONS), fillHeight = false) {
         Text(
@@ -77,40 +66,22 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall
         )
         controls.colors?.let { ColorRow(it) }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                modifier = Modifier.width(88.dp),
-                color = StratumTheme.colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            StratumSlider(
-                value = textSizeToFraction(style.size),
-                onValueChange = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
-                onValueChangeFinished = {},
-                valueRange = 0f..1f,
-                enabled = true,
-                centered = false,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag(EditScreenTags.TEXT_SIZE)
-                    .semantics {
-                        contentDescription = label
-                        stateDescription = shown
-                    }
-            )
-            Text(
-                text = shown,
-                modifier = Modifier.width(64.dp),
-                color = StratumTheme.colors.textPrimary,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
+        TextSizeSlider(controls)
     }
+}
+
+/** 글자 크기 슬라이더(8~2000px, 로그 눈금). [stacked]면 이름·값 줄 아래에 슬라이더를 놓는다(도구 옵션 띠의 옵션 창). */
+@Composable
+internal fun TextSizeSlider(controls: TextControls, stacked: Boolean = false) {
+    val style = controls.style
+    OptionSlider(
+        label = stringResource(R.string.brush_size),
+        shown = stringResource(R.string.brush_size_value, style.size.roundToInt()),
+        fraction = textSizeToFraction(style.size),
+        onFraction = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
+        tag = EditScreenTags.TEXT_SIZE,
+        stacked = stacked
+    )
 }
 
 /**

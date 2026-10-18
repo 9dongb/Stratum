@@ -175,4 +175,49 @@ class HingePlacementTest {
         assertEquals(0 to 0, insetsAvoiding(Span(1022, 1200), listOf(band)))
         assertEquals(0 to 0, insetsAvoiding(Span(800, 1010), emptyList()))
     }
+
+    @Test
+    fun pieceAt_findsThePieceHoldingThePoint() {
+        val bands = listOf(Span(40, 60))
+        assertEquals(Span(0, 40), pieceAt(Span(0, 100), bands, 10))
+        assertEquals(Span(60, 100), pieceAt(Span(0, 100), bands, 70))
+    }
+
+    @Test
+    fun pieceAt_onABand_takesThePieceAfterIt() {
+        assertEquals(Span(60, 100), pieceAt(Span(0, 100), listOf(Span(40, 60)), 50))
+        // 띠 뒤에 조각이 없으면 마지막 조각
+        assertEquals(Span(0, 40), pieceAt(Span(0, 100), listOf(Span(40, 100)), 50))
+    }
+
+    @Test
+    fun flyoutRegion_staysOnTheSideOfTheCell() {
+        // 왼쪽 띠의 칸(0..72), 가운데 세로 힌지 띠(400..440)
+        val region = flyoutRegion(
+            anchor = Region(0, 100, 72, 156),
+            area = Region(0, 0, 840, 700),
+            verticalBands = listOf(Span(400, 440)),
+            horizontalBands = emptyList(),
+            gap = 4
+        )
+        assertEquals(Region(0, 0, 400, 700), region)
+    }
+
+    @Test
+    fun flyoutRegion_usesTheRowOfTheCellAcrossAHorizontalHinge() {
+        val area = Region(0, 0, 700, 840)
+        val bands = listOf(Span(400, 440))
+        assertEquals(Region(0, 0, 700, 400), flyoutRegion(Region(0, 300, 72, 356), area, emptyList(), bands, gap = 4))
+        assertEquals(Region(0, 440, 700, 840), flyoutRegion(Region(0, 450, 72, 506), area, emptyList(), bands, gap = 4))
+    }
+
+    @Test
+    fun flyoutOffset_sitsRightOfTheCell_andIsPushedInside() {
+        val region = Region(0, 0, 400, 400)
+        // 칸 오른쪽에 붙고 위 끝을 맞춘다
+        assertEquals(76 to 100, flyoutOffset(Region(0, 100, 72, 156), width = 200, height = 120, region = region, gap = 4))
+        // 아래로 넘치면 올리고, 오른쪽으로 넘치면 왼쪽으로 민다
+        assertEquals(76 to 280, flyoutOffset(Region(0, 350, 72, 400), width = 200, height = 120, region = region, gap = 4))
+        assertEquals(100 to 0, flyoutOffset(Region(0, 0, 300, 56), width = 300, height = 120, region = region, gap = 4))
+    }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -109,31 +110,11 @@ private const val OPAQUE = 0xFF000000.toInt()
  */
 @Composable
 fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
-    val current = controls.color or OPAQUE
-    val currentLabel = stringResource(R.string.color_current, colorHex(current))
-    val chooseLabel = stringResource(R.string.color_choose)
-    val selectedLabel = stringResource(R.string.layer_selected)
     Row(
         modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(EditScreenTags.BRUSH_COLORS),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 지금 색: 무지개 테두리가 '색 고르기'를 알린다
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clickable(onClickLabel = chooseLabel, role = Role.Button, onClick = controls.onOpenPalette)
-                .semantics { contentDescription = currentLabel }
-                .testTag(EditScreenTags.COLOR_CURRENT),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), StratumShapes.Dot)
-                    .padding(5.dp)
-                    .background(Color(current), StratumShapes.Dot)
-            )
-        }
+        CurrentColorButton(controls)
         controls.onEyedropper?.let { toggle ->
             // 스포이드: 켜면 다음에 캔버스를 누르거나 끈 자리의 색을 고른다(고른 도구가 칠하던 손가락 대신)
             // 켜지면 도구 막대의 고른 도구처럼 모서리 8dp 사각형(선택 배경)으로 보인다
@@ -146,22 +127,69 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
             }
         }
         VerticalDivider(Modifier.padding(horizontal = 8.dp).height(28.dp), color = StratumTheme.colors.divider)
-        controls.recent.forEachIndexed { index, color ->
-            val isSelected = color or OPAQUE == current
-            val name = stringResource(R.string.color_recent, index + 1, colorHex(color))
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { controls.onChoose(color) })
-                    .semantics {
-                        contentDescription = name
-                        if (isSelected) stateDescription = selectedLabel
-                    }
-                    .testTag(EditScreenTags.recentColor(index)),
-                contentAlignment = Alignment.Center
-            ) {
-                ColorDot(color, isSelected)
-            }
+        RecentColorButtons(controls)
+    }
+}
+
+/**
+ * 도구 옵션 띠의 색 옵션 창 내용: 지금 색(누르면 팔레트)과 최근 색을 한 줄에 [COLOR_GRID_COLUMNS]개씩 쌓는다(좁은 창에 들어가게).
+ * 스포이드는 띠에 따로 있어 여기에는 두지 않는다. 이름표는 색 줄과 같다.
+ */
+@Composable
+fun ColorGrid(controls: ColorControls, modifier: Modifier = Modifier) {
+    FlowRow(modifier.testTag(EditScreenTags.BRUSH_COLORS), maxItemsInEachRow = COLOR_GRID_COLUMNS) {
+        CurrentColorButton(controls)
+        RecentColorButtons(controls)
+    }
+}
+
+/** 색 옵션 창의 한 줄에 놓는 색 수(지금 색 포함) */
+private const val COLOR_GRID_COLUMNS = 4
+
+/** 지금 색: 무지개 테두리가 '색 고르기'를 알린다. 누르면 팔레트를 연다. */
+@Composable
+private fun CurrentColorButton(controls: ColorControls) {
+    val current = controls.color or OPAQUE
+    val currentLabel = stringResource(R.string.color_current, colorHex(current))
+    val chooseLabel = stringResource(R.string.color_choose)
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clickable(onClickLabel = chooseLabel, role = Role.Button, onClick = controls.onOpenPalette)
+            .semantics { contentDescription = currentLabel }
+            .testTag(EditScreenTags.COLOR_CURRENT),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), StratumShapes.Dot)
+                .padding(5.dp)
+                .background(Color(current), StratumShapes.Dot)
+        )
+    }
+}
+
+/** 최근 색 동그라미들(누르면 그 색). 지금 색과 같은 것은 고른 것으로 보인다. */
+@Composable
+private fun RecentColorButtons(controls: ColorControls) {
+    val current = controls.color or OPAQUE
+    val selectedLabel = stringResource(R.string.layer_selected)
+    controls.recent.forEachIndexed { index, color ->
+        val isSelected = color or OPAQUE == current
+        val name = stringResource(R.string.color_recent, index + 1, colorHex(color))
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .selectable(selected = isSelected, role = Role.RadioButton, onClick = { controls.onChoose(color) })
+                .semantics {
+                    contentDescription = name
+                    if (isSelected) stateDescription = selectedLabel
+                }
+                .testTag(EditScreenTags.recentColor(index)),
+            contentAlignment = Alignment.Center
+        ) {
+            ColorDot(color, isSelected)
         }
     }
 }

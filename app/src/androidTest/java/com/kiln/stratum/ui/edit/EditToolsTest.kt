@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -24,7 +23,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.FlipImage
 import com.kiln.stratum.engine.platform.RotateImage
@@ -161,25 +159,42 @@ class EditToolsTest {
     }
 
     @Test
-    fun medium_railLongPress_putsOptionsInExpandedBottomPanel() {
+    fun medium_railLongPress_choosesTheSubTool_andTheStripShowsItsButtons() {
         show(700, 900)
-        // 아래 패널을 접어 둔다
-        val collapse = composeRule.activity.getString(R.string.panel_collapse)
-        composeRule.onNodeWithContentDescription(collapse).performClick()
 
         transformRail.performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
 
-        // 도구를 고르면 아래 패널이 펼쳐지고, 옵션은 그 안에 있다
-        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
+        // 메인 화면의 옵션은 도구 막대 오른쪽 띠에 있다(결정 기록 '편집 화면 도구 배치')
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun main_subToolCell_choosesTheSubTool_andResizeOpensTheWindow() {
+        show(930, 700)
+        transformRail.performClick()
+
+        chooseSubTool(SubTool.ROTATE)
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).performClick()
+        composeRule.runOnIdle { assertEquals(listOf<EditCommand>(RotateImage(clockwise = false)), commands) }
+
+        chooseSubTool(SubTool.RESIZE)
+        composeRule.onNodeWithTag(EditScreenTags.RESIZE_WIDTH).assertExists()
+    }
+
+    /** 메인 화면: 띠의 하위 도구 칸을 눌러 연 목록에서 [subTool]을 고른다 */
+    private fun chooseSubTool(subTool: SubTool) {
+        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(subTool)).performClick()
     }
 
     @Test
     fun medium_optionsMoveOffHorizontalHinge() {
         show(700, 900)
         transformRail.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        chooseSubTool(SubTool.ROTATE)
         // 회전 버튼 줄 한가운데를 가로로 지나가는 힌지
         val rowCenter = composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT)
             .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
@@ -192,7 +207,7 @@ class EditToolsTest {
     }
 
     @Test
-    fun expanded_optionsInSidePanel_avoidVerticalHinge() {
+    fun expanded_stripAndSubToolList_avoidVerticalHinge() {
         show(930, 700)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
@@ -200,9 +215,11 @@ class EditToolsTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         transformRail.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
+        composeRule.assertClickablesAvoid(hinge)
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
 
-        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
         composeRule.assertClickablesAvoid(hinge)
     }
@@ -219,6 +236,8 @@ class EditToolsTest {
         // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)을 눌러 회전·뒤집기를 고른다
         val tab = composeRule.onAllNodesWithTagOrNull(EditScreenTags.tabTool(EditTool.Transform))
         (tab ?: transformRail).performClick()
+        // 메인 화면은 띠의 하위 도구 칸을 눌러 연 목록에서 고른다
+        if (tab == null) composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
 
         // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다

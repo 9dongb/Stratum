@@ -145,11 +145,11 @@ class SizePreviewTest {
         dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_HARDNESS)
     }
 
-    /** 도구 막대로 [tool]을 고르고 [tags] 슬라이더마다 끄는 동안만 크기 원이 보이는지 본다 */
-    private fun railSlidersShowTheSize(tool: EditTool, vararg tags: String) {
+    /** 도구 막대로 [tool]을 고르고, 띠의 [cells] 칸(칸 이름 → 슬라이더 이름표)마다 옵션 창을 열어 끄는 동안만 크기 원이 보이는지 본다 */
+    private fun stripSlidersShowTheSize(tool: EditTool, vararg cells: Pair<String, String>) {
         composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performScrollTo().performClick()
-        for (tag in tags) {
-            composeRule.onNodeWithTag(tag).performScrollTo()
+        for ((cell, tag) in cells) {
+            composeRule.onNodeWithTag(EditScreenTags.strip(cell)).performScrollTo().performClick()
             dragShowsTheSizeUntilRelease(tag)
         }
     }
@@ -158,15 +158,32 @@ class SizePreviewTest {
     fun mainPortrait_retouchAndToneSizeAndHardness_showTheSize() {
         showEditScreen(700, 900)
 
-        railSlidersShowTheSize(EditTool.Retouch, EditScreenTags.RETOUCH_SIZE, EditScreenTags.RETOUCH_HARDNESS)
-        railSlidersShowTheSize(EditTool.Tone, EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Retouch, "size" to EditScreenTags.RETOUCH_SIZE, "hardness" to EditScreenTags.RETOUCH_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Tone, "size" to EditScreenTags.TONE_SIZE, "hardness" to EditScreenTags.TONE_HARDNESS)
     }
 
     @Test
     fun mainLandscape_eraserSizeAndHardness_showTheSize() {
         showEditScreen(930, 700)
 
-        railSlidersShowTheSize(EditTool.Eraser, EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Eraser, "size" to EditScreenTags.BRUSH_SIZE, "hardness" to EditScreenTags.BRUSH_HARDNESS)
+    }
+
+    @Test
+    fun flyoutClosedMidDrag_doesNotLeaveTheSizeBehind() {
+        showEditScreen(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput {
+            down(center)
+            moveBy(Offset(width / 8f, 0f))
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
+
+        // 손을 떼지 않은 채 뒤로 가기로 옵션 창이 닫혀도 크기 원은 사라진다
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
     }
 
     @Test

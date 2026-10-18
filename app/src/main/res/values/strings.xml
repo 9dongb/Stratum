@@ -177,6 +177,12 @@
     <string name="color_current">Current color, %1$s</string>
     <string name="color_choose">Choose color</string>
     <string name="color_eyedropper">Eyedropper</string>
+    <string name="strip_color">Color</string>
+    <string name="strip_subtool">Sub-tool</string>
+    <string name="strip_choice_description">%1$s: %2$s</string>
+    <string name="strip_selection_mode">Mode</string>
+    <string name="strip_tone_range">Range</string>
+    <string name="strip_crop_ratio">Ratio</string>
     <string name="color_recent">Recent color %1$d, %2$s</string>
     <string name="color_saturation_value">Saturation and brightness</string>
     <string name="color_saturation_value_state">Saturation %1$d%%, brightness %2$d%%</string>

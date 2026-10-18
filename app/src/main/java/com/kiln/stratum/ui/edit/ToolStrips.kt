@@ -1,0 +1,421 @@
+package com.kiln.stratum.ui.edit
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
+import com.kiln.stratum.R
+import com.kiln.stratum.engine.command.EditCommand
+import com.kiln.stratum.engine.platform.FlipImage
+import com.kiln.stratum.engine.platform.RotateImage
+import com.kiln.stratum.engine.selection.ColorRegion
+import com.kiln.stratum.engine.selection.SelectionMode
+import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
+import kotlin.math.roundToInt
+
+/*
+ * 메인 화면 도구 옵션 띠의 칸들(결정 기록 '편집 화면 도구 배치'). 커버 화면 옵션과 같은 값·할 일(…Controls)을 쓰고,
+ * 옵션 창의 슬라이더·고르기는 커버 옵션과 같은 부품·이름표다. 그래서 바꾸는 값과 기록은 커버와 똑같다.
+ * 고르기 칸의 옵션 창은 고르면 닫는다([close]).
+ */
+
+/** 브러시·지우개의 띠: (브러시만) 색·스포이드, 크기, 단단함, 불투명도 */
+@Composable
+internal fun brushStrip(controls: BrushControls): List<StripItem> {
+    val settings = controls.settings
+    val colors = controls.colors.takeIf { !controls.erase }
+    return buildList {
+        if (colors != null) addAll(colorCells(colors))
+        add(sizeCell(settings.size, EditScreenTags.BRUSH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
+        add(hardnessCell(settings.hardness, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
+        add(opacityCell(settings.opacity, EditScreenTags.BRUSH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
+    }
+}
+
+/** 글자의 띠: 색·스포이드, 크기. 넣을 자리를 누르라는 안내는 고를 때 알림으로 보인다. */
+@Composable
+internal fun textStrip(controls: TextControls): List<StripItem> =
+    buildList {
+        controls.colors?.let { addAll(colorCells(it)) }
+        add(
+            ValueCell("textSize", stringResource(R.string.brush_size), stringResource(R.string.brush_size_value, controls.style.size.roundToInt())) {
+                FlyoutSlider { TextSizeSlider(controls, stacked = true) }
+            }
+        )
+    }
+
+/**
+ * 자르기·변형의 띠: 하위 도구(자르기 / 회전·뒤집기 / 크기 변경…), 그리고
+ * 자르기면 비율·가로세로 바꾸기·취소·적용(파란 버튼), 회전·뒤집기면 왼쪽·오른쪽 회전과 좌우·상하 뒤집기.
+ * 자르기 테두리가 아직 없으면(첫 화면) 자르기 칸은 다음 화면에 보인다.
+ */
+@Composable
+internal fun transformStrip(
+    mode: SubTool,
+    busy: Boolean,
+    onEdit: (EditCommand) -> Unit,
+    onChoose: (SubTool) -> Unit,
+    crop: CropControls?,
+    close: () -> Unit
+): List<StripItem> =
+    buildList {
+        add(subToolCell(EditTool.Transform, mode, onChoose, close))
+        when (mode) {
+            SubTool.CROP -> if (crop != null) {
+                add(
+                    ValueCell("ratio", stringResource(R.string.strip_crop_ratio), cropRatioLabel(crop.frame.ratio)) {
+                        CropRatioFlow(crop, onChosen = close)
+                    }
+                )
+                add(IconCell("swap", R.drawable.ic_swap_horiz, stringResource(R.string.crop_swap), crop.onSwap, tag = EditScreenTags.CROP_SWAP))
+                add(StripDivider("cropActions"))
+                add(IconCell("cancel", R.drawable.ic_close, stringResource(R.string.action_cancel), crop.onCancel, tag = EditScreenTags.CROP_CANCEL))
+                add(
+                    IconCell(
+                        key = "apply",
+                        icon = R.drawable.ic_check,
+                        description = stringResource(R.string.action_apply),
+                        onClick = crop.onApply,
+                        enabled = crop.canApply && !busy,
+                        accent = true,
+                        tag = EditScreenTags.CROP_APPLY
+                    )
+                )
+            }
+            SubTool.ROTATE -> {
+                add(IconCell("rotateLeft", R.drawable.ic_rotate_90_degrees_ccw, stringResource(R.string.rotate_left), { onEdit(RotateImage(clockwise = false)) }, enabled = !busy, tag = EditScreenTags.ROTATE_LEFT))
+                add(IconCell("rotateRight", R.drawable.ic_rotate_90_degrees_cw, stringResource(R.string.rotate_right), { onEdit(RotateImage(clockwise = true)) }, enabled = !busy, tag = EditScreenTags.ROTATE_RIGHT))
+                add(IconCell("flipHorizontal", R.drawable.ic_flip, stringResource(R.string.flip_horizontal), { onEdit(FlipImage(horizontal = true)) }, enabled = !busy, tag = EditScreenTags.FLIP_HORIZONTAL))
+                // 상하 뒤집기 아이콘은 좌우 뒤집기 아이콘을 90° 돌려 쓴다(커버 옵션과 같다)
+                add(IconCell("flipVertical", R.drawable.ic_flip, stringResource(R.string.flip_vertical), { onEdit(FlipImage(horizontal = false)) }, enabled = !busy, iconRotation = 90f, tag = EditScreenTags.FLIP_VERTICAL))
+            }
+            // 크기 변경은 창을 띄우는 일이고, 다른 하위 도구는 이 도구의 것이 아니다
+            else -> Unit
+        }
+    }
+
+/**
+ * 선택의 띠: 하위 도구, 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
+ * 그리고 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기(모두 선택만 늘, 나머지는 고른 곳이 있을 때).
+ */
+@Composable
+internal fun selectionStrip(mode: SubTool, controls: SelectionControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+    val options = controls.options
+    val ready = !controls.busy
+    val selected = ready && controls.hasSelection
+    val actions = controls.actions
+    return buildList {
+        add(subToolCell(EditTool.Select, mode, onChoose, close))
+        add(
+            ValueCell("mode", stringResource(R.string.strip_selection_mode), stringResource(selectionModeLabel(options.mode))) {
+                ChoiceList(
+                    choices = SelectionMode.entries,
+                    selected = options.mode,
+                    label = { stringResource(selectionModeLabel(it)) },
+                    icon = { null },
+                    tag = { EditScreenTags.selectionMode(it) }
+                ) {
+                    controls.onOptions(options.copy(mode = it))
+                    close()
+                }
+            }
+        )
+        if (mode == SubTool.SELECT_WAND) {
+            val label = stringResource(R.string.selection_tolerance)
+            add(
+                ValueCell("tolerance", label, options.tolerance.toString()) {
+                    FlyoutSlider {
+                        Column {
+                            OptionSlider(
+                                label = label,
+                                shown = options.tolerance.toString(),
+                                fraction = options.tolerance / ColorRegion.MAX_TOLERANCE.toFloat(),
+                                onFraction = { controls.onOptions(options.copy(tolerance = (it * ColorRegion.MAX_TOLERANCE).roundToInt())) },
+                                tag = EditScreenTags.SELECTION_TOLERANCE,
+                                stacked = true
+                            )
+                            ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) }
+                        }
+                    }
+                }
+            )
+        } else {
+            val label = stringResource(R.string.selection_feather)
+            val shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt())
+            add(
+                ValueCell("feather", label, shown) {
+                    FlyoutSlider {
+                        OptionSlider(
+                            label = label,
+                            shown = shown,
+                            fraction = featherToFraction(options.feather),
+                            onFraction = { controls.onOptions(options.copy(feather = fractionToFeather(it))) },
+                            tag = EditScreenTags.SELECTION_FEATHER,
+                            stacked = true
+                        )
+                    }
+                }
+            )
+        }
+        add(StripDivider("selectionActions"))
+        add(IconCell("all", R.drawable.ic_select_all, stringResource(R.string.selection_all_description), actions::all, enabled = ready, tag = EditScreenTags.SELECTION_ALL))
+        add(IconCell("none", R.drawable.ic_deselect, stringResource(R.string.selection_none), actions::none, enabled = selected, tag = EditScreenTags.SELECTION_NONE))
+        add(IconCell("invert", R.drawable.ic_flip_to_front, stringResource(R.string.selection_invert), actions::invert, enabled = selected, tag = EditScreenTags.SELECTION_INVERT))
+        add(IconCell("delete", R.drawable.ic_delete, stringResource(R.string.selection_delete_description), actions::delete, enabled = selected, tag = EditScreenTags.SELECTION_DELETE))
+        add(IconCell("copy", R.drawable.ic_content_copy, stringResource(R.string.selection_copy_description), { actions.copyToLayer(cut = false) }, enabled = selected, tag = EditScreenTags.SELECTION_COPY))
+        add(IconCell("cut", R.drawable.ic_content_cut, stringResource(R.string.selection_cut_description), { actions.copyToLayer(cut = true) }, enabled = selected, tag = EditScreenTags.SELECTION_CUT))
+    }
+}
+
+/**
+ * 리터칭의 띠: 하위 도구, (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, 단단함, (복제만) 불투명도.
+ * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
+ */
+@Composable
+internal fun retouchStrip(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+    val settings = controls.settings
+    return buildList {
+        add(subToolCell(EditTool.Retouch, mode, onChoose, close))
+        if (mode != SubTool.RETOUCH_SPOT) {
+            add(
+                IconCell(
+                    key = "source",
+                    icon = R.drawable.ic_gps_fixed,
+                    description = stringResource(R.string.retouch_source),
+                    onClick = controls.onPick,
+                    checked = controls.picking,
+                    tag = EditScreenTags.RETOUCH_SOURCE
+                )
+            )
+        }
+        add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
+        add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
+        // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
+        if (mode == SubTool.RETOUCH_CLONE) {
+            add(opacityCell(settings.opacity, EditScreenTags.RETOUCH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
+        }
+    }
+}
+
+/** 명암의 띠: 하위 도구(닷지·번), 범위(어두운·중간·밝은 영역, 아이콘), 노출, 크기, 단단함 */
+@Composable
+internal fun toneStrip(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+    val options = controls.options
+    val brush = options.brush
+    val rangeCaption = stringResource(R.string.strip_tone_range)
+    return buildList {
+        add(subToolCell(EditTool.Tone, mode, onChoose, close))
+        add(
+            ChoiceCell(
+                key = "range",
+                icon = toneRangeIcon(options.range),
+                caption = rangeCaption,
+                description = stringResource(R.string.strip_choice_description, rangeCaption, stringResource(toneRangeLabel(options.range)))
+            ) {
+                ChoiceList(
+                    choices = ToneRange.entries,
+                    selected = options.range,
+                    label = { stringResource(toneRangeLabel(it)) },
+                    icon = { toneRangeIcon(it) },
+                    tag = { EditScreenTags.toneRange(it) }
+                ) {
+                    controls.onChange(options.copy(range = it))
+                    close()
+                }
+            }
+        )
+        val exposureLabel = stringResource(R.string.tone_exposure)
+        val exposureShown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt())
+        add(
+            ValueCell("exposure", exposureLabel, exposureShown) {
+                FlyoutSlider {
+                    OptionSlider(
+                        label = exposureLabel,
+                        shown = exposureShown,
+                        fraction = options.exposure,
+                        // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(커버 옵션과 같다)
+                        onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
+                        tag = EditScreenTags.TONE_EXPOSURE,
+                        stacked = true
+                    )
+                }
+            }
+        )
+        add(sizeCell(brush.size, EditScreenTags.TONE_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
+        add(hardnessCell(brush.hardness, EditScreenTags.TONE_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
+    }
+}
+
+/** 하위 도구 칸: 지금 하위 도구의 아이콘과 짧은 이름. 옵션 창에서 고르면(크기 변경은 창을 띄움) 닫는다. 이름표는 커버의 하위 도구 버튼과 같다. */
+@Composable
+private fun subToolCell(tool: EditTool, mode: SubTool, onChoose: (SubTool) -> Unit, close: () -> Unit): StripItem {
+    val title = stringResource(R.string.strip_subtool)
+    return ChoiceCell(
+        key = "subTool",
+        icon = mode.icon,
+        caption = stringResource(mode.shortLabel),
+        description = stringResource(R.string.strip_choice_description, title, stringResource(mode.label)),
+        title = title
+    ) {
+        ChoiceList(
+            choices = tool.subTools,
+            selected = mode,
+            label = { stringResource(it.label) },
+            icon = { it.icon },
+            tag = { EditScreenTags.subToolOption(it) }
+        ) {
+            close()
+            onChoose(it)
+        }
+    }
+}
+
+/** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]) */
+@Composable
+private fun sizeCell(size: Float, sliderTag: String, preview: SizePreviewState?, onSize: (Float) -> Unit): StripItem =
+    ValueCell("size", stringResource(R.string.brush_size), stringResource(R.string.brush_size_value, size.roundToInt())) {
+        FlyoutSlider { SizeSlider(size, onSize, sliderTag, preview, stacked = true) }
+    }
+
+/** 단단함 칸(0~100%). 끄는 동안 캔버스 가운데에 크기 원과 단단함 자리([preview]) */
+@Composable
+private fun hardnessCell(hardness: Float, sliderTag: String, preview: SizePreviewState?, onHardness: (Float) -> Unit): StripItem =
+    ValueCell("hardness", stringResource(R.string.brush_hardness), stringResource(R.string.layer_percent, (hardness * 100).roundToInt())) {
+        FlyoutSlider { HardnessSlider(hardness, onHardness, sliderTag, preview, stacked = true) }
+    }
+
+/** 색 칸(누르면 지금 색·최근 색 옵션 창)과 스포이드 버튼(켜고 끔, 커버 색 줄의 스포이드와 같은 이름표) */
+@Composable
+private fun colorCells(colors: ColorControls): List<StripItem> =
+    buildList {
+        add(
+            ColorCell(
+                key = "color",
+                color = colors.color,
+                caption = stringResource(R.string.strip_color),
+                description = stringResource(R.string.color_current, colorHex(colors.color))
+            ) {
+                // 스포이드는 띠에 따로 있어 옵션 창에는 두지 않는다
+                ColorGrid(colors)
+            }
+        )
+        colors.onEyedropper?.let { toggle ->
+            add(
+                IconCell(
+                    key = "eyedropper",
+                    icon = R.drawable.ic_colorize,
+                    description = stringResource(R.string.color_eyedropper),
+                    onClick = toggle,
+                    checked = colors.eyedropperOn,
+                    tag = EditScreenTags.COLOR_EYEDROPPER
+                )
+            )
+        }
+    }
+
+/** 불투명도 칸(1~100%, 0%면 아무것도 칠해지지 않아 1%에서 멈춘다). 브러시·리터칭(복제)이 쓴다. */
+@Composable
+private fun opacityCell(opacity: Float, sliderTag: String, onOpacity: (Float) -> Unit): StripItem {
+    val label = stringResource(R.string.layer_opacity)
+    val shown = stringResource(R.string.layer_percent, (opacity * 100).roundToInt())
+    return ValueCell("opacity", label, shown) {
+        FlyoutSlider {
+            OptionSlider(
+                label = label,
+                shown = shown,
+                fraction = opacity,
+                onFraction = { onOpacity(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
+                tag = sliderTag,
+                stacked = true
+            )
+        }
+    }
+}
+
+/** 고르기 옵션 창의 목록 폭 */
+private val ChoiceListWidth = 200.dp
+
+/**
+ * 고르기 옵션 창의 목록: 줄마다 아이콘(있으면)과 이름, 고른 줄은 선택 배경과 선택 색(모서리 8dp). 줄 전체를 누를 수 있다(48dp).
+ * 화면 읽기 기능에는 라디오 버튼 묶음으로 알린다.
+ */
+@Composable
+private fun <T> ChoiceList(
+    choices: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    icon: (T) -> Int?,
+    tag: (T) -> String,
+    onChoose: (T) -> Unit
+) {
+    val colors = StratumTheme.colors
+    Column(Modifier.width(ChoiceListWidth).selectableGroup()) {
+        for (choice in choices) {
+            val chosen = choice == selected
+            val color = if (chosen) colors.selectedContent else colors.textPrimary
+            Row(
+                modifier = Modifier
+                    .width(ChoiceListWidth)
+                    .heightIn(min = 48.dp)
+                    .clip(StratumShapes.Control)
+                    .background(if (chosen) colors.selectedBackground else Color.Transparent)
+                    .selectable(selected = chosen, role = Role.RadioButton, onClick = { onChoose(choice) })
+                    .padding(horizontal = 12.dp)
+                    .testTag(tag(choice)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                icon(choice)?.let {
+                    Icon(painterResource(it), contentDescription = null, tint = if (chosen) colors.selectedContent else colors.textSecondary)
+                    Spacer(Modifier.width(12.dp))
+                }
+                Text(text = label(choice), color = color, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * 메인 화면에서 도구를 고를 때 캔버스 위쪽 가운데에 알림으로 보일 안내. 띠에는 커버 옵션의 안내 글이 들어갈 자리가 없다.
+ * [mode]는 고른 하위 도구, [retouchPicking]은 리터칭이 가져올 곳을 정하는 중인지다. 같은 안내는 편집 화면에서 한 번만 띄운다(편집 화면이 기억한다).
+ * 안내가 없는 도구(브러시·지우개·자르기·변형)는 null이다.
+ */
+@Composable
+internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boolean): String? {
+    val hint = when (tool) {
+        EditTool.Text -> R.string.text_hint
+        EditTool.Select -> when (mode) {
+            SubTool.SELECT_WAND -> R.string.selection_hint_wand
+            SubTool.SELECT_LASSO -> R.string.selection_hint_lasso
+            else -> R.string.selection_hint_drag
+        }
+        EditTool.Retouch -> when {
+            mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
+            retouchPicking -> R.string.retouch_hint_pick
+            mode == SubTool.RETOUCH_HEAL -> R.string.retouch_hint_heal
+            else -> R.string.retouch_hint_clone
+        }
+        EditTool.Tone -> if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge
+        else -> null
+    }
+    return hint?.let { stringResource(it) }
+}

@@ -25,6 +25,10 @@
   - 켜진 뒤에도 안드로이드가 스스로 다시 시작해, 앱 설치가 "Can't find service: package"로 실패할 수 있다.
   - Docker Desktop처럼 무거운 앱을 끄고 켠다(2026-10-17, 16GB Mac에서 겪음). adb만 `offline`이면 `adb reconnect offline`
   - 빠른 부팅으로 켠 뒤 앱을 설치할 때마다 안드로이드가 다시 시작하면(`Can't find service: package`가 되풀이됨), 끄고 `emulator -avd <이름> -no-snapshot-load`로 처음부터 켠다. 데이터는 그대로다(2026-10-17 Medium_Phone에서 겪음).
+- Pixel_Fold(API 37 Play 이미지)에서 UWB 시스템 서비스(`vendor.uwb_hal`)가 5초마다 죽고 다시 켜지면 화면 테스트 하나가 1분 가까이 걸릴 만큼 느려진다(2026-10-19 겪음).
+  - 확인: `adb -s emulator-5554 logcat -d -b crash`에 `android.hardware.uwb-service`가 되풀이된다.
+  - 해결: 끄고 `emulator -avd Pixel_Fold -no-boot-anim -feature -Uwb`로 켠다(UWB를 쓰지 않는 앱이라 꺼도 된다).
+  - PC 메모리가 모자라 스왑을 많이 쓰면(`sysctl vm.swapusage`) 그래도 느리다. 펼친 상태보다 접은 상태(커버 화면)가 몇 배 빠르므로, 중간 확인은 접어서 돌리고 마지막 전체 테스트만 펼쳐서 돌린다(접은 상태에서만 실패하는 테스트 5개는 progress.md '기술 주의점').
 
 ## 에뮬레이터 테스트
 

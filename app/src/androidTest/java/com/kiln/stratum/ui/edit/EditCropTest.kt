@@ -9,6 +9,9 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -165,6 +168,7 @@ class EditCropTest {
     fun medium_cropButtonsAvoidHorizontalHinge() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.CROP_APPLY) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
         // 적용 버튼 한가운데를 가로로 지나가는 힌지
         val applyCenter = composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY)
             .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
@@ -174,5 +178,21 @@ class EditCropTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         composeRule.assertClickablesAvoid(hinge)
+    }
+
+    @Test
+    fun main_stripChangesTheRatio_andApplies() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        composeRule.waitForIdle()
+
+        // 자르기 칸은 띠에 있다(테두리를 띠를 뺀 자리에 맞추는 계산은 CanvasViewTest.fitInside_*)
+        composeRule.onNode(hasTestTag(EditScreenTags.CROP_CANCEL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
+        // 비율 칸의 목록에서 1:1을 고르고 적용하면 정사각형으로 자른다
+        composeRule.onNodeWithTag(EditScreenTags.strip("ratio")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.cropRatio(CropRatio.SQUARE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
+        composeRule.runOnIdle { assertEquals(listOf(CropImage(PixelRect(50, 0, 350, 300), document)), commands) }
     }
 }
