@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
@@ -66,11 +67,11 @@ class CanvasImageTest {
         val middleX = fit.left + fit.width / 2
 
         // 캔버스 안: 왼쪽 위 첫 칸은 밝은 칸이다
-        assertEquals(hex(CheckerLight.toArgb()), hex(shot.getPixel(fit.left + 1, fit.top + 1)))
+        assertEquals(hex(CanvasOverlayColors.CheckerLight.toArgb()), hex(shot.getPixel(fit.left + 1, fit.top + 1)))
         // 가로로 다음 칸은 어두운 칸이다(칸 크기 8dp는 캔버스 폭보다 작다)
         val square = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutInfo.density
             .run { CheckerSquare.roundToPx() }
-        assertEquals(hex(CheckerDark.toArgb()), hex(shot.getPixel(fit.left + square + 1, fit.top + 1)))
+        assertEquals(hex(CanvasOverlayColors.CheckerDark.toArgb()), hex(shot.getPixel(fit.left + square + 1, fit.top + 1)))
         // 캔버스 바로 위 바깥은 테두리, 더 바깥은 캔버스 배경이다
         assertEquals(hex(outline.toArgb()), hex(shot.getPixel(middleX, fit.top - 1)))
         assertEquals(hex(background.toArgb()), hex(shot.getPixel(middleX, fit.top / 2)))

@@ -14,6 +14,23 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 테마 토대: 색·모서리·크기 토큰(디자인 시안 작업 2단계)
+
+- 요청: "Material 3는 그대로 쓰되, 다이내믹 컬러(배경화면 색 따라가기)는 끄고 아래 고정 색만 사용", "표면에 색이 섞이는 효과(tonal elevation)는 끄기", "색·글자 크기·모서리 값은 테마 파일에 모아두고, 화면 코드에는 직접 쓰지 마"(색 값은 progress.md 결정 기록 '디자인(시안)')
+- 의도: "목표는 포토샵 플랫하고 촘촘한 디자인이야."
+- 커밋:
+  - "테마를 시안 색 토큰(다크·라이트)으로 바꾸고 모서리·크기 토큰을 두며, 캔버스 위 표시 색을 테마로 옮김"
+- 바꾼 것:
+  - `ui/theme/Color.kt`: `StratumColors`(역할별 색 토큰) 다크·라이트, `CanvasOverlayColors`(캔버스 위 표시), `ColorPickerColors`(색상 띠), `HiddenContentAlpha`. 보라색 임시 색은 지웠다.
+  - `ui/theme/Shape.kt`(새): `StratumRadius`(4·6·8·12dp), `StratumShapes`, M3 모양(메뉴·입력칸 6dp, 칩 8dp, 창·시트 12dp).
+  - `ui/theme/Dimens.kt`(새): 구분선·탭 밑줄·슬라이더·버튼·분할 버튼·도구 사각형 크기.
+  - `ui/theme/Type.kt`: 상단 바 제목 18sp, 창 제목 20sp(나머지는 그대로).
+  - `ui/theme/Theme.kt`: `StratumTheme(darkTheme = true)`, `StratumTheme.colors`, 표면 색 섞기 끔, M3 색 역할을 모두 토큰으로(`stratumColorScheme`).
+  - 화면 코드의 캔버스 위 표시 색(자르기·브러시 커서·선택 윤곽·리터칭 가져올 곳·크기 미리 보기·스포이드·체크 무늬·색 팔레트)을 테마 이름으로 바꿨다. 보이는 색은 그대로다.
+  - 테스트: 단위 `ThemeColorsTest` 4개(시안 색, M3 역할 매핑, 모든 역할이 토큰에서 옴, 글자 대비 4.5:1·캔버스 테두리), 에뮬레이터 `CanvasImageTest`의 체크 무늬 색 이름
+- 이번 단계까지 보이는 것: M3 부품의 색이 시안 색(회색 바탕·파란 강조)으로 바뀌었다. 모서리·버튼·슬라이더 모양은 다음 단계다.
+- 확인한 것: 빌드와 단위 테스트, 에뮬레이터(Pixel_Fold)에서 CanvasImageTest·SizePreviewTest·CropOverlayTest·BrushCursorTest·EyedropperTest·ColorPaletteTest·SelectionToolTest·RetouchToolTest 52개 중 50개가 통과했다. 실패한 2개(CanvasImageTest의 체크 무늬, ColorPaletteTest의 메인 세로 힌지)는 접힌 커버 화면에서만 실패하는 테스트다(기술 주의점, 3차 이전 판도 같음). 마지막에 펼친 상태로 테스트 전체를 돌린다.
+
 ## 2026-10-18 · 뒤로 가기로 도구 닫기(디자인 시안 작업 1단계)
 
 - 요청: "추가적으로 각 픽셀 유동화를 제외한 탭에서는 뒤로가기 시 바로 앱의 홈화면으로 나가집니다. 해당 탭에서 나가지는 것으로 되어야 맞습니다."

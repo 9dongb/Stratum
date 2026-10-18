@@ -78,6 +78,7 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
 /** 레이어 패널이 엔진 쪽(ViewModel)에 보내는 일 */
@@ -537,10 +538,10 @@ private fun LayerThumbnail(thumbnail: Bitmap?, colorSpace: DocumentColorSpace, m
         // 그림 자리의 체크 무늬
         clipRect(left.toFloat(), top.toFloat(), (left + width).toFloat(), (top + height).toFloat()) {
             val square = ThumbnailChecker.toPx()
-            drawRect(CheckerLight)
+            drawRect(CanvasOverlayColors.CheckerLight)
             for (row in 0..(height / square).toInt()) {
                 for (column in 0..(width / square).toInt()) {
-                    if ((row + column) % 2 == 1) drawRect(CheckerDark, Offset(left + column * square, top + row * square), Size(square, square))
+                    if ((row + column) % 2 == 1) drawRect(CanvasOverlayColors.CheckerDark, Offset(left + column * square, top + row * square), Size(square, square))
                 }
             }
         }

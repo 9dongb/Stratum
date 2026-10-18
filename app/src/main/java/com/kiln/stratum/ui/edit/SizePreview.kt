@@ -10,12 +10,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
 /**
@@ -61,11 +61,11 @@ fun SizePreviewOverlay(view: () -> CanvasView, document: PixelSize, size: Float,
 /** 브러시 크기 원: 어떤 사진 위에서도 보이게 검은 테두리 위에 흰 선이다(리터칭의 가져올 곳 표시와 같다). 아주 작아도 1dp는 보인다. */
 private fun DrawScope.drawBrushSize(center: Offset, radius: Float, hardness: Float?) {
     val ring = radius.coerceAtLeast(1.dp.toPx())
-    drawCircle(Color.Black, ring, center, style = Stroke(3.dp.toPx()))
-    drawCircle(Color.White, ring, center, style = Stroke(1.5.dp.toPx()))
+    drawCircle(CanvasOverlayColors.Dark, ring, center, style = Stroke(3.dp.toPx()))
+    drawCircle(CanvasOverlayColors.Light, ring, center, style = Stroke(1.5.dp.toPx()))
     if (hardness != null && hardness > 0f && hardness < 1f) {
         val core = ring * hardness
-        drawCircle(Color.Black.copy(alpha = 0.6f), core, center, style = Stroke(2.dp.toPx()))
-        drawCircle(Color.White.copy(alpha = 0.6f), core, center, style = Stroke(1.dp.toPx()))
+        drawCircle(CanvasOverlayColors.DarkHalo, core, center, style = Stroke(2.dp.toPx()))
+        drawCircle(CanvasOverlayColors.LightHalo, core, center, style = Stroke(1.dp.toPx()))
     }
 }

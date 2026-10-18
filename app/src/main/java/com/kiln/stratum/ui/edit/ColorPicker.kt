@@ -69,6 +69,8 @@ import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
+import com.kiln.stratum.ui.theme.ColorPickerColors
 import java.util.Locale
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
@@ -99,7 +101,6 @@ class ColorControls(
 private const val OPAQUE = 0xFF000000.toInt()
 
 /** 색상 띠의 색(빨강에서 시작해 한 바퀴) */
-private val HueColors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
 
 /**
  * 색 줄: 지금 색(무지개 테두리, 누르면 팔레트), 스포이드 버튼, 최근 색(6개까지, 누르면 그 색). 폭이 모자라면 옆으로 밀어 본다.
@@ -127,7 +128,7 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
             Box(
                 Modifier
                     .size(38.dp)
-                    .border(BorderStroke(3.dp, Brush.sweepGradient(HueColors)), CircleShape)
+                    .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), CircleShape)
                     .padding(5.dp)
                     .background(Color(current), CircleShape)
             )
@@ -340,13 +341,13 @@ private fun SaturationValueSquare(draft: PaletteDraft, onChange: (PaletteDraft) 
     ) {
         // 네모만 둥글게 그리고, 고른 자리 고리는 모서리에서도 잘리지 않게 그 위에 그린다
         val corner = CornerRadius(8.dp.toPx())
-        drawRoundRect(Brush.horizontalGradient(listOf(Color.White, pure)), cornerRadius = corner)
-        drawRoundRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)), cornerRadius = corner)
+        drawRoundRect(Brush.horizontalGradient(listOf(ColorPickerColors.NoSaturation, pure)), cornerRadius = corner)
+        drawRoundRect(Brush.verticalGradient(listOf(Color.Transparent, ColorPickerColors.NoBrightness)), cornerRadius = corner)
         // 고른 자리: 어떤 색 위에서도 보이게 검은 테두리 위의 흰 고리
         val center = Offset(draft.saturation * size.width, (1f - draft.value) * size.height)
         val radius = 9.dp.toPx()
-        drawCircle(Color.Black, radius, center, style = Stroke(3.dp.toPx()))
-        drawCircle(Color.White, radius, center, style = Stroke(1.5.dp.toPx()))
+        drawCircle(CanvasOverlayColors.Dark, radius, center, style = Stroke(3.dp.toPx()))
+        drawCircle(CanvasOverlayColors.Light, radius, center, style = Stroke(1.5.dp.toPx()))
     }
 }
 
@@ -388,7 +389,7 @@ private fun HueStrip(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, modi
         val stripWidth = 20.dp.toPx()
         val left = (size.width - stripWidth) / 2
         drawRoundRect(
-            brush = Brush.verticalGradient(HueColors),
+            brush = Brush.verticalGradient(ColorPickerColors.Hues),
             topLeft = Offset(left, 0f),
             size = Size(stripWidth, size.height),
             cornerRadius = CornerRadius(4.dp.toPx())
@@ -397,8 +398,8 @@ private fun HueStrip(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, modi
         val y = draft.hue / 360f * size.height
         val markerHeight = 6.dp.toPx()
         val top = (y - markerHeight / 2).coerceIn(0f, size.height - markerHeight)
-        drawRect(Color.Black, Offset(left - 4.dp.toPx(), top), Size(stripWidth + 8.dp.toPx(), markerHeight), style = Stroke(3.dp.toPx()))
-        drawRect(Color.White, Offset(left - 4.dp.toPx(), top), Size(stripWidth + 8.dp.toPx(), markerHeight), style = Stroke(1.5.dp.toPx()))
+        drawRect(CanvasOverlayColors.Dark, Offset(left - 4.dp.toPx(), top), Size(stripWidth + 8.dp.toPx(), markerHeight), style = Stroke(3.dp.toPx()))
+        drawRect(CanvasOverlayColors.Light, Offset(left - 4.dp.toPx(), top), Size(stripWidth + 8.dp.toPx(), markerHeight), style = Stroke(1.5.dp.toPx()))
     }
 }
 

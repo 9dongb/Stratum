@@ -16,6 +16,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 
 /**
  * 스포이드로 색을 고르는 중(손가락 둘레 고리, 결정 기록 '스포이드'). 좌표는 문서 픽셀이다.
@@ -119,19 +120,19 @@ fun EyedropperLoupe(state: EyedropperState, currentColor: Int, view: () -> Canva
         val radius = outer - width / 2
         val box = Size(radius * 2, radius * 2)
         val topLeft = Offset(center.x - radius, center.y - radius)
-        val picked = state.color?.let { Color(it) } ?: Color.Gray
+        val picked = state.color?.let { Color(it) } ?: CanvasOverlayColors.Unknown
         // 위쪽 반(9시 → 12시 → 3시): 고를 색, 아래쪽 반: 지금 색
         drawArc(picked, startAngle = 180f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
         drawArc(Color(currentColor), startAngle = 0f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
-        val edge = Color.Black.copy(alpha = 0.6f)
+        val edge = CanvasOverlayColors.DarkHalo
         drawCircle(edge, outer, center, style = Stroke(1.5.dp.toPx()))
         drawCircle(edge, outer - width, center, style = Stroke(1.5.dp.toPx()))
         // 가운데 작은 십자: 고르는 자리
         val cross = 6.dp.toPx()
-        drawLine(Color.White, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 3.dp.toPx())
-        drawLine(Color.White, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 3.dp.toPx())
-        drawLine(Color.Black, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 1.dp.toPx())
-        drawLine(Color.Black, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 1.dp.toPx())
+        drawLine(CanvasOverlayColors.Light, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 3.dp.toPx())
+        drawLine(CanvasOverlayColors.Light, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 3.dp.toPx())
+        drawLine(CanvasOverlayColors.Dark, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 1.dp.toPx())
+        drawLine(CanvasOverlayColors.Dark, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 1.dp.toPx())
     }
 }
 

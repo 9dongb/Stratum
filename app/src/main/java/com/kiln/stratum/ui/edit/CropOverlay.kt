@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -20,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 
 /** 손잡이를 잡을 수 있는 거리. 손잡이 둘레 48dp가 잡힌다(CLAUDE.md 6장 최소 터치 영역). */
 private val CropHandleReach = 24.dp
@@ -28,7 +28,6 @@ private val CropHandleReach = 24.dp
 private val CropMinSide = 72.dp
 
 /** 테두리 바깥을 어둡게 덮는 색 */
-private val CropScrim = Color(0x8C000000)
 
 /**
  * 자르기 테두리. 캔버스 위에 겹쳐, 테두리 바깥을 어둡게 하고 3등분 선과 손잡이(모서리 넷, 변 넷)를 그린다.
@@ -118,24 +117,24 @@ fun CropOverlay(
 /** 테두리 바깥을 어둡게 하고, 3등분 선·테두리·손잡이를 그린다. 손잡이는 어두운 테를 둘러 밝은 사진 위에서도 보인다. */
 private fun DrawScope.drawCropFrame(left: Float, top: Float, right: Float, bottom: Float) {
     // 바깥 네 조각
-    drawRect(CropScrim, Offset.Zero, Size(size.width, top.coerceIn(0f, size.height)))
-    drawRect(CropScrim, Offset(0f, bottom), Size(size.width, (size.height - bottom).coerceAtLeast(0f)))
-    drawRect(CropScrim, Offset(0f, top), Size(left.coerceIn(0f, size.width), bottom - top))
-    drawRect(CropScrim, Offset(right, top), Size((size.width - right).coerceAtLeast(0f), bottom - top))
+    drawRect(CanvasOverlayColors.CropScrim, Offset.Zero, Size(size.width, top.coerceIn(0f, size.height)))
+    drawRect(CanvasOverlayColors.CropScrim, Offset(0f, bottom), Size(size.width, (size.height - bottom).coerceAtLeast(0f)))
+    drawRect(CanvasOverlayColors.CropScrim, Offset(0f, top), Size(left.coerceIn(0f, size.width), bottom - top))
+    drawRect(CanvasOverlayColors.CropScrim, Offset(right, top), Size((size.width - right).coerceAtLeast(0f), bottom - top))
     val thin = 1.dp.toPx()
     val w = right - left
     val h = bottom - top
     // 3등분 선
-    val guide = Color.White.copy(alpha = 0.5f)
+    val guide = CanvasOverlayColors.Guide
     for (i in 1..2) {
         drawLine(guide, Offset(left + w * i / 3, top), Offset(left + w * i / 3, bottom), thin)
         drawLine(guide, Offset(left, top + h * i / 3), Offset(right, top + h * i / 3), thin)
     }
-    drawRect(Color.White, Offset(left, top), Size(w, h), style = Stroke(thin))
+    drawRect(CanvasOverlayColors.Light, Offset(left, top), Size(w, h), style = Stroke(thin))
     // 모서리는 ㄱ자, 변은 가운데 짧은 막대
     val arm = 20.dp.toPx().coerceAtMost(minOf(w, h) / 2)
     val bar = 24.dp.toPx().coerceAtMost(minOf(w, h) / 3)
-    for ((color, width) in listOf(Color.Black.copy(alpha = 0.6f) to 5.dp.toPx(), Color.White to 3.dp.toPx())) {
+    for ((color, width) in listOf(CanvasOverlayColors.DarkHalo to 5.dp.toPx(), CanvasOverlayColors.Light to 3.dp.toPx())) {
         fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(x1, y1), Offset(x2, y2), width)
         line(left, top, left + arm, top)
         line(left, top, left, top + arm)

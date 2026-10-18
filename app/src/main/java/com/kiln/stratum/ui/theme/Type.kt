@@ -6,8 +6,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Set of Material typography styles to start with
-val Typography = Typography(
+// M3 기본 글자를 바탕으로, 촘촘하게 보이도록 바 제목과 창 제목만 줄인다(결정 기록 '디자인(시안)').
+// 버튼·분할 버튼·칩·본문 글자는 그대로 둔다. 줄이면 폭이 바뀌어 줄 바꿈과 옵션 위치가 움직인다.
+private val MaterialDefaults = Typography()
+
+val StratumTypography = Typography(
+    // 상단 바 제목(유동화·홈·설정) 22 → 18sp
+    titleLarge = MaterialDefaults.titleLarge.copy(fontSize = 18.sp, lineHeight = 24.sp),
+    // 창·아래 시트 제목 24 → 20sp
+    headlineSmall = MaterialDefaults.headlineSmall.copy(fontSize = 20.sp, lineHeight = 28.sp),
+    // 처음 프로젝트에서 쓰던 값 그대로(글자 높이가 바뀌어 줄이 움직이지 않게)
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
@@ -15,20 +23,4 @@ val Typography = Typography(
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp
     )
-    /* Other default text styles to override
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
-    */
 )

@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ClipOp
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asComposePath
@@ -66,6 +65,7 @@ import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionPoint
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -418,10 +418,10 @@ private fun transformed(path: android.graphics.Path, matrix: android.graphics.Ma
 private fun DrawScope.drawAnts(path: Path, phase: Float) {
     val width = 1.dp.toPx()
     val dash = 4.dp.toPx()
-    drawPath(path, Color.White, style = Stroke(width = width))
+    drawPath(path, CanvasOverlayColors.Light, style = Stroke(width = width))
     drawPath(
         path,
-        Color.Black,
+        CanvasOverlayColors.Dark,
         style = Stroke(width = width, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash), phase * dash * 2))
     )
 }

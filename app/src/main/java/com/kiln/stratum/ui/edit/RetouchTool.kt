@@ -19,7 +19,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -33,6 +32,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
 /**
@@ -260,7 +260,7 @@ fun RetouchOverlay(
 private fun DrawScope.drawSourceMarker(center: Offset, radius: Float) {
     val arm = 8.dp.toPx()
     val ring = radius.coerceAtLeast(arm)
-    for ((color, width) in listOf(Color.Black to 3.dp.toPx(), Color.White to 1.5.dp.toPx())) {
+    for ((color, width) in listOf(CanvasOverlayColors.Dark to 3.dp.toPx(), CanvasOverlayColors.Light to 1.5.dp.toPx())) {
         drawCircle(color, ring, center, style = Stroke(width))
         drawLine(color, Offset(center.x - arm, center.y), Offset(center.x + arm, center.y), width)
         drawLine(color, Offset(center.x, center.y - arm), Offset(center.x, center.y + arm), width)

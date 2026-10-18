@@ -13,7 +13,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -24,6 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
 /** 캔버스의 브러시·지우개 손가락이 엔진 쪽(ViewModel)에 보내는 일. 좌표는 문서 픽셀이다. */
@@ -210,8 +210,8 @@ internal fun BrushCursor(center: Offset, size: Float, view: () -> CanvasView, do
 
 /** 브러시 커서 모양: 흰 선에 검은 테두리를 둘러 어떤 사진 위에서도 보인다(유동화와 같다) */
 internal fun DrawScope.drawBrushCursor(center: Offset, radius: Float) {
-    drawCircle(Color.White, radius, center, style = Stroke(width = 2.dp.toPx()))
-    drawCircle(Color.Black, radius + 1.dp.toPx(), center, style = Stroke(width = 1.dp.toPx()))
+    drawCircle(CanvasOverlayColors.Light, radius, center, style = Stroke(width = 2.dp.toPx()))
+    drawCircle(CanvasOverlayColors.Dark, radius + 1.dp.toPx(), center, style = Stroke(width = 1.dp.toPx()))
 }
 
 /**

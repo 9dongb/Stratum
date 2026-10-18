@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
@@ -34,13 +33,10 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
-
-/** 투명한 곳을 보여 주는 체크 무늬의 두 칸 색. 다른 편집 앱처럼 흰색과 밝은 회색이다. */
-internal val CheckerLight = Color(0xFFFFFFFF)
-internal val CheckerDark = Color(0xFFCCCCCC)
 
 /** 체크 무늬 한 칸의 크기. 확대해도 화면에서 같은 크기다. */
 internal val CheckerSquare = 8.dp
@@ -177,7 +173,7 @@ private fun DrawScope.drawPreview(image: ImageBitmap, preview: PreviewImage, tra
 
 /** 체크 무늬 한 벌(2×2칸) 비트맵. 셰이더가 칸 크기로 늘여 반복해 그린다. */
 private fun checkerBitmap(): Bitmap {
-    val light = CheckerLight.toArgb()
-    val dark = CheckerDark.toArgb()
+    val light = CanvasOverlayColors.CheckerLight.toArgb()
+    val dark = CanvasOverlayColors.CheckerDark.toArgb()
     return Bitmap.createBitmap(intArrayOf(light, dark, dark, light), 2, 2, Bitmap.Config.ARGB_8888)
 }
