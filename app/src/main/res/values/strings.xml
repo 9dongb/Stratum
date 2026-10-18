@@ -174,6 +174,7 @@
     <string name="action_ok">OK</string>
     <string name="color_current">Current color, %1$s</string>
     <string name="color_choose">Choose color</string>
+    <string name="color_eyedropper">Eyedropper</string>
     <string name="color_recent">Recent color %1$d, %2$s</string>
     <string name="color_saturation_value">Saturation and brightness</string>
     <string name="color_saturation_value_state">Saturation %1$d%%, brightness %2$d%%</string>

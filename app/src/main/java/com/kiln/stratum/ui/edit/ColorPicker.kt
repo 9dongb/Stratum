@@ -26,6 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -48,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -73,15 +77,24 @@ import android.graphics.Color as AndroidColor
 enum class ColorTarget { BRUSH, TEXT }
 
 /**
- * 색 줄이 쓰는 값과 할 일(브러시·글자 옵션, 결정 기록 '색 팔레트·최근 색').
+ * 색 줄이 쓰는 값과 할 일(브러시·글자 옵션, 결정 기록 '색 팔레트·최근 색'·'스포이드').
  *
  * @property color 지금 색(불투명한 0xAARRGGBB)
  * @property recent 최근 색(맨 앞이 가장 최근)
  * @property onChoose 최근 색을 눌렀다. 그 색을 쓰고 최근 색 맨 앞으로 옮긴다.
  * @property onOpenPalette 지금 색을 눌렀다(팔레트를 연다)
+ * @property eyedropperOn 스포이드 버튼이 켜져 있는지(다음에 캔버스를 누르면 그 자리 색을 고른다)
+ * @property onEyedropper 스포이드 버튼을 눌렀다(켜고 끈다). 없으면 버튼을 보이지 않는다.
  */
 @Stable
-class ColorControls(val color: Int, val recent: List<Int>, val onChoose: (Int) -> Unit, val onOpenPalette: () -> Unit)
+class ColorControls(
+    val color: Int,
+    val recent: List<Int>,
+    val onChoose: (Int) -> Unit,
+    val onOpenPalette: () -> Unit,
+    val eyedropperOn: Boolean = false,
+    val onEyedropper: (() -> Unit)? = null
+)
 
 private const val OPAQUE = 0xFF000000.toInt()
 
@@ -89,7 +102,7 @@ private const val OPAQUE = 0xFF000000.toInt()
 private val HueColors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
 
 /**
- * 색 줄: 지금 색(무지개 테두리, 누르면 팔레트), 최근 색(6개까지, 누르면 그 색). 폭이 모자라면 옆으로 밀어 본다.
+ * 색 줄: 지금 색(무지개 테두리, 누르면 팔레트), 스포이드 버튼, 최근 색(6개까지, 누르면 그 색). 폭이 모자라면 옆으로 밀어 본다.
  * 지금 색과 같은 최근 색은 테두리로 보인다. 누르는 영역은 모두 48dp다.
  */
 @Composable
@@ -118,6 +131,20 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
                     .padding(5.dp)
                     .background(Color(current), CircleShape)
             )
+        }
+        controls.onEyedropper?.let { toggle ->
+            // 스포이드: 켜면 다음에 캔버스를 누르거나 끈 자리의 색을 고른다(고른 도구가 칠하던 손가락 대신)
+            IconToggleButton(
+                checked = controls.eyedropperOn,
+                onCheckedChange = { toggle() },
+                colors = IconButtonDefaults.iconToggleButtonColors(
+                    checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                modifier = Modifier.testTag(EditScreenTags.COLOR_EYEDROPPER)
+            ) {
+                Icon(painterResource(R.drawable.ic_colorize), contentDescription = stringResource(R.string.color_eyedropper))
+            }
         }
         VerticalDivider(Modifier.padding(horizontal = 8.dp).height(28.dp))
         controls.recent.forEachIndexed { index, color ->

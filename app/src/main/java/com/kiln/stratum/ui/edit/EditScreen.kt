@@ -130,6 +130,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
  * @param recentColors 최근 색(브러시·글자의 색 줄, 맨 앞이 가장 최근)
  * @param onChooseColor 브러시·글자의 색을 골랐다(최근 색 누르기·팔레트 확인). 최근 색에도 더한다.
+ * @param eyedropper 스포이드로 고르는 중인 자리와 색(없으면 null). 손가락 둘레 고리만 읽도록 함수로 받는다.
+ * @param eyedropperActions 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일
  */
 @Composable
 fun EditScreen(
@@ -173,7 +175,9 @@ fun EditScreen(
     onToneOptions: (ToneOptions) -> Unit = {},
     toneActions: ToneActions = ToneActions.None,
     recentColors: List<Int> = emptyList(),
-    onChooseColor: (ColorTarget, Int) -> Unit = { _, _ -> }
+    onChooseColor: (ColorTarget, Int) -> Unit = { _, _ -> },
+    eyedropper: () -> EyedropperState? = { null },
+    eyedropperActions: EyedropperActions = EyedropperActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -231,13 +235,27 @@ fun EditScreen(
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
     // 색 팔레트에서 고르던 색. 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var palette by rememberSaveable(stateSaver = PaletteDraft.Saver) { mutableStateOf<PaletteDraft?>(null) }
-    // 브러시·글자의 색 줄: 최근 색을 누르면 그 색, 지금 색을 누르면 팔레트
+    // 스포이드 버튼을 켠 곳(브러시·글자). 켜면 다음에 캔버스를 누른 자리의 색을 고르고 꺼진다. 도구를 바꾸면 꺼진다.
+    var eyedropperTarget by rememberSaveable { mutableStateOf<ColorTarget?>(null) }
+    LaunchedEffect(selection.active) { eyedropperTarget = null }
+    // 브러시·글자의 색 줄: 최근 색을 누르면 그 색, 지금 색을 누르면 팔레트, 스포이드 버튼은 켜고 끈다
     fun colorControls(target: ColorTarget, color: Int) = ColorControls(
         color = color,
         recent = recentColors,
         onChoose = { onChooseColor(target, it) },
-        onOpenPalette = { palette = PaletteDraft.start(target, color) }
+        onOpenPalette = { palette = PaletteDraft.start(target, color) },
+        eyedropperOn = eyedropperTarget == target,
+        onEyedropper = { eyedropperTarget = if (eyedropperTarget == target) null else target }
     )
+    // 브러시로 움직이지 않고 꾹 누르면 그 손가락이 스포이드가 된다(결정 기록 '스포이드')
+    val brushHold = remember(eyedropperActions) {
+        object : HoldActions {
+            override fun begin(x: Float, y: Float) = eyedropperActions.begin(ColorTarget.BRUSH, x, y)
+            override fun move(x: Float, y: Float) = eyedropperActions.move(x, y)
+            override fun end() = eyedropperActions.end()
+            override fun cancel() = eyedropperActions.cancel()
+        }
+    }
     // 공유 창은 앱이 화면에 있을 때만 띄운다. 뒤로 가 있는 동안 끝난 것은 돌아왔을 때 띄운다.
     val context = LocalContext.current
     // 넓은 색 문서를 여는 동안 창을 넓은 색 모드로, HDR 문서는 HDR 모드로 둔다. 닫으면 되돌린다.
@@ -349,15 +367,30 @@ fun EditScreen(
         val railToolOptions = toolOptions?.takeIf { railTool != null }
         // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다.
         // 크기 슬라이더를 끄는 동안은 그 위에 브러시 크기 원을 보인다.
+        // 스포이드 버튼을 켰으면 브러시·글자의 손가락 대신 스포이드 손가락을 겹친다
+        val picking = eyedropperTarget?.takeIf {
+            (it == ColorTarget.BRUSH && activeTool == EditTool.Brush) || (it == ColorTarget.TEXT && activeTool == EditTool.Text)
+        }
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
-            if (ready != null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
+            if (ready != null && picking != null) {
+                EyedropperOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    target = picking,
+                    actions = eyedropperActions,
+                    onPicked = { eyedropperTarget = null },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && picking == null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
                 StrokeOverlay(
                     view = { viewState.view },
                     document = ready.documentSize,
                     erase = activeTool == EditTool.Eraser,
                     actions = strokeActions,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    hold = brushHold.takeIf { activeTool == EditTool.Brush }
                 )
             }
             if (ready != null && activeTool == EditTool.Retouch) {
@@ -392,7 +425,7 @@ fun EditScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            if (ready != null && activeTool == EditTool.Text) {
+            if (ready != null && picking == null && activeTool == EditTool.Text) {
                 TextOverlay(
                     view = { viewState.view },
                     document = ready.documentSize,
@@ -415,6 +448,17 @@ fun EditScreen(
                     document = ready.documentSize,
                     size = sizedBrush.size,
                     hardness = sizedBrush.hardness,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            // 스포이드로 고르는 동안 손가락 둘레에 고를 색(위)과 지금 색(아래) 고리를 보인다
+            val picked = eyedropper()
+            if (ready != null && picked != null) {
+                EyedropperLoupe(
+                    state = picked,
+                    currentColor = if (picked.target == ColorTarget.BRUSH) brush.color else textStyle.color,
+                    view = { viewState.view },
+                    document = ready.documentSize,
                     modifier = Modifier.fillMaxSize()
                 )
             }

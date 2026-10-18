@@ -100,6 +100,8 @@ fun StratumApp(editor: EditorViewModel) {
             val retouch by editor.retouch.collectAsState()
             val cloneSource by editor.cloneSource.collectAsState()
             val toneOptions by editor.tone.collectAsState()
+            // 스포이드 고리는 끄는 동안 자주 바뀌므로 State로 받아 두고, 고리만 읽게 한다
+            val eyedropper = editor.eyedropper.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -140,7 +142,9 @@ fun StratumApp(editor: EditorViewModel) {
                 onToneOptions = editor::setTone,
                 toneActions = editor.toneActions,
                 recentColors = settingsValues.recentColors,
-                onChooseColor = editor::chooseColor
+                onChooseColor = editor::chooseColor,
+                eyedropper = { eyedropper.value },
+                eyedropperActions = editor.eyedropperActions
             )
         }
     }

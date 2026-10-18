@@ -41,6 +41,7 @@ import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.BlankCanvas
+import com.kiln.stratum.engine.platform.ColorSampler
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.Deselect
@@ -445,6 +446,23 @@ class EditorViewModel internal constructor(
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
     }
+
+    /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
+    val eyedropperActions: EyedropperActions = object : EyedropperActions {
+        override fun begin(target: ColorTarget, x: Float, y: Float) = beginEyedropper(target, x, y)
+        override fun move(x: Float, y: Float) = moveEyedropper(x, y)
+        override fun end() = endEyedropper()
+        override fun cancel() = cancelEyedropper()
+    }
+
+    private val _eyedropper = MutableStateFlow<EyedropperState?>(null)
+
+    /** 스포이드로 고르는 중인 자리와 그 자리 색(손가락 둘레 고리). 고르지 않으면 null이다. */
+    val eyedropper: StateFlow<EyedropperState?> = _eyedropper.asStateFlow()
+
+    /** 스포이드 자리의 색을 읽는 작업과, 그사이 손을 뗐는지 */
+    private var eyedropperJob: Job? = null
+    private var eyedropperEnding = false
 
     /** 캔버스의 명암 손가락이 보내는 일 */
     val toneActions: ToneActions = object : ToneActions {
@@ -1072,6 +1090,69 @@ class EditorViewModel internal constructor(
         appSettings.update { it.copy(recentColors = RecentColors.add(it.recentColors, opaque)) }
     }
 
+    /**
+     * 스포이드를 시작한다: [target](브러시·글자)의 색을 문서 좌표 ([x], [y])에서 고르기 시작한다(결정 기록 '스포이드').
+     * 그 자리에 보이는 색(보이는 레이어를 모두 합친 색)을 백그라운드에서 읽어 [eyedropper]로 알린다.
+     */
+    fun beginEyedropper(target: ColorTarget, x: Float, y: Float) {
+        if (_state.value !is EditorState.Ready || history == null) return
+        eyedropperJob?.cancel()
+        eyedropperEnding = false
+        _eyedropper.value = EyedropperState(target, x, y)
+        sampleEyedropper()
+    }
+
+    /** 스포이드 손가락이 ([x], [y])로 움직였다 */
+    fun moveEyedropper(x: Float, y: Float) {
+        val current = _eyedropper.value ?: return
+        if (current.x == x && current.y == y) return
+        _eyedropper.value = current.copy(x = x, y = y)
+        sampleEyedropper()
+    }
+
+    /** 스포이드 손을 뗐다: 마지막 자리의 색을 쓰고 최근 색에 더한다(투명한 곳이면 그대로). 읽는 중이면 다 읽은 뒤 쓴다. */
+    fun endEyedropper() {
+        if (_eyedropper.value == null) return
+        eyedropperEnding = true
+        if (eyedropperJob?.isActive != true) finishEyedropper()
+    }
+
+    /** 스포이드를 그만둔다(색은 그대로) */
+    fun cancelEyedropper() {
+        eyedropperJob?.cancel()
+        eyedropperJob = null
+        eyedropperEnding = false
+        _eyedropper.value = null
+    }
+
+    /**
+     * 스포이드 자리의 색을 읽는다. 읽는 중이면 그 일이 끝난 뒤 그때의 마지막 자리를 이어서 읽는다(사이 자리는 건너뜀).
+     * 1픽셀만 GPU로 그려 읽어 가볍다. 문서는 바꾸지 않는 값이라, 편집을 처리하는 중에도 읽을 수 있다.
+     */
+    private fun sampleEyedropper() {
+        if (eyedropperJob?.isActive == true) return
+        eyedropperJob = viewModelScope.launch {
+            while (true) {
+                val wanted = _eyedropper.value ?: return@launch
+                val document = history?.document ?: return@launch
+                val color = withContext(Dispatchers.Default) { ColorSampler.sample(document, wanted.x, wanted.y) }
+                val now = _eyedropper.value ?: return@launch
+                _eyedropper.value = now.copy(color = color)
+                if (now.x == wanted.x && now.y == wanted.y) break
+            }
+            if (eyedropperEnding) finishEyedropper()
+        }
+    }
+
+    /** 스포이드를 끝내고, 읽은 색이 있으면 그 색을 쓴다. 색을 먼저 바꾼 뒤 고리를 지운다(고리가 사라지면 이미 그 색이다). */
+    private fun finishEyedropper() {
+        val picked = _eyedropper.value
+        eyedropperJob = null
+        eyedropperEnding = false
+        picked?.color?.let { chooseColor(picked.target, it) }
+        _eyedropper.value = null
+    }
+
     /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */
     fun setTextStyle(style: TextStyle) {
         if (style.size != _textStyle.value.size) textSizeChosen = true
@@ -1693,6 +1774,7 @@ class EditorViewModel internal constructor(
 
     /** 문서를 닫고 메모리를 비운다. 홈으로 돌아갈 때 부른다. 마지막 문서는 저장한다(백그라운드에서 끝까지). */
     fun close() {
+        cancelEyedropper()
         closeProject()
         // 작업은 취소만 하고 지우지 않는다. 다음에 열 때 끝날 때까지 기다린다.
         openJob?.cancel()

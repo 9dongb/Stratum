@@ -45,6 +45,16 @@ object DocumentColors {
     }
 
     /**
+     * [space] 문서의 값 [argb](알파를 곱하지 않음)를 sRGB로 고른 색으로 바꾼다([paintColor]의 반대, 스포이드). 같은 색으로 보인다.
+     * sRGB에 없는 아주 진한 P3 색은 sRGB 안으로 조금 준다. 알파는 그대로, sRGB 문서는 그대로다.
+     */
+    fun pickedColor(argb: Int, space: DocumentColorSpace): Int {
+        if (space == DocumentColorSpace.SRGB) return argb
+        val rgb = toSrgb.transform(Color.red(argb) / 255f, Color.green(argb) / 255f, Color.blue(argb) / 255f)
+        return Color.argb(Color.alpha(argb), channel(rgb[0]), channel(rgb[1]), channel(rgb[2]))
+    }
+
+    /**
      * 화면에 그릴 그림. P3 문서면 같은 GPU 메모리를 P3 꼬리표로 감싼 새 비트맵이고(복사 없음), sRGB 문서면 [bitmap] 그대로다.
      * [gainmap]이 있으면(HDR 문서, 안드로이드 14 이상) 새 비트맵에 그림이 보이는 문서 자리 [shown]만큼의 게인맵을 붙여,
      * HDR 창에서 HDR 화면이면 밝게 보인다(문서 크기 [document]).
@@ -83,6 +93,10 @@ object DocumentColors {
     /** 압축할 그림 [bitmap]의 꼬리표를 문서 색 공간으로 바꾼다. 값은 그대로다. 압축하면 그 색 정보가 파일에 붙는다. */
     fun tagForEncoding(bitmap: Bitmap, space: DocumentColorSpace) {
         if (space != DocumentColorSpace.SRGB) bitmap.setColorSpace(androidColorSpace(space))
+    }
+
+    private val toSrgb: ColorSpace.Connector by lazy {
+        ColorSpace.connect(ColorSpace.get(ColorSpace.Named.DISPLAY_P3), ColorSpace.get(ColorSpace.Named.SRGB))
     }
 
     private val toDisplayP3: ColorSpace.Connector by lazy {

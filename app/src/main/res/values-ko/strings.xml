@@ -172,6 +172,7 @@
     <string name="action_ok">확인</string>
     <string name="color_current">지금 색, %1$s</string>
     <string name="color_choose">색 고르기</string>
+    <string name="color_eyedropper">스포이드</string>
     <string name="color_recent">최근 색 %1$d, %2$s</string>
     <string name="color_saturation_value">채도·밝기</string>
     <string name="color_saturation_value_state">채도 %1$d%%, 밝기 %2$d%%</string>

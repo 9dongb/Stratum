@@ -10,6 +10,11 @@ object EditScreenTags {
     /** 색 줄의 지금 색(누르면 팔레트) */
     const val COLOR_CURRENT = "colorCurrent"
 
+    /** 색 줄의 스포이드 버튼, 켜면 캔버스에 겹치는 스포이드 터치 자리, 손가락 둘레 고리 */
+    const val COLOR_EYEDROPPER = "colorEyedropper"
+    const val EYEDROPPER_OVERLAY = "eyedropperOverlay"
+    const val EYEDROPPER_LOUPE = "eyedropperLoupe"
+
     /** 색 팔레트와 그 안의 채도·밝기 네모, 색상 띠, 16진 코드, 원래 색, 버튼 */
     const val PALETTE = "palette"
     const val PALETTE_SQUARE = "paletteSquare"
