@@ -80,7 +80,7 @@ class LayerPreviewCache {
     ): Bitmap? {
         val size = PixelSize(document.width, document.height)
         val region = PreviewLevels.wholeRegion(size, level)
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         // 앞 축소본을 고쳐 쓸 수 있게, 놓아 주기 전에 붙잡아 둔다
         val previous = HashMap<LayerId, Bitmap>()
         for (layer in document.layers) {
@@ -88,7 +88,7 @@ class LayerPreviewCache {
             if (last !== rasterOf(layer)) entries[last]?.takeIf { it.level == level }?.let { previous[layer.id] = it.bitmap }
         }
         // 지금 문서에 없는 래스터와 다른 단계의 축소본은 놓아 준다(화면이 아직 그리고 있을 수 있어 recycle하지 않는다).
-        // 숨긴(불투명도 0) 레이어의 축소본은 작은 그림에 쓰므로 남긴다.
+        // 숨긴(눈을 끈·불투명도 0) 레이어의 축소본은 작은 그림에 쓰므로 남긴다.
         val lastByLayer = HashMap(lastRasters)
         forget(document, level)
         lastRasters.clear()
@@ -160,14 +160,14 @@ class LayerPreviewCache {
     /**
      * 화면 축소본에 붙일 HDR 게인맵(편집 화면 HDR, 결정 기록 'HDR'). HDR 문서가 아니면 null.
      * 내보내기와 같은 겹치기이고([GainmapComposer]), 레이어 알파는 [level] 단계의 레이어 축소본(이미 그린 것)을 써서 타일을 다시 읽지 않는다.
-     * 크기는 게인맵 원래 크기와 축소본 크기 중 작은 쪽이다. 레이어의 래스터·게인맵·불투명도·혼합 모드가 같으면 다시 만들지 않아,
+     * 크기는 게인맵 원래 크기와 축소본 크기 중 작은 쪽이다. 레이어의 래스터·게인맵·불투명도·혼합 모드·보이기가 같으면 다시 만들지 않아,
      * 보정 슬라이더를 끄는 동안 느려지지 않는다. [render]와 같은 잠금 안에서 부른다.
      */
     fun screenGainmap(document: Document, level: Int): ScreenGainmap? {
         val info = document.hdr ?: return null
         if (!document.hasHdr) return null
         val key: List<Any> = listOf(level, document.width, document.height, info) +
-            document.layers.map { listOf(IdentityKey(rasterOf(it)), IdentityKey(it.gainmap?.raster), it.opacity, it.blendMode) }
+            document.layers.map { listOf(IdentityKey(rasterOf(it)), IdentityKey(it.gainmap?.raster), it.opacity, it.blendMode, it.visible) }
         lastGainmap?.let { (lastKey, gainmap) -> if (lastKey == key) return gainmap }
         val size = PixelSize(document.width, document.height)
         val region = PreviewLevels.wholeRegion(size, level)

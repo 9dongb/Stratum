@@ -1,7 +1,9 @@
 package com.kiln.stratum.ui.edit
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.graphics.Color
+import com.kiln.stratum.engine.brush.StrokePoint
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -40,6 +42,13 @@ class EditorLayersTest {
     private fun openCanvas(): EditorState.Ready {
         onMain { viewModel.newCanvas(400, 300, CanvasFill.Solid(Color.rgb(200, 120, 40))) }
         return awaitReady { !it.busy && it.documentSize == PixelSize(400, 300) }
+    }
+
+    /** 캔버스 축소본의 문서 좌표 ([x], [y]) 픽셀 */
+    private fun pixel(ready: EditorState.Ready, x: Int, y: Int): Int {
+        val bitmap = ready.base.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val level = ready.base.region.level
+        return bitmap.getPixel(x shr level, y shr level)
     }
 
     private fun addLayer(after: EditorState.Ready): EditorState.Ready {
@@ -162,6 +171,68 @@ class EditorLayersTest {
         onMain { viewModel.undo() }
         val undone = awaitReady { !it.busy && it.layers.size == 3 }
         assertEquals(withThree.layers.map { it.id }, undone.layers.map { it.id })
+    }
+
+    @Test
+    fun hiding_isOneUndoStep_andTheCanvasDrawsWithoutTheLayer() {
+        val opened = openCanvas()
+        val layer = opened.layers.single()
+
+        onMain { viewModel.setLayerVisible(layer.id, false) }
+        val hidden = awaitReady { !it.busy && it.revision > opened.revision }
+
+        val summary = hidden.layers.single()
+        assertEquals(false, summary.visible)
+        // 불투명도는 그대로이고, 작은 그림도 남는다(줄에서 흐리게 보인다)
+        assertEquals(1f, summary.opacity)
+        assertNotNull(summary.thumbnail)
+        // 숨긴 레이어는 그리지 않는다(한 장뿐이라 캔버스가 투명하다)
+        assertEquals(0, Color.alpha(pixel(hidden, 200, 150)))
+        assertTrue(hidden.canUndo)
+
+        onMain { viewModel.undo() }
+        val shown = awaitReady { !it.busy && it.layers.single().visible }
+        assertEquals(Color.rgb(200, 120, 40), pixel(shown, 200, 150))
+    }
+
+    @Test
+    fun drawingOnAHiddenLayer_tellsWhy_andDrawsNothing() {
+        val opened = openCanvas()
+        onMain { viewModel.setLayerVisible(opened.layers.single().id, false) }
+        val hidden = awaitReady { !it.busy && it.revision > opened.revision }
+
+        onMain {
+            viewModel.beginStroke(StrokePoint(100f, 100f), erase = false)
+            viewModel.extendStroke(StrokePoint(300f, 100f))
+            viewModel.endStroke()
+        }
+
+        assertEquals(EditorMessage.HiddenLayer, runBlocking { withTimeout(10_000) { viewModel.messages.first() } })
+        Thread.sleep(300)
+        assertEquals(hidden.revision, (viewModel.state.value as EditorState.Ready).revision)
+        // 유동화 작업 모드도 열지 않는다(같은 알림은 떠 있는 동안 다시 보내지 않는다)
+        onMain { viewModel.startLiquify() }
+        Thread.sleep(300)
+        assertNull(viewModel.liquify.value)
+    }
+
+    @Test
+    fun hiddenLayers_stayOutOfMerging() {
+        val withThree = addLayer(addLayer(openCanvas()))
+        val middle = withThree.layers[1].id
+
+        onMain { viewModel.setLayerVisible(middle, false) }
+        val hidden = awaitReady { !it.busy && it.revision > withThree.revision }
+        // 맨 위 레이어(고른 것)의 아래가 숨어 있어 아래와 병합은 하지 않는다
+        onMain { viewModel.mergeLayerDown() }
+        Thread.sleep(300)
+        assertEquals(hidden.revision, (viewModel.state.value as EditorState.Ready).revision)
+
+        // 보이는 레이어 병합은 숨긴 레이어를 제자리에 남긴다
+        onMain { viewModel.mergeVisibleLayers() }
+        val merged = awaitReady { !it.busy && it.layers.size == 2 }
+        assertEquals(listOf(LayerId(0), middle), merged.layers.map { it.id })
+        assertEquals(listOf(true, false), merged.layers.map { it.visible })
     }
 
     @Test

@@ -79,6 +79,17 @@ data class SetLayerOpacity(val layerId: LayerId, val opacity: Float) : EditComma
         }
 }
 
+/**
+ * [layerId] 레이어를 보이거나 숨긴다(레이어 줄의 눈 버튼, 결정 기록 '레이어 보이기'). 불투명도는 그대로다.
+ * 없는 레이어이거나 값이 같으면 그대로 둔다.
+ */
+data class SetLayerVisible(val layerId: LayerId, val visible: Boolean) : EditCommand {
+    override fun applyTo(document: Document): Document =
+        document.updateLayer(layerId) { layer ->
+            if (layer.visible == visible) layer else layer.copy(visible = visible)
+        }
+}
+
 /** [layerId] 레이어의 혼합 모드를 [blendMode]로 바꾼다. 없는 레이어이거나 값이 같으면 그대로 둔다. */
 data class SetLayerBlendMode(val layerId: LayerId, val blendMode: BlendMode) : EditCommand {
     override fun applyTo(document: Document): Document =

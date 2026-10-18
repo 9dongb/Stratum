@@ -646,6 +646,7 @@ private fun EditCanvas(
     val exportFailed = stringResource(R.string.edit_export_failed)
     val view = stringResource(R.string.action_view)
     val autosaveFailed = stringResource(R.string.edit_autosave_failed)
+    val hiddenLayer = stringResource(R.string.edit_hidden_layer)
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
     // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
     val busy = (state as? EditorState.Ready)?.busy == true
@@ -676,6 +677,7 @@ private fun EditCanvas(
                 EditorMessage.ExportNotEnoughMemory -> snackbarHostState.showSnackbar(exportNotEnoughMemory)
                 EditorMessage.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
                 EditorMessage.AutosaveFailed -> snackbarHostState.showSnackbar(autosaveFailed)
+                EditorMessage.HiddenLayer -> snackbarHostState.showSnackbar(hiddenLayer)
             }
         }
     }

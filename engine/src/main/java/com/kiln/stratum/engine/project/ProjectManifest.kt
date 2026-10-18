@@ -50,7 +50,8 @@ data class ProjectManifest(
 }
 
 /**
- * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에 적고, 없으면 적지 않는다.
+ * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에, 숨김은 덧붙임(꼬리표 3)에 적고,
+ * 없으면(보이면) 적지 않는다. 그래서 숨김을 모르는 앞 판의 프로젝트는 모두 보이는 레이어로 열린다.
  */
 data class LayerEntry(
     val id: Long,
@@ -59,7 +60,8 @@ data class LayerEntry(
     val blendMode: BlendMode,
     val content: ContentEntry,
     val adjustments: Adjustments = Adjustments.NONE,
-    val gainmap: GainmapEntry? = null
+    val gainmap: GainmapEntry? = null,
+    val visible: Boolean = true
 )
 
 /** 레이어의 게인맵: 크기와, 게인맵 격자의 자리마다 어떤 타일이 있는지(Layer.gainmap) */
@@ -114,6 +116,9 @@ object ProjectManifestCodec {
     /** 레이어 덧붙임 꼬리표: 게인맵(크기와 타일 목록) */
     private const val EXTRA_GAINMAP = 2
 
+    /** 레이어 덧붙임 꼬리표: 숨긴 레이어(내용 없음). 보이면 적지 않는다. */
+    private const val EXTRA_HIDDEN = 3
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
 
@@ -148,6 +153,7 @@ object ProjectManifestCodec {
             val extras = ArrayList<Pair<Int, ByteArray>>()
             if (!layer.adjustments.isIdentity) extras += EXTRA_ADJUSTMENTS to adjustmentBytes(layer.adjustments)
             layer.gainmap?.let { extras += EXTRA_GAINMAP to gainmapBytes(it) }
+            if (!layer.visible) extras += EXTRA_HIDDEN to ByteArray(0)
             writeExtras(out, extras)
         }
         // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
@@ -177,13 +183,15 @@ object ProjectManifestCodec {
                 }
                 var adjustments = Adjustments.NONE
                 var gainmap: GainmapEntry? = null
+                var visible = true
                 data.readExtras { tag, bytes ->
                     when (tag) {
                         EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
                         EXTRA_GAINMAP -> gainmap = gainmapOf(bytes)
+                        EXTRA_HIDDEN -> visible = false
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap, visible)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null

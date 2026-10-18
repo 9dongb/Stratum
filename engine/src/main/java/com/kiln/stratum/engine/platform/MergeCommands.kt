@@ -23,12 +23,13 @@ import com.kiln.stratum.engine.raster.TileKey
  *
  * 결과는 아래 레이어의 번호·이름·불투명도·혼합 모드를 지닌다. 아래 레이어의 보정과 위 레이어의 불투명도·혼합 모드·보정은
  * 픽셀에 굳힌다(결과의 보정은 없음). 없는 레이어이거나 맨 아래 레이어면 그대로 둔다.
+ * 둘 중 하나라도 숨겼으면(눈을 끔) 그대로 둔다. 숨긴 내용을 모르고 합치거나 잃지 않게 한다(결정 기록 '레이어 보이기').
  */
 data class MergeDown(val layerId: LayerId) : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         val index = document.indexOfLayer(layerId)
-        if (index <= 0) return document
+        if (!canMerge(document, index)) return document
         val lower = document.layers[index - 1]
         val merging = mergedLayers(document, index)
         val merged = LayerMerger.merge(document, merging, checkCanceled)
@@ -43,8 +44,12 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
 
     override fun estimateNewBytes(document: Document): Long {
         val index = document.indexOfLayer(layerId)
-        return if (index <= 0) 0L else LayerMerger.estimateNewBytes(mergedLayers(document, index))
+        return if (!canMerge(document, index)) 0L else LayerMerger.estimateNewBytes(mergedLayers(document, index))
     }
+
+    /** [index] 레이어를 아래와 합칠 수 있는지: 맨 아래가 아니고 두 레이어가 다 보인다 */
+    private fun canMerge(document: Document, index: Int): Boolean =
+        index > 0 && document.layers[index].visible && document.layers[index - 1].visible
 
     /** 합칠 두 레이어. 아래 레이어의 불투명도·혼합 모드는 결과 레이어에 그대로 남으므로 픽셀에는 넣지 않는다(보정은 굳힌다). */
     private fun mergedLayers(document: Document, index: Int): List<Layer> =
@@ -52,15 +57,15 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
 }
 
 /**
- * 보이는(불투명도가 0보다 큰) 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다(포토샵 '보이는 레이어 병합').
+ * 보이는(숨기지 않았고 불투명도가 0보다 큰) 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다(포토샵 '보이는 레이어 병합').
  *
  * 결과는 그 레이어의 번호·이름을 지니고 표준·100%·보정 없음이라, 화면에 보이던 모습 그대로다.
- * 숨긴(0%) 레이어는 제자리에 그대로 남는다. 보이는 레이어가 둘보다 적으면 그대로 둔다.
+ * 숨긴(눈을 끈·0%) 레이어는 제자리에 그대로 남는다. 보이는 레이어가 둘보다 적으면 그대로 둔다.
  */
 data object MergeVisible : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         if (visible.size < 2) return document
         val base = visible.first()
         val merged = LayerMerger.merge(document, visible, checkCanceled)
@@ -69,7 +74,7 @@ data object MergeVisible : CancellableCommand {
         val layers = document.layers.mapNotNull { layer ->
             when {
                 layer.id == base.id -> result
-                layer.opacity > 0f -> null
+                layer.isShown -> null
                 else -> layer
             }
         }
@@ -77,7 +82,7 @@ data object MergeVisible : CancellableCommand {
     }
 
     override fun estimateNewBytes(document: Document): Long {
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         return if (visible.size < 2) 0L else LayerMerger.estimateNewBytes(visible)
     }
 }
@@ -135,7 +140,7 @@ internal object LayerMerger {
 
     /** 그대로 쓸 타일(자리 → 타일)과 다시 그릴 자리 */
     private fun plan(layers: List<Layer>): Pair<Map<TileKey, Tile>, List<TileKey>> {
-        val shown = layers.filter { it.opacity > 0f }
+        val shown = layers.filter { it.isShown }
         val rasters = shown.map { (it.content as RasterContent).raster }
         val kept = HashMap<TileKey, Tile>()
         val render = ArrayList<TileKey>()

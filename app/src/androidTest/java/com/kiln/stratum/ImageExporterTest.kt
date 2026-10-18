@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.SetLayerOpacity
+import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.export.ExportFormat.JPEG
@@ -118,6 +119,23 @@ class ImageExporterTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun hiddenLayers_areLeftOut() {
+        val source = bitmapOf(300, 200) { x, y -> Color.rgb((x * 7) and 0xFF, (y * 5) and 0xFF, 90) }
+        val base = photo(source)
+        val top = photo(300, 200) { _, _ -> Color.RED }
+        val withLayer = AddLayer("Layer 1", 1).applyTo(base)
+        val shown = withLayer.copy(layers = listOf(withLayer.layers[0], withLayer.layers[1].copy(content = top.layers[0].content)))
+        val hidden = SetLayerVisible(LayerId(1), false).applyTo(shown)
+
+        assertEquals(Color.RED, decode(export(shown, ExportSettings(PNG, 90, PixelSize(300, 200)))).getPixel(10, 10))
+        // 보이는 레이어 하나만 남으면 원본 크기 PNG는 그 레이어를 그대로 베낀다(숨긴 레이어는 빠진다)
+        assertArrayEquals(rawBytes(source), rawBytes(decode(export(hidden, ExportSettings(PNG, 90, PixelSize(300, 200))))))
+        // 줄여 그려도 숨긴 레이어는 빠진다
+        val smaller = decode(export(hidden, ExportSettings(JPEG, 95, PixelSize(150, 100))))
+        assertTrue(hex(smaller.getPixel(5, 5)), Color.red(smaller.getPixel(5, 5)) < 200)
     }
 
     @Test

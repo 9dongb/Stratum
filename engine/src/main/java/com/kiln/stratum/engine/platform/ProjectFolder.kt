@@ -91,7 +91,7 @@ class ProjectFolder(val directory: File) {
                     }
                 )
             }
-            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments, gainmap)
+            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments, gainmap, layer.visible)
         }
         val manifest = ProjectManifest(
             width = document.width,
@@ -146,7 +146,7 @@ class ProjectFolder(val directory: File) {
             }
             try {
                 val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
-                Layer(LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap)
+                Layer(LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible)
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")
             }

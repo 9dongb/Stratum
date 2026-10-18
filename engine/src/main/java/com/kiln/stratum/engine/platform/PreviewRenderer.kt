@@ -100,7 +100,7 @@ object PreviewRenderer {
         try {
             for (layer in document.layers) {
                 val raster = (layer.content as? RasterContent)?.raster ?: continue
-                if (layer.opacity == 0f) continue
+                if (!layer.isShown) continue
                 // 보정 값이 있으면 타일마다 보정 셰이더를 건다(이웃 픽셀을 보지 않아 레이어 전체에 건 것과 같다)
                 val adjust = AdjustShader.of(layer.adjustments)
                 // 불투명도가 1보다 작거나 표준이 아니면 레이어를 따로 그린 뒤, 그 불투명도·혼합 모드로 아래에 얹는다.

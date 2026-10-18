@@ -157,6 +157,9 @@
     <string name="layer_merge_down">Merge down</string>
     <string name="layer_merge_visible">Merge visible</string>
     <string name="layer_copy_name">%1$s copy</string>
+    <string name="layer_visibility">Show layer</string>
+    <string name="layer_hidden">Hidden</string>
+    <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>
     <string name="blend_normal">Normal</string>
     <string name="blend_multiply">Multiply</string>
     <string name="blend_screen">Screen</string>

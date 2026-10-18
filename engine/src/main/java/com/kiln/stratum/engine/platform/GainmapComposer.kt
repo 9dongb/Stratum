@@ -51,7 +51,7 @@ internal object GainmapComposer {
             val canvas = picture.beginRecording(width, height)
             canvas.drawColor(neutral, BlendMode.SRC)
             for (layer in document.layers) {
-                if (layer.opacity == 0f || layer.blendMode != com.kiln.stratum.engine.document.BlendMode.NORMAL) continue
+                if (!layer.isShown || layer.blendMode != com.kiln.stratum.engine.document.BlendMode.NORMAL) continue
                 val raster = (layer.content as RasterContent).raster
                 if (raster.tiles.isEmpty()) continue
                 checkCanceled()

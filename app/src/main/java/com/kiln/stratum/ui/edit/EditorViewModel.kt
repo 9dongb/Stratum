@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -26,6 +27,7 @@ import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
+import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
@@ -140,6 +142,9 @@ sealed interface EditorMessage {
 
     /** 자동 저장하지 못했다(저장 공간 부족 등). 편집은 계속할 수 있다. */
     data object AutosaveFailed : EditorMessage
+
+    /** 숨긴 레이어에는 그릴 수 없다(브러시·지우개·리터칭·명암·유동화). 레이어 줄의 눈을 켜면 그릴 수 있다. */
+    data object HiddenLayer : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -149,6 +154,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * 화면에 보일 레이어 하나의 속성(보정·레이어 패널). 아래 레이어부터의 순서로 [EditorState.Ready.layers]에 담는다.
  *
  * @property thumbnail 레이어 목록의 작은 그림(보정을 건 레이어 픽셀, 하드웨어 비트맵). 빈 레이어는 null이다.
+ * @property visible 보이는지(레이어 줄의 눈). 불투명도와 따로다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -156,7 +162,8 @@ data class LayerSummary(
     val opacity: Float,
     val blendMode: BlendMode,
     val adjustments: Adjustments,
-    val thumbnail: Bitmap? = null
+    val thumbnail: Bitmap? = null,
+    val visible: Boolean = true
 )
 
 /**
@@ -540,6 +547,7 @@ class EditorViewModel internal constructor(
         override fun previewOpacity(opacity: Float) = this@EditorViewModel.previewOpacity(opacity)
         override fun commitOpacity() = commitLive()
         override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
+        override fun setVisible(id: LayerId, visible: Boolean) = setLayerVisible(id, visible)
     }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
@@ -748,6 +756,7 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues || liquifySession != null || _state.value !is EditorState.Ready) return
         val layer = activeLayerIn(document)
+        if (!document.layers[document.indexOfLayer(layer)].visible) return tellHiddenLayer()
         val level = levelFor(document)
         startEditing()
         editJob = viewModelScope.launch {
@@ -999,7 +1008,8 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
         val index = activeIndexIn(document)
-        if (index <= 0) return
+        // 숨긴 레이어는 합치지 않는다(메뉴에서도 꺼 둔다, 결정 기록 '레이어 보이기')
+        if (index <= 0 || !document.layers[index].visible || !document.layers[index - 1].visible) return
         runEdit(MergeDown(document.layers[index].id), select = document.layers[index - 1].id)
     }
 
@@ -1010,7 +1020,7 @@ class EditorViewModel internal constructor(
     fun mergeVisibleLayers() {
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         if (visible.size < 2) return
         runEdit(MergeVisible, select = visible.first().id)
     }
@@ -1036,6 +1046,16 @@ class EditorViewModel internal constructor(
         val layer = currentLayer() ?: return
         if (hasLiveValues) return
         edit(SetLayerBlendMode(layer.id, mode))
+    }
+
+    /**
+     * [id] 레이어를 보이거나 숨긴다(레이어 줄의 눈, 실행 취소 한 단계). 고른 레이어는 그대로다.
+     * 다른 편집을 처리하는 중이거나 슬라이더를 끄는 중이면 무시한다.
+     */
+    fun setLayerVisible(id: LayerId, visible: Boolean) {
+        val document = history?.document ?: return
+        if (hasLiveValues || document.indexOfLayer(id) < 0) return
+        edit(SetLayerVisible(id, visible))
     }
 
     /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */
@@ -1088,6 +1108,7 @@ class EditorViewModel internal constructor(
     fun beginTone(point: StrokePoint, dodge: Boolean) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
         val options = _tone.value
         val fill = ToneFill(dodge, options.range, options.exposure)
         startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, tone = fill), point)
@@ -1113,6 +1134,7 @@ class EditorViewModel internal constructor(
     fun beginStroke(point: StrokePoint, erase: Boolean) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
         startStroke(Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection), point)
     }
 
@@ -1124,6 +1146,7 @@ class EditorViewModel internal constructor(
     fun beginRetouch(point: StrokePoint, mode: RetouchMode) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
         val offset = if (mode == RetouchMode.SPOT_HEAL) {
             null
         } else {
@@ -1136,6 +1159,21 @@ class EditorViewModel internal constructor(
         val settings = _retouch.value.let { if (mode == RetouchMode.CLONE) it else it.copy(opacity = 1f) }
         startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, mode, offset), point)
     }
+
+    /**
+     * 숨긴 레이어에 그리려 했다고 알린다(포토샵과 같다). 그 알림이 떠 있는 동안([HIDDEN_LAYER_MESSAGE_GAP_MILLIS])은
+     * 다시 보내지 않아, 여러 번 눌러도 같은 알림이 줄지어 쌓이지 않는다.
+     */
+    private fun tellHiddenLayer() {
+        val now = SystemClock.uptimeMillis()
+        val last = lastHiddenLayerMessage
+        if (last != null && now - last < HIDDEN_LAYER_MESSAGE_GAP_MILLIS) return
+        lastHiddenLayerMessage = now
+        _messages.trySend(EditorMessage.HiddenLayer)
+    }
+
+    /** 숨긴 레이어 알림을 마지막으로 보낸 때(SystemClock.uptimeMillis). 보낸 적이 없으면 null이다. */
+    private var lastHiddenLayerMessage: Long? = null
 
     /** 획을 시작할 수 있는지. 끄는 획이나 끄는 슬라이더가 있거나, 획이 아닌 편집을 처리하는 중이면 안 된다. */
     private fun canBeginStroke(): Boolean =
@@ -1375,7 +1413,7 @@ class EditorViewModel internal constructor(
      * 지우개·복제(레이어 픽셀을 읽는 획)는 그 레이어가 보이는 유일한 레이어일 때다. 그러면 그 위에 아무것도 없어 합친 그림에 바로 그린 것과 같다.
      */
     private fun strokesFitDetail(document: Document): Boolean {
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         val top = visible.lastOrNull() ?: return false
         if (top.blendMode != BlendMode.NORMAL || top.opacity < 1f || !top.adjustments.isIdentity) return false
         return detailStrokes.all { it.layer == top.id && (!it.readsLayer || visible.size == 1) }
@@ -1743,7 +1781,7 @@ class EditorViewModel internal constructor(
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
                 busy = editing,
-                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id]) },
+                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible) },
                 activeLayer = activeLayerIn(document),
                 selection = outline,
                 selectionDetail = selectionDetail,
@@ -1840,6 +1878,9 @@ class EditorViewModel internal constructor(
 
         /** 저장된 상태에 둔 열린 프로젝트 번호. 백그라운드 종료 뒤 되살릴 때 쓴다. */
         const val KEY_PROJECT = "projectId"
+
+        /** 숨긴 레이어 알림을 다시 보내기까지 기다리는 시간(밀리초). 알림 막대가 보이는 시간(짧게, 4초)과 같다. */
+        const val HIDDEN_LAYER_MESSAGE_GAP_MILLIS = 4_000L
 
         /** 편집이 이만큼(밀리초) 멈추면 자동 저장한다 */
         const val AUTOSAVE_DELAY_MILLIS = 1_500L

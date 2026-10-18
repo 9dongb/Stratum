@@ -88,7 +88,7 @@ object ImageExporter {
      */
     private fun exactRaster(document: Document, settings: ExportSettings): Raster? {
         if (settings.size != PixelSize(document.width, document.height) || !settings.format.keepsTransparency) return null
-        val visible = document.layers.filter { it.opacity > 0f }
+        val visible = document.layers.filter { it.isShown }
         val layer = visible.singleOrNull()?.takeIf { it.opacity == 1f && it.adjustments.isIdentity } ?: return null
         return (layer.content as? RasterContent)?.raster
     }
@@ -126,7 +126,7 @@ object ImageExporter {
     ) {
         val plan = ResizePlan(PixelSize(document.width, document.height), target)
         val rasters = document.layers
-            .filter { it.opacity > 0f }
+            .filter { it.isShown }
             .mapNotNull { (it.content as? RasterContent)?.raster }
         val canvas = Canvas(into)
         for (block in plan.blocks()) {

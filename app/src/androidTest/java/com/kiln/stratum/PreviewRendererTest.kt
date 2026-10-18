@@ -5,6 +5,11 @@ import android.graphics.Color
 import android.graphics.ImageDecoder
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.command.SetLayerOpacity
+import com.kiln.stratum.engine.command.SetLayerVisible
+import com.kiln.stratum.engine.document.Layer
+import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.platform.PhotoImporter
@@ -16,6 +21,7 @@ import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -176,6 +182,22 @@ class PreviewRendererTest {
 
         assertTrue("alpha was ${Color.alpha(pixel)}", abs(Color.alpha(pixel) - 128) <= 1)
         assertEquals(255, Color.red(pixel))
+    }
+
+    @Test
+    fun hiddenLayer_isNotDrawn_inTheWholeOrARegion() {
+        val green = Raster.filled(TileGrid(100, 100), Tile.of(IntArray(TILE_PIXEL_COUNT) { Color.GREEN }))
+        val red = Raster.filled(TileGrid(100, 100), Tile.of(IntArray(TILE_PIXEL_COUNT) { Color.RED }))
+        val document = Document.create(100, 100, "Background", green).let {
+            it.copy(layers = it.layers + Layer(LayerId(1), "Top", RasterContent(red)), nextLayerId = 2)
+        }
+        assertEquals(Color.RED, checkNotNull(PreviewRenderer.render(document, level = 0)).readable().getPixel(50, 50))
+
+        val hidden = SetLayerVisible(LayerId(1), false).applyTo(document)
+
+        assertEquals(Color.GREEN, checkNotNull(PreviewRenderer.render(hidden, level = 0)).readable().getPixel(50, 50))
+        val region = checkNotNull(PreviewRenderer.renderRegion(hidden, PreviewRegion(0, PixelRect(20, 20, 60, 60)))).readable()
+        assertEquals(Color.GREEN, region.getPixel(10, 10))
     }
 
     @Test

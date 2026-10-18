@@ -148,6 +148,16 @@ class ProjectManifestTest {
     }
 
     @Test
+    fun hiddenLayer_roundTrips_andShownLayersWriteNothingExtra() {
+        val hidden = manifest.copy(layers = listOf(manifest.layers[0], manifest.layers[1].copy(visible = false)))
+
+        assertEquals(hidden, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(hidden))))
+        // 레이어 덧붙임 하나(꼬리표·길이, 내용 없음)만큼 길다. 숨김을 모르는 앞 프로젝트는 모두 보이는 레이어로 열린다.
+        assertEquals(bytesOf(manifest).size + 8, bytesOf(hidden).size)
+        assertTrue(ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).layers.all { it.visible })
+    }
+
+    @Test
     fun colorSpace_roundTrips_andSrgbWritesNothingExtra() {
         val wide = manifest.copy(colorSpace = DocumentColorSpace.DISPLAY_P3)
 

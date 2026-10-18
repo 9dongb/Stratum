@@ -13,6 +13,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.command.SetLayerAdjustments
+import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
@@ -188,6 +189,26 @@ class HdrTest {
         val exported = exportAndDecode(photo.copy(layers = photo.layers + tint, nextLayerId = photo.nextLayerId + 1), ExportFormat.JPEG)
 
         assertNear(200, checkNotNull(exported.gainmap).gainmapContents.gainValue(30, 30))
+    }
+
+    @Test
+    fun hiddenPaintLayer_leavesThePhotosGainmap() {
+        val photo = import(ultraHdrJpeg())
+        val paint = Layer(
+            LayerId(photo.nextLayerId), "Paint", RasterContent(Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.solid(Color.RED)))),
+            visible = false
+        )
+        val document = photo.copy(layers = photo.layers + paint, nextLayerId = photo.nextLayerId + 1)
+
+        // 숨긴(눈을 끈) 레이어는 게인맵을 덮지 않는다
+        assertNear(200, checkNotNull(exportAndDecode(document, ExportFormat.JPEG).gainmap).gainmapContents.gainValue(30, 30))
+        // 화면용 게인맵도 보이기가 바뀌면 다시 만든다
+        val cache = LayerPreviewCache()
+        checkNotNull(cache.render(document, level = 1))
+        val hiddenMap = checkNotNull(cache.screenGainmap(document, level = 1))
+        val shown = SetLayerVisible(paint.id, true).applyTo(document)
+        checkNotNull(cache.render(shown, level = 1))
+        assertNotSame(hiddenMap, cache.screenGainmap(shown, level = 1))
     }
 
     @Test

@@ -191,6 +191,29 @@ class MergeCommandsTest {
     }
 
     @Test
+    fun mergeDown_withAHiddenLayer_keepsTheDocument() {
+        // 눈을 끈 레이어는 위든 아래든 합치지 않는다(결정 기록 '레이어 보이기')
+        val hiddenUpper = document(layer(0, gradient), layer(1, partial).copy(visible = false))
+        val hiddenLower = document(layer(0, gradient).copy(visible = false), layer(1, partial))
+
+        assertSame(hiddenUpper, MergeDown(LayerId(1)).applyTo(hiddenUpper))
+        assertSame(hiddenLower, MergeDown(LayerId(1)).applyTo(hiddenLower))
+        assertEquals(0L, MergeDown(LayerId(1)).estimateNewBytes(hiddenLower))
+    }
+
+    @Test
+    fun mergeVisible_leavesLayersWithTheirEyeOff() {
+        val hidden = layer(1, partial).copy(visible = false)
+        val before = document(layer(0, gradient), hidden, layer(2, partial, mode = BlendMode.MULTIPLY))
+
+        val after = MergeVisible.applyTo(before)
+
+        assertEquals(listOf(LayerId(0), LayerId(1)), after.layers.map { it.id })
+        assertSame(hidden, after.layers[1])
+        assertSameLook(before, after)
+    }
+
+    @Test
     fun mergeVisible_withFewerThanTwoVisibleLayers_keepsTheDocument() {
         val one = document(layer(0, gradient), layer(1, partial, opacity = 0f))
 

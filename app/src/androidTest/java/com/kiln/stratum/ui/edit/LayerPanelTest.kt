@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -116,6 +118,11 @@ class LayerPanelTest {
         override fun setBlendMode(mode: BlendMode) {
             calls += "blend $mode"
             layers = layers.map { if (it.id == active) it.copy(blendMode = mode) else it }
+        }
+
+        override fun setVisible(id: LayerId, visible: Boolean) {
+            calls += "visible ${id.value} $visible"
+            layers = layers.map { if (it.id == id) it.copy(visible = visible) else it }
         }
 
         companion object {
@@ -291,12 +298,52 @@ class LayerPanelTest {
         openCompactLayers(fake)
 
         row(1).performTouchInput { longClick() }
-        // 아래 레이어가 숨겨져 있어도 아래와 병합은 된다(포토샵과 같다). 보이는 레이어는 하나뿐이다.
+        // 아래 레이어가 0%여도(눈은 켜짐) 아래와 병합은 된다. 보이는 레이어는 하나뿐이다.
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsNotEnabled()
         composeRule.runOnIdle { fake.layers = listOf(fake.layers.last()) }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsEnabled()
+    }
+
+    @Test
+    fun eye_hidesAndShowsTheLayer_withoutPickingIt() {
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+        val eye = composeRule.onNodeWithTag(EditScreenTags.layerVisibility(LayerId(0)))
+
+        eye.assertIsOn().performClick()
+
+        eye.assertIsOff()
+        // 숨긴 줄은 화면 읽기 기능에 '숨김'으로 읽힌다
+        row(0).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, composeRule.activity.getString(R.string.layer_hidden)))
+        eye.performClick()
+        eye.assertIsOn()
+        composeRule.runOnIdle {
+            assertEquals(listOf("visible 0 false", "visible 0 true"), fake.calls)
+            // 눈을 눌러도 고른 레이어는 그대로다
+            assertEquals(LayerId(1), fake.active)
+        }
+    }
+
+    @Test
+    fun hiddenLayers_turnOffMergeDown_andDoNotCountAsVisible() {
+        val fake = FakeLayers(3)
+        fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 1) layer.copy(visible = false) else layer }
+        openCompactLayers(fake)
+
+        // 아래 레이어를 숨겼으면 아래와 병합은 꺼진다. 보이는 레이어는 둘이라 보이는 레이어 병합은 된다.
+        row(2).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsEnabled().performClick()
+
+        // 숨긴 레이어 자신도 아래와 합치지 않는다
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        // 하나를 더 숨기면 보이는 레이어가 하나뿐이다
+        composeRule.runOnIdle { fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 0) layer.copy(visible = false) else layer } }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsNotEnabled()
+        composeRule.runOnIdle { assertEquals(listOf("select 2", "mergeVisible", "select 1"), fake.calls) }
     }
 
     @Test

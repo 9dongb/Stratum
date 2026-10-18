@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
+import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
@@ -143,16 +144,19 @@ class ProjectFolderTest {
     fun layers_keepTheirProperties() {
         val base = photo(300, 200) { _, _ -> Color.BLUE }
         val withLayer = AddLayer("위 레이어", 1).applyTo(base)
-        val document = SetLayerBlendMode(LayerId(1), BlendMode.MULTIPLY)
-            .applyTo(SetLayerOpacity(LayerId(1), 0.4f).applyTo(withLayer))
+        val document = SetLayerVisible(LayerId(0), false).applyTo(
+            SetLayerBlendMode(LayerId(1), BlendMode.MULTIPLY).applyTo(SetLayerOpacity(LayerId(1), 0.4f).applyTo(withLayer))
+        )
 
         ProjectFolder(directory).save(document, 1, 1)
         val loaded = ProjectFolder(directory).load().document
 
+        // 숨긴 레이어(눈을 끈 아래 레이어)도 숨긴 채로 열린다
         assertEquals(
-            document.layers.map { listOf(it.id, it.name, it.opacity, it.blendMode) },
-            loaded.layers.map { listOf(it.id, it.name, it.opacity, it.blendMode) }
+            document.layers.map { listOf(it.id, it.name, it.opacity, it.blendMode, it.visible) },
+            loaded.layers.map { listOf(it.id, it.name, it.opacity, it.blendMode, it.visible) }
         )
+        assertEquals(listOf(false, true), loaded.layers.map { it.visible })
         assertEquals(document.nextLayerId, loaded.nextLayerId)
         assertTrue(loaded.raster(1).tiles.isEmpty())
         assertSamePixels(document, loaded)

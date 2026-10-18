@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -43,6 +44,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -111,6 +113,9 @@ interface LayerActions {
     /** 고른 레이어의 혼합 모드를 바꾼다 */
     fun setBlendMode(mode: BlendMode)
 
+    /** [id] 레이어를 보이거나 숨긴다(줄의 눈) */
+    fun setVisible(id: LayerId, visible: Boolean)
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : LayerActions {
         override fun select(id: LayerId) = Unit
@@ -123,6 +128,7 @@ interface LayerActions {
         override fun previewOpacity(opacity: Float) = Unit
         override fun commitOpacity() = Unit
         override fun setBlendMode(mode: BlendMode) = Unit
+        override fun setVisible(id: LayerId, visible: Boolean) = Unit
     }
 }
 
@@ -165,6 +171,9 @@ class LayerControls(
 
 /** 레이어 줄 하나의 높이. 작은 그림(40dp)과 위아래 여백, 누르는 영역 48dp 이상. */
 private val RowHeight = 56.dp
+
+/** 숨긴 레이어 줄의 작은 그림·이름 흐림 정도 */
+private const val HiddenAlpha = 0.4f
 
 /** 작은 그림 칸의 크기와 그 바탕 체크 무늬 한 칸 */
 private val ThumbnailSize = 40.dp
@@ -321,7 +330,8 @@ private fun LayerList(controls: LayerControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 레이어 줄 하나: 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠한다.
+ * 레이어 줄 하나: 눈(보이기·숨기기), 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠하고, 숨긴 줄은 작은 그림·이름을 흐리게 보인다.
+ * 눈을 누르면 그 레이어를 보이거나 숨긴다(고르지는 않는다, 포토샵과 같다).
  * 작은 그림·이름 쪽을 길게 누르면 그 레이어를 고르고 메뉴([LayerMenu])를 띄운다. 손잡이는 끌기라 길게 누르기에서 뺀다.
  * 화면 읽기 기능에서는 '레이어 메뉴' 동작(길게 누르기)으로 연다.
  */
@@ -344,6 +354,8 @@ private fun LayerRow(
     val mode = stringResource(blendModeLabel(layer.blendMode))
     val description = stringResource(R.string.layer_row_description, layer.name, mode, percent)
     val selectedLabel = stringResource(R.string.layer_selected)
+    val hiddenLabel = stringResource(R.string.layer_hidden)
+    val rowState = listOfNotNull(selectedLabel.takeIf { selected }, hiddenLabel.takeIf { !layer.visible }).joinToString(", ")
     val upLabel = stringResource(R.string.layer_move_up)
     val downLabel = stringResource(R.string.layer_move_down)
     val menuLabel = stringResource(R.string.layer_menu)
@@ -371,7 +383,7 @@ private fun LayerRow(
                 .selectable(selected = selected, enabled = controls.enabled, onClick = { actions.select(layer.id) })
                 .semantics {
                     contentDescription = description
-                    if (selected) stateDescription = selectedLabel
+                    if (rowState.isNotEmpty()) stateDescription = rowState
                     if (canMove) {
                         customActions = listOfNotNull(
                             CustomAccessibilityAction(upLabel) {
@@ -391,12 +403,33 @@ private fun LayerRow(
                         }
                     }
                 }
-                .testTag(EditScreenTags.layerRow(layer.id))
-                .padding(start = 8.dp),
+                .testTag(EditScreenTags.layerRow(layer.id)),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 눈: 누르면 보이기·숨기기(누르는 영역 48dp). 화면 읽기 기능은 '레이어 보이기' 켜짐·꺼짐으로 읽는다.
+            IconToggleButton(
+                checked = layer.visible,
+                onCheckedChange = { actions.setVisible(layer.id, it) },
+                enabled = controls.canEdit,
+                modifier = Modifier.testTag(EditScreenTags.layerVisibility(layer.id))
+            ) {
+                Icon(
+                    painterResource(if (layer.visible) R.drawable.ic_visibility else R.drawable.ic_visibility_off),
+                    contentDescription = stringResource(R.string.layer_visibility),
+                    // 켜진 눈도 강조색이 아니라 글자색으로 둔다(줄마다 있어 눈에 띄지 않게)
+                    tint = when {
+                        !layer.visible -> colors.onSurfaceVariant
+                        selected -> colors.onSecondaryContainer
+                        else -> colors.onSurface
+                    }
+                )
+            }
             // 작은 그림·이름: 길게 누르면 메뉴. 줄의 누르기(고르기)보다 먼저 알아채고, 길게 누른 뒤에는 누르기가 일어나지 않는다.
-            Row(Modifier.weight(1f).fillMaxHeight().longPressFirst(openMenu), verticalAlignment = Alignment.CenterVertically) {
+            // 숨긴 레이어는 흐리게 보인다
+            Row(
+                Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenAlpha).longPressFirst(openMenu),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -448,7 +481,7 @@ private fun LayerRow(
 /**
  * 레이어 줄을 길게 누르면 뜨는 메뉴: 복제, 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
  * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다. 할 수 없는 항목은 꺼 둔다
- * (맨 아래 레이어는 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
+ * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
  */
 @Composable
 private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex: Int, onDismiss: () -> Unit) {
@@ -456,10 +489,13 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
     val canEdit = controls.canEdit
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
-        LayerMenuItem(R.string.layer_merge_down, canEdit && documentIndex > 0, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
+        val layers = controls.layers
+        // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
+        val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible
+        LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
         LayerMenuItem(
             R.string.layer_merge_visible,
-            canEdit && controls.layers.count { it.opacity > 0f } >= 2,
+            canEdit && layers.count { it.visible && it.opacity > 0f } >= 2,
             EditScreenTags.LAYER_MENU_MERGE_VISIBLE,
             onDismiss,
             actions::mergeVisible

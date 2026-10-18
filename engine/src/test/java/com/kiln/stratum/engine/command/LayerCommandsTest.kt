@@ -169,6 +169,40 @@ class LayerCommandsTest {
     }
 
     @Test
+    fun setLayerVisible_hidesAndShowsOnlyTargetLayer_keepingTheOpacity() {
+        val document = SetLayerOpacity(LayerId(1), 0.5f).applyTo(documentWithLayers(3))
+
+        val hidden = SetLayerVisible(LayerId(1), false).applyTo(document)
+
+        assertEquals(false, hidden.layers[1].visible)
+        assertEquals(false, hidden.layers[1].isShown)
+        assertEquals(0.5f, hidden.layers[1].opacity, 0f)
+        assertSame(document.layers[0], hidden.layers[0])
+        assertSame(document.layers[2], hidden.layers[2])
+        assertEquals(true, document.layers[1].visible)
+
+        val shown = SetLayerVisible(LayerId(1), true).applyTo(hidden)
+        assertEquals(document.layers[1], shown.layers[1])
+    }
+
+    @Test
+    fun setLayerVisible_keepsDocumentWhenSameValueOrUnknown() {
+        val document = documentWithLayers(2)
+
+        assertSame(document, SetLayerVisible(LayerId(0), true).applyTo(document))
+        assertSame(document, SetLayerVisible(LayerId(9), false).applyTo(document))
+    }
+
+    @Test
+    fun isShown_needsVisibleAndSomeOpacity() {
+        val layer = documentWithLayers(1).layers[0]
+
+        assertEquals(true, layer.isShown)
+        assertEquals(false, layer.copy(visible = false).isShown)
+        assertEquals(false, layer.copy(opacity = 0f).isShown)
+    }
+
+    @Test
     fun setLayerBlendMode_changesOnlyTargetLayer() {
         val document = documentWithLayers(2)
 

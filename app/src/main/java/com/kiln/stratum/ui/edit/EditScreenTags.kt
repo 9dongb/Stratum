@@ -157,6 +157,9 @@ object EditScreenTags {
     /** 레이어 줄의 순서 손잡이 */
     fun layerHandle(id: com.kiln.stratum.engine.document.LayerId): String = "layerHandle_${id.value}"
 
+    /** 레이어 줄의 눈(보이기·숨기기) */
+    fun layerVisibility(id: com.kiln.stratum.engine.document.LayerId): String = "layerVisibility_${id.value}"
+
     /** 브러시 색 줄의 [index]번째 색 */
     fun brushColor(index: Int): String = "brushColor_$index"
 
