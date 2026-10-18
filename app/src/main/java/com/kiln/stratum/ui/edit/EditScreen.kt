@@ -312,7 +312,6 @@ fun EditScreen(
                 // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 맞춘다.
                 // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠를 뺀 자리에 맞춘다(결정 기록 '편집 화면 도구 배치').
                 if (cropFrame == null) {
-                    floating.closePanel()
                     cropFrame = CropFrame.whole(ready.documentSize)
                     val start = if (widthClass != WidthClass.Compact && canvasArea.width > 0 && canvasArea.height > 0) {
                         val margin = with(density) { CropStartMargin.roundToPx() }
@@ -338,15 +337,17 @@ fun EditScreen(
         }
         val closableTool = if (widthClass == WidthClass.Compact) activeTool else activeTool?.takeIf { it in EditTool.railTools }
         BackHandler(enabled = closableTool != null, onBack = selection::close)
-        // 옵션 창·패널이 떠 있으면 뒤로 가기는 그것부터 닫는다. 도구의 것 바로 뒤에 늘 두어, 창·유동화의 것보다는 먼저 등록된다.
+        // 옵션 창이 떠 있으면 뒤로 가기는 그것부터 닫는다. 도구의 것 바로 뒤에 늘 두어, 창·유동화의 것보다는 먼저 등록된다.
         // (Scaffold 안에 두면 다시 만들어질 때 창보다 나중에 등록돼 창보다 먼저 받는다)
-        BackHandler(enabled = floating.isOpen, onBack = floating::close)
+        // 레이어·조정 패널은 뒤로 가기로 닫지 않는다(사용자 결정: 상단 바 버튼으로만 닫음)
+        BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
         // 도구·하위 도구·배치가 바뀌거나, 자르기·유동화를 시작하거나, 다른 크기의 문서를 보면 옵션 창을 닫는다(칸이 바뀌거나 사라진다)
         val activeMode = activeTool?.let { selection.modeOf(it) }
         LaunchedEffect(activeTool, activeMode, widthClass, cropMode, ready?.documentSize, liquify != null) { floating.closeFlyout() }
-        // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 떠 있는 것을 닫는다
+        // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 옵션 창을 닫는다.
+        // 패널은 그대로 둔다(창·작업 모드 아래에 남았다가, 닫히면 다시 보인다)
         val dialogOpen = resizeInput != null || textAt != null || exportDraft != null || palette != null || state is EditorState.AskSize || liquify != null
-        LaunchedEffect(dialogOpen) { if (dialogOpen) floating.close() }
+        LaunchedEffect(dialogOpen) { if (dialogOpen) floating.closeFlyout() }
         val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
             val document = checkNotNull(ready).documentSize
             CropControls(
@@ -441,19 +442,16 @@ fun EditScreen(
                 else -> null
             }
         }
-        // 도구 막대에서 도구를 고르면 떠 있는 패널을 닫는다(바로 칠할 수 있게). 다시 만들어질 때(접기·펼치기)는 닫지 않는다.
-        var lastRailTool by remember { mutableStateOf(railTool) }
-        LaunchedEffect(railTool) {
-            if (railTool != null && railTool != lastRailTool) floating.closePanel()
-            lastRailTool = railTool
-        }
         // 접기·펼치기 잇기(결정 기록 '떠 있는 레이어·조정 패널'): 커버에서 고른 조정·레이어 탭은 펼치면 그 패널로 열고,
-        // 고른 도구 없이 패널을 연 채 접으면 커버에서 그 탭을 연다
+        // 고른 도구 없이 패널을 연 채 접으면 커버에서 그 탭을 연다.
+        // 도구를 고른 채 접으면 커버에는 그 도구가 보이고, 패널은 끄지 않고 남겨 두어 다시 펼치면 그대로 보인다(직접 끄기 전까지 유지).
         LaunchedEffect(widthClass) {
             if (widthClass == WidthClass.Compact) {
                 floating.panel?.let { panel ->
-                    if (selection.active == null) selection.tap(if (panel == MainPanel.ADJUST) EditTool.Adjust else EditTool.Layers)
-                    floating.closePanel()
+                    if (selection.active == null) {
+                        selection.tap(if (panel == MainPanel.ADJUST) EditTool.Adjust else EditTool.Layers)
+                        floating.closePanel()
+                    }
                 }
             } else {
                 when (selection.active) {
@@ -481,12 +479,13 @@ fun EditScreen(
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
         val stripInset = if (stripItems != null) OptionStripWidth else 0.dp
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
+            // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
+            // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다.
+            if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
             if (stripItems != null) {
                 OptionStrip(stripItems, floating, Modifier.align(Alignment.CenterStart))
                 FlyoutHost(floating, stripItems, Modifier.fillMaxSize().windowInsetsPadding(insets))
             }
-            // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위)
-            FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
         }
         // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다.
         // 크기 슬라이더를 끄는 동안은 그 위에 브러시 크기 원을 보인다.
@@ -588,7 +587,7 @@ fun EditScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            // 옵션 창·패널이 떠 있는 동안 캔버스를 누르면 닫기만 한다(맨 위라 도구가 받지 않는다)
+            // 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(맨 위라 도구가 받지 않는다). 패널만 열려 있으면 캔버스를 바로 쓴다.
             FloatingDismissLayer(floating, Modifier.fillMaxSize())
         }
         Scaffold(
@@ -932,9 +931,10 @@ private fun EditCanvas(
         ) {
             CanvasContent(state, viewState, onViewport, overlay, showZoomChip, showBusy, onTwoFingerTap, threeFinger, overlayStart)
         }
-        // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(가로로 접히는 선은 피함). 떠 있는 띠·옵션 창·패널을 가리지 않게 그 아래에 그린다.
-        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets))
         floating(insets)
+        // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(가로로 접히는 선은 피함). 떠 있는 패널은 직접 끌 때까지 남아 알림과 겹칠 수 있어,
+        // 알림이 가려지지 않게 그 위에 그린다. 알림은 터치를 받지 않아 그 밑의 패널·옵션 창을 그대로 누를 수 있다.
+        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets))
         // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠를 피한다
         HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart), margin = 8.dp) {
             SnackbarHost(snackbarHostState)

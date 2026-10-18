@@ -261,19 +261,19 @@ class AdjustPanelTest {
     }
 
     @Test
-    fun medium_railToolClosesTheAdjustPanel_andShowsItsStrip() {
+    fun medium_railToolKeepsTheAdjustPanel_andShowsItsStrip() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
 
-        // 도구 막대에서 도구를 고르면 패널이 닫히고, 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '떠 있는 레이어·조정 패널')
+        // 도구 막대에서 도구를 골라도 패널은 남고(직접 끄기 전까지 유지), 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '떠 있는 레이어·조정 패널')
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
     }
 
     @Test
-    fun expanded_adjustPanelAvoidsTheHinge_andCropClosesIt() {
+    fun expanded_adjustPanelAvoidsTheHinge_andCropHidesIt() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         slider(AdjustItem.EXPOSURE).assertIsEnabled()
@@ -285,7 +285,7 @@ class AdjustPanelTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.assertClickablesAvoid(hinge)
 
-        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로): 패널을 닫고 버튼을 끈다
+        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로): 패널을 숨기고 버튼을 끈다
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).assertIsNotEnabled()

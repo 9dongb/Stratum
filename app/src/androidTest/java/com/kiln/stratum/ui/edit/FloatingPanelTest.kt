@@ -46,8 +46,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 메인 화면의 떠 있는 레이어·조정 패널(결정 기록 '떠 있는 레이어·조정 패널'): 상단 바 버튼으로 열고 닫기, 하나만 뜸,
- * 캔버스를 누르면 닫힘, 뒤로 가기, 자르기, 접히는 선 피하기, 커버의 조정·레이어 탭과 잇기, 끄는 도중 닫혀도 한 번 기록.
+ * 메인 화면의 떠 있는 레이어·조정 패널(결정 기록 '떠 있는 레이어·조정 패널'): 상단 바 버튼으로 열고 닫기, 패널은 하나만 뜸,
+ * 버튼으로 끄기 전까지 남음(캔버스 터치·도구·옵션 창·뒤로 가기·창), 자르기 중에는 숨김, 접히는 선 피하기,
+ * 커버의 조정·레이어 탭과 잇기, 끄는 도중 닫혀도 한 번 기록.
  */
 @RunWith(AndroidJUnit4::class)
 class FloatingPanelTest {
@@ -175,42 +176,60 @@ class FloatingPanelTest {
     }
 
     @Test
-    fun onlyOneFloats_panelsSwitch_andAFlyoutClosesThePanel() {
+    fun onlyOnePanel_switches_andToolsAndFlyoutsKeepIt() {
         show()
         toggle(MainPanel.ADJUST).performClick()
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
 
+        // 패널은 하나만: 다른 쪽 버튼을 누르면 그 패널로 바뀐다(사용자 결정 '하나씩')
         toggle(MainPanel.LAYERS).performClick()
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
         toggle(MainPanel.ADJUST).assertIsOff()
 
-        // 도구 막대에서 도구를 고르면 패널이 닫힌다
+        // 도구 막대에서 도구를 골라도, 띠의 칸으로 옵션 창을 열어도 패널은 남는다(직접 끄기 전까지 유지)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
-        toggle(MainPanel.ADJUST).performClick()
-        // 띠의 칸을 누르면 패널이 닫히고 옵션 창이 뜬다
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
+
+        // 패널 버튼을 누르면 옵션 창은 닫히고(다른 곳을 눌렀으므로) 패널이 바뀐다
+        toggle(MainPanel.ADJUST).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+        toggle(MainPanel.ADJUST).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
     }
 
     @Test
-    fun canvasTouch_closesThePanel_andBackClosesItBeforeGoingHome() {
+    fun canvasTouchBackAndDialogs_keepThePanel() {
         show()
         toggle(MainPanel.LAYERS).performClick()
+        // 패널만 열려 있으면 캔버스를 덮는 바탕이 없어 캔버스를 바로 쓴다
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_DISMISS).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput {
             down(center)
             up()
         }
-        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
 
-        toggle(MainPanel.LAYERS).performClick()
+        // 창(내보내기)이 떴다 닫혀도 남는다
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT_SAVE).assertExists()
         back()
-        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT_SAVE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
+
+        // 뒤로 가기는 패널을 닫지 않는다(사용자 결정): 고른 도구를 닫은 뒤 홈으로 간다
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(0, homeBacks) }
         back()
         composeRule.runOnIdle { assertEquals(1, homeBacks) }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
     }
 
     @Test
@@ -234,22 +253,45 @@ class FloatingPanelTest {
         }
         composeRule.runOnIdle { assertTrue("${adjust.live}", adjust.live != null) }
 
-        // 손을 떼지 않은 채 뒤로 가기로 패널이 닫혀도 끌던 값은 한 번 기록한다
-        back()
+        // 손을 떼지 않은 채 상단 바 버튼으로 패널이 닫혀도 끌던 값은 한 번 기록한다(끄는 손가락은 그대로라 버튼은 화면 읽기 동작으로 누른다)
+        toggle(MainPanel.ADJUST).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(1, adjust.committed.size) }
     }
 
     @Test
-    fun crop_closesThePanel_andTurnsOffTheButtons() {
+    fun crop_hidesThePanel_turnsOffTheButtons_andItComesBack() {
         show()
         toggle(MainPanel.ADJUST).performClick()
 
+        // 자르기 중에는 조정·레이어를 막으므로 패널을 숨기고 버튼을 끈다
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
-
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         toggle(MainPanel.ADJUST).assertIsNotEnabled()
         toggle(MainPanel.LAYERS).assertIsNotEnabled()
+
+        // 자르기가 끝나면(뒤로 가기로 도구를 닫음) 끄지 않은 패널이 다시 보인다
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+        toggle(MainPanel.ADJUST).assertIsOn()
+    }
+
+    @Test
+    fun foldingWithATool_keepsThePanel_forUnfolding() {
+        show(MAIN_LANDSCAPE)
+        toggle(MainPanel.LAYERS).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+
+        // 커버에는 고른 도구(브러시)가 보이고, 패널은 끄지 않았으므로 다시 펼치면 그대로 보인다
+        composeRule.runOnIdle { size.value = COVER }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertExists()
+
+        composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
     }
 
     @Test

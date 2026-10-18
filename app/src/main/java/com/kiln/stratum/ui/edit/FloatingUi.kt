@@ -37,8 +37,9 @@ import kotlin.math.roundToInt
 enum class MainPanel { ADJUST, LAYERS }
 
 /**
- * 메인 화면(Medium·Expanded)의 캔버스 위에 떠 있는 것: 도구 옵션 띠 칸의 옵션 창, 또는 레이어·조정 패널(결정 기록 '편집 화면 도구 배치').
- * 한 번에 하나만 뜬다. 옵션 창을 열면 패널이 닫히고, 패널을 열면 옵션 창이 닫힌다.
+ * 메인 화면(Medium·Expanded)의 캔버스 위에 떠 있는 것: 도구 옵션 띠 칸의 옵션 창과 레이어·조정 패널(결정 기록 '떠 있는 레이어·조정 패널').
+ * 옵션 창은 잠깐 쓰는 것이라 캔버스를 누르거나, 뒤로 가기, 다른 곳(패널 버튼 등)을 누르면 닫힌다.
+ * 패널은 상단 바 버튼(화면 읽기 기능은 '닫기' 동작)으로만 닫힌다(사용자 요청: 직접 끄기 전까지 유지). 패널은 한 번에 하나이고, 옵션 창과 함께 뜰 수 있다.
  * 패널은 접기·펼치기나 백그라운드 종료 뒤에도 남고(저장), 옵션 창은 남지 않는다(칸 자리를 다시 재야 해서).
  */
 @Stable
@@ -55,17 +56,12 @@ class FloatingState(panel: MainPanel? = null) {
     /** 띠 칸의 자리(창 좌표). 옵션 창을 그 칸 옆에 띄운다. */
     internal val anchors = mutableStateMapOf<String, Region>()
 
-    /** 무엇이든 떠 있는지 */
-    val isOpen: Boolean
-        get() = panel != null || flyout != null
-
-    /** [key] 칸의 옵션 창을 열고, 이미 열려 있으면 닫는다 */
+    /** [key] 칸의 옵션 창을 열고, 이미 열려 있으면 닫는다. 열린 패널은 그대로 둔다. */
     fun toggleFlyout(key: String) {
-        panel = null
         flyout = if (flyout == key) null else key
     }
 
-    /** [target] 패널을 열고, 이미 열려 있으면 닫는다 */
+    /** [target] 패널을 열고, 이미 열려 있으면 닫는다. 다른 패널이 열려 있으면 그 패널로 바꾼다. 옵션 창은 닫는다(다른 곳을 눌렀으므로). */
     fun togglePanel(target: MainPanel) {
         flyout = null
         panel = if (panel == target) null else target
@@ -85,12 +81,6 @@ class FloatingState(panel: MainPanel? = null) {
         panel = null
     }
 
-    /** 떠 있는 것을 모두 닫는다 */
-    fun close() {
-        panel = null
-        flyout = null
-    }
-
     companion object {
         /** 열린 패널 이름만 저장한다(없으면 빈 문자열) */
         val Saver: Saver<FloatingState, String> = Saver(
@@ -105,20 +95,21 @@ class FloatingState(panel: MainPanel? = null) {
 fun rememberFloatingState(): FloatingState = rememberSaveable(saver = FloatingState.Saver) { FloatingState() }
 
 /**
- * 옵션 창·패널이 떠 있는 동안 캔버스를 덮는 바탕. 캔버스에 손가락이 닿으면 닫기만 하고, 그 터치는 손을 뗄 때까지 도구로 가지 않는다(그리지 않음).
+ * 옵션 창이 떠 있는 동안 캔버스를 덮는 바탕. 캔버스에 손가락이 닿으면 옵션 창을 닫기만 하고, 그 터치는 손을 뗄 때까지 도구로 가지 않는다(그리지 않음).
+ * 패널만 열려 있을 때는 없다(패널은 직접 끌 때까지 남고, 캔버스는 바로 쓴다).
  * 캔버스 도구 화면(overlay)의 맨 위에 둔다. 두 손가락 확대·이동·톡과 세 손가락 제스처는 부모(CanvasViewport)가 먼저 읽어 그대로 된다.
- * 누르는 것(clickable)이 아니라서 화면 읽기 기능에는 나오지 않는다. 화면 읽기 기능은 뒤로 가기나 같은 버튼으로 닫는다.
+ * 누르는 것(clickable)이 아니라서 화면 읽기 기능에는 나오지 않는다. 화면 읽기 기능은 뒤로 가기나 같은 칸으로 닫는다.
  */
 @Composable
 fun FloatingDismissLayer(state: FloatingState, modifier: Modifier = Modifier) {
-    if (!state.isOpen) return
+    if (state.flyout == null) return
     Box(
         modifier
             .testTag(EditScreenTags.FLOATING_DISMISS)
             .pointerInput(state) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    state.close()
+                    state.closeFlyout()
                     down.consume()
                     // 손을 뗄 때까지 이 터치를 모두 가진다(도구 동작으로 이어지지 않게)
                     while (true) {

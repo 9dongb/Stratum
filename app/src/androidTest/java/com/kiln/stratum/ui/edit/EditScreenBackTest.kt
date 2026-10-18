@@ -115,8 +115,9 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun adjustChosenOnCover_opensThePanelOnTheMainScreen_andBackClosesItFirst() {
-        // 커버에서 조정을 고른 채 펼치면 메인에서는 떠 있는 조정 패널로 열린다. 뒤로는 그 패널을 먼저 닫는다.
+    fun adjustChosenOnCover_opensThePanelOnTheMainScreen_andBackLeavesItOpen() {
+        // 커버에서 조정을 고른 채 펼치면 메인에서는 떠 있는 조정 패널로 열린다.
+        // 패널은 상단 바 버튼으로만 닫으므로(사용자 결정) 뒤로 가기는 패널을 그대로 두고 홈으로 간다.
         show(COVER)
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performScrollTo().performClick()
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
@@ -124,9 +125,7 @@ class EditScreenBackTest {
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertExists()
 
         back()
-        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
-        composeRule.runOnIdle { assertEquals(0, homeBacks) }
-        back()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertExists()
         composeRule.runOnIdle { assertEquals(1, homeBacks) }
     }
 
