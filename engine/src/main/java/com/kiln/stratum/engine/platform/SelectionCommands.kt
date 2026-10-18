@@ -199,7 +199,9 @@ data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: 
             content = RasterContent(copied),
             opacity = layer.opacity,
             blendMode = layer.blendMode,
-            adjustments = layer.adjustments
+            adjustments = layer.adjustments,
+            // 게인맵은 함께 쓴다. 고르지 않은 곳은 알파가 0이라 상관없다(결정 기록 'HDR').
+            gainmap = layer.gainmap
         )
         val layers = document.layers.toMutableList()
         if (cut) layers[index] = layer.copy(content = RasterContent(SelectedPixels.cut(raster, selection, size, checkCanceled)))

@@ -30,9 +30,12 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
         val index = document.indexOfLayer(layerId)
         if (index <= 0) return document
         val lower = document.layers[index - 1]
-        val merged = LayerMerger.merge(document, mergedLayers(document, index), checkCanceled)
+        val merging = mergedLayers(document, index)
+        val merged = LayerMerger.merge(document, merging, checkCanceled)
+        // 게인맵도 같은 알파로 겹쳐 합친다(결정 기록 'HDR')
+        val gainmap = GainmapEdits.merge(document, merging, checkCanceled)
         val layers = document.layers.toMutableList().apply {
-            set(index - 1, lower.copy(content = RasterContent(merged), adjustments = Adjustments.NONE))
+            set(index - 1, lower.copy(content = RasterContent(merged), adjustments = Adjustments.NONE, gainmap = gainmap))
             removeAt(index)
         }
         return document.copy(layers = layers)
@@ -61,7 +64,8 @@ data object MergeVisible : CancellableCommand {
         if (visible.size < 2) return document
         val base = visible.first()
         val merged = LayerMerger.merge(document, visible, checkCanceled)
-        val result = base.copy(content = RasterContent(merged), opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE)
+        val gainmap = GainmapEdits.merge(document, visible, checkCanceled)
+        val result = base.copy(content = RasterContent(merged), opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE, gainmap = gainmap)
         val layers = document.layers.mapNotNull { layer ->
             when {
                 layer.id == base.id -> result

@@ -9,6 +9,8 @@ import android.graphics.ImageDecoder
 import android.graphics.Paint
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
@@ -18,18 +20,31 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.importing.ImportResult
+import com.kiln.stratum.engine.liquify.LiquifyMesh
+import com.kiln.stratum.engine.liquify.LiquifyTool
+import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.LiquifyLayer
+import com.kiln.stratum.engine.platform.MergeDown
+import com.kiln.stratum.engine.platform.MergeVisible
+import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.ProjectFolder
 import com.kiln.stratum.engine.platform.ResizeImage
+import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.RotateImage
+import com.kiln.stratum.engine.platform.SelectShape
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.retouch.RetouchMode
+import com.kiln.stratum.engine.retouch.SourceOffset
+import com.kiln.stratum.engine.selection.SelectionMode
+import com.kiln.stratum.engine.selection.SelectionShape
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -174,6 +189,80 @@ class HdrTest {
 
         assertFalse(exportAndDecode(document, ExportFormat.PNG).hasGainmap())
         assertFalse(exportAndDecode(document, ExportFormat.WEBP).hasGainmap())
+    }
+
+    private val bigBrush = BrushSettings(size = 120f, hardness = 1f, color = Color.BLUE)
+
+    @Test
+    fun brushOnThePhoto_makesTheGainmapNeutralUnderTheStroke_butTheEraserDoesNot() {
+        val document = import(ultraHdrJpeg())
+
+        // 문서 (200, 300)은 게인맵 (50, 75): 왼쪽 절반(200)
+        val painted = checkNotNull(PaintStroke(LayerId(0), listOf(StrokePoint(200f, 300f)), bigBrush, erase = false).applyTo(document).layers[0].gainmap)
+        assertNear(0, painted.value(50, 75))
+        assertNear(200, painted.value(10, 10))
+        val erased = PaintStroke(LayerId(0), listOf(StrokePoint(200f, 300f)), bigBrush, erase = true).applyTo(document)
+        assertSame(document.layers[0].gainmap, erased.layers[0].gainmap)
+    }
+
+    @Test
+    fun brushWithASelection_neutralizesOnlyInsideIt() {
+        val selected = SelectShape(SelectionShape.Rectangle(0f, 0f, 200f, 600f), SelectionMode.REPLACE).applyTo(import(ultraHdrJpeg()))
+
+        // 선택 경계(문서 x 200, 게인맵 x 50)에 걸친 획: 안쪽만 '밝히지 않음'이 된다
+        val gainmap = checkNotNull(PaintStroke(LayerId(0), listOf(StrokePoint(200f, 300f)), bigBrush, erase = false).applyTo(selected).layers[0].gainmap)
+        assertNear(0, gainmap.value(40, 75))
+        assertNear(200, gainmap.value(60, 75))
+    }
+
+    @Test
+    fun liquify_warpsTheGainmapWithThePixels() {
+        val document = import(ultraHdrJpeg())
+        // 경계(문서 x 400)에서 오른쪽으로 100px 밀면 경계 오른쪽에 왼쪽(밝힘)이 온다
+        val mesh = LiquifyMesh.identity(PixelSize(width, height)).apply { brush(LiquifyTool.PUSH, 400f, 300f, 200f, 1f, moveX = 100f) }
+
+        val warped = checkNotNull(LiquifyLayer(LayerId(0), mesh).applyTo(document).layers[0].gainmap)
+
+        assertNear(200, warped.value(105, 75), tolerance = 20)
+        // 멀리 떨어진 곳은 그대로다
+        assertNear(50, warped.value(190, 10))
+    }
+
+    @Test
+    fun cloneStamp_copiesTheGainmapFromTheSource() {
+        val document = import(ultraHdrJpeg())
+
+        // 오른쪽 (600, 300)에 왼쪽 (300, 300)을 베낀다
+        val cloned = RetouchStroke(LayerId(0), listOf(StrokePoint(600f, 300f)), bigBrush.copy(size = 80f), RetouchMode.CLONE, SourceOffset(300, 0))
+            .applyTo(document)
+
+        val gainmap = checkNotNull(cloned.layers[0].gainmap)
+        assertNear(200, gainmap.value(150, 75))
+        assertNear(50, gainmap.value(190, 10))
+    }
+
+    @Test
+    fun copyingTheSelection_sharesTheGainmap() {
+        val selected = SelectShape(SelectionShape.Rectangle(100f, 100f, 300f, 300f), SelectionMode.REPLACE).applyTo(import(ultraHdrJpeg()))
+
+        val copied = CopySelectedToLayer(LayerId(0), "Copy", cut = false).applyTo(selected)
+
+        assertSame(selected.layers[0].gainmap, copied.layers[1].gainmap)
+    }
+
+    @Test
+    fun merging_combinesTheGainmapsByTheSameRule() {
+        val photo = import(ultraHdrJpeg())
+        val paint = Layer(LayerId(photo.nextLayerId), "Paint", RasterContent(Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.solid(Color.RED)))))
+        val document = photo.copy(layers = photo.layers + paint, nextLayerId = photo.nextLayerId + 1)
+
+        for (merged in listOf(MergeDown(paint.id).applyTo(document), MergeVisible.applyTo(document))) {
+            assertEquals(1, merged.layers.size)
+            val gainmap = checkNotNull(merged.layers[0].gainmap)
+            assertNear(0, gainmap.value(30, 30))
+            assertNear(200, gainmap.value(30, 120))
+            assertNear(50, gainmap.value(180, 120))
+        }
     }
 
     @Test

@@ -77,8 +77,9 @@ data class RetouchStroke(
         val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return document
         // 빈 레이어에서는 가져올 픽셀이 없다
         if (raster.tiles.isEmpty()) return document
+        val from: SourceOffset
         val painted = try {
-            val from = when (mode) {
+            from = when (mode) {
                 RetouchMode.SPOT_HEAL -> Retouch.spotOffset(raster, size, bounds, dabs, settings, checkCanceled) ?: return document
                 else -> checkNotNull(offset)
             }
@@ -88,7 +89,13 @@ data class RetouchStroke(
             throw NotEnoughMemoryException(e)
         }
         if (painted === raster) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted))) }
+        // 게인맵은 무늬를 가져온 자리의 것을 그대로 베낀다(결정 기록 'HDR')
+        val gainmap = try {
+            layer.gainmap?.let { GainmapEdits.clone(it, size, dabs, settings, from, document.selection, checkCanceled) }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted), gainmap = gainmap)) }
         return document.copy(layers = layers)
     }
 

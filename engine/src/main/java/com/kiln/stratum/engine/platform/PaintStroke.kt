@@ -49,7 +49,14 @@ data class PaintStroke(
             throw NotEnoughMemoryException(e)
         }
         if (painted === raster) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted))) }
+        // 칠한 곳의 게인맵은 '밝히지 않음'으로 칠한다(칠한 색이 HDR로 밝아지지 않게). 지우개는 알파가 대신해 그대로 둔다.
+        val info = document.hdr
+        val gainmap = try {
+            layer.gainmap?.let { if (erase || info == null) it else GainmapEdits.neutralize(it, size, dabs, settings, info, document.selection, checkCanceled) }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted), gainmap = gainmap)) }
         return document.copy(layers = layers)
     }
 

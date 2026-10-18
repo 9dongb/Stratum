@@ -12,6 +12,7 @@ import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.BlendMode as LayerBlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.liquify.LiquifyMesh
@@ -47,7 +48,13 @@ class LiquifyLayer(val layerId: LayerId, val mesh: LiquifyMesh) : CancellableCom
             throw NotEnoughMemoryException(e)
         }
         if (warped === raster) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(warped))) }
+        // 게인맵도 같은 변위로 비튼다(결정 기록 'HDR')
+        val gainmap = try {
+            layer.gainmap?.let { LiquifyRenderer.warpGainmap(it, size, mesh) }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(warped), gainmap = gainmap)) }
         return document.copy(layers = layers)
     }
 
@@ -97,7 +104,7 @@ object LiquifyRenderer {
      */
     fun preview(image: Bitmap, level: Int, field: Bitmap, cellSize: Int): Bitmap? {
         val scale = (1 shl level).toFloat()
-        val shader = shaderOf(image, field, cellSize, outputLeft = 0f, outputTop = 0f, outputScale = scale, imageLeft = 0f, imageTop = 0f, imageScale = scale)
+        val shader = shaderOf(image, field, cellSize, outputLeft = 0f, outputTop = 0f, outputScaleX = scale, outputScaleY = scale, imageLeft = 0f, imageTop = 0f, imageScaleX = scale, imageScaleY = scale)
         return draw(shader, image.width, image.height)
     }
 
@@ -126,8 +133,8 @@ object LiquifyRenderer {
                     val drawn = try {
                         val shader = shaderOf(
                             image, field, mesh.cellSize,
-                            outputLeft = block.left.toFloat(), outputTop = block.top.toFloat(), outputScale = 1f,
-                            imageLeft = source.left.toFloat(), imageTop = source.top.toFloat(), imageScale = 1f
+                            outputLeft = block.left.toFloat(), outputTop = block.top.toFloat(), outputScaleX = 1f, outputScaleY = 1f,
+                            imageLeft = source.left.toFloat(), imageTop = source.top.toFloat(), imageScaleX = 1f, imageScaleY = 1f
                         )
                         draw(shader, block.width, block.height)?.let { hardware ->
                             try {
@@ -150,6 +157,43 @@ object LiquifyRenderer {
             field.recycle()
         }
         return if (tiles.isEmpty()) raster else raster.withTiles(tiles)
+    }
+
+    /**
+     * [gainmap]을 [mesh](문서 크기 [size])대로 비튼 새 게인맵(결정 기록 'HDR'). 게인맵은 레이어 전체를 늘여 덮으므로,
+     * 게인맵 픽셀 가운데의 문서 좌표에서 변위를 읽어 같은 셰이더로 그린다. 게인맵은 작아 통째로 한 번에 다시 그린다.
+     */
+    internal fun warpGainmap(gainmap: HdrGainmap, size: PixelSize, mesh: LiquifyMesh): HdrGainmap {
+        val whole = PixelRect(0, 0, gainmap.width, gainmap.height)
+        val field = fieldBitmap(mesh)
+        try {
+            fill(field, FloatArray(mesh.columns * mesh.rows * 2).also { mesh.copyInto(it) }, ShortArray(mesh.columns * mesh.rows * 4))
+            val image = compose(gainmap.raster, whole)
+            val drawn = try {
+                // 게인맵 한 칸이 덮는 문서 픽셀(가로·세로가 조금 다를 수 있어 따로 둔다)
+                val scaleX = size.width.toFloat() / gainmap.width
+                val scaleY = size.height.toFloat() / gainmap.height
+                val shader = shaderOf(image, field, mesh.cellSize, 0f, 0f, scaleX, scaleY, 0f, 0f, scaleX, scaleY)
+                draw(shader, gainmap.width, gainmap.height)?.let { hardware ->
+                    try {
+                        hardware.copy(Bitmap.Config.ARGB_8888, false)
+                    } finally {
+                        hardware.recycle()
+                    }
+                } ?: throw NotEnoughMemoryException()
+            } finally {
+                image.recycle()
+            }
+            val tiles = HashMap<TileKey, Tile?>()
+            try {
+                split(drawn, whole, TileGrid(gainmap.width, gainmap.height), tiles)
+            } finally {
+                drawn.recycle()
+            }
+            return gainmap.copy(raster = gainmap.raster.withTiles(tiles))
+        } finally {
+            field.recycle()
+        }
     }
 
     /** [raster]의 [area] 부분을 한 장으로 베낀 소프트웨어 비트맵(값 그대로) */
@@ -193,18 +237,20 @@ object LiquifyRenderer {
         cellSize: Int,
         outputLeft: Float,
         outputTop: Float,
-        outputScale: Float,
+        outputScaleX: Float,
+        outputScaleY: Float,
         imageLeft: Float,
         imageTop: Float,
-        imageScale: Float
+        imageScaleX: Float,
+        imageScaleY: Float
     ): RuntimeShader =
         RuntimeShader(LIQUIFY).apply {
             setInputShader("image", BitmapShader(image, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply { filterMode = BitmapShader.FILTER_MODE_LINEAR })
             setInputShader("field", BitmapShader(field, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply { filterMode = BitmapShader.FILTER_MODE_LINEAR })
             setFloatUniform("outputOrigin", outputLeft, outputTop)
-            setFloatUniform("outputScale", outputScale)
+            setFloatUniform("outputScale", outputScaleX, outputScaleY)
             setFloatUniform("imageOrigin", imageLeft, imageTop)
-            setFloatUniform("imageScale", imageScale)
+            setFloatUniform("imageScale", imageScaleX, imageScaleY)
             setFloatUniform("cellSize", cellSize.toFloat())
         }
 
@@ -227,9 +273,9 @@ object LiquifyRenderer {
         uniform shader image;
         uniform shader field;
         uniform float2 outputOrigin;
-        uniform float outputScale;
+        uniform float2 outputScale;
         uniform float2 imageOrigin;
-        uniform float imageScale;
+        uniform float2 imageScale;
         uniform float cellSize;
 
         half4 main(float2 position) {
