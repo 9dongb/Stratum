@@ -97,6 +97,7 @@ object SettingsTags {
     const val DETAIL = "settingsDetail"
     const val QUALITY = "settingsQuality"
     const val TWO_FINGER_UNDO = "settingsTwoFingerUndo"
+    const val THREE_FINGER = "settingsThreeFinger"
     const val LICENSES = "settingsLicenses"
 
     fun category(category: SettingsCategory) = "settingsCategory_${category.name}"
@@ -376,31 +377,46 @@ private fun PreviewItems(values: SettingsValues, onChange: ((SettingsValues) -> 
     }
 }
 
-/** 제스처: 두 손가락으로 톡 → 실행 취소 */
+/** 제스처: 두 손가락으로 톡 → 실행 취소, 세 손가락 제스처. 스위치마다 하나의 항목이다. */
 @Composable
 private fun GestureItems(values: SettingsValues, onChange: ((SettingsValues) -> SettingsValues) -> Unit) {
+    SwitchItem(
+        checked = values.twoFingerTapUndo,
+        onCheckedChange = { on -> onChange { it.copy(twoFingerTapUndo = on) } },
+        title = R.string.settings_two_finger_undo,
+        description = R.string.settings_two_finger_undo_description,
+        tag = SettingsTags.TWO_FINGER_UNDO
+    )
+    SwitchItem(
+        checked = values.threeFingerGestures,
+        onCheckedChange = { on -> onChange { it.copy(threeFingerGestures = on) } },
+        title = R.string.settings_three_finger,
+        description = R.string.settings_three_finger_description,
+        tag = SettingsTags.THREE_FINGER
+    )
+}
+
+/** 이름·설명과 스위치 한 줄. 줄 전체를 누르면 켜고 끈다. */
+@Composable
+private fun SwitchItem(checked: Boolean, onCheckedChange: (Boolean) -> Unit, @StringRes title: Int, @StringRes description: Int, tag: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .toggleable(
-                value = values.twoFingerTapUndo,
-                role = Role.Switch,
-                onValueChange = { on -> onChange { it.copy(twoFingerTapUndo = on) } }
-            )
-            .testTag(SettingsTags.TWO_FINGER_UNDO),
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .testTag(tag),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.settings_two_finger_undo), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
             Text(
-                stringResource(R.string.settings_two_finger_undo_description),
+                stringResource(description),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = values.twoFingerTapUndo, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

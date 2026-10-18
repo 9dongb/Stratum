@@ -105,15 +105,18 @@ class SettingsScreenTest {
         composeRule.onNodeWithTag(SettingsTags.size(ExportSize.LongEdge(2048))).performScrollTo().performClick()
         composeRule.onNodeWithTag(SettingsTags.preview(PreviewQuality.LIGHT)).performScrollTo().performClick()
         composeRule.onNodeWithTag(SettingsTags.TWO_FINGER_UNDO).performScrollTo().performClick()
+        composeRule.onNodeWithTag(SettingsTags.THREE_FINGER).performScrollTo().performClick()
 
         composeRule.onNodeWithTag(SettingsTags.preview(PreviewQuality.LIGHT)).assertIsSelected()
         composeRule.onNodeWithTag(SettingsTags.TWO_FINGER_UNDO).assertIsOff()
+        composeRule.onNodeWithTag(SettingsTags.THREE_FINGER).assertIsOff()
         composeRule.runOnIdle {
             val changed = values.value
             assertEquals(ExportFormat.PNG, changed.export.format)
             assertEquals(ExportSize.LongEdge(2048), changed.export.size)
             assertEquals(PreviewQuality.LIGHT, changed.previewQuality)
             assertFalse(changed.twoFingerTapUndo)
+            assertFalse(changed.threeFingerGestures)
         }
     }
 
@@ -127,6 +130,7 @@ class SettingsScreenTest {
 
         composeRule.onNodeWithTag(SettingsTags.category(SettingsCategory.GESTURES)).performClick()
         composeRule.onNodeWithTag(SettingsTags.TWO_FINGER_UNDO).assertIsDisplayed()
+        composeRule.onNodeWithTag(SettingsTags.THREE_FINGER).assertIsDisplayed()
         composeRule.onNodeWithTag(SettingsTags.format(ExportFormat.JPEG)).assertDoesNotExist()
 
         composeRule.onNodeWithTag(SettingsTags.category(SettingsCategory.ABOUT)).performClick()

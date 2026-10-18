@@ -27,12 +27,14 @@ enum class PreviewQuality {
  * @property export 앱을 켠 뒤 내보내기 창이 처음 열릴 때의 고르기. 같은 실행 안에서는 마지막으로 내보낸 고르기가 이어진다.
  * @property previewQuality 미리 보기 화질
  * @property twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소
+ * @property threeFingerGestures 세 손가락 제스처: 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)
  * @property recentColors 최근 색(브러시·글자, 맨 앞이 가장 최근, [RecentColors]). 설정 화면에는 보이지 않고, 앱을 다시 켜도 남는다.
  */
 data class SettingsValues(
     val export: ExportChoice = ExportChoice(),
     val previewQuality: PreviewQuality = PreviewQuality.STANDARD,
     val twoFingerTapUndo: Boolean = true,
+    val threeFingerGestures: Boolean = true,
     val recentColors: List<Int> = RecentColors.DEFAULT
 )
 
@@ -65,6 +67,7 @@ class AppSettings internal constructor(private val preferences: SharedPreference
         private const val KEY_EXPORT_SIZE = "exportSize"
         private const val KEY_PREVIEW_QUALITY = "previewQuality"
         private const val KEY_TWO_FINGER_UNDO = "twoFingerTapUndo"
+        private const val KEY_THREE_FINGER = "threeFingerGestures"
         private const val KEY_RECENT_COLORS = "recentColors"
 
         /** 크기 저장 값: 원본은 이 글자, 긴 변은 픽셀 숫자 */
@@ -97,6 +100,7 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 export = ExportChoice(format, quality, size),
                 previewQuality = preview,
                 twoFingerTapUndo = preferences.getBoolean(KEY_TWO_FINGER_UNDO, defaults.twoFingerTapUndo),
+                threeFingerGestures = preferences.getBoolean(KEY_THREE_FINGER, defaults.threeFingerGestures),
                 recentColors = RecentColors.decode(preferences.getString(KEY_RECENT_COLORS, null))
             )
         }
@@ -114,6 +118,7 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 )
                 .putString(KEY_PREVIEW_QUALITY, values.previewQuality.name)
                 .putBoolean(KEY_TWO_FINGER_UNDO, values.twoFingerTapUndo)
+                .putBoolean(KEY_THREE_FINGER, values.threeFingerGestures)
                 .putString(KEY_RECENT_COLORS, RecentColors.encode(values.recentColors))
                 .apply()
         }

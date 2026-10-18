@@ -19,20 +19,20 @@ import com.kiln.stratum.engine.raster.PixelSize
 import kotlin.math.roundToInt
 
 /**
- * 크기·단단함 슬라이더를 끄는 동안 캔버스에 브러시 크기를 보일지. 값이 바뀌면 보이고, 손을 떼면 바로 사라진다.
+ * 크기·단단함 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스에 브러시 크기를 보일지. 값이 바뀌면 보이고, 손을 떼면 바로 사라진다.
  */
 @Stable
 class SizePreviewState {
-    /** 슬라이더를 끄는 중 */
+    /** 슬라이더를 끄는(세 손가락으로 미는) 중 */
     var visible: Boolean by mutableStateOf(false)
         private set
 
-    /** 슬라이더의 값이 바뀌었다 */
+    /** 값이 바뀌었다 */
     fun onChange() {
         visible = true
     }
 
-    /** 슬라이더에서 손을 뗐다 */
+    /** 손을 뗐다 */
     fun onFinished() {
         visible = false
     }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import com.kiln.stratum.engine.raster.PixelSize
 
@@ -54,6 +55,8 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  *
  * [onTwoFingerTap]이 있으면 캔버스를 두 손가락으로 톡 눌렀을 때 부른다(설정의 '두 손가락으로 톡: 실행 취소').
  * 그 터치는 도구 화면이 한 손가락 톡으로 받지 않는다.
+ *
+ * [threeFinger]가 있으면 세 손가락 톡·밀기를 알린다(설정의 '세 손가락 제스처', [detectCanvasGestures]). 그동안 도구 화면은 터치를 받지 않는다.
  */
 @Composable
 fun CanvasViewport(
@@ -62,14 +65,17 @@ fun CanvasViewport(
     modifier: Modifier = Modifier,
     onViewport: (Viewport) -> Unit = {},
     onTwoFingerTap: (() -> Unit)? = null,
+    threeFinger: ThreeFingerActions? = null,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
     // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
     val documentSize by rememberUpdatedState(state.documentSize)
     val report by rememberUpdatedState(onViewport)
     val twoFingerTap by rememberUpdatedState(onTwoFingerTap)
-    // 두 손가락 톡을 켜고 끌 때만 터치 처리를 다시 시작한다(켜져 있을 때만 그 터치를 소비한다)
+    val threeFingerActions by rememberUpdatedState(threeFinger)
+    // 두 손가락 톡·세 손가락 제스처를 켜고 끌 때만 터치 처리를 다시 시작한다(켜져 있을 때만 그 터치를 소비한다)
     val tapEnabled = onTwoFingerTap != null
+    val threeEnabled = threeFinger != null
     // 캔버스 영역의 크기(픽셀). 그리는 쪽이 쓰는 크기와 같다.
     var area by remember { mutableStateOf(IntSize.Zero) }
     LaunchedEffect(viewState) {
@@ -79,8 +85,8 @@ fun CanvasViewport(
         }
     }
     Box(
-        modifier.onSizeChanged { area = it }.pointerInput(viewState, tapEnabled) {
-            detectTwoFingerTransform(
+        modifier.onSizeChanged { area = it }.pointerInput(viewState, tapEnabled, threeEnabled) {
+            detectCanvasGestures(
                 onTransform = { centroid, pan, zoom ->
                     if (size.width > 0 && size.height > 0) {
                         viewState.view = viewState.view.transformedBy(
@@ -94,7 +100,25 @@ fun CanvasViewport(
                         )
                     }
                 },
-                onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null
+                onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null,
+                // 화면이 다시 그려지며 넘긴 것이 바뀌어도 지금 것에 보낸다
+                threeFinger = if (threeEnabled) {
+                    object : ThreeFingerActions {
+                        override fun tap() {
+                            threeFingerActions?.tap()
+                        }
+
+                        override fun swipe(axis: SwipeAxis, distance: Dp) {
+                            threeFingerActions?.swipe(axis, distance)
+                        }
+
+                        override fun swipeEnd() {
+                            threeFingerActions?.swipeEnd()
+                        }
+                    }
+                } else {
+                    null
+                }
             )
         }
     ) {

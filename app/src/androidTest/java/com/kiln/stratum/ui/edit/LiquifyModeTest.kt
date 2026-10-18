@@ -124,11 +124,11 @@ class LiquifyModeTest {
         LiquifyState(preview, document, LiquifyTool.PUSH, size = 150f, strength = 0.5f, canUndo = false, changed = false)
     )
 
-    private fun show(widthDp: Int, heightDp: Int, twoFingerTapUndo: Boolean = false) {
+    private fun show(widthDp: Int, heightDp: Int, twoFingerTapUndo: Boolean = false, threeFingerGestures: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { LiquifyMode(state, actions, twoFingerTapUndo = twoFingerTapUndo) }
+                    StratumTheme { LiquifyMode(state, actions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures) }
                 }
             }
         }
@@ -222,6 +222,64 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { twoFingerTap() }
 
         composeRule.runOnIdle { assertTrue("undo" !in actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+    }
+
+    @Test
+    fun threeFingerTap_redoesAStroke_andTellsSo() {
+        state = state.copy(canRedo = true)
+        show(411, 800, threeFingerGestures = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { threeFingerTap() }
+
+        composeRule.runOnIdle { assertEquals(listOf("begin", "cancelStroke", "redo"), actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.action_redo))
+    }
+
+    @Test
+    fun threeFingerTap_withNothingToRedo_tellsSo() {
+        show(411, 800, threeFingerGestures = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { threeFingerTap() }
+
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.gesture_nothing_to_redo))
+        composeRule.runOnIdle { assertTrue("redo" !in actions.calls) }
+    }
+
+    @Test
+    fun threeFingerSwipes_changeTheSize_andTheStrength() {
+        show(411, 800, threeFingerGestures = true)
+        val overlay = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY)
+
+        // 위로 밀면 크기가 커지고, 미는 동안 크기 원만 보인다(알림 없음)
+        overlay.performTouchInput { threeFingerSwipe(Offset(0f, -200f), lift = false) }
+        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+        overlay.performTouchInput { for (id in 0..2) up(id) }
+        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertTrue("${actions.chosenSize}", checkNotNull(actions.chosenSize) > 150f)
+            assertEquals(null, actions.chosenStrength)
+        }
+
+        // 왼쪽으로 밀면 압력이 준다(유동화에는 단단함이 없다)
+        overlay.performTouchInput { threeFingerSwipe(Offset(-200f, 0f)) }
+        composeRule.runOnIdle { assertTrue("${actions.chosenStrength}", checkNotNull(actions.chosenStrength) < 0.5f) }
+    }
+
+    @Test
+    fun threeFingers_turnedOff_doNothing() {
+        state = state.copy(canRedo = true)
+        show(411, 800, threeFingerGestures = false)
+        val overlay = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY)
+
+        overlay.performTouchInput { threeFingerTap() }
+        overlay.performTouchInput { threeFingerSwipe(Offset(0f, -200f)) }
+
+        composeRule.runOnIdle {
+            assertTrue("redo" !in actions.calls)
+            assertEquals(null, actions.chosenSize)
+        }
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
     }
 

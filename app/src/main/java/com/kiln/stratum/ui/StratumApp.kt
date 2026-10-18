@@ -128,6 +128,7 @@ fun StratumApp(editor: EditorViewModel) {
                 onTextStyle = editor::setTextStyle,
                 onAddText = editor::addText,
                 twoFingerTapUndo = settingsValues.twoFingerTapUndo,
+                threeFingerGestures = settingsValues.threeFingerGestures,
                 selectionOptions = selectionOptions,
                 onSelectionOptions = editor::setSelectionOptions,
                 selectionActions = editor.selectionActions,

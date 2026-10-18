@@ -118,6 +118,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param textStyle 글자 모양, [onTextStyle]로 바꾼다
  * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위)
  * @param twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소한다(설정). 상단 바의 실행 취소 버튼이 켜져 있을 때만 된다.
+ * @param threeFingerGestures 세 손가락 제스처(설정): 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함을 바꾼다.
  * @param selectionOptions 선택 도구 설정, [onSelectionOptions]로 바꾼다
  * @param selectionActions 선택 도구가 캔버스와 옵션 버튼에서 보내는 일
  * @param liquify 열려 있는 픽셀 유동화 작업 모드. 있으면 편집 화면 전체를 덮는다.
@@ -161,6 +162,7 @@ fun EditScreen(
     onTextStyle: (TextStyle) -> Unit = {},
     onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
     twoFingerTapUndo: Boolean = false,
+    threeFingerGestures: Boolean = false,
     selectionOptions: SelectionOptions = SelectionOptions(),
     onSelectionOptions: (SelectionOptions) -> Unit = {},
     selectionActions: SelectionActions = SelectionActions.None,
@@ -191,12 +193,16 @@ fun EditScreen(
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
     var retouchPicking by rememberSaveable { mutableStateOf(false) }
-    // 크기 슬라이더를 끄는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
+    // 크기·단단함 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
     val sizePreview = rememberSizePreviewState()
     // 두 손가락·세 손가락 톡의 짧은 알림(결정 기록 '제스처 알림')
     val gestureToast = rememberGestureToastState()
     val undoneText = stringResource(R.string.action_undo)
     val nothingToUndoText = stringResource(R.string.gesture_nothing_to_undo)
+    val redoneText = stringResource(R.string.action_redo)
+    val nothingToRedoText = stringResource(R.string.gesture_nothing_to_redo)
+    // 세 손가락으로 미는 동안 시작할 때의 브러시 설정(그 값에서 움직인 거리만큼 바꾼다)
+    val swipeAnchor = remember { SwipeAnchor<BrushSettings>() }
     // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
@@ -504,9 +510,45 @@ fun EditScreen(
             } else {
                 null
             }
+            // 세 손가락(결정 기록 '세 손가락 제스처'): 톡은 다시 실행(두 손가락 톡의 반대), 위아래로 밀면 크기, 좌우로 밀면 단단함.
+            // 브러시·지우개·리터칭·명암의 설정을 바꾸고, 미는 동안은 알림 없이 캔버스 가운데에 크기 원만 보인다(사용자 결정).
+            // 다른 도구를 골랐거나 고른 도구가 없으면 밀기는 아무것도 하지 않는다.
+            val threeFinger: ThreeFingerActions? = if (threeFingerGestures) {
+                object : ThreeFingerActions {
+                    override fun tap() {
+                        when {
+                            ready == null || ready.busy -> Unit
+                            ready.canRedo -> {
+                                onRedo()
+                                gestureToast.show(redoneText)
+                            }
+                            else -> gestureToast.show(nothingToRedoText)
+                        }
+                    }
+
+                    override fun swipe(axis: SwipeAxis, distance: Dp) {
+                        val changed = swipeAnchor.from(sizedBrush ?: return).swiped(axis, distance.value)
+                        when (activeTool) {
+                            EditTool.Brush -> onBrush(changed)
+                            EditTool.Eraser -> onEraser(changed)
+                            EditTool.Retouch -> onRetouch(changed)
+                            EditTool.Tone -> onToneOptions(toneOptions.copy(brush = changed))
+                            else -> return
+                        }
+                        sizePreview.onChange()
+                    }
+
+                    override fun swipeEnd() {
+                        swipeAnchor.end()
+                        sizePreview.onFinished()
+                    }
+                }
+            } else {
+                null
+            }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, gestureToast, Modifier.weight(1f), twoFingerUndo)
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
                     if (toolOptions != null) ToolOptionsSheet(toolOptions, maxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
@@ -514,7 +556,7 @@ fun EditScreen(
                 WidthClass.Medium -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, gestureToast, Modifier.weight(1f), twoFingerUndo)
+                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
                         val adjustTab = adjustControls?.takeIf { panelTab == PanelTab.ADJUST }
                         val layersTab = layerControls?.takeIf { panelTab == PanelTab.LAYERS }
                         BottomPanel(
@@ -549,7 +591,7 @@ fun EditScreen(
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, gestureToast, Modifier.weight(1f), twoFingerUndo)
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
                     SidePanel(
                         toolTitle = railToolTitle,
                         toolOptions = railToolOptions,
@@ -622,7 +664,7 @@ fun EditScreen(
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
         if (liquify != null) {
-            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo)
+            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures)
         }
     }
 }
@@ -712,6 +754,7 @@ private fun EditTopBar(
  * 배경은 영역 끝까지 칠하고, 안의 내용만 [insetSides] 쪽 시스템 바·카메라 구멍을 피한다.
  * 편집을 처리하는 동안 위쪽에 처리 중 막대를 보이고, [messages]는 아래쪽 알림 막대로 보인다.
  * [gestureToast]는 두 손가락·세 손가락 톡의 짧은 알림으로, 위쪽 가운데에 뜬다.
+ * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
  */
 @Composable
 private fun EditCanvas(
@@ -725,7 +768,8 @@ private fun EditCanvas(
     insetSides: WindowInsetsSides,
     gestureToast: GestureToastState,
     modifier: Modifier = Modifier,
-    onTwoFingerTap: (() -> Unit)? = null
+    onTwoFingerTap: (() -> Unit)? = null,
+    threeFinger: ThreeFingerActions? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -785,7 +829,7 @@ private fun EditCanvas(
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, overlay)
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, overlay)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다.
                 if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize())
                 if (showBusy) {

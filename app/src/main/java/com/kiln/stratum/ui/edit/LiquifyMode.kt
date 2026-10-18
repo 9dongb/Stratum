@@ -47,6 +47,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
@@ -144,14 +145,22 @@ interface LiquifyActions {
  * - 위: 취소(버림), 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용(실행 취소 한 단계로 기록).
  * - 가운데: 고른 레이어를 비튼 미리 보기. 한 손가락으로 끌어 비틀고, 두 손가락으로 확대·이동한다. 브러시 크기만큼 동그라미를 보인다.
  *   [twoFingerTapUndo](설정)면 두 손가락으로 톡 눌러 한 획 되돌린다(편집 화면과 같다, 결정 기록 '제스처 알림').
+ *   [threeFingerGestures](설정)면 세 손가락으로 톡 눌러 한 획 다시 실행하고, 위아래로 밀어 크기, 좌우로 밀어 압력을 바꾼다
+ *   (유동화에는 단단함이 없어 압력으로 대신한다, 결정 기록 '세 손가락 제스처').
  * - 옵션: 도구(뒤틀기·오목·볼록·재구성), 크기, 압력. 커버·메인 세로는 아래, 메인 가로는 오른쪽에 둔다(접히는 선을 피함).
  * - 시스템 뒤로는 취소와 같다.
  */
 @Composable
-fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier = Modifier, twoFingerTapUndo: Boolean = false) {
+fun LiquifyMode(
+    state: LiquifyState,
+    actions: LiquifyActions,
+    modifier: Modifier = Modifier,
+    twoFingerTapUndo: Boolean = false,
+    threeFingerGestures: Boolean = false
+) {
     BackHandler(enabled = !state.busy, onBack = actions::cancel)
     val viewState = rememberCanvasViewState(state.documentSize)
-    // 크기 슬라이더를 끄는 동안 캔버스 가운데에 브러시 크기를 보인다
+    // 크기 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스 가운데에 브러시 크기를 보인다
     val sizePreview = rememberSizePreviewState()
     // 두 손가락 톡: 처리 중이면 아무것도 하지 않고, 한 획 되돌리거나 되돌릴 것이 없다고 알린다
     val gestureToast = rememberGestureToastState()
@@ -171,6 +180,40 @@ fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier
     } else {
         null
     }
+    // 세 손가락: 톡은 한 획 다시 실행, 위아래로 밀면 크기, 좌우로 밀면 압력. 미는 동안은 알림 없이 크기 원만 보인다(편집 화면과 같다).
+    val redoneText = stringResource(R.string.action_redo)
+    val nothingToRedoText = stringResource(R.string.gesture_nothing_to_redo)
+    val swipeAnchor = remember { SwipeAnchor<LiquifyState>() }
+    val threeFinger: ThreeFingerActions? = if (threeFingerGestures) {
+        object : ThreeFingerActions {
+            override fun tap() {
+                when {
+                    state.busy -> Unit
+                    state.canRedo -> {
+                        actions.redo()
+                        gestureToast.show(redoneText)
+                    }
+                    else -> gestureToast.show(nothingToRedoText)
+                }
+            }
+
+            override fun swipe(axis: SwipeAxis, distance: Dp) {
+                val start = swipeAnchor.from(state)
+                when (axis) {
+                    SwipeAxis.VERTICAL -> actions.setSize(swipedSize(start.size, distance.value))
+                    SwipeAxis.HORIZONTAL -> actions.setStrength(swipedStrength(start.strength, distance.value))
+                }
+                sizePreview.onChange()
+            }
+
+            override fun swipeEnd() {
+                swipeAnchor.end()
+                sizePreview.onFinished()
+            }
+        }
+    } else {
+        null
+    }
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = MaterialTheme.colorScheme.surface) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthClass = widthClassOf(maxWidth.value)
@@ -178,7 +221,7 @@ fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions)
                 val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
-                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, canvasModifier)
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, threeFinger, canvasModifier)
                 }
                 if (widthClass == WidthClass.Expanded) {
                     Row(Modifier.fillMaxSize()) {
@@ -256,7 +299,7 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
 
 /**
  * 비튼 미리 보기와 브러시 손가락 자리. 적용하는 동안 위쪽에 처리 중 막대를 보인다.
- * [showSize]면(크기 슬라이더를 끄는 중) 가운데에 브러시 크기 원을 보인다. 제스처 알림([gestureToast])은 위쪽 가운데에 뜬다.
+ * [showSize]면(크기 슬라이더를 끄거나 세 손가락으로 미는 중) 가운데에 브러시 크기 원을 보인다. 제스처 알림([gestureToast])은 위쪽 가운데에 뜬다.
  */
 @Composable
 private fun LiquifyCanvas(
@@ -266,6 +309,7 @@ private fun LiquifyCanvas(
     showSize: Boolean,
     gestureToast: GestureToastState,
     onTwoFingerTap: (() -> Unit)?,
+    threeFinger: ThreeFingerActions?,
     modifier: Modifier
 ) {
     val ready = remember(state.preview, state.documentSize, state.colorSpace) {
@@ -276,7 +320,7 @@ private fun LiquifyCanvas(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .testTag(EditScreenTags.LIQUIFY_CANVAS)
     ) {
-        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap) {
+        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger) {
             LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
             if (showSize) {
                 SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())

@@ -209,6 +209,8 @@
     <string name="settings_preview_light_description">화면보다 큰 사진은 미리 보기를 절반 크기로 그려요. 슬라이더와 브러시가 가벼워지고, 확대하면 선명하게 다시 그려요.</string>
     <string name="settings_two_finger_undo">두 손가락으로 톡: 실행 취소</string>
     <string name="settings_two_finger_undo_description">캔버스를 두 손가락으로 톡 누르면 마지막 편집을 되돌려요.</string>
+    <string name="settings_three_finger">세 손가락 제스처</string>
+    <string name="settings_three_finger_description">캔버스를 세 손가락으로 톡 누르면 다시 실행해요. 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)이 바뀌어요.</string>
     <string name="settings_version">버전</string>
     <string name="settings_privacy">개인정보</string>
     <string name="settings_privacy_description">Stratum은 인터넷을 쓰지 않아요. 사진과 프로젝트는 이 기기 안에만 있어요. 광고·로그인·분석이 없어요.</string>

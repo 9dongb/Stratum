@@ -45,6 +45,7 @@ class AppSettingsTest {
             export = ExportChoice(ExportFormat.WEBP, 75, ExportSize.LongEdge(2048)),
             previewQuality = PreviewQuality.LIGHT,
             twoFingerTapUndo = false,
+            threeFingerGestures = false,
             recentColors = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
         )
 
@@ -81,6 +82,7 @@ class AppSettingsTest {
         assertEquals(ExportSize.Original, values.export.size)
         assertEquals(PreviewQuality.STANDARD, values.previewQuality)
         assertTrue(values.twoFingerTapUndo)
+        assertTrue(values.threeFingerGestures)
         // 망가진 최근 색은 건너뛰고 같은 색은 한 번만 읽는다
         assertEquals(listOf(0xFF1E88E5.toInt()), values.recentColors)
     }
