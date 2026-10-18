@@ -7,6 +7,9 @@ import com.kiln.stratum.engine.export.ExportSize
 object EditScreenTags {
     const val CANVAS = "editCanvas"
 
+    /** 제스처 알림(두 손가락·세 손가락 톡의 짧은 알림) */
+    const val GESTURE_TOAST = "gestureToast"
+
     /** 칠하는 손가락 자리의 브러시 커서(크기 원) */
     const val BRUSH_CURSOR = "brushCursor"
 

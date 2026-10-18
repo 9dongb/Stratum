@@ -232,3 +232,49 @@ fun HingeAvoidingBottom(
         }
     }
 }
+
+/**
+ * 하나를 위쪽 가운데에 놓되, 힌지의 띠(양쪽 [HingeMargin])를 피한다. 잠깐 뜨는 제스처 알림에 쓴다([HingeAvoidingBottom]과 같은 방식).
+ *
+ * - 세로 힌지의 띠가 가로를 나누면, 띠 밖에서 가장 넓은 칸에 들어가도록 폭을 줄여 그 칸 가운데에 놓는다.
+ * - 가로 힌지의 띠에 걸리면 띠 아래로 내린다.
+ * - 놓을 것이 없으면(사라지는 알림이 다 사라짐) 아무것도 놓지 않는다.
+ *
+ * 받은 영역을 다 차지하지만 터치는 받지 않는다([HingeAvoidingTopStart]와 같다).
+ */
+@Composable
+fun HingeAvoidingTop(
+    modifier: Modifier = Modifier,
+    margin: Dp = 0.dp,
+    content: @Composable () -> Unit
+) {
+    val hinges = LocalHinges.current
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val marginPx = margin.roundToPx()
+        val hingeMarginPx = HingeMargin.roundToPx()
+        layout(width, height) {
+            val measurable = measurables.firstOrNull() ?: return@layout
+            // 정렬선을 재는 단계에서는 위치를 몰라(null) 띠 없이 놓고, 곧 이어지는 배치에서 다시 놓는다
+            val origin = coordinates?.positionInWindow()
+            val row = Span(0, width)
+            val span = if (origin == null) {
+                row
+            } else {
+                widestFreeSpan(row, hinges.filter { it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-origin.x.roundToInt()) })
+            }
+            val placeable = measurable.measure(Constraints(maxWidth = (span.end - span.start).coerceAtLeast(0), maxHeight = height))
+            val x = span.start + (span.end - span.start - placeable.width) / 2
+            var y = marginPx
+            if (origin != null) {
+                val top = origin.y.roundToInt()
+                // 위에서부터 내려가며, 걸리는 띠가 있으면 그 띠 아래로 내린다
+                for (band in hinges.filter { !it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-top) }.sortedBy { it.start }) {
+                    if (y < band.end && y + placeable.height > band.start) y = band.end
+                }
+            }
+            placeable.place(x, y)
+        }
+    }
+}

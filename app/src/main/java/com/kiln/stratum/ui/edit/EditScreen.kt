@@ -193,6 +193,10 @@ fun EditScreen(
     var retouchPicking by rememberSaveable { mutableStateOf(false) }
     // 크기 슬라이더를 끄는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
     val sizePreview = rememberSizePreviewState()
+    // 두 손가락·세 손가락 톡의 짧은 알림(결정 기록 '제스처 알림')
+    val gestureToast = rememberGestureToastState()
+    val undoneText = stringResource(R.string.action_undo)
+    val nothingToUndoText = stringResource(R.string.gesture_nothing_to_undo)
     // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
@@ -485,14 +489,24 @@ fun EditScreen(
         ) { innerPadding ->
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
             // 두 손가락 톡: 실행 취소 버튼과 같은 조건(되돌릴 것이 있고 처리 중이 아님)일 때만 되돌린다
+            // 처리 중이면 아무것도 하지 않고, 되돌릴 것이 없으면 그렇다고 알린다
             val twoFingerUndo: (() -> Unit)? = if (twoFingerTapUndo) {
-                { if (ready?.canUndo == true && !ready.busy) onUndo() }
+                {
+                    when {
+                        ready == null || ready.busy -> Unit
+                        ready.canUndo -> {
+                            onUndo()
+                            gestureToast.show(undoneText)
+                        }
+                        else -> gestureToast.show(nothingToUndoText)
+                    }
+                }
             } else {
                 null
             }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, Modifier.weight(1f), twoFingerUndo)
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, gestureToast, Modifier.weight(1f), twoFingerUndo)
                     if (toolOptions != null) ToolOptionsSheet(toolOptions, maxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
@@ -500,7 +514,7 @@ fun EditScreen(
                 WidthClass.Medium -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     Column(Modifier.weight(1f)) {
-                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, Modifier.weight(1f), twoFingerUndo)
+                        EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, gestureToast, Modifier.weight(1f), twoFingerUndo)
                         val adjustTab = adjustControls?.takeIf { panelTab == PanelTab.ADJUST }
                         val layersTab = layerControls?.takeIf { panelTab == PanelTab.LAYERS }
                         BottomPanel(
@@ -535,7 +549,7 @@ fun EditScreen(
 
                 WidthClass.Expanded -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
-                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, Modifier.weight(1f), twoFingerUndo)
+                    EditCanvas(state, viewState, messages, onCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, gestureToast, Modifier.weight(1f), twoFingerUndo)
                     SidePanel(
                         toolTitle = railToolTitle,
                         toolOptions = railToolOptions,
@@ -697,6 +711,7 @@ private fun EditTopBar(
  * 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
  * 배경은 영역 끝까지 칠하고, 안의 내용만 [insetSides] 쪽 시스템 바·카메라 구멍을 피한다.
  * 편집을 처리하는 동안 위쪽에 처리 중 막대를 보이고, [messages]는 아래쪽 알림 막대로 보인다.
+ * [gestureToast]는 두 손가락·세 손가락 톡의 짧은 알림으로, 위쪽 가운데에 뜬다.
  */
 @Composable
 private fun EditCanvas(
@@ -708,6 +723,7 @@ private fun EditCanvas(
     overlay: @Composable BoxScope.() -> Unit,
     showZoomChip: Boolean,
     insetSides: WindowInsetsSides,
+    gestureToast: GestureToastState,
     modifier: Modifier = Modifier,
     onTwoFingerTap: (() -> Unit)? = null
 ) {
@@ -799,6 +815,8 @@ private fun EditCanvas(
                 style = MaterialTheme.typography.bodyLarge
             )
         }
+        // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(접히는 선을 피함)
+        GestureToast(gestureToast, Modifier.fillMaxSize())
         // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선을 피한다
         HingeAvoidingBottom(Modifier.fillMaxSize(), margin = 8.dp) {
             SnackbarHost(snackbarHostState)

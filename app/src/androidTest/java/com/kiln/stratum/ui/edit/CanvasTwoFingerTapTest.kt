@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.TouchInjectionScope
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -171,13 +173,14 @@ class CanvasTwoFingerTapTest {
     }
 
     @Test
-    fun editScreen_twoFingerTap_undoes() {
+    fun editScreen_twoFingerTap_undoes_andTellsSo() {
         var undos = 0
         showEditScreen(ready(canUndo = true), twoFingerTapUndo = true) { undos++ }
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput { twoFingerTap() }
 
         composeRule.runOnIdle { assertEquals(1, undos) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.action_undo))
     }
 
     @Test
@@ -191,7 +194,7 @@ class CanvasTwoFingerTapTest {
     }
 
     @Test
-    fun editScreen_twoFingerTap_doesNothing_whenThereIsNothingToUndo_orWhileBusy() {
+    fun editScreen_twoFingerTap_tellsThereIsNothingToUndo_andDoesNothingWhileBusy() {
         var undos = 0
         val state = mutableStateOf<EditorState>(ready(canUndo = false))
         composeRule.setContent {
@@ -209,6 +212,7 @@ class CanvasTwoFingerTapTest {
         }
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput { twoFingerTap() }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.gesture_nothing_to_undo))
         composeRule.runOnIdle { state.value = ready(canUndo = true, busy = true) }
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput { twoFingerTap() }
 

@@ -18,6 +18,8 @@
     <string name="action_back">뒤로</string>
     <string name="action_undo">실행 취소</string>
     <string name="action_redo">다시 실행</string>
+    <string name="gesture_nothing_to_undo">되돌릴 것이 없어요</string>
+    <string name="gesture_nothing_to_redo">다시 할 것이 없어요</string>
     <string name="action_export">내보내기</string>
     <string name="action_cancel">취소</string>
     <string name="action_apply">적용</string>
