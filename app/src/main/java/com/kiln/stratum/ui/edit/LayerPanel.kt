@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -87,6 +88,15 @@ interface LayerActions {
     /** 고른 레이어를 지운다 */
     fun delete()
 
+    /** 고른 레이어를 바로 위에 복제한다 */
+    fun duplicate()
+
+    /** 고른 레이어를 바로 아래 레이어에 합친다 */
+    fun mergeDown()
+
+    /** 보이는 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다 */
+    fun mergeVisible()
+
     /** [id] 레이어를 [toIndex](0이 맨 아래) 자리로 옮긴다 */
     fun move(id: LayerId, toIndex: Int)
 
@@ -104,6 +114,9 @@ interface LayerActions {
         override fun select(id: LayerId) = Unit
         override fun add() = Unit
         override fun delete() = Unit
+        override fun duplicate() = Unit
+        override fun mergeDown() = Unit
+        override fun mergeVisible() = Unit
         override fun move(id: LayerId, toIndex: Int) = Unit
         override fun previewOpacity(opacity: Float) = Unit
         override fun commitOpacity() = Unit
@@ -303,7 +316,11 @@ private fun LayerList(controls: LayerControls, modifier: Modifier = Modifier) {
     }
 }
 
-/** 레이어 줄 하나: 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠한다. */
+/**
+ * 레이어 줄 하나: 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠한다.
+ * 작은 그림·이름 쪽을 길게 누르면 그 레이어를 고르고 메뉴([LayerMenu])를 띄운다. 손잡이는 끌기라 길게 누르기에서 뺀다.
+ * 화면 읽기 기능에서는 '레이어 메뉴' 동작(길게 누르기)으로 연다.
+ */
 @Composable
 private fun LayerRow(
     layer: LayerSummary,
@@ -325,82 +342,140 @@ private fun LayerRow(
     val selectedLabel = stringResource(R.string.layer_selected)
     val upLabel = stringResource(R.string.layer_move_up)
     val downLabel = stringResource(R.string.layer_move_down)
+    val menuLabel = stringResource(R.string.layer_menu)
+    var menuOpen by remember { mutableStateOf(false) }
+    val openMenu = {
+        if (controls.enabled) {
+            actions.select(layer.id)
+            menuOpen = true
+        }
+    }
     // 제스처는 한 번 시작해 계속 돌므로, 그 안에서는 늘 지금 값을 부른다
     val currentOnDragStart by rememberUpdatedState(onDragStart)
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
     val currentOnDragCancel by rememberUpdatedState(onDragCancel)
     val canMove = controls.canEdit
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(RowHeight)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) colors.secondaryContainer else Color.Transparent)
-            .selectable(selected = selected, enabled = controls.enabled, onClick = { actions.select(layer.id) })
-            .semantics {
-                contentDescription = description
-                if (selected) stateDescription = selectedLabel
-                if (canMove) {
-                    customActions = listOfNotNull(
-                        CustomAccessibilityAction(upLabel) {
-                            actions.move(layer.id, documentIndex + 1)
+    // 메뉴가 줄을 따라 움직이도록(끄는 동안 등) 줄과 메뉴를 함께 감싼다
+    Box(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(RowHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (selected) colors.secondaryContainer else Color.Transparent)
+                .selectable(selected = selected, enabled = controls.enabled, onClick = { actions.select(layer.id) })
+                .semantics {
+                    contentDescription = description
+                    if (selected) stateDescription = selectedLabel
+                    if (canMove) {
+                        customActions = listOfNotNull(
+                            CustomAccessibilityAction(upLabel) {
+                                actions.move(layer.id, documentIndex + 1)
+                                true
+                            }.takeIf { documentIndex < controls.layers.lastIndex },
+                            CustomAccessibilityAction(downLabel) {
+                                actions.move(layer.id, documentIndex - 1)
+                                true
+                            }.takeIf { documentIndex > 0 }
+                        )
+                    }
+                    if (controls.enabled) {
+                        onLongClick(label = menuLabel) {
+                            openMenu()
                             true
-                        }.takeIf { documentIndex < controls.layers.lastIndex },
-                        CustomAccessibilityAction(downLabel) {
-                            actions.move(layer.id, documentIndex - 1)
-                            true
-                        }.takeIf { documentIndex > 0 }
+                        }
+                    }
+                }
+                .testTag(EditScreenTags.layerRow(layer.id))
+                .padding(start = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 작은 그림·이름: 길게 누르면 메뉴. 줄의 누르기(고르기)보다 먼저 알아채고, 길게 누른 뒤에는 누르기가 일어나지 않는다.
+            Row(Modifier.weight(1f).fillMaxHeight().longPressFirst(openMenu), verticalAlignment = Alignment.CenterVertically) {
+                LayerThumbnail(layer.thumbnail, Modifier.size(ThumbnailSize))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = layer.name,
+                        color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(R.string.layer_row_detail, mode, percent),
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
             }
-            .testTag(EditScreenTags.layerRow(layer.id))
-            .padding(start = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        LayerThumbnail(layer.thumbnail, Modifier.size(ThumbnailSize))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = layer.name,
-                color = if (selected) colors.onSecondaryContainer else colors.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                text = stringResource(R.string.layer_row_detail, mode, percent),
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelSmall
-            )
+            // 순서 손잡이: 위아래로 끌면 옮긴다(누르는 영역 48dp)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag(EditScreenTags.layerHandle(layer.id))
+                    .pointerInput(layer.id, canMove) {
+                        if (!canMove) return@pointerInput
+                        detectVerticalDragGestures(
+                            onDragStart = { currentOnDragStart() },
+                            onDragEnd = { currentOnDragEnd() },
+                            onDragCancel = { currentOnDragCancel() }
+                        ) { change, delta ->
+                            change.consume()
+                            currentOnDrag(delta)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_drag_handle),
+                    contentDescription = null,
+                    tint = if (canMove) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f)
+                )
+            }
         }
-        // 순서 손잡이: 위아래로 끌면 옮긴다(누르는 영역 48dp)
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .testTag(EditScreenTags.layerHandle(layer.id))
-                .pointerInput(layer.id, canMove) {
-                    if (!canMove) return@pointerInput
-                    detectVerticalDragGestures(
-                        onDragStart = { currentOnDragStart() },
-                        onDragEnd = { currentOnDragEnd() },
-                        onDragCancel = { currentOnDragCancel() }
-                    ) { change, delta ->
-                        change.consume()
-                        currentOnDrag(delta)
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painterResource(R.drawable.ic_drag_handle),
-                contentDescription = null,
-                tint = if (canMove) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f)
-            )
-        }
+        LayerMenu(expanded = menuOpen, controls = controls, documentIndex = documentIndex, onDismiss = { menuOpen = false })
     }
+}
+
+/**
+ * 레이어 줄을 길게 누르면 뜨는 메뉴: 복제, 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
+ * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다. 할 수 없는 항목은 꺼 둔다
+ * (맨 아래 레이어는 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
+ */
+@Composable
+private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex: Int, onDismiss: () -> Unit) {
+    val actions = controls.actions
+    val canEdit = controls.canEdit
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
+        LayerMenuItem(R.string.layer_merge_down, canEdit && documentIndex > 0, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
+        LayerMenuItem(
+            R.string.layer_merge_visible,
+            canEdit && controls.layers.count { it.opacity > 0f } >= 2,
+            EditScreenTags.LAYER_MENU_MERGE_VISIBLE,
+            onDismiss,
+            actions::mergeVisible
+        )
+        LayerMenuItem(R.string.layer_delete, canEdit && controls.layers.size > 1, EditScreenTags.LAYER_MENU_DELETE, onDismiss, actions::delete)
+    }
+}
+
+/** 메뉴 항목 하나. 누르면 메뉴를 닫고 [onClick]을 한다. */
+@Composable
+private fun LayerMenuItem(@StringRes label: Int, enabled: Boolean, tag: String, onDismiss: () -> Unit, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(label)) },
+        onClick = {
+            onDismiss()
+            onClick()
+        },
+        enabled = enabled,
+        modifier = Modifier.testTag(tag)
+    )
 }
 
 /**

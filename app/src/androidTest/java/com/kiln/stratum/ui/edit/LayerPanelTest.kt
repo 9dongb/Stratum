@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -81,6 +82,18 @@ class LayerPanelTest {
 
         override fun delete() {
             calls += "delete ${active.value}"
+        }
+
+        override fun duplicate() {
+            calls += "duplicate ${active.value}"
+        }
+
+        override fun mergeDown() {
+            calls += "mergeDown ${active.value}"
+        }
+
+        override fun mergeVisible() {
+            calls += "mergeVisible"
         }
 
         override fun move(id: LayerId, toIndex: Int) {
@@ -234,6 +247,79 @@ class LayerPanelTest {
         composeRule.runOnIdle { action.action() }
 
         composeRule.runOnIdle { assertEquals(listOf("move 0 to 1"), fake.calls) }
+    }
+
+    @Test
+    fun longPressingARow_picksItAndOpensTheMenu_turningOffWhatCannotBeDone() {
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        row(0).performTouchInput { longClick() }
+
+        composeRule.runOnIdle { assertEquals(LayerId(0), fake.active) }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsEnabled()
+        // 맨 아래 레이어는 아래와 합칠 수 없다
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsEnabled()
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(listOf("select 0", "duplicate 0"), fake.calls) }
+    }
+
+    @Test
+    fun menuItems_sendTheirWorkForThePressedLayer() {
+        val fake = FakeLayers(3)
+        openCompactLayers(fake)
+
+        for (item in listOf(EditScreenTags.LAYER_MENU_MERGE_DOWN, EditScreenTags.LAYER_MENU_MERGE_VISIBLE, EditScreenTags.LAYER_MENU_DELETE)) {
+            row(1).performTouchInput { longClick() }
+            composeRule.onNodeWithTag(item).performClick()
+        }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("select 1", "mergeDown 1", "select 1", "mergeVisible", "select 1", "delete 1"), fake.calls)
+        }
+    }
+
+    @Test
+    fun oneVisibleLayer_turnsOffMerging_andOneLayerTurnsOffDeleting() {
+        val fake = FakeLayers(2)
+        fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 0) layer.copy(opacity = 0f) else layer }
+        openCompactLayers(fake)
+
+        row(1).performTouchInput { longClick() }
+        // 아래 레이어가 숨겨져 있어도 아래와 병합은 된다(포토샵과 같다). 보이는 레이어는 하나뿐이다.
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsNotEnabled()
+        composeRule.runOnIdle { fake.layers = listOf(fake.layers.last()) }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsEnabled()
+    }
+
+    @Test
+    fun accessibilityLongClick_opensTheMenu() {
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        row(0).performSemanticsAction(SemanticsActions.OnLongClick)
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(LayerId(0), fake.active) }
+    }
+
+    @Test
+    fun expanded_longPressOpensTheMenuInTheSidePanel() {
+        val fake = FakeLayers(2)
+        show(fake, 930, 700)
+
+        composeRule.onNode(hasTestTag(EditScreenTags.layerRow(LayerId(1))) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
+            .performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("select 1", "mergeDown 1"), fake.calls) }
     }
 
     @Test

@@ -50,6 +50,38 @@ class LayerCommandsTest {
     }
 
     @Test
+    fun duplicateLayer_addsTheSameLayerRightAbove_withTheNextId_sharingThePixels() {
+        val document = documentWithLayers(3)
+        val styled = document.copy(
+            layers = document.layers.toMutableList().apply {
+                set(1, get(1).copy(opacity = 0.4f, blendMode = BlendMode.SCREEN, adjustments = Adjustments(exposure = 0.5f)))
+            }
+        )
+
+        val result = DuplicateLayer(LayerId(1), "L1 copy").applyTo(styled)
+
+        assertEquals(listOf(0L, 1L, 3L, 2L), result.layerIds())
+        assertEquals(4L, result.nextLayerId)
+        val copy = result.layers[2]
+        assertEquals("L1 copy", copy.name)
+        assertEquals(0.4f, copy.opacity, 0f)
+        assertEquals(BlendMode.SCREEN, copy.blendMode)
+        assertEquals(Adjustments(exposure = 0.5f), copy.adjustments)
+        // 픽셀은 같은 래스터를 함께 쓰고, 다른 레이어는 같은 객체다
+        assertSame((styled.layers[1].content as RasterContent).raster, (copy.content as RasterContent).raster)
+        assertSame(styled.layers[1], result.layers[1])
+        assertSame(styled.layers[2], result.layers[3])
+    }
+
+    @Test
+    fun duplicateLayer_topLayerGoesToTheTop_andUnknownLayerKeepsTheDocument() {
+        val document = documentWithLayers(2)
+
+        assertEquals(listOf(0L, 1L, 2L), DuplicateLayer(LayerId(1), "copy").applyTo(document).layerIds())
+        assertSame(document, DuplicateLayer(LayerId(9), "copy").applyTo(document))
+    }
+
+    @Test
     fun deleteLayer_removesLayerAndNewLayersStillGetNewIds() {
         val document = documentWithLayers(3)
 

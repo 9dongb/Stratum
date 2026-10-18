@@ -64,6 +64,12 @@ object EditScreenTags {
     const val LAYER_OPACITY = "layerOpacity"
     const val LAYER_BLEND = "layerBlend"
 
+    /** 레이어 줄을 길게 누르면 뜨는 메뉴의 항목 */
+    const val LAYER_MENU_DUPLICATE = "layerMenuDuplicate"
+    const val LAYER_MENU_MERGE_DOWN = "layerMenuMergeDown"
+    const val LAYER_MENU_MERGE_VISIBLE = "layerMenuMergeVisible"
+    const val LAYER_MENU_DELETE = "layerMenuDelete"
+
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"
 

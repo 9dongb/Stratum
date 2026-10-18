@@ -23,6 +23,22 @@ data class AddLayer(val name: String, val index: Int) : EditCommand {
     }
 }
 
+/**
+ * [layerId] 레이어를 바로 위에 복제한다(픽셀·불투명도·혼합 모드·보정이 같다). 새 레이어 번호는 문서의 nextLayerId다.
+ * 픽셀은 바꾸지 않는 값이라 원래 레이어와 같은 래스터를 함께 써서 메모리가 늘지 않는다. 없는 레이어면 그대로 둔다.
+ *
+ * @property name 새 레이어의 이름. 앱이 strings.xml에서 만들어 넘긴다('<이름> 복사').
+ */
+data class DuplicateLayer(val layerId: LayerId, val name: String) : EditCommand {
+    override fun applyTo(document: Document): Document {
+        val index = document.indexOfLayer(layerId)
+        if (index < 0) return document
+        val copy = document.layers[index].copy(id = LayerId(document.nextLayerId), name = name)
+        val layers = document.layers.toMutableList().apply { add(index + 1, copy) }
+        return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1)
+    }
+}
+
 /** [layerId] 레이어를 지운다. 없는 레이어이거나 마지막 남은 레이어면 그대로 둔다(포토샵과 같음). */
 data class DeleteLayer(val layerId: LayerId) : EditCommand {
     override fun applyTo(document: Document): Document {

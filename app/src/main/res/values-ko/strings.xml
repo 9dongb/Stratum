@@ -148,6 +148,11 @@
     <string name="layer_row_detail">%1$s · %2$d%%</string>
     <string name="layer_row_description">%1$s, %2$s, 불투명도 %3$d%%</string>
     <string name="layer_selected">선택됨</string>
+    <string name="layer_menu">레이어 메뉴</string>
+    <string name="layer_duplicate">레이어 복제</string>
+    <string name="layer_merge_down">아래 레이어와 병합</string>
+    <string name="layer_merge_visible">보이는 레이어 병합</string>
+    <string name="layer_copy_name">%1$s 복사</string>
     <string name="blend_normal">표준</string>
     <string name="blend_multiply">곱하기</string>
     <string name="blend_screen">스크린</string>

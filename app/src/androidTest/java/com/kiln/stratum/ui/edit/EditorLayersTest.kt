@@ -125,6 +125,51 @@ class EditorLayersTest {
     }
 
     @Test
+    fun duplicate_addsANamedCopyAbove_picksIt_andUndoRemovesIt() {
+        val opened = openCanvas()
+        val original = opened.layers.single()
+
+        onMain { viewModel.duplicateLayer() }
+        val duplicated = awaitReady { !it.busy && it.layers.size == 2 }
+
+        val copy = duplicated.layers.last()
+        assertEquals(context.getString(R.string.layer_copy_name, original.name), copy.name)
+        assertEquals(copy.id, duplicated.activeLayer)
+        assertNotNull(copy.thumbnail)
+        onMain { viewModel.undo() }
+        val undone = awaitReady { !it.busy && it.layers.size == 1 }
+        assertEquals(original.id, undone.activeLayer)
+    }
+
+    @Test
+    fun mergeDown_mergesIntoTheLayerBelow_andPicksIt_butNotFromTheBottom() {
+        val withTwo = addLayer(openCanvas())
+
+        onMain { viewModel.mergeLayerDown() }
+        val merged = awaitReady { !it.busy && it.layers.size == 1 }
+        assertEquals(LayerId(0), merged.activeLayer)
+
+        // 맨 아래 레이어는 아래와 합칠 수 없다
+        onMain { viewModel.mergeLayerDown() }
+        Thread.sleep(300)
+        assertEquals(merged.revision, (viewModel.state.value as EditorState.Ready).revision)
+        assertEquals(withTwo.revision + 1, merged.revision)
+    }
+
+    @Test
+    fun mergeVisible_mergesEveryVisibleLayerIntoTheLowest_inOneUndoStep() {
+        val withThree = addLayer(addLayer(openCanvas()))
+
+        onMain { viewModel.mergeVisibleLayers() }
+        val merged = awaitReady { !it.busy && it.layers.size == 1 }
+        assertEquals(LayerId(0), merged.activeLayer)
+
+        onMain { viewModel.undo() }
+        val undone = awaitReady { !it.busy && it.layers.size == 3 }
+        assertEquals(withThree.layers.map { it.id }, undone.layers.map { it.id })
+    }
+
+    @Test
     fun selecting_isIgnoredWhileASliderIsHeld() {
         val withTwo = addLayer(openCanvas())
         val top = withTwo.activeLayer

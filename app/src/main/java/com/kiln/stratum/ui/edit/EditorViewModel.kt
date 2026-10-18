@@ -17,6 +17,7 @@ import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.DeleteLayer
+import com.kiln.stratum.engine.command.DuplicateLayer
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.EditSequence
 import com.kiln.stratum.engine.command.MoveLayer
@@ -40,6 +41,8 @@ import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.Deselect
 import com.kiln.stratum.engine.platform.InvertSelection
+import com.kiln.stratum.engine.platform.MergeDown
+import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.SelectAll
 import com.kiln.stratum.engine.platform.SelectShape
 import com.kiln.stratum.engine.platform.SelectSimilarColor
@@ -521,6 +524,9 @@ class EditorViewModel internal constructor(
         override fun select(id: LayerId) = selectLayer(id)
         override fun add() = addLayer()
         override fun delete() = deleteLayer()
+        override fun duplicate() = duplicateLayer()
+        override fun mergeDown() = mergeLayerDown()
+        override fun mergeVisible() = mergeVisibleLayers()
         override fun move(id: LayerId, toIndex: Int) = moveLayer(id, toIndex)
         override fun previewOpacity(opacity: Float) = this@EditorViewModel.previewOpacity(opacity)
         override fun commitOpacity() = commitLive()
@@ -961,6 +967,42 @@ class EditorViewModel internal constructor(
         val index = activeIndexIn(document)
         val next = document.layers[if (index > 0) index - 1 else 1].id
         runEdit(DeleteLayer(document.layers[index].id), select = next)
+    }
+
+    /**
+     * 고른 레이어를 바로 위에 복제하고 그 레이어를 고른다(실행 취소 한 단계). 이름은 '<이름> 복사'다(포토샵의 'copy').
+     * 픽셀은 원래 레이어와 함께 써서 메모리가 늘지 않는다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun duplicateLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val layer = document.layers[activeIndexIn(document)]
+        val name = getApplication<Application>().getString(R.string.layer_copy_name, layer.name)
+        runEdit(DuplicateLayer(layer.id, name), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * 고른 레이어를 바로 아래 레이어에 합치고(실행 취소 한 단계) 합친 레이어(아래 레이어)를 고른다.
+     * 맨 아래 레이어면 하지 않는다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun mergeLayerDown() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val index = activeIndexIn(document)
+        if (index <= 0) return
+        runEdit(MergeDown(document.layers[index].id), select = document.layers[index - 1].id)
+    }
+
+    /**
+     * 보이는 레이어를 모두 가장 아래 보이는 레이어 하나로 합치고(실행 취소 한 단계) 그 레이어를 고른다.
+     * 보이는 레이어가 둘보다 적으면 하지 않는다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun mergeVisibleLayers() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val visible = document.layers.filter { it.opacity > 0f }
+        if (visible.size < 2) return
+        runEdit(MergeVisible, select = visible.first().id)
     }
 
     /**
