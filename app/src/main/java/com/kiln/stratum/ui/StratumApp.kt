@@ -64,7 +64,8 @@ fun StratumApp(editor: EditorViewModel) {
                     editor.openProject(id)
                     screen = AppScreen.Edit
                 },
-                onDeleteProject = editor::deleteProject,
+                onDeleteProjects = editor::deleteProjects,
+                onRenameProject = editor::renameProject,
                 onOpenSettings = { screen = AppScreen.Settings }
             )
         }

@@ -6,9 +6,16 @@
     <string name="home_new_canvas">New canvas</string>
     <string name="home_recent_projects">Recent projects</string>
     <string name="home_recent_projects_empty">No projects yet. Open a photo or start a new canvas, and it will show up here.</string>
-    <string name="home_project_description">Project edited %1$s, %2$d × %3$d px</string>
+    <string name="home_project_description">%1$s, edited %2$s, %3$d × %4$d px</string>
     <string name="home_project_size">%1$d × %2$d</string>
     <string name="home_project_menu">More options</string>
+    <string name="project_untitled">Untitled</string>
+    <string name="home_select">Select</string>
+    <string name="home_select_title">Select projects</string>
+    <string name="home_done">Done</string>
+    <string name="home_rename">Rename</string>
+    <string name="home_rename_title">Rename project</string>
+    <string name="home_rename_label">Name</string>
     <string name="home_delete_title">Delete this project?</string>
     <string name="home_delete_message">You can\'t undo this. Photos you exported to the gallery stay.</string>
 
@@ -296,4 +303,12 @@
     <string name="tone_highlights">Highlights</string>
     <string name="tone_hint_dodge">Paint to lighten. The chosen range changes most, and painting again lightens more.</string>
     <string name="tone_hint_burn">Paint to darken. The chosen range changes most, and painting again darkens more.</string>
+    <plurals name="home_selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <plurals name="home_delete_projects_title">
+        <item quantity="one">Delete %d project?</item>
+        <item quantity="other">Delete %d projects?</item>
+    </plurals>
 </resources>

@@ -8,6 +8,10 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -44,8 +48,9 @@ class HomeProjectsTest {
     private val hinges = mutableStateOf(emptyList<Hinge>())
     private val opened = mutableListOf<String>()
     private val deleted = mutableListOf<String>()
+    private val renamed = mutableListOf<Pair<String, String>>()
 
-    /** 작은 그림 파일은 없어도 된다(빈 칸으로 보인다) */
+    /** 작은 그림 파일은 없어도 된다(빈 칸으로 보인다). 짝수 번째는 이름이 있고, 홀수 번째는 이름이 없다('제목 없음'). */
     private fun projects(count: Int): List<ProjectInfo> =
         List(count) {
             ProjectInfo(
@@ -53,7 +58,8 @@ class HomeProjectsTest {
                 width = 4000,
                 height = 3000,
                 modifiedMillis = 1_792_000_000_000 - it * 60_000L,
-                thumbnail = File("/nonexistent/$it.webp")
+                thumbnail = File("/nonexistent/$it.webp"),
+                name = if (it % 2 == 0) "Project $it" else ""
             )
         }
 
@@ -67,7 +73,8 @@ class HomeProjectsTest {
                             onCreateCanvas = { _, _, _ -> },
                             projects = projects,
                             onOpenProject = { opened += it },
-                            onDeleteProject = { deleted += it }
+                            onDeleteProjects = { deleted += it },
+                            onRenameProject = { id, name -> renamed += id to name }
                         )
                     }
                 }
@@ -157,5 +164,77 @@ class HomeProjectsTest {
 
         // 버튼과 카드 모두 띠를 피한다
         composeRule.assertClickablesAvoid(hinge)
+    }
+
+    @Test
+    fun cards_showTheNameOrUntitled_andTheSize() {
+        show(projects(2))
+
+        composeRule.onNodeWithText("Project 0").assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.project_untitled)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(composeRule.activity.getString(R.string.home_project_size, 4000, 3000)).assertCountEquals(2)
+    }
+
+    @Test
+    fun tappingTheName_renames() {
+        show(projects(2))
+
+        composeRule.onNodeWithTag(HomeTags.projectName("p0")).performClick()
+        composeRule.onNodeWithTag(HomeTags.RENAME_FIELD).performTextReplacement("Sea at dusk")
+        composeRule.onNodeWithTag(HomeTags.RENAME_OK).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("p0" to "Sea at dusk"), renamed)
+            assertTrue(opened.isEmpty())
+        }
+    }
+
+    @Test
+    fun longPressRename_alsoRenames() {
+        show(projects(1))
+
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performTouchInput { longClick() }
+        composeRule.onNodeWithText(text(R.string.home_rename)).performClick()
+        composeRule.onNodeWithTag(HomeTags.RENAME_OK).performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("p0" to "Project 0"), renamed) }
+    }
+
+    @Test
+    fun select_togglesCards_andDeletesTheChosenOnesAfterAsking() {
+        show(projects(3))
+        composeRule.onNodeWithTag(HomeTags.DELETE_SELECTED).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(HomeTags.SELECT).performClick()
+        composeRule.onNodeWithTag(HomeTags.DELETE_SELECTED).assertIsNotEnabled()
+        // 고르는 중에는 눌러도 열지 않고 고르고 푼다
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performClick()
+        composeRule.onNodeWithTag(HomeTags.project("p2")).performClick()
+        composeRule.onNodeWithTag(HomeTags.project("p1")).performClick()
+        composeRule.onNodeWithTag(HomeTags.project("p1")).performClick()
+        composeRule.onNodeWithText(composeRule.activity.resources.getQuantityString(R.plurals.home_selected_count, 2, 2)).assertIsDisplayed()
+
+        composeRule.onNodeWithTag(HomeTags.DELETE_SELECTED).performClick()
+        composeRule.onNodeWithTag(HomeTags.DELETE_CONFIRM).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("p0", "p2"), deleted)
+            assertTrue(opened.isEmpty())
+        }
+        // 지우면 고르기를 끝낸다
+        composeRule.onNodeWithTag(HomeTags.SELECT).assertIsDisplayed()
+    }
+
+    @Test
+    fun back_endsSelecting() {
+        show(projects(2))
+        composeRule.onNodeWithTag(HomeTags.SELECT).performClick()
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performClick()
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+
+        composeRule.onNodeWithTag(HomeTags.SELECT).assertIsDisplayed()
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performClick()
+        composeRule.runOnIdle { assertEquals(listOf("p0"), opened) }
     }
 }

@@ -1,58 +1,90 @@
 package com.kiln.stratum.ui.home
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
+import android.graphics.Matrix
+import android.graphics.Shader
 import android.text.format.DateUtils
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.project.ProjectInfo
+import com.kiln.stratum.project.ProjectNames
+import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumDropdownMenu
+import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Span
+import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.insetsAvoiding
+import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -63,18 +95,38 @@ import kotlinx.coroutines.withContext
 object HomeTags {
     const val PROJECT_GRID = "projectGrid"
     const val DELETE_CONFIRM = "deleteProjectConfirm"
+    const val TOP_BAR = "homeTopBar"
+    const val SELECT = "homeSelect"
+    const val DONE = "homeSelectDone"
+    const val DELETE_SELECTED = "homeDeleteSelected"
+    const val OPEN_PHOTO = "homeOpenPhoto"
+    const val NEW_CANVAS = "homeNewCanvas"
+    const val SETTINGS = "homeSettings"
+    const val RENAME_FIELD = "homeRenameField"
+    const val RENAME_OK = "homeRenameOk"
 
-    /** [id] 프로젝트 카드 */
+    /** 프로젝트가 없을 때 가운데의 두 버튼 */
+    const val EMPTY_OPEN_PHOTO = "homeEmptyOpenPhoto"
+    const val EMPTY_NEW_CANVAS = "homeEmptyNewCanvas"
+
+    /** [id] 프로젝트 카드(작은 그림 칸) */
     fun project(id: String): String = "project_$id"
+
+    /** [id] 프로젝트의 이름·크기 칸(누르면 이름 바꾸기) */
+    fun projectName(id: String): String = "projectName_$id"
 }
 
 /** 격자 바깥 여백, 칸 사이, 줄 사이 */
 private val GridPadding = 16.dp
-private val GridSpacing = 12.dp
-private val GridRowSpacing = 16.dp
+private val GridSpacing = 16.dp
+private val GridRowSpacing = 20.dp
+
+/** 투명한 그림 바탕 체크 무늬 한 칸 */
+private val ThumbnailChecker = 6.dp
 
 /**
- * 최근 프로젝트 격자. 칸마다 작은 그림, 고친 날짜·시각, 크기를 보인다. 누르면 열고, 길게 누르면 메뉴(지우기)를 띄운다.
+ * 프로젝트 격자(홈 갤러리). 칸마다 작은 그림(그림 비율대로, 칸 아래쪽에 맞춤), 이름, 크기를 보인다.
+ * 그림을 누르면 열고([selecting]이면 고르고 푼다), 이름·크기 칸을 누르면 이름 바꾸기, 길게 누르면 메뉴(이름 바꾸기·지우기)를 띄운다.
  *
  * 세로 힌지(메인 가로)가 지나면 그 띠에 걸리는 칸을 띠 바깥으로 줄여 놓는다(칸 자리는 스크롤해도 그대로다).
  * 가로 힌지(메인 세로)는 줄이 스크롤되며 지나가므로 피하지 않는다(결정 기록 '홈 최근 프로젝트').
@@ -84,8 +136,12 @@ fun RecentProjectsGrid(
     projects: List<ProjectInfo>,
     columns: Int,
     onOpen: (String) -> Unit,
+    onRename: (String) -> Unit,
     onDelete: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selecting: Boolean = false,
+    selected: List<String> = emptyList(),
+    onToggle: (String) -> Unit = {}
 ) {
     val density = LocalDensity.current
     val bands = LocalHinges.current.filter { it.isVertical }.map { it.band(with(density) { HingeMargin.roundToPx() }) }
@@ -94,7 +150,7 @@ fun RecentProjectsGrid(
         modifier = modifier
             .fillMaxWidth()
             .testTag(HomeTags.PROJECT_GRID),
-        contentPadding = PaddingValues(start = GridPadding, end = GridPadding, bottom = GridPadding),
+        contentPadding = PaddingValues(GridPadding),
         horizontalArrangement = Arrangement.spacedBy(GridSpacing),
         verticalArrangement = Arrangement.spacedBy(GridRowSpacing)
     ) {
@@ -110,7 +166,11 @@ fun RecentProjectsGrid(
             ) {
                 ProjectCard(
                     info = info,
+                    selecting = selecting,
+                    isSelected = info.id in selected,
                     onOpen = { onOpen(info.id) },
+                    onToggle = { onToggle(info.id) },
+                    onRename = { onRename(info.id) },
                     onDelete = { onDelete(info.id) },
                     modifier = Modifier.padding(start = with(density) { start.toDp() }, end = with(density) { end.toDp() })
                 )
@@ -119,10 +179,23 @@ fun RecentProjectsGrid(
     }
 }
 
-/** 프로젝트 카드 하나. 화면 읽기 기능은 날짜·크기를 한 번에 읽고, '지우기' 동작도 쓸 수 있다. */
+/**
+ * 프로젝트 카드 하나. 화면 읽기 기능은 이름·날짜·크기를 한 번에 읽고, '이름 바꾸기'·'지우기' 동작도 쓸 수 있다.
+ * 고르는 중에는 그림과 이름 칸 어디를 눌러도 고르고 풀며, 고른 카드는 파란 테두리와 체크 동그라미로 보인다.
+ */
 @Composable
-private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier) {
+private fun ProjectCard(
+    info: ProjectInfo,
+    selecting: Boolean,
+    isSelected: Boolean,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier
+) {
     val context = LocalContext.current
+    val name = info.name.ifEmpty { stringResource(R.string.project_untitled) }
     val date = remember(info.modifiedMillis) {
         DateUtils.formatDateTime(
             context,
@@ -130,39 +203,77 @@ private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> U
             DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH
         )
     }
-    val description = stringResource(R.string.home_project_description, date, info.width, info.height)
+    val description = stringResource(R.string.home_project_description, name, date, info.width, info.height)
+    val renameLabel = stringResource(R.string.home_rename)
     val deleteLabel = stringResource(R.string.action_delete)
     val menuLabel = stringResource(R.string.home_project_menu)
     var menuOpen by remember { mutableStateOf(false) }
+    val colors = StratumTheme.colors
     Box(modifier) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(StratumShapes.Card)
-                .combinedClickable(onClick = onOpen, onLongClick = { menuOpen = true }, onLongClickLabel = menuLabel)
-                .semantics(mergeDescendants = true) {
-                    contentDescription = description
-                    customActions = listOf(CustomAccessibilityAction(deleteLabel) { onDelete(); true })
-                }
-                .testTag(HomeTags.project(info.id))
-        ) {
-            ProjectThumbnail(info, Modifier.fillMaxWidth().aspectRatio(1f).clip(StratumShapes.Card))
-            Text(
-                text = date,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = stringResource(R.string.home_project_size, info.width, info.height),
-                modifier = Modifier.padding(horizontal = 4.dp),
-                color = StratumTheme.colors.textDescription,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1
-            )
+        Column(Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(StratumShapes.Card)
+                    .combinedClickable(
+                        onClick = if (selecting) onToggle else onOpen,
+                        onLongClick = if (selecting) onToggle else ({ menuOpen = true }),
+                        onLongClickLabel = if (selecting) null else menuLabel
+                    )
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = description
+                        if (selecting) {
+                            selected = isSelected
+                        } else {
+                            customActions = listOf(
+                                CustomAccessibilityAction(renameLabel) { onRename(); true },
+                                CustomAccessibilityAction(deleteLabel) { onDelete(); true }
+                            )
+                        }
+                    }
+                    .testTag(HomeTags.project(info.id)),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                ProjectThumbnail(info, isSelected)
+                if (selecting) SelectionMark(isSelected, Modifier.align(Alignment.TopEnd).padding(8.dp))
+            }
+            // 이름과 크기: 누르면 이름 바꾸기(프로크리에이트와 같다). 누르는 영역은 48dp 이상이다.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(StratumShapes.Control)
+                    .clickable(onClickLabel = if (selecting) null else renameLabel, onClick = if (selecting) onToggle else onRename)
+                    .testTag(HomeTags.projectName(info.id))
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = name,
+                    color = colors.textPrimary,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = stringResource(R.string.home_project_size, info.width, info.height),
+                    color = colors.textDescription,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1
+                )
+            }
         }
         StratumDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(renameLabel) },
+                onClick = {
+                    menuOpen = false
+                    onRename()
+                }
+            )
             DropdownMenuItem(
                 text = { Text(deleteLabel) },
                 onClick = {
@@ -174,23 +285,71 @@ private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> U
     }
 }
 
-/** 프로젝트의 작은 그림. 파일을 백그라운드에서 읽고, 저장할 때마다(고친 시각이 바뀌면) 다시 읽는다. 없으면 빈 칸이다. */
+/**
+ * 프로젝트의 작은 그림. 정사각형 칸 안에 그림 비율대로(저장한 크기로 미리 자리를 잡아 읽는 동안 칸이 튀지 않음) 아래쪽에 맞춰 놓고,
+ * 투명한 곳은 체크 무늬로 보인다. 파일을 백그라운드에서 읽고, 저장할 때마다(고친 시각이 바뀌면) 다시 읽는다. 고른 카드는 파란 테두리다.
+ */
 @Composable
-private fun ProjectThumbnail(info: ProjectInfo, modifier: Modifier) {
+private fun ProjectThumbnail(info: ProjectInfo, isSelected: Boolean) {
     val image by produceState<ImageBitmap?>(null, info.thumbnail.path, info.modifiedMillis) {
         value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(info.thumbnail.path)?.asImageBitmap() }
     }
-    Box(modifier.background(StratumTheme.colors.panel), contentAlignment = Alignment.Center) {
-        image?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+    val ratio = (info.width.toFloat() / info.height).coerceIn(0.05f, 20f)
+    val selectedBorder = if (isSelected) BorderStroke(2.dp, StratumTheme.colors.accent) else null
+    Box(
+        Modifier
+            .aspectRatio(ratio, matchHeightConstraintsFirst = ratio < 1f)
+            .clip(StratumShapes.Card)
+            .checkerBackground()
+            .then(if (selectedBorder != null) Modifier.border(selectedBorder, StratumShapes.Card) else Modifier)
+    ) {
+        image?.let { Image(it, contentDescription = null, contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize()) }
     }
 }
 
-/** 프로젝트를 지울지 묻는 창. 되돌릴 수 없어서 한 번 더 묻는다. 화면 전체를 덮는 자리에 놓는다. */
+/** 고르는 중인 카드의 동그라미: 고르면 파란 동그라미에 체크, 아니면 흰 테두리 동그라미 */
 @Composable
-fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun SelectionMark(isSelected: Boolean, modifier: Modifier = Modifier) {
+    val colors = StratumTheme.colors
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .background(if (isSelected) colors.accent else colors.scrim, StratumShapes.Dot)
+            .border(BorderStroke(2.dp, if (isSelected) colors.accent else colors.textPrimary), StratumShapes.Dot),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = colors.onAccent, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** 체크 무늬 바탕(투명한 그림 아래). 칸 크기는 [ThumbnailChecker]이고 캔버스와 같은 색이다. */
+private fun Modifier.checkerBackground(): Modifier =
+    drawWithCache {
+        val square = ThumbnailChecker.toPx()
+        val tile = Bitmap.createBitmap(
+            intArrayOf(CanvasOverlayColors.CheckerLight.toArgb(), CanvasOverlayColors.CheckerDark.toArgb(), CanvasOverlayColors.CheckerDark.toArgb(), CanvasOverlayColors.CheckerLight.toArgb()),
+            2,
+            2,
+            Bitmap.Config.ARGB_8888
+        )
+        val brush = ShaderBrush(
+            BitmapShader(tile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT).apply {
+                filterMode = BitmapShader.FILTER_MODE_NEAREST
+                setLocalMatrix(Matrix().apply { setScale(square, square) })
+            }
+        )
+        onDrawBehind { drawRect(brush) }
+    }
+
+/**
+ * 지울지 묻는 창. 되돌릴 수 없어서 한 번 더 묻는다. [count]가 둘 이상이면('선택') 몇 개인지 제목에 보인다.
+ * 화면 전체를 덮는 자리에 놓는다.
+ */
+@Composable
+fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit, count: Int = 1) {
     HingeAwareDialog(
         onDismissRequest = onDismiss,
-        title = stringResource(R.string.home_delete_title),
+        title = if (count > 1) pluralStringResource(R.plurals.home_delete_projects_title, count, count) else stringResource(R.string.home_delete_title),
         buttons = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 QuietButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
@@ -202,5 +361,52 @@ fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         }
     ) {
         Text(stringResource(R.string.home_delete_message))
+    }
+}
+
+/**
+ * 프로젝트 이름을 바꾸는 창. 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 접히는 선을 피해 뜨는 창이다(글자 창과 같다).
+ * 비우면 '제목 없음'이 된다. 적은 글자는 접기·펼치기에도 남는다([projectId]마다 따로).
+ */
+// ModalBottomSheet가 아직 실험 기능이라 opt-in이 필요하다
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RenameProjectPrompt(projectId: String, initial: String, widthClass: WidthClass, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var text by rememberSaveable(projectId) { mutableStateOf(initial) }
+    val title = stringResource(R.string.home_rename_title)
+    val field: @Composable () -> Unit = {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it.take(ProjectNames.MAX_LENGTH) },
+            label = { Text(stringResource(R.string.home_rename_label)) },
+            placeholder = { Text(stringResource(R.string.project_untitled)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onRename(text) }),
+            modifier = Modifier.fillMaxWidth().testTag(HomeTags.RENAME_FIELD)
+        )
+    }
+    val buttons: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuietButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            AccentButton(onClick = { onRename(text) }, modifier = Modifier.testTag(HomeTags.RENAME_OK)) { Text(stringResource(R.string.action_ok)) }
+        }
+    }
+    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+            HideStatusBarInSheet()
+            Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)) {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(16.dp))
+                field()
+                Spacer(Modifier.height(16.dp))
+                buttons(Modifier.align(Alignment.End))
+            }
+        }
+    } else {
+        HingeAwareDialog(onDismissRequest = onDismiss, title = title, buttons = { buttons(Modifier) }) {
+            field()
+        }
     }
 }

@@ -1,7 +1,10 @@
 package com.kiln.stratum.ui.home
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,27 +17,31 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.engine.canvas.CanvasFill
+import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.SecondaryButton
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
@@ -45,19 +52,22 @@ import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
-import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
- * 홈 화면. 앱을 새로 실행하면 항상 여기서 시작한다.
+ * 홈 화면(갤러리). 앱을 새로 실행하면 항상 여기서 시작한다. 프로크리에이트 갤러리를 본떴다(사용자 요청, 결정 기록 '홈 갤러리').
  *
- * 사진 열기·새 캔버스로 편집을 시작하고, 아래에 최근 프로젝트(자동 저장한 것)를 격자로 보여 준다.
- * 버튼과 제목은 위에 고정하고 격자만 스크롤한다. 격자는 커버 화면 2열, 메인 화면 4열이다(기획서 화면 목록).
+ * - 위 줄: 앱 이름과 오른쪽의 [선택] [사진 열기] [+](새 캔버스) [설정]
+ * - 그 아래 프로젝트 격자(커버 2열, 메인 4열, 기획서): 그림 비율대로의 작은 그림과 이름·크기. 누르면 열고, 이름을 누르면 이름 바꾸기,
+ *   길게 누르면 메뉴(이름 바꾸기·지우기)
+ * - 선택: [선택]을 누르면 카드를 눌러 여러 개 고르고 [지우기]로 한꺼번에 지운다(되돌릴 수 없어 한 번 더 묻는다). 뒤로 가기는 선택을 끝낸다.
+ * - 프로젝트가 없으면 가운데에 안내와 사진 열기·새 캔버스 버튼을 보인다.
  *
  * @param onCreateCanvas 새 캔버스 창에서 '만들기'를 눌렀다. 고른 가로·세로(픽셀)와 배경을 받는다.
  * @param projects 최근 프로젝트. 고친 시각이 늦은 것부터다.
  * @param onOpenProject 프로젝트 카드를 눌렀다.
- * @param onDeleteProject 지울지 묻는 창에서 '지우기'를 눌렀다.
+ * @param onDeleteProjects 지울지 묻는 창에서 '지우기'를 눌렀다(하나 또는 '선택'으로 고른 여럿).
+ * @param onRenameProject 이름 바꾸기 창에서 '확인'을 눌렀다(적은 이름 그대로, 다듬기는 받는 쪽이 한다).
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,123 +78,95 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     projects: List<ProjectInfo> = emptyList(),
     onOpenProject: (String) -> Unit = {},
-    onDeleteProject: (String) -> Unit = {},
+    onDeleteProjects: (List<String>) -> Unit = {},
+    onRenameProject: (id: String, name: String) -> Unit = { _, _ -> },
     onOpenSettings: () -> Unit = {}
 ) {
     // 새 캔버스 창을 열었는지와 입력값. 접기·펼치기로 시트↔창이 바뀌어도 이어지도록 창 밖에서 기억한다.
     var showNewCanvas by rememberSaveable { mutableStateOf(false) }
     val newCanvasInput = rememberNewCanvasInput()
-    // 지울지 묻는 프로젝트. 접기·펼치기에도 창이 남는다.
-    var confirmDelete by rememberSaveable { mutableStateOf<String?>(null) }
+    // '선택' 중인지와 고른 프로젝트. 접기·펼치기에도 남는다.
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // 지울지 묻는 프로젝트들과 이름을 바꾸는 프로젝트. 접기·펼치기에도 창이 남는다.
+    var confirmDelete by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    var renaming by rememberSaveable { mutableStateOf<String?>(null) }
+    // 목록에서 사라진(지워진) 프로젝트는 고른 것에서 빼고, 프로젝트가 없으면 선택을 끝낸다
+    LaunchedEffect(projects) {
+        val ids = projects.map { it.id }.toSet()
+        selected = selected.filter { it in ids }
+        if (projects.isEmpty()) selecting = false
+        if (renaming != null && renaming !in ids) renaming = null
+    }
+    val endSelecting = {
+        selecting = false
+        selected = emptyList()
+    }
 
     // 창 전체 폭으로 시트·창을 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthClass = widthClassOf(maxWidth.value)
+        // 뒤로 가기는 선택을 먼저 끝낸다. 창보다 먼저 등록돼, 창이 열려 있으면 창이 먼저 닫힌다.
+        BackHandler(enabled = selecting, onBack = endSelecting)
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                // 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 카메라 구멍이 제목·버튼에 걸릴 때만 내린다(결정 기록 '전체 화면').
-                val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
-                TopAppBar(
-                    title = { Text(stringResource(R.string.app_name), Modifier.topBarItem(barInsets, "title")) },
-                    modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider),
-                    actions = {
-                        StratumIconButton(onClick = onOpenSettings, modifier = Modifier.topBarItem(barInsets, "settings")) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_settings),
-                                contentDescription = stringResource(R.string.action_settings)
-                            )
-                        }
-                    },
-                    windowInsets = barInsets.windowInsets(),
-                    colors = stratumTopAppBarColors()
+                HomeTopBar(
+                    selecting = selecting,
+                    selectedCount = selected.size,
+                    canSelect = projects.isNotEmpty(),
+                    onSelect = { selecting = true },
+                    onDone = endSelecting,
+                    onDeleteSelected = { confirmDelete = selected },
+                    onOpenPhoto = onOpenPhoto,
+                    onNewCanvas = { showNewCanvas = true },
+                    onOpenSettings = onOpenSettings
                 )
             }
         ) { innerPadding ->
-            Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                // 버튼과 제목은 위에 고정한다. 넓은 화면에서 버튼이 너무 길게 늘어나지 않게 폭을 제한한다.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
-                        // 버튼 안 아이콘은 글자가 버튼 이름을 말해 주므로 따로 이름(contentDescription)을 붙이지 않는다.
-                        // 펼친 화면 가운데의 접히는 부분(힌지)이 버튼 줄을 지나면, 두 버튼을 힌지 양쪽에 하나씩 놓는다.
-                        HingeSplitRow(
-                            first = {
-                                AccentButton(onClick = onOpenPhoto) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_photo_library),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(ButtonDefaults.IconSize)
-                                    )
-                                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                                    Text(stringResource(R.string.home_open_photo))
-                                }
-                            },
-                            second = {
-                                SecondaryButton(onClick = { showNewCanvas = true }) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_add),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(ButtonDefaults.IconSize)
-                                    )
-                                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                                    Text(stringResource(R.string.home_new_canvas))
-                                }
-                            },
-                            gap = 12.dp
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        Text(
-                            text = stringResource(R.string.home_recent_projects),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-                if (projects.isEmpty()) {
-                    // 아직 프로젝트가 없으면 안내만 보인다
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Surface(
-                            modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
-                            shape = StratumShapes.Card,
-                            color = StratumTheme.colors.panel
-                        ) {
-                            Text(
-                                text = stringResource(R.string.home_recent_projects_empty),
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 48.dp),
-                                color = StratumTheme.colors.textDescription,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                } else {
-                    RecentProjectsGrid(
-                        projects = projects,
-                        columns = if (widthClass == WidthClass.Compact) 2 else 4,
-                        onOpen = onOpenProject,
-                        onDelete = { confirmDelete = it },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            if (projects.isEmpty()) {
+                EmptyGallery(onOpenPhoto = onOpenPhoto, onNewCanvas = { showNewCanvas = true }, modifier = Modifier.padding(innerPadding))
+            } else {
+                RecentProjectsGrid(
+                    projects = projects,
+                    columns = if (widthClass == WidthClass.Compact) 2 else 4,
+                    selecting = selecting,
+                    selected = selected,
+                    onOpen = onOpenProject,
+                    onToggle = { id -> selected = if (id in selected) selected - id else selected + id },
+                    onRename = { renaming = it },
+                    onDelete = { confirmDelete = listOf(it) },
+                    modifier = Modifier.fillMaxSize().padding(innerPadding)
+                )
             }
         }
 
         // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
-        confirmDelete?.let { id ->
+        confirmDelete?.let { ids ->
             DeleteProjectDialog(
+                count = ids.size,
                 onConfirm = {
                     confirmDelete = null
-                    onDeleteProject(id)
+                    endSelecting()
+                    onDeleteProjects(ids)
                 },
                 onDismiss = { confirmDelete = null }
             )
+        }
+        renaming?.let { id ->
+            val info = projects.firstOrNull { it.id == id }
+            if (info != null) {
+                RenameProjectPrompt(
+                    projectId = id,
+                    initial = info.name,
+                    widthClass = widthClass,
+                    onDismiss = { renaming = null },
+                    onRename = { name ->
+                        renaming = null
+                        onRenameProject(id, name)
+                    }
+                )
+            }
         }
         if (showNewCanvas) {
             NewCanvasPrompt(
@@ -197,6 +179,110 @@ fun HomeScreen(
                 }
             )
         }
+    }
+}
+
+/**
+ * 홈 위 줄: 왼쪽에 앱 이름(선택 중이면 고른 수), 오른쪽에 [선택] [사진 열기] [+] [설정](선택 중이면 [지우기] [완료]).
+ * 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 카메라 구멍이 제목·버튼에 걸릴 때만 내린다(결정 기록 '전체 화면').
+ * 오른쪽 버튼 묶음은 메인 가로의 세로 힌지 오른쪽에 들어가는 폭이다.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeTopBar(
+    selecting: Boolean,
+    selectedCount: Int,
+    canSelect: Boolean,
+    onSelect: () -> Unit,
+    onDone: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onOpenPhoto: () -> Unit,
+    onNewCanvas: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
+    val title = when {
+        !selecting -> stringResource(R.string.app_name)
+        selectedCount > 0 -> pluralStringResource(R.plurals.home_selected_count, selectedCount, selectedCount)
+        else -> stringResource(R.string.home_select_title)
+    }
+    TopAppBar(
+        title = { Text(title, Modifier.topBarItem(barInsets, "title"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(HomeTags.TOP_BAR),
+        actions = {
+            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
+                if (selecting) {
+                    // 되돌릴 수 없는 지우기는 오류 색 글자 버튼이다(한 번 더 묻는다)
+                    QuietButton(
+                        onClick = onDeleteSelected,
+                        enabled = selectedCount > 0,
+                        color = StratumTheme.colors.error,
+                        modifier = Modifier.testTag(HomeTags.DELETE_SELECTED)
+                    ) {
+                        Text(stringResource(R.string.action_delete))
+                    }
+                    QuietButton(onClick = onDone, modifier = Modifier.padding(end = 4.dp).testTag(HomeTags.DONE)) {
+                        Text(stringResource(R.string.home_done))
+                    }
+                } else {
+                    QuietButton(onClick = onSelect, enabled = canSelect, modifier = Modifier.testTag(HomeTags.SELECT)) {
+                        Text(stringResource(R.string.home_select))
+                    }
+                    QuietButton(onClick = onOpenPhoto, modifier = Modifier.testTag(HomeTags.OPEN_PHOTO)) {
+                        Text(stringResource(R.string.home_open_photo))
+                    }
+                    StratumIconButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.NEW_CANVAS)) {
+                        Icon(painter = painterResource(R.drawable.ic_add), contentDescription = stringResource(R.string.home_new_canvas))
+                    }
+                    StratumIconButton(onClick = onOpenSettings, modifier = Modifier.testTag(HomeTags.SETTINGS)) {
+                        Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
+                    }
+                }
+            }
+        },
+        windowInsets = barInsets.windowInsets(),
+        colors = stratumTopAppBarColors()
+    )
+}
+
+/**
+ * 프로젝트가 없을 때: 가운데에 안내와 사진 열기(주요)·새 캔버스(보조) 버튼.
+ * 펼친 화면 가운데의 접히는 부분(힌지)이 버튼 줄을 지나면, 두 버튼을 힌지 양쪽에 하나씩 놓는다.
+ */
+@Composable
+private fun EmptyGallery(onOpenPhoto: () -> Unit, onNewCanvas: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = stringResource(R.string.home_recent_projects_empty),
+            modifier = Modifier.widthIn(max = 480.dp),
+            color = StratumTheme.colors.textDescription,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(Modifier.height(24.dp))
+        // 버튼 안 아이콘은 글자가 버튼 이름을 말해 주므로 따로 이름(contentDescription)을 붙이지 않는다
+        HingeSplitRow(
+            first = {
+                AccentButton(onClick = onOpenPhoto, modifier = Modifier.testTag(HomeTags.EMPTY_OPEN_PHOTO)) {
+                    Icon(painter = painterResource(R.drawable.ic_photo_library), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.home_open_photo))
+                }
+            },
+            second = {
+                SecondaryButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.EMPTY_NEW_CANVAS)) {
+                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.home_new_canvas))
+                }
+            },
+            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+            gap = 12.dp
+        )
     }
 }
 

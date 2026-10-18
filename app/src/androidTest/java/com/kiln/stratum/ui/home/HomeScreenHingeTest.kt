@@ -8,12 +8,11 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.kiln.stratum.R
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -47,8 +46,9 @@ class HomeScreenHingeTest {
                 }
             }
         }
-        val openPhoto = composeRule.onNodeWithText(composeRule.activity.getString(R.string.home_open_photo))
-        val newCanvas = composeRule.onNodeWithText(composeRule.activity.getString(R.string.home_new_canvas))
+        // 프로젝트가 없을 때 가운데에 보이는 두 버튼
+        val openPhoto = composeRule.onNodeWithTag(HomeTags.EMPTY_OPEN_PHOTO)
+        val newCanvas = composeRule.onNodeWithTag(HomeTags.EMPTY_NEW_CANVAS)
 
         // 두 버튼 사이 한가운데를 화면 위에서 아래까지 세로로 지나가는 힌지(두께 0인 선).
         // 힌지가 없을 때의 간격(12dp)은 띠(양쪽 16dp)보다 좁아서, 갈라 놓지 않으면 두 버튼 모두 띠에 걸린다.
