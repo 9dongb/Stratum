@@ -217,4 +217,16 @@
     <string name="selection_hint_drag">캔버스를 끌어서 고르세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
     <string name="selection_hint_lasso">고를 곳을 손가락으로 둘러 그리세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
     <string name="selection_hint_wand">색을 누르면 고른 레이어에서 비슷한 색을 골라요.</string>
+
+    <!-- 픽셀 유동화 -->
+    <string name="tool_liquify">픽셀 유동화</string>
+    <string name="tool_liquify_short">유동화</string>
+    <string name="liquify_push">뒤틀기</string>
+    <string name="liquify_pucker">오목</string>
+    <string name="liquify_bloat">볼록</string>
+    <string name="liquify_reconstruct">재구성</string>
+    <string name="liquify_strength">압력</string>
+    <string name="liquify_undo">한 획 되돌리기</string>
+    <string name="liquify_reset">모두 되돌리기</string>
+    <string name="liquify_hint">한 손가락으로 끌어 고른 레이어의 모양을 바꿔요. 두 손가락으로 확대해요. 적용하면 실행 취소 한 단계로 남아요.</string>
 </resources>

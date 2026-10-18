@@ -109,6 +109,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소한다(설정). 상단 바의 실행 취소 버튼이 켜져 있을 때만 된다.
  * @param selectionOptions 선택 도구 설정, [onSelectionOptions]로 바꾼다
  * @param selectionActions 선택 도구가 캔버스와 옵션 버튼에서 보내는 일
+ * @param liquify 열려 있는 픽셀 유동화 작업 모드. 있으면 편집 화면 전체를 덮는다.
+ * @param liquifyActions 유동화 작업 모드가 보내는 일
+ * @param onStartLiquify 유동화 도구를 골랐다(작업 모드를 연다)
  */
 @Composable
 fun EditScreen(
@@ -140,7 +143,10 @@ fun EditScreen(
     twoFingerTapUndo: Boolean = false,
     selectionOptions: SelectionOptions = SelectionOptions(),
     onSelectionOptions: (SelectionOptions) -> Unit = {},
-    selectionActions: SelectionActions = SelectionActions.None
+    selectionActions: SelectionActions = SelectionActions.None,
+    liquify: LiquifyState? = null,
+    liquifyActions: LiquifyActions = LiquifyActions.None,
+    onStartLiquify: () -> Unit = {}
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -159,6 +165,13 @@ fun EditScreen(
         if (selection.active == EditTool.Layers) panelTab = PanelTab.LAYERS
     }
     val ready = state as? EditorState.Ready
+    // 유동화는 도구로 남지 않고 작업 모드를 연다
+    LaunchedEffect(selection.active) {
+        if (selection.active == EditTool.Liquify) {
+            selection.close()
+            onStartLiquify()
+        }
+    }
     // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
     var cropFrame by rememberSaveable(ready?.revision, stateSaver = CropFrameSaver) { mutableStateOf<CropFrame?>(null) }
     val cropMode = ready != null && selection.active == EditTool.Transform && selection.transformMode == SubTool.CROP
@@ -435,6 +448,10 @@ fun EditScreen(
                     exportDraft = null
                 }
             )
+        }
+        // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
+        if (liquify != null) {
+            LiquifyMode(liquify, liquifyActions)
         }
     }
 }

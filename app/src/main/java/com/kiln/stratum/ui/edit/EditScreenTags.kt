@@ -88,6 +88,21 @@ object EditScreenTags {
     /** 선택 영역 윤곽선(개미 행렬) */
     const val SELECTION_OUTLINE = "selectionOutline"
 
+    /** 픽셀 유동화 작업 모드 */
+    const val LIQUIFY_MODE = "liquifyMode"
+    const val LIQUIFY_CANVAS = "liquifyCanvas"
+    const val LIQUIFY_OVERLAY = "liquifyOverlay"
+    const val LIQUIFY_OPTIONS = "liquifyOptions"
+    const val LIQUIFY_CANCEL = "liquifyCancel"
+    const val LIQUIFY_UNDO = "liquifyUndo"
+    const val LIQUIFY_RESET = "liquifyReset"
+    const val LIQUIFY_APPLY = "liquifyApply"
+    const val LIQUIFY_SIZE = "liquifySize"
+    const val LIQUIFY_STRENGTH = "liquifyStrength"
+
+    /** 유동화 작업 모드의 [tool] 도구 버튼 */
+    fun liquifyTool(tool: com.kiln.stratum.engine.liquify.LiquifyTool): String = "liquifyTool_${tool.name}"
+
     /** 선택 도구 옵션의 합치는 방법 [mode] 버튼 */
     fun selectionMode(mode: com.kiln.stratum.engine.selection.SelectionMode): String = "selectionMode_${mode.name}"
 

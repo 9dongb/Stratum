@@ -33,6 +33,8 @@ import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportPlan
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
+import com.kiln.stratum.engine.liquify.LiquifyMesh
+import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
@@ -45,6 +47,8 @@ import com.kiln.stratum.engine.platform.SelectionPreview
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LiquifyLayer
+import com.kiln.stratum.engine.platform.LiquifyRenderer
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
@@ -390,6 +394,57 @@ class EditorViewModel internal constructor(
     /** 부분 윤곽선([EditorState.Ready.selectionDetail])을 찾은 선택 영역 */
     private var detailOutlined: Selection? = null
 
+    private val _liquify = MutableStateFlow<LiquifyState?>(null)
+
+    /** 픽셀 유동화 작업 모드. 열려 있으면 화면이 편집 화면 위를 덮는다(CLAUDE.md 6장 '전체 화면 작업 모드'). */
+    val liquify: StateFlow<LiquifyState?> = _liquify.asStateFlow()
+
+    /**
+     * 열려 있는 유동화 작업: 고른 레이어, 미리 보기 단계, 그 레이어만 그린 축소본, 변위 격자와 GPU에 올릴 그림,
+     * 작업 모드 안의 되돌리기(획마다 앞 격자, 최대 [LIQUIFY_UNDO_STEPS]개), 끄는 손가락 자리.
+     */
+    private class LiquifySession(val layer: LayerId, val level: Int, val image: Bitmap, var mesh: LiquifyMesh, val field: Bitmap) {
+        val displacements = FloatArray(mesh.columns * mesh.rows * 2)
+        val halves = ShortArray(mesh.columns * mesh.rows * 4)
+        val undo = ArrayList<LiquifyMesh>()
+        var lastX = 0f
+        var lastY = 0f
+        var pressed = false
+    }
+
+    private var liquifySession: LiquifySession? = null
+    private var liquifyRenderJob: Job? = null
+    private var liquifyDirty = false
+    private var liquifyHoldJob: Job? = null
+
+    /** 유동화 도구·크기(문서 픽셀 지름, 처음에는 문서에 맞춤)·압력. 앱을 끌 때까지 남는다. */
+    private var liquifyTool = LiquifyTool.PUSH
+    private var liquifySize: Float? = null
+    private var liquifyStrength = 0.5f
+
+    /** 픽셀 유동화 작업 모드가 보내는 일 */
+    val liquifyActions: LiquifyActions = object : LiquifyActions {
+        override fun begin(x: Float, y: Float) = liquifyBegin(x, y)
+        override fun move(x: Float, y: Float) = liquifyMove(x, y)
+        override fun end() = liquifyEnd()
+        override fun setTool(tool: LiquifyTool) {
+            liquifyTool = tool
+            republishLiquify()
+        }
+        override fun setSize(size: Float) {
+            liquifySize = size
+            republishLiquify()
+        }
+        override fun setStrength(strength: Float) {
+            liquifyStrength = strength.coerceIn(0.01f, 1f)
+            republishLiquify()
+        }
+        override fun undo() = undoLiquify()
+        override fun reset() = resetLiquify()
+        override fun apply() = applyLiquify()
+        override fun cancel() = cancelLiquify()
+    }
+
     /** 레이어 패널이 보내는 일 */
     val layerActions: LayerActions = object : LayerActions {
         override fun select(id: LayerId) = selectLayer(id)
@@ -597,6 +652,185 @@ class EditorViewModel internal constructor(
         if (document.indexOfLayer(id) < 0 || hasLiveValues) return
         activeLayer = id
         (_state.value as? EditorState.Ready)?.let { _state.value = it.copy(activeLayer = id) }
+    }
+
+    /**
+     * 고른 레이어로 픽셀 유동화 작업 모드를 연다. 그 레이어만 축소본 단계로 그려 미리 보기를 만든다.
+     * 다른 편집을 처리하는 중이거나 이미 열려 있으면 무시한다. 그리지 못하면(메모리 부족) 알린다.
+     */
+    fun startLiquify() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || liquifySession != null || _state.value !is EditorState.Ready) return
+        val layer = activeLayerIn(document)
+        val level = levelFor(document)
+        startEditing()
+        editJob = viewModelScope.launch {
+            val image = renderMutex.withLock {
+                withContext(Dispatchers.Default) { LiquifyRenderer.layerPreview(document, layer, level) }
+            }
+            if (image == null) {
+                finishEditing(EditorMessage.EditNotEnoughMemory)
+                return@launch
+            }
+            if (history?.document !== document) {
+                image.recycle()
+                finishEditing()
+                return@launch
+            }
+            val size = PixelSize(document.width, document.height)
+            val mesh = LiquifyMesh.identity(size)
+            val session = LiquifySession(layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh))
+            liquifySession = session
+            if (liquifySize == null) liquifySize = defaultLiquifySize(size)
+            finishEditing()
+            publishLiquify(session, PreviewImage(image, PreviewLevels.wholeRegion(size, level)))
+        }
+    }
+
+    /** 처음 브러시 지름: 문서 짧은 변의 15%(포토샵 기본 브러시처럼 화면에서 넉넉한 크기) */
+    private fun defaultLiquifySize(size: PixelSize): Float = (minOf(size.width, size.height) * 0.15f).coerceIn(4f, 1000f)
+
+    private fun publishLiquify(session: LiquifySession, preview: PreviewImage, busy: Boolean = false) {
+        _liquify.value = LiquifyState(
+            preview = preview,
+            documentSize = session.mesh.size,
+            tool = liquifyTool,
+            size = checkNotNull(liquifySize),
+            strength = liquifyStrength,
+            canUndo = session.undo.isNotEmpty(),
+            changed = !session.mesh.isIdentity(),
+            busy = busy
+        )
+    }
+
+    /** 미리 보기는 그대로 두고 도구·크기·되돌리기 상태만 새로 알린다 */
+    private fun republishLiquify() {
+        val session = liquifySession ?: return
+        val shown = _liquify.value ?: return
+        publishLiquify(session, shown.preview, shown.busy)
+    }
+
+    /** 한 손가락이 닿았다: 앞 격자를 되돌리기에 남기고, 뒤틀기가 아니면 그 자리에 한 번 건다(누르고 있으면 계속) */
+    private fun liquifyBegin(x: Float, y: Float) {
+        val session = liquifySession ?: return
+        if (_liquify.value?.busy == true) return
+        session.undo += session.mesh.copy()
+        if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        session.lastX = x
+        session.lastY = y
+        session.pressed = true
+        if (liquifyTool != LiquifyTool.PUSH) {
+            liquifyBrush(session, x, y, 0f, 0f)
+            liquifyHoldJob?.cancel()
+            liquifyHoldJob = viewModelScope.launch {
+                // 누르고 있는 동안 조금씩 더 건다(포토샵의 오목·볼록·재구성과 같다)
+                while (session.pressed && liquifySession === session) {
+                    delay(LIQUIFY_HOLD_MILLIS)
+                    if (session.pressed) liquifyBrush(session, session.lastX, session.lastY, 0f, 0f)
+                }
+            }
+        }
+        republishLiquify()
+    }
+
+    private fun liquifyMove(x: Float, y: Float) {
+        val session = liquifySession ?: return
+        if (!session.pressed) return
+        liquifyBrush(session, x, y, x - session.lastX, y - session.lastY)
+        session.lastX = x
+        session.lastY = y
+    }
+
+    private fun liquifyEnd() {
+        val session = liquifySession ?: return
+        session.pressed = false
+        liquifyHoldJob?.cancel()
+        republishLiquify()
+    }
+
+    private fun liquifyBrush(session: LiquifySession, x: Float, y: Float, moveX: Float, moveY: Float) {
+        session.mesh.brush(liquifyTool, x, y, checkNotNull(liquifySize) / 2f, liquifyStrength, moveX, moveY)
+        requestLiquifyRender()
+    }
+
+    /** 미리 보기를 다시 그린다. 그리는 중이면 끝난 뒤 한 번 더 그린다(여러 번 바뀌어도 한 번에). */
+    private fun requestLiquifyRender() {
+        liquifyDirty = true
+        if (liquifyRenderJob?.isActive == true) return
+        liquifyRenderJob = viewModelScope.launch {
+            while (liquifyDirty) {
+                liquifyDirty = false
+                val session = liquifySession ?: return@launch
+                // 격자는 메인 스레드에서만 바꾸므로, 여기서 사본을 받아 GPU에 올린다
+                session.mesh.copyInto(session.displacements)
+                val cellSize = session.mesh.cellSize
+                val drawn = renderMutex.withLock {
+                    withContext(Dispatchers.Default) {
+                        LiquifyRenderer.fill(session.field, session.displacements, session.halves)
+                        LiquifyRenderer.preview(session.image, session.level, session.field, cellSize)
+                    }
+                }
+                if (drawn == null || liquifySession !== session) continue
+                publishLiquify(session, PreviewImage(drawn, PreviewLevels.wholeRegion(session.mesh.size, session.level)), _liquify.value?.busy == true)
+            }
+        }
+    }
+
+    /** 작업 모드 안에서 마지막 한 획을 되돌린다 */
+    private fun undoLiquify() {
+        val session = liquifySession ?: return
+        if (session.pressed || session.undo.isEmpty() || _liquify.value?.busy == true) return
+        session.mesh = session.undo.removeAt(session.undo.lastIndex)
+        requestLiquifyRender()
+        republishLiquify()
+    }
+
+    /** 모두 원래대로(되돌리기에 남긴다) */
+    private fun resetLiquify() {
+        val session = liquifySession ?: return
+        if (session.pressed || session.mesh.isIdentity() || _liquify.value?.busy == true) return
+        session.undo += session.mesh.copy()
+        if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        session.mesh.reset()
+        requestLiquifyRender()
+        republishLiquify()
+    }
+
+    /**
+     * 비튼 것을 레이어에 적용해(원본 해상도, 실행 취소 한 단계) 작업 모드를 닫는다. 움직인 곳이 없으면 그냥 닫는다.
+     * 메모리가 모자라 적용하지 못하면 작업 모드를 그대로 두고 알린다(다시 해 보거나 취소할 수 있게).
+     */
+    private fun applyLiquify() {
+        val session = liquifySession ?: return
+        if (session.pressed || editing) return
+        if (session.mesh.isIdentity()) {
+            cancelLiquify()
+            return
+        }
+        val shown = _liquify.value ?: return
+        publishLiquify(session, shown.preview, busy = true)
+        runEdit(
+            LiquifyLayer(session.layer, session.mesh.copy()),
+            onCommitted = { closeLiquify() },
+            onFinished = {
+                // 기록하지 못했으면 작업 모드가 남아 있다(다시 해 보거나 취소할 수 있게 버튼을 켠다)
+                if (liquifySession === session) _liquify.value = _liquify.value?.copy(busy = false)
+            }
+        )
+    }
+
+    /** 바꾼 것을 버리고 작업 모드를 닫는다 */
+    private fun cancelLiquify() {
+        if (_liquify.value?.busy == true) return
+        closeLiquify()
+    }
+
+    private fun closeLiquify() {
+        liquifySession = null
+        liquifyRenderJob?.cancel()
+        liquifyHoldJob?.cancel()
+        // 보이던 미리 보기는 화면이 아직 그리고 있을 수 있어 recycle()하지 않고 가비지 컬렉터에 맡긴다
+        _liquify.value = null
     }
 
     /** 선택 도구 설정을 바꾼다 */
@@ -1420,6 +1654,12 @@ class EditorViewModel internal constructor(
         /** 편집이 이만큼(밀리초) 멈추면 자동 저장한다 */
         const val AUTOSAVE_DELAY_MILLIS = 1_500L
 
+        /** 유동화 작업 모드 안에서 되돌릴 수 있는 획 수 */
+        const val LIQUIFY_UNDO_STEPS = 8
+
+        /** 오목·볼록·재구성을 누르고 있을 때 다시 거는 간격(밀리초) */
+        const val LIQUIFY_HOLD_MILLIS = 40L
+
         /** '가볍게' 미리 보기에서 전체 축소본을 화면에서 키워 보여도 되는 정도 */
         const val LIGHT_PREVIEW_MAGNIFICATION = 2.0
 
@@ -1467,6 +1707,7 @@ class EditorViewModel internal constructor(
         layerPreviews.clear()
         outlined = null
         detailOutlined = null
+        closeLiquify()
     }
 
     /** 레이어 요약을 [document]의 레이어 순서로. 레이어가 서로 다르면(더하거나 지움) 그대로 둔다. */

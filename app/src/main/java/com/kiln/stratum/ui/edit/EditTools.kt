@@ -85,6 +85,8 @@ enum class EditTool(
     Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser, available = true),
     /** 글자. 고르면 캔버스를 눌러 그 자리에 글자 레이어를 더한다. */
     Text(R.drawable.ic_text_fields, R.string.tool_text, available = true),
+    /** 픽셀 유동화. 고르면 편집 화면을 덮는 작업 모드가 열린다(도구로 남지 않는다). */
+    Liquify(R.drawable.ic_waves, R.string.tool_liquify, R.string.tool_liquify_short, available = true),
     /** 레이어. 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
     Layers(R.drawable.ic_layers, R.string.tool_layers, available = true);
 
@@ -94,10 +96,10 @@ enum class EditTool(
 
     companion object {
         /** 메인 화면 왼쪽 도구 막대의 도구. 조정·레이어는 패널에 있다. */
-        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Text)
+        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Text, Liquify)
 
         /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. */
-        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Text, Layers)
+        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Text, Liquify, Layers)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

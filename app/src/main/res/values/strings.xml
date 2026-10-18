@@ -219,4 +219,16 @@
     <string name="selection_hint_drag">Drag on the canvas to select. Brushes and the eraser only paint inside the selection.</string>
     <string name="selection_hint_lasso">Draw around the area to select. Brushes and the eraser only paint inside the selection.</string>
     <string name="selection_hint_wand">Tap a color to select similar colors on the chosen layer.</string>
+
+    <!-- 픽셀 유동화 -->
+    <string name="tool_liquify">Liquify</string>
+    <string name="tool_liquify_short">Liquify</string>
+    <string name="liquify_push">Warp</string>
+    <string name="liquify_pucker">Pucker</string>
+    <string name="liquify_bloat">Bloat</string>
+    <string name="liquify_reconstruct">Restore</string>
+    <string name="liquify_strength">Pressure</string>
+    <string name="liquify_undo">Undo last stroke</string>
+    <string name="liquify_reset">Restore all</string>
+    <string name="liquify_hint">Drag with one finger to reshape the chosen layer. Pinch with two fingers to zoom. Apply records one undo step.</string>
 </resources>
