@@ -38,10 +38,7 @@ interface StrokeActions {
 
 /**
  * 브러시·지우개를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 끌면 획을 그린다(눌렀다 떼기만 해도 점 하나).
- *
- * 화면 좌표는 지금 보기([view])로 문서 좌표로 바꿔 보낸다. 손가락이 빠르게 움직이면 이벤트 사이의 점들도 보낸다.
- * 두 손가락 조작(확대·이동)은 부모가 먼저 읽고, 시작되면 터치를 소비한다(CanvasGestures.kt). 그러면 끄던 획을 버린다.
- * 두 번째 손가락이 닿아도 버린다(두 손가락으로 확대·이동하려는 것으로 본다).
+ * 손가락 처리는 [PaintGestureOverlay]와 같다.
  */
 @Composable
 fun StrokeOverlay(
@@ -51,10 +48,41 @@ fun StrokeOverlay(
     actions: StrokeActions,
     modifier: Modifier = Modifier
 ) {
-    val currentActions by rememberUpdatedState(actions)
-    val currentErase by rememberUpdatedState(erase)
+    PaintGestureOverlay(
+        view = view,
+        document = document,
+        tag = EditScreenTags.STROKE_OVERLAY,
+        onBegin = { x, y -> actions.begin(x, y, erase) },
+        onExtend = actions::extend,
+        onEnd = actions::end,
+        onCancel = actions::cancel,
+        modifier = modifier
+    )
+}
+
+/**
+ * 한 손가락으로 끌어 획을 그리는 터치 자리(브러시·지우개·명암). 좌표는 지금 보기([view])로 문서 좌표로 바꿔 보낸다.
+ * 손가락이 빠르게 움직이면 이벤트 사이의 점들도 보낸다.
+ * 두 손가락 조작(확대·이동)은 부모가 먼저 읽고, 시작되면 터치를 소비한다(CanvasGestures.kt). 그러면 끄던 획을 버린다([onCancel]).
+ * 두 번째 손가락이 닿아도 버린다(두 손가락으로 확대·이동하려는 것으로 본다).
+ */
+@Composable
+fun PaintGestureOverlay(
+    view: () -> CanvasView,
+    document: PixelSize,
+    tag: String,
+    onBegin: (x: Float, y: Float) -> Unit,
+    onExtend: (x: Float, y: Float) -> Unit,
+    onEnd: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val begin by rememberUpdatedState(onBegin)
+    val extend by rememberUpdatedState(onExtend)
+    val end by rememberUpdatedState(onEnd)
+    val cancel by rememberUpdatedState(onCancel)
     Box(
-        modifier.testTag(EditScreenTags.STROKE_OVERLAY).pointerInput(document) {
+        modifier.testTag(tag).pointerInput(document) {
             awaitEachGesture {
                 // 두 손가락 조작이 가져간 터치는 받지 않는다
                 val down = awaitFirstDown()
@@ -63,7 +91,7 @@ fun StrokeOverlay(
                     val transform = view().transform(area, document)
                     send(transform.toDocumentX(position.x.toDouble()).toFloat(), transform.toDocumentY(position.y.toDouble()).toFloat())
                 }
-                toDocument(down.position) { x, y -> currentActions.begin(x, y, currentErase) }
+                toDocument(down.position) { x, y -> begin(x, y) }
                 down.consume()
                 // 두 손가락이면 버리고(false), 손을 떼면 기록한다(true). 그 전에 이 자리가 사라지면(도구를 바꿈, 접기·펼치기)
                 // 터치를 기다리던 일이 취소되어 아래 finally에서 끄던 획까지 기록한다(보정 슬라이더와 같다).
@@ -76,8 +104,8 @@ fun StrokeOverlay(
                             keep = false
                             break
                         }
-                        for (point in change.historical) toDocument(point.position) { x, y -> currentActions.extend(x, y) }
-                        toDocument(change.position) { x, y -> currentActions.extend(x, y) }
+                        for (point in change.historical) toDocument(point.position) { x, y -> extend(x, y) }
+                        toDocument(change.position) { x, y -> extend(x, y) }
                         if (!change.pressed) {
                             keep = true
                             break
@@ -85,7 +113,7 @@ fun StrokeOverlay(
                         change.consume()
                     }
                 } finally {
-                    if (keep == false) currentActions.cancel() else currentActions.end()
+                    if (keep == false) cancel() else end()
                 }
             }
         }

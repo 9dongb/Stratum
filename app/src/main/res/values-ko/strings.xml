@@ -243,4 +243,16 @@
     <string name="retouch_hint_pick">가져올 곳을 누른 뒤 고칠 곳을 칠하세요.</string>
     <string name="retouch_hint_heal">칠하면 가져올 곳의 무늬를 가져오고, 손을 떼면 둘레의 밝기·색에 맞춰요.</string>
     <string name="retouch_hint_clone">칠하면 가져올 곳을 그대로 베껴 와요.</string>
+
+    <!-- 명암(닷지·번) -->
+    <string name="tool_tone">명암(닷지·번)</string>
+    <string name="tool_tone_short">명암</string>
+    <string name="subtool_dodge">닷지</string>
+    <string name="subtool_burn">번</string>
+    <string name="tone_exposure">노출</string>
+    <string name="tone_shadows">어두운 영역</string>
+    <string name="tone_midtones">중간 영역</string>
+    <string name="tone_highlights">밝은 영역</string>
+    <string name="tone_hint_dodge">칠한 곳을 밝게 해요. 고른 범위의 밝기가 가장 많이 바뀌고, 여러 번 칠하면 더 밝아져요.</string>
+    <string name="tone_hint_burn">칠한 곳을 어둡게 해요. 고른 범위의 밝기가 가장 많이 바뀌고, 여러 번 칠하면 더 어두워져요.</string>
 </resources>

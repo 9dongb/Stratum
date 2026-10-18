@@ -99,6 +99,7 @@ fun StratumApp(editor: EditorViewModel) {
             val liquify by editor.liquify.collectAsState()
             val retouch by editor.retouch.collectAsState()
             val cloneSource by editor.cloneSource.collectAsState()
+            val toneOptions by editor.tone.collectAsState()
             EditScreen(
                 state = state,
                 onBack = goHome,
@@ -134,7 +135,10 @@ fun StratumApp(editor: EditorViewModel) {
                 retouch = retouch,
                 onRetouch = editor::setRetouch,
                 cloneSource = cloneSource,
-                retouchActions = editor.retouchActions
+                retouchActions = editor.retouchActions,
+                toneOptions = toneOptions,
+                onToneOptions = editor::setTone,
+                toneActions = editor.toneActions
             )
         }
     }

@@ -112,6 +112,17 @@ object EditScreenTags {
     const val RETOUCH_SOURCE = "retouchSource"
     const val RETOUCH_HINT = "retouchHint"
 
+    /** 명암(닷지·번) 옵션과 캔버스 터치 자리 */
+    const val TONE_OPTIONS = "toneOptions"
+    const val TONE_OVERLAY = "toneOverlay"
+    const val TONE_EXPOSURE = "toneExposure"
+    const val TONE_SIZE = "toneSize"
+    const val TONE_HARDNESS = "toneHardness"
+    const val TONE_HINT = "toneHint"
+
+    /** 명암 옵션의 [range] 범위 버튼 */
+    fun toneRange(range: com.kiln.stratum.engine.tone.ToneRange): String = "toneRange_${range.name}"
+
     /** 유동화 작업 모드의 [tool] 도구 버튼 */
     fun liquifyTool(tool: com.kiln.stratum.engine.liquify.LiquifyTool): String = "liquifyTool_${tool.name}"
 

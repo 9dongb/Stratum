@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 
 /**
- * 하위 도구. 자르기·변형 도구, 선택 도구, 리터칭 도구의 것이다. 어느 도구의 것인지는 [EditTool.subTools]가 정한다.
+ * 하위 도구. 자르기·변형 도구, 선택 도구, 리터칭 도구, 명암 도구의 것이다. 어느 도구의 것인지는 [EditTool.subTools]가 정한다.
  *
  * @property shortLabel 옵션 위쪽 버튼에 보이는 짧은 이름. 커버 화면 폭에 한 줄로 들어가게 따로 둔다.
  * @property oneShot 고르면 창을 띄워 한 번 하고 끝나는 하위 도구(크기 변경). 도구를 다시 눌렀을 때 시작할 하위 도구로 기억하지 않는다.
@@ -51,11 +51,17 @@ enum class SubTool(
     RETOUCH_HEAL(R.string.subtool_heal, R.drawable.ic_healing, R.string.subtool_heal_short),
 
     /** 복제 도장: 정한 곳을 그대로 베낀다 */
-    RETOUCH_CLONE(R.string.subtool_clone, R.drawable.ic_approval, R.string.subtool_clone_short)
+    RETOUCH_CLONE(R.string.subtool_clone, R.drawable.ic_approval, R.string.subtool_clone_short),
+
+    /** 닷지: 칠한 곳을 밝게 한다 */
+    TONE_DODGE(R.string.subtool_dodge, R.drawable.ic_light_mode),
+
+    /** 번: 칠한 곳을 어둡게 한다 */
+    TONE_BURN(R.string.subtool_burn, R.drawable.ic_dark_mode)
 }
 
 /**
- * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(선택·리터칭·픽셀 유동화)가 켜져 있다.
+ * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(선택·리터칭·명암·픽셀 유동화)가 켜져 있다.
  * 아직 만들지 않은 도구(제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
@@ -100,6 +106,15 @@ enum class EditTool(
         subTools = listOf(SubTool.RETOUCH_SPOT, SubTool.RETOUCH_HEAL, SubTool.RETOUCH_CLONE),
         available = true
     ),
+
+    /** 명암(닷지·번). 칠한 곳을 밝게(닷지) 또는 어둡게(번) 한다. 고른 레이어에 한 손가락으로 칠한다. */
+    Tone(
+        R.drawable.ic_tonality,
+        R.string.tool_tone,
+        R.string.tool_tone_short,
+        subTools = listOf(SubTool.TONE_DODGE, SubTool.TONE_BURN),
+        available = true
+    ),
     /** 글자. 고르면 캔버스를 눌러 그 자리에 글자 레이어를 더한다. */
     Text(R.drawable.ic_text_fields, R.string.tool_text, available = true),
     /** 픽셀 유동화. 고르면 편집 화면을 덮는 작업 모드가 열린다(도구로 남지 않는다). */
@@ -113,10 +128,10 @@ enum class EditTool(
 
     companion object {
         /** 메인 화면 왼쪽 도구 막대의 도구. 조정·레이어는 패널에 있다. */
-        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Retouch, Text, Liquify)
+        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Retouch, Tone, Text, Liquify)
 
         /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. 폭이 모자라면 옆으로 밀어 본다. */
-        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Retouch, Text, Liquify, Layers)
+        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Retouch, Tone, Text, Liquify, Layers)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

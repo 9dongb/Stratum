@@ -67,6 +67,7 @@ class CropControls(
  * @param text 글자 도구의 모양과 바꾸기
  * @param select 선택 도구의 설정과 할 일
  * @param retouch 리터칭 도구의 설정과 가져올 곳
+ * @param tone 명암 도구의 설정과 바꾸기
  */
 @Composable
 fun ToolOptions(
@@ -83,7 +84,8 @@ fun ToolOptions(
     brush: BrushControls? = null,
     text: TextControls? = null,
     select: SelectionControls? = null,
-    retouch: RetouchControls? = null
+    retouch: RetouchControls? = null,
+    tone: ToneControls? = null
 ) {
     when (selection.active) {
         EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
@@ -96,6 +98,9 @@ fun ToolOptions(
         }
         EditTool.Retouch -> if (retouch != null) {
             RetouchOptions(checkNotNull(selection.modeOf(EditTool.Retouch)), retouch, onChoose, modifier)
+        }
+        EditTool.Tone -> if (tone != null) {
+            ToneToolOptions(checkNotNull(selection.modeOf(EditTool.Tone)), tone, onChoose, modifier)
         }
         else -> Unit
     }

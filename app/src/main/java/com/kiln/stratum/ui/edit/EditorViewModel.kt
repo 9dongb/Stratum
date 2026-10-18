@@ -55,6 +55,7 @@ import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
+import com.kiln.stratum.engine.platform.ToneStroke
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
@@ -63,6 +64,7 @@ import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.engine.tone.ToneFill
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
 import com.kiln.stratum.project.ProjectInfo
@@ -354,9 +356,15 @@ class EditorViewModel internal constructor(
     /** 복제 도장·복구 브러시가 가져올 곳. 다른 문서를 열거나 문서 크기가 바뀌면(자르기·회전·크기 변경) 지운다. */
     val cloneSource: StateFlow<CloneSource?> = _cloneSource.asStateFlow()
 
+    private val _tone = MutableStateFlow(ToneOptions())
+
+    /** 명암 도구(닷지·번) 설정. 둘이 함께 쓰고, 앱을 끌 때까지 남는다(브러시와 같다). */
+    val tone: StateFlow<ToneOptions> = _tone.asStateFlow()
+
     /**
      * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
      * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
+     * [tone]이 있으면 명암(닷지·번) 획이다.
      */
     private class Stroke(
         val layer: LayerId,
@@ -364,29 +372,31 @@ class EditorViewModel internal constructor(
         val erase: Boolean,
         val selection: Selection?,
         val retouch: RetouchMode? = null,
-        val offset: SourceOffset? = null
+        val offset: SourceOffset? = null,
+        val tone: ToneFill? = null
     ) {
         val dabs = StrokeDabs(settings.spacing)
 
         /**
          * 그리는 동안 바뀌지 않는 미리 보기용 사본. 복제 도장·복구 브러시는 가져올 곳을 베껴 보이고(복구는 손을 뗀 뒤 둘레에 맞춘다),
-         * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다).
+         * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
         fun live(): LiveStroke = when (retouch) {
-            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection)
+            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone)
             RetouchMode.SPOT_HEAL -> LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
         }
 
         /** 손을 뗀 뒤 기록할 명령 */
-        fun command(): CancellableCommand = when (retouch) {
-            null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
+        fun command(): CancellableCommand = when {
+            tone != null -> ToneStroke(layer, ArrayList(dabs.dabs), settings, tone)
+            retouch == null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
             else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset)
         }
 
-        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
+        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
         val readsLayer: Boolean
-            get() = erase || offset != null
+            get() = erase || offset != null || tone != null
     }
 
     /** 끄는 중인 획 */
@@ -411,6 +421,14 @@ class EditorViewModel internal constructor(
     /** 캔버스의 브러시·지우개 손가락이 보내는 일 */
     val strokeActions: StrokeActions = object : StrokeActions {
         override fun begin(x: Float, y: Float, erase: Boolean) = beginStroke(StrokePoint(x, y), erase)
+        override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
+        override fun end() = endStroke()
+        override fun cancel() = cancelStroke()
+    }
+
+    /** 캔버스의 명암 손가락이 보내는 일 */
+    val toneActions: ToneActions = object : ToneActions {
+        override fun begin(x: Float, y: Float, dodge: Boolean) = beginTone(StrokePoint(x, y), dodge)
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
@@ -1004,6 +1022,23 @@ class EditorViewModel internal constructor(
     /** 지우개 설정을 바꾼다. 다음 획부터 쓴다. */
     fun setEraser(settings: BrushSettings) {
         _eraser.value = settings
+    }
+
+    /** 명암 도구 설정을 바꾼다. 다음 획부터 쓴다. */
+    fun setTone(options: ToneOptions) {
+        _tone.value = options
+    }
+
+    /**
+     * 고른 레이어에 명암 획을 시작한다([dodge]면 밝게, 아니면 어둡게). 손가락을 떼면 실행 취소 한 단계로 기록한다(브러시와 같은 차례).
+     * 세기는 노출이 정하므로 브러시 불투명도는 쓰지 않는다.
+     */
+    fun beginTone(point: StrokePoint, dodge: Boolean) {
+        if (!canBeginStroke()) return
+        val layer = currentLayer() ?: return
+        val options = _tone.value
+        val fill = ToneFill(dodge, options.range, options.exposure)
+        startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, tone = fill), point)
     }
 
     /** 리터칭 설정을 바꾼다. 다음 획부터 쓴다. */

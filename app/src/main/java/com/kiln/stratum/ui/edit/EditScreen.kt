@@ -116,6 +116,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param retouch 리터칭 설정(크기·단단함·불투명도), [onRetouch]로 바꾼다
  * @param cloneSource 복제 도장·복구 브러시가 가져올 곳(정하지 않았으면 null)
  * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
+ * @param toneOptions 명암 도구 설정(범위·노출·크기·단단함), [onToneOptions]로 바꾼다
+ * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
  */
 @Composable
 fun EditScreen(
@@ -154,7 +156,10 @@ fun EditScreen(
     retouch: BrushSettings = BrushSettings(),
     onRetouch: (BrushSettings) -> Unit = {},
     cloneSource: CloneSource? = null,
-    retouchActions: RetouchActions = RetouchActions.None
+    retouchActions: RetouchActions = RetouchActions.None,
+    toneOptions: ToneOptions = ToneOptions(),
+    onToneOptions: (ToneOptions) -> Unit = {},
+    toneActions: ToneActions = ToneActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -281,6 +286,7 @@ fun EditScreen(
             picking = retouchPicks,
             onPick = { if (cloneSource != null) retouchPicking = !retouchPicking }
         ).takeIf { activeTool == EditTool.Retouch }
+        val toneControls = ToneControls(toneOptions, onToneOptions).takeIf { activeTool == EditTool.Tone }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -296,7 +302,8 @@ fun EditScreen(
                     brush = brushControls,
                     text = textControls,
                     select = selectionControls,
-                    retouch = retouchControls
+                    retouch = retouchControls,
+                    tone = toneControls
                 )
             }
         }
@@ -304,7 +311,7 @@ fun EditScreen(
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
         val railToolTitle = toolTitle?.takeIf { railTool != null }
         val railToolOptions = toolOptions?.takeIf { railTool != null }
-        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭을 고르면 그리는 터치 자리를 겹친다
+        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
             if (ready != null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
@@ -326,6 +333,15 @@ fun EditScreen(
                     radius = retouch.radius,
                     actions = retouchActions,
                     onPicked = { retouchPicking = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && activeTool == EditTool.Tone) {
+                ToneOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    dodge = selection.modeOf(EditTool.Tone) != SubTool.TONE_BURN,
+                    actions = toneActions,
                     modifier = Modifier.fillMaxSize()
                 )
             }
