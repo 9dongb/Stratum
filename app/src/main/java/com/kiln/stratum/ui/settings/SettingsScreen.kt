@@ -62,6 +62,7 @@ import com.kiln.stratum.engine.export.MAX_EXPORT_QUALITY
 import com.kiln.stratum.engine.export.MIN_EXPORT_QUALITY
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.SettingsValues
+import com.kiln.stratum.settings.ThemeMode
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSegment
@@ -85,6 +86,7 @@ import kotlin.math.roundToInt
 enum class SettingsCategory(@get:StringRes val label: Int) {
     EXPORT(R.string.settings_export),
     PREVIEW(R.string.settings_preview),
+    THEME(R.string.settings_theme),
     GESTURES(R.string.settings_gestures),
     ABOUT(R.string.settings_about)
 }
@@ -108,6 +110,7 @@ object SettingsTags {
         is ExportSize.LongEdge -> "settingsSize_${size.pixels}"
     }
     fun preview(quality: PreviewQuality) = "settingsPreview_${quality.name}"
+    fun theme(mode: ThemeMode) = "settingsTheme_${mode.name}"
 }
 
 /**
@@ -240,6 +243,7 @@ private fun CategoryItems(
     when (category) {
         SettingsCategory.EXPORT -> ExportItems(values, onChange)
         SettingsCategory.PREVIEW -> PreviewItems(values, onChange)
+        SettingsCategory.THEME -> ThemeItems(values, onChange)
         SettingsCategory.GESTURES -> GestureItems(values, onChange)
         SettingsCategory.ABOUT -> AboutItems(versionName)
     }
@@ -377,6 +381,52 @@ private fun PreviewItems(values: SettingsValues, onChange: ((SettingsValues) -> 
         }
     }
 }
+
+/** 테마: 다크(기본) / 라이트 / 시스템 설정(휴대폰의 다크 모드를 따름). 줄마다 하나의 항목이고, 고르면 바로 바뀐다(결정 기록 '테마 고르기'). */
+@Composable
+private fun ThemeItems(values: SettingsValues, onChange: ((SettingsValues) -> SettingsValues) -> Unit) {
+    for (mode in ThemeMode.entries) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .selectable(
+                    selected = values.themeMode == mode,
+                    role = Role.RadioButton,
+                    onClick = { onChange { it.copy(themeMode = mode) } }
+                )
+                .testTag(SettingsTags.theme(mode)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = values.themeMode == mode, onClick = null)
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(stringResource(themeLabel(mode)), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(themeDescription(mode)),
+                    color = StratumTheme.colors.textDescription,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@StringRes
+private fun themeLabel(mode: ThemeMode): Int =
+    when (mode) {
+        ThemeMode.DARK -> R.string.settings_theme_dark
+        ThemeMode.LIGHT -> R.string.settings_theme_light
+        ThemeMode.SYSTEM -> R.string.settings_theme_system
+    }
+
+@StringRes
+private fun themeDescription(mode: ThemeMode): Int =
+    when (mode) {
+        ThemeMode.DARK -> R.string.settings_theme_dark_description
+        ThemeMode.LIGHT -> R.string.settings_theme_light_description
+        ThemeMode.SYSTEM -> R.string.settings_theme_system_description
+    }
 
 /** 제스처: 두 손가락으로 톡 → 실행 취소, 세 손가락 제스처. 스위치마다 하나의 항목이다. */
 @Composable

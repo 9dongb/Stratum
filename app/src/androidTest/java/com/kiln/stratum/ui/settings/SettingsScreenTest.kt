@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
@@ -28,6 +29,7 @@ import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.SettingsValues
+import com.kiln.stratum.settings.ThemeMode
 import com.kiln.stratum.ui.home.HomeScreen
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.HingeMargin
@@ -106,8 +108,11 @@ class SettingsScreenTest {
         composeRule.onNodeWithTag(SettingsTags.preview(PreviewQuality.LIGHT)).performScrollTo().performClick()
         composeRule.onNodeWithTag(SettingsTags.TWO_FINGER_UNDO).performScrollTo().performClick()
         composeRule.onNodeWithTag(SettingsTags.THREE_FINGER).performScrollTo().performClick()
+        composeRule.onNodeWithTag(SettingsTags.theme(ThemeMode.LIGHT)).performScrollTo().performClick()
 
         composeRule.onNodeWithTag(SettingsTags.preview(PreviewQuality.LIGHT)).assertIsSelected()
+        composeRule.onNodeWithTag(SettingsTags.theme(ThemeMode.LIGHT)).assertIsSelected()
+        composeRule.onNodeWithTag(SettingsTags.theme(ThemeMode.DARK)).assertIsNotSelected()
         composeRule.onNodeWithTag(SettingsTags.TWO_FINGER_UNDO).assertIsOff()
         composeRule.onNodeWithTag(SettingsTags.THREE_FINGER).assertIsOff()
         composeRule.runOnIdle {
@@ -117,6 +122,7 @@ class SettingsScreenTest {
             assertEquals(PreviewQuality.LIGHT, changed.previewQuality)
             assertFalse(changed.twoFingerTapUndo)
             assertFalse(changed.threeFingerGestures)
+            assertEquals(ThemeMode.LIGHT, changed.themeMode)
         }
     }
 

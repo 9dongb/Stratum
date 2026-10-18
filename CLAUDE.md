@@ -15,7 +15,8 @@
 ## 2. 기술 스택
 
 - 언어: Kotlin만 사용. Flutter·React Native 등 크로스플랫폼 도구 금지
-- UI: Jetpack Compose + Material 3, **다크 테마만** (라이트 테마 만들지 않음)
+- UI: Jetpack Compose + Material 3. 테마는 **다크(기본)·라이트·시스템 설정 따름**을 설정에서 고른다
+  - 색·글자 크기·모서리는 `ui/theme`에만 두고 화면 코드에 직접 쓰지 않는다. 버튼·칩·슬라이더 같은 부품은 `ui/components`의 것을 쓴다(`ThemeUsageGuardTest`가 지키는지 본다)
 - 폴더블 대응: Jetpack WindowManager (접힘 상태, 힌지 위치), Window Size Class
 - 이미지 처리: GPU 우선 — AGSL(RuntimeShader) 또는 OpenGL ES. 큰 이미지를 CPU로 픽셀 단위 반복 처리 금지
 - 비동기: Kotlin Coroutines / Flow

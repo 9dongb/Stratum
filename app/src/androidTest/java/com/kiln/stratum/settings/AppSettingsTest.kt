@@ -46,6 +46,7 @@ class AppSettingsTest {
             previewQuality = PreviewQuality.LIGHT,
             twoFingerTapUndo = false,
             threeFingerGestures = false,
+            themeMode = ThemeMode.LIGHT,
             recentColors = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
         )
 
@@ -72,6 +73,7 @@ class AppSettingsTest {
             .putInt("exportQuality", 500)
             .putString("exportSize", "big")
             .putString("previewQuality", "ULTRA")
+            .putString("themeMode", "SEPIA")
             .putString("recentColors", "FF1E88E5,red,,FF1E88E5,123456789")
             .commit()
 
@@ -83,6 +85,7 @@ class AppSettingsTest {
         assertEquals(PreviewQuality.STANDARD, values.previewQuality)
         assertTrue(values.twoFingerTapUndo)
         assertTrue(values.threeFingerGestures)
+        assertEquals(ThemeMode.DARK, values.themeMode)
         // 망가진 최근 색은 건너뛰고 같은 색은 한 번만 읽는다
         assertEquals(listOf(0xFF1E88E5.toInt()), values.recentColors)
     }

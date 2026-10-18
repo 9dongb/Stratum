@@ -21,6 +21,26 @@ enum class PreviewQuality {
     LIGHT
 }
 
+/** 앱 테마(설정의 '테마', 결정 기록 '테마 고르기') */
+enum class ThemeMode {
+    /** 다크(기본) */
+    DARK,
+
+    /** 라이트 */
+    LIGHT,
+
+    /** 휴대폰의 다크 모드 설정을 따른다 */
+    SYSTEM;
+
+    /** 이 설정이면 다크로 그리는지. [systemDark]는 휴대폰이 다크 모드인지다. */
+    fun isDark(systemDark: Boolean): Boolean =
+        when (this) {
+            DARK -> true
+            LIGHT -> false
+            SYSTEM -> systemDark
+        }
+}
+
 /**
  * 앱 설정 값(바꾸지 않는 값).
  *
@@ -28,6 +48,7 @@ enum class PreviewQuality {
  * @property previewQuality 미리 보기 화질
  * @property twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소
  * @property threeFingerGestures 세 손가락 제스처: 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)
+ * @property themeMode 앱 테마(다크·라이트·휴대폰 설정 따름)
  * @property recentColors 최근 색(브러시·글자, 맨 앞이 가장 최근, [RecentColors]). 설정 화면에는 보이지 않고, 앱을 다시 켜도 남는다.
  */
 data class SettingsValues(
@@ -35,6 +56,7 @@ data class SettingsValues(
     val previewQuality: PreviewQuality = PreviewQuality.STANDARD,
     val twoFingerTapUndo: Boolean = true,
     val threeFingerGestures: Boolean = true,
+    val themeMode: ThemeMode = ThemeMode.DARK,
     val recentColors: List<Int> = RecentColors.DEFAULT
 )
 
@@ -68,6 +90,7 @@ class AppSettings internal constructor(private val preferences: SharedPreference
         private const val KEY_PREVIEW_QUALITY = "previewQuality"
         private const val KEY_TWO_FINGER_UNDO = "twoFingerTapUndo"
         private const val KEY_THREE_FINGER = "threeFingerGestures"
+        private const val KEY_THEME_MODE = "themeMode"
         private const val KEY_RECENT_COLORS = "recentColors"
 
         /** 크기 저장 값: 원본은 이 글자, 긴 변은 픽셀 숫자 */
@@ -96,11 +119,14 @@ class AppSettings internal constructor(private val preferences: SharedPreference
             }
             val preview = preferences.getString(KEY_PREVIEW_QUALITY, null)
                 ?.let { name -> PreviewQuality.entries.firstOrNull { it.name == name } } ?: defaults.previewQuality
+            val theme = preferences.getString(KEY_THEME_MODE, null)
+                ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } } ?: defaults.themeMode
             return SettingsValues(
                 export = ExportChoice(format, quality, size),
                 previewQuality = preview,
                 twoFingerTapUndo = preferences.getBoolean(KEY_TWO_FINGER_UNDO, defaults.twoFingerTapUndo),
                 threeFingerGestures = preferences.getBoolean(KEY_THREE_FINGER, defaults.threeFingerGestures),
+                themeMode = theme,
                 recentColors = RecentColors.decode(preferences.getString(KEY_RECENT_COLORS, null))
             )
         }
@@ -119,6 +145,7 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 .putString(KEY_PREVIEW_QUALITY, values.previewQuality.name)
                 .putBoolean(KEY_TWO_FINGER_UNDO, values.twoFingerTapUndo)
                 .putBoolean(KEY_THREE_FINGER, values.threeFingerGestures)
+                .putString(KEY_THEME_MODE, values.themeMode.name)
                 .putString(KEY_RECENT_COLORS, RecentColors.encode(values.recentColors))
                 .apply()
         }

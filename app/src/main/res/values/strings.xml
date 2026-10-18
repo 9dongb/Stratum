@@ -213,6 +213,13 @@
     <string name="settings_two_finger_undo_description">Tap the canvas with two fingers to undo the last edit.</string>
     <string name="settings_three_finger">Three-finger gestures</string>
     <string name="settings_three_finger_description">Tap the canvas with three fingers to redo. Swipe up or down to change the brush size, and left or right to change the hardness (strength in Liquify).</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_dark_description">Dark panels keep the focus on your photo.</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_light_description">Light panels and a light workspace.</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_system_description">Follows the phone’s dark theme setting.</string>
     <string name="settings_version">Version</string>
     <string name="settings_privacy">Privacy</string>
     <string name="settings_privacy_description">Stratum does not use the internet. Your photos and projects stay on this device. There are no ads, accounts or analytics.</string>

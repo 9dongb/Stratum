@@ -14,6 +14,23 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 테마 고르기와 라이트 색(디자인 시안 작업 7단계)
+
+- 요청: "설정에서 다크모드, 라이트모드 지정할 수 있게하세요."
+  - 질문에 대한 사용자 답: "다크·라이트·시스템"(기본 다크). CLAUDE.md·기획서의 '다크 테마만'을 고쳐 적는다.
+- 의도: 말하지 않음
+- 커밋:
+  - "설정에 테마(다크·라이트·시스템 설정)를 더하고, 고르면 앱 색·창 바탕·제스처 막대 아이콘이 바로 바뀌게 함"
+- 바꾼 것:
+  - `settings/AppSettings.kt`: `ThemeMode`(DARK·LIGHT·SYSTEM, `isDark`), `SettingsValues.themeMode`(기본 다크), 저장 키 `themeMode`.
+  - `MainActivity.kt`: 설정을 읽어 `StratumTheme(darkTheme)`에 넘기고(시스템이면 휴대폰 설정), 창 바탕과 시스템 막대 아이콘 색을 테마에 맞춘다(`applyWindowTheme`).
+  - `settings/SettingsScreen.kt`: '테마' 분류(미리 보기 다음)와 세 줄 고르기. 문구 7개(영어·한국어).
+  - CLAUDE.md 2장(테마·토큰·부품 규칙), 기획서 결정 목록의 테마.
+  - 테스트: 단위 `ThemeModeTest` 3개, 에뮬레이터 `ThemeModeActivityTest`(라이트로 바꾸면 창 바탕이 밝아지고 막대 아이콘이 어두워지며 다크로 돌아옴), `AppSettingsTest`(저장·읽기·모르는 값), `SettingsScreenTest`(테마 고르기)
+- 확인한 것:
+  - 빌드와 단위 테스트, 에뮬레이터(Pixel_Fold)에서 AppSettingsTest·SettingsScreenTest·ThemeModeActivityTest·FullScreenTest·SystemBarsTest 18개가 통과했다.
+  - 실제 앱(에뮬레이터): 커버·메인 가로·메인 세로에서 다크와 라이트를 바꿔 보며 찍었다. 라이트는 밝은 바·패널, 작업 공간 #DCDDE1, 캔버스 테두리, 테두리를 두른 흰 손잡이가 보였다.
+
 ## 2026-10-18 · 창·시트·홈·설정(디자인 시안 작업 6단계)
 
 - 요청: 시안 디자인을 앱 전체에 적용(질문에 대한 사용자 답 "앱 전체 (추천)")
