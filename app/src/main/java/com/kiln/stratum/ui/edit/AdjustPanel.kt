@@ -22,14 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
@@ -61,8 +57,13 @@ import androidx.compose.ui.unit.min
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.ToneCurve
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumFilterChip
+import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /** 보정 패널이 엔진 쪽(ViewModel)에 보내는 일 */
 interface AdjustActions {
@@ -185,7 +186,7 @@ fun AdjustList(controls: AdjustControls, twoColumns: Boolean, modifier: Modifier
 /** 고른 레이어의 보정을 모두 처음으로 돌린다(실행 취소 한 단계). 바꾼 것이 없으면 누를 수 없다. */
 @Composable
 fun ResetAllButton(controls: AdjustControls, modifier: Modifier = Modifier) {
-    TextButton(
+    QuietButton(
         onClick = { controls.actions.record { Adjustments.NONE } },
         enabled = controls.enabled && !controls.adjustments.isIdentity,
         modifier = modifier.testTag(EditScreenTags.ADJUST_RESET_ALL)
@@ -208,13 +209,13 @@ private fun CommitOnDispose(actions: AdjustActions) {
 /** 커버 화면의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
 @Composable
 private fun AdjustChip(item: AdjustItem, selected: Boolean, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    FilterChip(
+    StratumFilterChip(
         selected = selected,
         onClick = onClick,
         enabled = enabled,
         label = { Text(stringResource(item.label), maxLines = 1, softWrap = false) },
         trailingIcon = if (changed) {
-            { Box(Modifier.size(6.dp).background(MaterialTheme.colorScheme.primary, CircleShape)) }
+            { Box(Modifier.size(6.dp).background(StratumTheme.colors.sliderFill, StratumShapes.Dot)) }
         } else {
             null
         },
@@ -234,7 +235,10 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
     val shown = item.format(value, LocalConfiguration.current.locales[0])
     val actions = controls.actions
     val reset = { actions.record { item.resetIn(it) } }
-    val textColor = if (controls.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    // 이름은 보조색, 숫자는 기본색(시안). 꺼지면 둘 다 비활성 색.
+    val colors = StratumTheme.colors
+    val labelColor = if (controls.enabled) colors.textSecondary else colors.textDisabled
+    val valueColor = if (controls.enabled) colors.textPrimary else colors.textDisabled
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(EditScreenTags.adjustSlider(item)),
         verticalAlignment = Alignment.CenterVertically
@@ -247,7 +251,7 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
                 .pointerInput(controls.enabled, item) {
                     if (controls.enabled) detectTapGestures(onDoubleTap = { reset() })
                 },
-            color = textColor,
+            color = labelColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
@@ -277,7 +281,7 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
         Text(
             text = shown,
             modifier = Modifier.width(ValueWidth),
-            color = textColor,
+            color = valueColor,
             textAlign = TextAlign.End,
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge
@@ -292,7 +296,7 @@ private fun CurveSection(controls: AdjustControls, modifier: Modifier = Modifier
         Text(
             text = stringResource(R.string.adjust_curve),
             modifier = Modifier.padding(vertical = 4.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.labelLarge
         )
         CurveBlock(controls, Modifier.weight(1f).fillMaxWidth())
@@ -320,7 +324,7 @@ private fun CurveBlock(controls: AdjustControls, modifier: Modifier = Modifier) 
             modifier = Modifier.weight(1f).fillMaxHeight()
         )
         Column {
-            IconButton(
+            StratumIconButton(
                 onClick = {
                     actions.record { it.copy(curve = ToneCurve.IDENTITY) }
                     picked = -1
@@ -330,7 +334,7 @@ private fun CurveBlock(controls: AdjustControls, modifier: Modifier = Modifier) 
             ) {
                 Icon(painterResource(R.drawable.ic_restart_alt), contentDescription = stringResource(R.string.adjust_curve_reset))
             }
-            IconButton(
+            StratumIconButton(
                 onClick = {
                     actions.record { current -> CurveEditing.removePoint(current.curve, selected)?.let { current.copy(curve = it) } ?: current }
                     picked = -1
@@ -363,14 +367,13 @@ private fun ToneCurveEditor(
     onFinish: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = StratumTheme.colors
     val description = stringResource(R.string.adjust_curve_editor, curve.points.size)
     // 제스처는 한 번 시작해 계속 돌므로, 그 안에서는 늘 지금 값을 읽는다
     val currentCurve by rememberUpdatedState(curve)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnChange by rememberUpdatedState(onChange)
     val currentOnFinish by rememberUpdatedState(onFinish)
-    val alpha = if (enabled) 1f else 0.38f
     Canvas(
         modifier
             .testTag(EditScreenTags.CURVE_EDITOR)
@@ -439,17 +442,19 @@ private fun ToneCurveEditor(
         val height = size.height - inset * 2
         if (width <= 0f || height <= 0f) return@Canvas
         fun pointAt(x: Float, y: Float) = Offset(inset + x * width, inset + (1f - y) * height)
-        val grid = colors.outlineVariant.copy(alpha = alpha)
-        val line = colors.primary.copy(alpha = alpha)
+        // 바탕은 입력칸 바탕, 격자는 구분선, 그대로인 대각선은 테두리 색, 곡선·점은 슬라이더 채움 색(꺼지면 비활성 색)
+        val grid = colors.divider
+        val diagonal = colors.fieldBorder
+        val line = if (enabled) colors.sliderFill else colors.textDisabled
         // 바탕과 4칸 격자, 그대로인 대각선
-        drawRect(colors.surfaceContainerHighest, topLeft = Offset(inset, inset), size = androidx.compose.ui.geometry.Size(width, height))
+        drawRect(colors.fieldBackground, topLeft = Offset(inset, inset), size = androidx.compose.ui.geometry.Size(width, height))
         for (step in 1..3) {
             val x = inset + width * step / 4
             val y = inset + height * step / 4
             drawLine(grid, Offset(x, inset), Offset(x, inset + height))
             drawLine(grid, Offset(inset, y), Offset(inset + width, y))
         }
-        drawLine(grid, pointAt(0f, 0f), pointAt(1f, 1f), strokeWidth = 1.dp.toPx())
+        drawLine(diagonal, pointAt(0f, 0f), pointAt(1f, 1f), strokeWidth = 1.dp.toPx())
         // 곡선(그래프 폭 4픽셀마다 한 번 계산)
         val steps = (width / 4f).toInt().coerceAtLeast(16)
         val path = Path()
@@ -466,7 +471,7 @@ private fun ToneCurveEditor(
             if (index == selected) {
                 drawCircle(line, radius + 1.dp.toPx(), center)
             } else {
-                drawCircle(colors.surfaceContainerHighest, radius, center)
+                drawCircle(colors.fieldBackground, radius, center)
                 drawCircle(line, radius, center, style = Stroke(width = 2.dp.toPx()))
             }
         }

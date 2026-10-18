@@ -5,9 +5,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -19,7 +16,10 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -88,7 +88,7 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
         Text(
             text = stringResource(if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.TONE_HINT),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -98,14 +98,13 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
 @Composable
 private fun ToneRangeRow(range: ToneRange, onRange: (ToneRange) -> Unit) {
     val ranges = ToneRange.entries
-    SingleChoiceSegmentedButtonRow {
+    StratumSegmentedRow {
         ranges.forEachIndexed { index, entry ->
-            SegmentedButton(
+            StratumSegment(
                 selected = entry == range,
                 onClick = { onRange(entry) },
-                shape = SegmentedButtonDefaults.itemShape(index, ranges.size),
-                // 고른 칸은 배경색으로 보인다. 체크 표시는 칸 폭 계산에 들어가지 않아 이름을 가리므로 뺀다.
-                icon = {},
+                index = index,
+                count = ranges.size,
                 modifier = Modifier.testTag(EditScreenTags.toneRange(entry))
             ) {
                 // 한국어는 글자마다 줄을 바꿀 수 있어, 이름 전체 폭(최대 고유 폭)을 쓰게 한다(하위 도구 줄과 같다)

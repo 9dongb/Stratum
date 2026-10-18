@@ -11,7 +11,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -20,16 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -50,12 +42,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.platform.MAX_FEATHER
@@ -64,8 +52,13 @@ import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionPoint
 import com.kiln.stratum.engine.selection.SelectionShape
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
+import com.kiln.stratum.ui.components.StratumSwitch
+import com.kiln.stratum.ui.components.ToolActionButton
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -124,7 +117,7 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
                 }
             ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -135,14 +128,13 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
  */
 @Composable
 fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit) {
-    SingleChoiceSegmentedButtonRow {
+    StratumSegmentedRow {
         subTools.forEachIndexed { index, subTool ->
-            SegmentedButton(
+            StratumSegment(
                 selected = subTool == mode,
                 onClick = { onChoose(subTool) },
-                shape = SegmentedButtonDefaults.itemShape(index, subTools.size),
-                // 고른 칸은 배경색으로 보인다. 체크 표시는 칸 폭 계산에 들어가지 않아 이름을 가리므로 뺀다.
-                icon = {},
+                index = index,
+                count = subTools.size,
                 modifier = Modifier.testTag(EditScreenTags.subToolOption(subTool))
             ) {
                 // 한국어는 글자마다 줄을 바꿀 수 있어, 이름 전체 폭(최대 고유 폭)을 쓰게 한다(자르기·변형 하위 도구 줄과 같다)
@@ -156,13 +148,13 @@ fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) 
 @Composable
 private fun SelectionModeRow(mode: SelectionMode, onMode: (SelectionMode) -> Unit) {
     val modes = SelectionMode.entries
-    SingleChoiceSegmentedButtonRow {
+    StratumSegmentedRow {
         modes.forEachIndexed { index, entry ->
-            SegmentedButton(
+            StratumSegment(
                 selected = entry == mode,
                 onClick = { onMode(entry) },
-                shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                icon = {},
+                index = index,
+                count = modes.size,
                 modifier = Modifier.testTag(EditScreenTags.selectionMode(entry))
             ) {
                 Text(
@@ -194,9 +186,14 @@ private fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {
             .testTag(EditScreenTags.SELECTION_CONTIGUOUS),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(R.string.selection_contiguous), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            stringResource(R.string.selection_contiguous),
+            modifier = Modifier.weight(1f),
+            color = StratumTheme.colors.textSecondary,
+            style = MaterialTheme.typography.bodyMedium
+        )
         Spacer(Modifier.width(16.dp))
-        Switch(checked = contiguous, onCheckedChange = null)
+        StratumSwitch(checked = contiguous, onCheckedChange = null)
     }
 }
 
@@ -223,26 +220,14 @@ private fun SelectionActionRow(controls: SelectionControls) {
 /** 아이콘 아래에 짧은 이름이 있는 버튼. [description]이 있으면 화면 읽기 기능은 그 긴 이름으로 읽는다. 누르는 영역은 48dp 이상이다. */
 @Composable
 private fun ActionButton(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    val spoken = description?.let { stringResource(it) }
-    TextButton(
+    ToolActionButton(
+        icon = icon,
+        label = stringResource(label),
         onClick = onClick,
+        modifier = Modifier.testTag(tag),
         enabled = enabled,
-        modifier = Modifier
-            .widthIn(min = 64.dp)
-            .testTag(tag)
-            .then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(icon), contentDescription = null)
-            Text(
-                text = stringResource(label),
-                modifier = Modifier.padding(top = 4.dp),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
+        description = description?.let { stringResource(it) }
+    )
 }
 
 /** 페더 슬라이더 자리(0..1)와 픽셀. 작은 값을 세밀하게 고르게 제곱 눈금이다. */

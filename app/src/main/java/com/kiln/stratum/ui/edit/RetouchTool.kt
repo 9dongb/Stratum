@@ -6,7 +6,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,8 +30,10 @@ import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
+import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -108,7 +109,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
         SubToolSegments(EditTool.Retouch.subTools, mode, onChoose)
         // 할 일(가져올 곳 정하기·안내)을 위쪽에 둔다. 옵션 자리가 좁으면 아래 슬라이더는 밀어서 본다.
         if (mode != SubTool.RETOUCH_SPOT) {
-            FilterChip(
+            StratumFilterChip(
                 selected = controls.picking,
                 onClick = controls.onPick,
                 label = { Text(stringResource(R.string.retouch_source)) },
@@ -126,7 +127,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
                 }
             ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.RETOUCH_HINT),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)

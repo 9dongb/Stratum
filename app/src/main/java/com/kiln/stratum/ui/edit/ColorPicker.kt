@@ -22,17 +22,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -65,12 +60,18 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.ColorPickerColors
+import com.kiln.stratum.ui.theme.StratumRadius
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 import java.util.Locale
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
@@ -128,26 +129,23 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
             Box(
                 Modifier
                     .size(38.dp)
-                    .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), CircleShape)
+                    .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), StratumShapes.Dot)
                     .padding(5.dp)
-                    .background(Color(current), CircleShape)
+                    .background(Color(current), StratumShapes.Dot)
             )
         }
         controls.onEyedropper?.let { toggle ->
             // 스포이드: 켜면 다음에 캔버스를 누르거나 끈 자리의 색을 고른다(고른 도구가 칠하던 손가락 대신)
-            IconToggleButton(
+            // 켜지면 도구 막대의 고른 도구처럼 모서리 8dp 사각형(선택 배경)으로 보인다
+            StratumIconToggleButton(
                 checked = controls.eyedropperOn,
                 onCheckedChange = { toggle() },
-                colors = IconButtonDefaults.iconToggleButtonColors(
-                    checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ),
                 modifier = Modifier.testTag(EditScreenTags.COLOR_EYEDROPPER)
             ) {
                 Icon(painterResource(R.drawable.ic_colorize), contentDescription = stringResource(R.string.color_eyedropper))
             }
         }
-        VerticalDivider(Modifier.padding(horizontal = 8.dp).height(28.dp))
+        VerticalDivider(Modifier.padding(horizontal = 8.dp).height(28.dp), color = StratumTheme.colors.divider)
         controls.recent.forEachIndexed { index, color ->
             val isSelected = color or OPAQUE == current
             val name = stringResource(R.string.color_recent, index + 1, colorHex(color))
@@ -171,13 +169,13 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
 /** 색 동그라미(보이는 32dp). 고른 색은 굵은 테두리다. */
 @Composable
 private fun ColorDot(color: Int, selected: Boolean) {
-    val ring = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val ring = if (selected) StratumTheme.colors.selectedContent else StratumTheme.colors.fieldBorder
     Box(
         Modifier
             .size(32.dp)
-            .border(BorderStroke(if (selected) 3.dp else 1.dp, ring), CircleShape)
+            .border(BorderStroke(if (selected) 3.dp else 1.dp, ring), StratumShapes.Dot)
             .padding(if (selected) 4.dp else 1.dp)
-            .background(Color(color or OPAQUE), CircleShape)
+            .background(Color(color or OPAQUE), StratumShapes.Dot)
     )
 }
 
@@ -243,8 +241,8 @@ fun ColorPalettePrompt(
     val maxHeight = (region - PaletteChrome).coerceIn(MinSquare, MaxSquare)
     val buttons: @Composable (Modifier) -> Unit = { modifier ->
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.testTag(EditScreenTags.PALETTE_CANCEL)) { Text(stringResource(R.string.action_cancel)) }
-            TextButton(onClick = onConfirm, modifier = Modifier.testTag(EditScreenTags.PALETTE_OK)) { Text(stringResource(R.string.action_ok)) }
+            QuietButton(onClick = onDismiss, modifier = Modifier.testTag(EditScreenTags.PALETTE_CANCEL)) { Text(stringResource(R.string.action_cancel)) }
+            AccentButton(onClick = onConfirm, modifier = Modifier.testTag(EditScreenTags.PALETTE_OK)) { Text(stringResource(R.string.action_ok)) }
         }
     }
     if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
@@ -340,7 +338,7 @@ private fun SaturationValueSquare(draft: PaletteDraft, onChange: (PaletteDraft) 
             .testTag(EditScreenTags.PALETTE_SQUARE)
     ) {
         // 네모만 둥글게 그리고, 고른 자리 고리는 모서리에서도 잘리지 않게 그 위에 그린다
-        val corner = CornerRadius(8.dp.toPx())
+        val corner = CornerRadius(StratumRadius.Control.toPx())
         drawRoundRect(Brush.horizontalGradient(listOf(ColorPickerColors.NoSaturation, pure)), cornerRadius = corner)
         drawRoundRect(Brush.verticalGradient(listOf(Color.Transparent, ColorPickerColors.NoBrightness)), cornerRadius = corner)
         // 고른 자리: 어떤 색 위에서도 보이게 검은 테두리 위의 흰 고리
@@ -392,7 +390,7 @@ private fun HueStrip(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, modi
             brush = Brush.verticalGradient(ColorPickerColors.Hues),
             topLeft = Offset(left, 0f),
             size = Size(stripWidth, size.height),
-            cornerRadius = CornerRadius(4.dp.toPx())
+            cornerRadius = CornerRadius(StratumRadius.Small.toPx())
         )
         // 고른 색상: 띠를 가로지르는 검은 테두리의 흰 막대
         val y = draft.hue / 360f * size.height
@@ -409,11 +407,11 @@ private fun HueStrip(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, modi
  */
 @Composable
 private fun ColorCompare(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, modifier: Modifier) {
-    val outline = MaterialTheme.colorScheme.outlineVariant
+    val outline = StratumTheme.colors.fieldBorder
     val newLabel = stringResource(R.string.color_new_state, colorHex(draft.color))
     val revertLabel = stringResource(R.string.color_revert, colorHex(draft.original))
     Column(modifier) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, outline, RoundedCornerShape(8.dp))) {
+        Column(Modifier.fillMaxWidth().clip(StratumShapes.Card).border(1.dp, outline, StratumShapes.Card)) {
             Box(
                 Modifier
                     .fillMaxWidth()

@@ -16,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -39,12 +38,15 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -71,12 +73,19 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
             text = stringResource(R.string.text_hint),
             // 힌지를 피하는 칸은 좁은 줄을 가운데 놓으므로, 왼쪽에 맞추려고 줄을 꽉 채운다
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
         controls.colors?.let { ColorRow(it) }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = label, modifier = Modifier.width(88.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = label,
+                modifier = Modifier.width(88.dp),
+                color = StratumTheme.colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium
+            )
             StratumSlider(
                 value = textSizeToFraction(style.size),
                 onValueChange = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
@@ -92,7 +101,14 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
                         stateDescription = shown
                     }
             )
-            Text(text = shown, modifier = Modifier.width(64.dp), textAlign = TextAlign.End, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = shown,
+                modifier = Modifier.width(64.dp),
+                color = StratumTheme.colors.textPrimary,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }
@@ -136,8 +152,8 @@ fun TextPrompt(widthClass: WidthClass, busy: Boolean, onDismiss: () -> Unit, onA
     }
     val buttons: @Composable (Modifier) -> Unit = { modifier ->
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
-            TextButton(
+            QuietButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            AccentButton(
                 onClick = { onAdd(text) },
                 enabled = text.isNotBlank() && !busy,
                 modifier = Modifier.testTag(EditScreenTags.TEXT_ADD)

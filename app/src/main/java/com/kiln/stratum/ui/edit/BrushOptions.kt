@@ -22,6 +22,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -113,6 +114,7 @@ internal fun OptionSlider(label: String, shown: String, fraction: Float, onFract
         Text(
             text = label,
             modifier = Modifier.width(88.dp),
+            color = StratumTheme.colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
@@ -135,6 +137,7 @@ internal fun OptionSlider(label: String, shown: String, fraction: Float, onFract
         Text(
             text = shown,
             modifier = Modifier.width(64.dp),
+            color = StratumTheme.colors.textPrimary,
             textAlign = TextAlign.End,
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge

@@ -14,6 +14,21 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 도구 옵션과 패널 안(디자인 시안 작업 5단계)
+
+- 요청: "칩: 테두리형, 선택 시 #2A3550 배경 + #4C7BD9 테두리", "레이어 줄: 둥근 카드 대신 평평한 줄, 선택 시 배경만 #2A3550", "혼합 모드 선택: 알약 버튼 대신 모서리 6dp의 작은 선택 상자 (테두리 #3A3C43)", 버튼·슬라이더 모양과 글자 색
+- 의도: "목표는 포토샵 플랫하고 촘촘한 디자인이야."
+- 커밋:
+  - "도구 옵션과 패널 안(조정·자르기·선택·명암·리터칭·글자·색 팔레트·레이어 패널)을 시안 부품과 색으로 바꿈"
+- 바꾼 것:
+  - `AdjustPanel.kt`: 칩·글자 버튼, 이름 보조색·숫자 기본색, 곡선 편집기 색. `BrushOptions.kt`: 슬라이더 줄 글자 색.
+  - `ToolOptions.kt`: 자르기 비율 칩, 취소(글자)·적용(주요)·바꾸기 아이콘, 하위 도구 분할 버튼, 크기 변경(글자), 회전·뒤집기 버튼(`ToolActionButton`).
+  - `SelectionTool.kt`·`ToneTool.kt`·`RetouchTool.kt`·`TextTool.kt`: 분할 버튼·칩·스위치·동작 버튼, 안내 설명색, 글자 창 버튼(넣기는 주요).
+  - `ColorPicker.kt`: 스포이드 8dp 사각형, 최근 색 테두리, 팔레트 버튼(확인은 주요), 모서리 토큰.
+  - `LayerPanel.kt`: 평평한 줄·선택 배경만, 눈·이름·부제·손잡이 색, 작은 그림 4dp, 혼합 모드 선택 상자, 앱 메뉴, 버튼 줄.
+  - 태그·화면 읽기 역할은 그대로라 테스트는 바꾸지 않았다.
+- 확인한 것: 빌드와 단위 테스트, 에뮬레이터(Pixel_Fold)에서 AdjustPanelTest·BrushToolsTest·EditToolsTest·EditCropTest·SelectionToolTest·ToneToolTest·RetouchToolTest·ColorPaletteTest·EyedropperTest·LayerPanelTest·EditScreenEditingTest와 6단계의 창·홈·설정 테스트를 함께 돌려 146개 중 141개가 통과했다. 실패 5개 중 4개(ColorPaletteTest·HingeAwareDialogTest·ResizeDialogTest·NewCanvasTest의 메인 세로 힌지)는 접힌 커버 화면에서만 실패하는 테스트이고, 1개(StratumComponentsTest의 선택 상자)는 누른 직후 번지는 표시가 남은 채 찍은 테스트 순서 문제라 찍은 뒤 누르게 고쳐 통과했다(6개).
+
 ## 2026-10-18 · 편집 화면 틀(디자인 시안 작업 4단계)
 
 - 요청: "선택된 도구(왼쪽 도구 막대): 동그란 배경 대신 모서리 8dp 사각형, 배경 #2A3550, 아이콘 #8DB6FF", "탭: 선택된 탭 아래 2dp 밑줄"과 색(작업 공간·기본 배경·패널·구분선)

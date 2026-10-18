@@ -104,11 +104,13 @@ class StratumComponentsTest {
             StratumTheme { SelectBox(text = "Normal", onClick = { clicks++ }, modifier = Modifier.testTag(TAG)) }
         }
 
+        // 누르기 전에 찍는다(누른 뒤에는 번지는 표시가 사라지는 동안 색이 섞인다)
+        val box = shot(TAG).rowsOf(colors.fieldBackground.toArgb(), x = px(5.dp).toInt())
+        assertAbout("select box height", px(StratumDimens.ControlHeight) - 2 * px(StratumDimens.Divider), box)
+
         composeRule.onNodeWithTag(TAG).assertTouchHeightIsEqualTo(48.dp).performClick()
 
         composeRule.runOnIdle { assertEquals(1, clicks) }
-        val box = shot(TAG).rowsOf(colors.fieldBackground.toArgb(), x = px(5.dp).toInt())
-        assertAbout("select box height", px(StratumDimens.ControlHeight) - 2 * px(StratumDimens.Divider), box)
     }
 
     @Test

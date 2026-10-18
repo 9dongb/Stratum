@@ -4,37 +4,31 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.FlipImage
 import com.kiln.stratum.engine.platform.RotateImage
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumFilterChip
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
+import com.kiln.stratum.ui.components.ToolActionButton
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 
 /**
@@ -139,7 +133,7 @@ private fun CropRatioRow(crop: CropControls) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         for (ratio in CropRatio.entries) {
-            FilterChip(
+            StratumFilterChip(
                 selected = crop.frame.ratio == ratio,
                 onClick = { crop.onRatio(ratio) },
                 label = { Text(cropRatioLabel(ratio)) },
@@ -162,13 +156,13 @@ private fun cropRatioLabel(ratio: CropRatio): String =
 @Composable
 private fun CropActionRow(crop: CropControls, busy: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
+        StratumIconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
             Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
         }
-        TextButton(onClick = crop.onCancel, modifier = Modifier.testTag(EditScreenTags.CROP_CANCEL)) {
+        QuietButton(onClick = crop.onCancel, modifier = Modifier.testTag(EditScreenTags.CROP_CANCEL)) {
             Text(stringResource(R.string.action_cancel))
         }
-        Button(
+        AccentButton(
             onClick = crop.onApply,
             enabled = crop.canApply && !busy,
             modifier = Modifier.testTag(EditScreenTags.CROP_APPLY)
@@ -191,14 +185,13 @@ private fun SubToolRow(mode: SubTool, onChoose: (SubTool) -> Unit) {
         itemVerticalAlignment = Alignment.CenterVertically
     ) {
         val modes = EditTool.Transform.subTools.filter { !it.oneShot }
-        SingleChoiceSegmentedButtonRow {
+        StratumSegmentedRow {
             modes.forEachIndexed { index, subTool ->
-                SegmentedButton(
+                StratumSegment(
                     selected = subTool == mode,
                     onClick = { onChoose(subTool) },
-                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                    // 고른 칸은 배경색으로 보인다. 체크 표시는 칸 폭 계산에 들어가지 않아 이름을 가리므로 뺀다.
-                    icon = {},
+                    index = index,
+                    count = modes.size,
                     modifier = Modifier.testTag(EditScreenTags.subToolOption(subTool))
                 ) {
                     // 버튼 줄은 이름을 가장 좁게 줄인 폭(최소 고유 폭)으로 칸을 나눈다. 한국어는 글자마다 줄을 바꿀 수 있어
@@ -212,7 +205,7 @@ private fun SubToolRow(mode: SubTool, onChoose: (SubTool) -> Unit) {
                 }
             }
         }
-        TextButton(
+        QuietButton(
             onClick = { onChoose(SubTool.RESIZE) },
             modifier = Modifier.testTag(EditScreenTags.subToolOption(SubTool.RESIZE))
         ) {
@@ -241,7 +234,7 @@ private fun RotateButtons(enabled: Boolean, onEdit: (EditCommand) -> Unit) {
     }
 }
 
-/** 아이콘 아래에 이름이 있는 버튼. 누르는 영역은 48dp 이상이다(TextButton). */
+/** 아이콘 아래에 이름이 있는 버튼(두 줄까지). 누르는 영역은 48dp 이상이다. */
 @Composable
 private fun IconLabelButton(
     @DrawableRes icon: Int,
@@ -251,16 +244,14 @@ private fun IconLabelButton(
     iconRotation: Float = 0f,
     onClick: () -> Unit
 ) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.widthIn(min = 72.dp).testTag(tag)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.rotate(iconRotation))
-            Text(
-                text = stringResource(label),
-                modifier = Modifier.padding(top = 4.dp),
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
+    ToolActionButton(
+        icon = icon,
+        label = stringResource(label),
+        onClick = onClick,
+        modifier = Modifier.testTag(tag),
+        enabled = enabled,
+        minWidth = 72.dp,
+        maxLines = 2,
+        iconRotation = iconRotation
+    )
 }

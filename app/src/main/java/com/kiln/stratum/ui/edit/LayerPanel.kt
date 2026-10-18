@@ -17,20 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,9 +71,16 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.DocumentColors
+import com.kiln.stratum.ui.components.SelectBox
+import com.kiln.stratum.ui.components.StratumDropdownMenu
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
+import com.kiln.stratum.ui.theme.HiddenContentAlpha
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 레이어 패널이 엔진 쪽(ViewModel)에 보내는 일 */
@@ -174,9 +175,6 @@ class LayerControls(
 /** 레이어 줄 하나의 높이. 작은 그림(40dp)과 위아래 여백, 누르는 영역 48dp 이상. */
 private val RowHeight = 56.dp
 
-/** 숨긴 레이어 줄의 작은 그림·이름 흐림 정도 */
-private const val HiddenAlpha = 0.4f
-
 /** 작은 그림 칸의 크기와 그 바탕 체크 무늬 한 칸 */
 private val ThumbnailSize = 40.dp
 private val ThumbnailChecker = 5.dp
@@ -259,7 +257,7 @@ fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ToolbarButton(@DrawableRes icon: Int, @StringRes label: Int, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) {
+    StratumIconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) {
         Icon(painterResource(icon), contentDescription = stringResource(label))
     }
 }
@@ -349,7 +347,7 @@ private fun LayerRow(
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = StratumTheme.colors
     val actions = controls.actions
     val documentIndex = controls.layers.lastIndex - displayIndex
     val percent = (layer.opacity * 100).roundToInt()
@@ -380,8 +378,8 @@ private fun LayerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(RowHeight)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (selected) colors.secondaryContainer else Color.Transparent)
+                // 둥근 카드가 아니라 평평한 줄이고, 고르면 배경만 칠한다(시안)
+                .background(if (selected) colors.selectedBackground else Color.Transparent)
                 .selectable(selected = selected, enabled = controls.enabled, onClick = { actions.select(layer.id) })
                 .semantics {
                     contentDescription = description
@@ -409,27 +407,25 @@ private fun LayerRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 눈: 누르면 보이기·숨기기(누르는 영역 48dp). 화면 읽기 기능은 '레이어 보이기' 켜짐·꺼짐으로 읽는다.
-            IconToggleButton(
+            // 켜진 눈도 강조색이 아니라 보조색이고(줄마다 있어 눈에 띄지 않게), 숨긴 눈은 설명색이다
+            StratumIconToggleButton(
                 checked = layer.visible,
                 onCheckedChange = { actions.setVisible(layer.id, it) },
                 enabled = controls.canEdit,
+                checkedBackground = false,
+                contentColor = colors.textDescription,
+                checkedContentColor = colors.textSecondary,
                 modifier = Modifier.testTag(EditScreenTags.layerVisibility(layer.id))
             ) {
                 Icon(
                     painterResource(if (layer.visible) R.drawable.ic_visibility else R.drawable.ic_visibility_off),
-                    contentDescription = stringResource(R.string.layer_visibility),
-                    // 켜진 눈도 강조색이 아니라 글자색으로 둔다(줄마다 있어 눈에 띄지 않게)
-                    tint = when {
-                        !layer.visible -> colors.onSurfaceVariant
-                        selected -> colors.onSecondaryContainer
-                        else -> colors.onSurface
-                    }
+                    contentDescription = stringResource(R.string.layer_visibility)
                 )
             }
             // 작은 그림·이름: 길게 누르면 메뉴. 줄의 누르기(고르기)보다 먼저 알아채고, 길게 누른 뒤에는 누르기가 일어나지 않는다.
             // 숨긴 레이어는 흐리게 보인다
             Row(
-                Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenAlpha).longPressFirst(openMenu),
+                Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenContentAlpha).longPressFirst(openMenu),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
@@ -437,14 +433,14 @@ private fun LayerRow(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = layer.name,
-                        color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                        color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
                         text = stringResource(R.string.layer_row_detail, mode, percent),
-                        color = colors.onSurfaceVariant,
+                        color = colors.textDescription,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelSmall
@@ -472,7 +468,7 @@ private fun LayerRow(
                 Icon(
                     painterResource(R.drawable.ic_drag_handle),
                     contentDescription = null,
-                    tint = if (canMove) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f)
+                    tint = if (canMove) colors.textSecondary else colors.textDisabled
                 )
             }
         }
@@ -489,7 +485,7 @@ private fun LayerRow(
 private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex: Int, onDismiss: () -> Unit) {
     val actions = controls.actions
     val canEdit = controls.canEdit
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    StratumDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
         val layers = controls.layers
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
@@ -528,9 +524,9 @@ private fun LayerMenuItem(@StringRes label: Int, enabled: Boolean, tag: String, 
 @Composable
 private fun LayerThumbnail(thumbnail: Bitmap?, colorSpace: DocumentColorSpace, modifier: Modifier = Modifier) {
     val image = remember(thumbnail, colorSpace) { thumbnail?.let { DocumentColors.forScreen(it, colorSpace).asImageBitmap() } }
-    val colors = MaterialTheme.colorScheme
-    Canvas(modifier.clip(RoundedCornerShape(4.dp))) {
-        drawRect(colors.surfaceContainerHighest)
+    val colors = StratumTheme.colors
+    Canvas(modifier.clip(StratumShapes.Thumbnail)) {
+        drawRect(colors.fieldBackground)
         val scale = if (image == null) 1f else minOf(size.width / image.width, size.height / image.height)
         val width = if (image == null) size.width.roundToInt() else (image.width * scale).roundToInt().coerceAtLeast(1)
         val height = if (image == null) size.height.roundToInt() else (image.height * scale).roundToInt().coerceAtLeast(1)
@@ -549,7 +545,7 @@ private fun LayerThumbnail(thumbnail: Bitmap?, colorSpace: DocumentColorSpace, m
         if (image != null) {
             drawImage(image = image, dstOffset = IntOffset(left, top), dstSize = IntSize(width, height), filterQuality = FilterQuality.Medium)
         }
-        drawRect(colors.outlineVariant, Offset(left.toFloat(), top.toFloat()), Size(width.toFloat(), height.toFloat()), style = Stroke(width = 1.dp.toPx()))
+        drawRect(colors.divider, Offset(left.toFloat(), top.toFloat()), Size(width.toFloat(), height.toFloat()), style = Stroke(width = 1.dp.toPx()))
     }
 }
 
@@ -564,7 +560,7 @@ private fun LayerOpacityRow(controls: LayerControls) {
         Text(
             text = name,
             modifier = Modifier.width(88.dp),
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            color = if (enabled) StratumTheme.colors.textSecondary else StratumTheme.colors.textDisabled,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
@@ -587,6 +583,7 @@ private fun LayerOpacityRow(controls: LayerControls) {
         Text(
             text = shown,
             modifier = Modifier.width(48.dp),
+            color = if (enabled) StratumTheme.colors.textPrimary else StratumTheme.colors.textDisabled,
             textAlign = TextAlign.End,
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge
@@ -604,17 +601,20 @@ private fun BlendModeRow(controls: LayerControls) {
         Text(
             text = stringResource(R.string.layer_blend_mode),
             modifier = Modifier.width(88.dp),
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            color = if (enabled) StratumTheme.colors.textSecondary else StratumTheme.colors.textDisabled,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
         Box {
-            OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.testTag(EditScreenTags.LAYER_BLEND)) {
-                Text(stringResource(blendModeLabel(current)), maxLines = 1)
-                Icon(painterResource(R.drawable.ic_expand_more), contentDescription = null, modifier = Modifier.padding(start = 4.dp))
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // 알약 버튼 대신 모서리 6dp의 작은 선택 상자(시안)
+            SelectBox(
+                text = stringResource(blendModeLabel(current)),
+                onClick = { open = true },
+                enabled = enabled,
+                modifier = Modifier.testTag(EditScreenTags.LAYER_BLEND)
+            )
+            StratumDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 for (mode in BlendMode.entries) {
                     DropdownMenuItem(
                         text = { Text(stringResource(blendModeLabel(mode))) },
