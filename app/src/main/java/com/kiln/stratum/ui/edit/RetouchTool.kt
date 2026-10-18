@@ -84,6 +84,7 @@ val SubTool.retouchMode: RetouchMode?
  * @property source 정한 가져올 곳(없으면 null)
  * @property picking 캔버스를 누르면 가져올 곳을 정하는 중인지(가져올 곳이 없으면 늘 그렇다)
  * @property onPick 가져올 곳 정하기 버튼을 눌렀다(켜고 끈다)
+ * @property sizePreview 크기 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
  */
 @Stable
 class RetouchControls(
@@ -91,7 +92,8 @@ class RetouchControls(
     val onChange: (BrushSettings) -> Unit,
     val source: CloneSource?,
     val picking: Boolean,
-    val onPick: () -> Unit
+    val onPick: () -> Unit,
+    val sizePreview: SizePreviewState? = null
 )
 
 /**
@@ -127,13 +129,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
-        OptionSlider(
-            label = stringResource(R.string.brush_size),
-            shown = stringResource(R.string.brush_size_value, settings.size.roundToInt()),
-            fraction = sizeToFraction(settings.size),
-            onFraction = { controls.onChange(settings.copy(size = fractionToSize(it))) },
-            tag = EditScreenTags.RETOUCH_SIZE
-        )
+        SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.brush_hardness),
             shown = stringResource(R.string.layer_percent, (settings.hardness * 100).roundToInt()),

@@ -42,12 +42,14 @@ import kotlin.math.roundToInt
  * 브러시·지우개 옵션이 쓰는 값과 할 일. 설정은 ViewModel이 들고(앱을 끌 때까지 남음), 바꾸면 [onChange]로 알린다.
  *
  * @property erase 지우개 옵션인지. 지우개는 색을 고르지 않는다.
+ * @property sizePreview 크기 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
  */
 @Stable
 class BrushControls(
     val settings: BrushSettings,
     val erase: Boolean,
-    val onChange: (BrushSettings) -> Unit
+    val onChange: (BrushSettings) -> Unit,
+    val sizePreview: SizePreviewState? = null
 )
 
 /** 옵션에 보일 색(`0xAARRGGBB`). 검정·흰색·회색과 무지개 차례의 기본색이다. */
@@ -66,13 +68,7 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), fillHeight = false) {
         if (!controls.erase) ColorSwatches(settings.color) { controls.onChange(settings.copy(color = it)) }
-        OptionSlider(
-            label = stringResource(R.string.brush_size),
-            shown = stringResource(R.string.brush_size_value, settings.size.roundToInt()),
-            fraction = sizeToFraction(settings.size),
-            onFraction = { controls.onChange(settings.copy(size = fractionToSize(it))) },
-            tag = EditScreenTags.BRUSH_SIZE
-        )
+        SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.BRUSH_SIZE, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.brush_hardness),
             shown = stringResource(R.string.layer_percent, (settings.hardness * 100).roundToInt()),
@@ -91,9 +87,31 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
     }
 }
 
-/** 이름·가는 슬라이더(0..1)·숫자 한 줄. 끄는 대로 바로 바꾼다(그리기 전 설정이라 미리 보기·기록이 따로 없다). */
+/**
+ * 크기 슬라이더(1~1000px, 로그 눈금). 끄는 동안 [preview]가 캔버스에 그 크기를 보인다(손을 떼면 잠깐 뒤 사라짐).
+ * 브러시·지우개·리터칭·명암·유동화가 같이 쓴다.
+ */
 @Composable
-internal fun OptionSlider(label: String, shown: String, fraction: Float, onFraction: (Float) -> Unit, tag: String) {
+internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
+    OptionSlider(
+        label = stringResource(R.string.brush_size),
+        shown = stringResource(R.string.brush_size_value, size.roundToInt()),
+        fraction = sizeToFraction(size),
+        onFraction = {
+            preview?.onChange()
+            onSize(fractionToSize(it))
+        },
+        tag = tag,
+        onFinished = { preview?.onFinished() }
+    )
+}
+
+/**
+ * 이름·가는 슬라이더(0..1)·숫자 한 줄. 끄는 대로 바로 바꾼다(그리기 전 설정이라 기록이 따로 없다).
+ * [onFinished]는 손을 뗄 때 부른다.
+ */
+@Composable
+internal fun OptionSlider(label: String, shown: String, fraction: Float, onFraction: (Float) -> Unit, tag: String, onFinished: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -105,7 +123,7 @@ internal fun OptionSlider(label: String, shown: String, fraction: Float, onFract
         ThinSlider(
             value = fraction,
             onValueChange = onFraction,
-            onValueChangeFinished = {},
+            onValueChangeFinished = onFinished,
             valueRange = 0f..1f,
             enabled = true,
             centered = false,

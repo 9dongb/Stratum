@@ -173,6 +173,8 @@ fun EditScreen(
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
     var retouchPicking by rememberSaveable { mutableStateOf(false) }
+    // 크기 슬라이더를 끄는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
+    val sizePreview = rememberSizePreviewState()
     // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
@@ -268,8 +270,8 @@ fun EditScreen(
         }
         // 고른 브러시·지우개의 설정
         val brushControls = when (activeTool) {
-            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush)
-            EditTool.Eraser -> BrushControls(eraser, erase = true, onChange = onEraser)
+            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush, sizePreview = sizePreview)
+            EditTool.Eraser -> BrushControls(eraser, erase = true, onChange = onEraser, sizePreview = sizePreview)
             else -> null
         }
         val textControls = TextControls(textStyle, onTextStyle).takeIf { activeTool == EditTool.Text }
@@ -284,9 +286,18 @@ fun EditScreen(
             onChange = onRetouch,
             source = cloneSource,
             picking = retouchPicks,
-            onPick = { if (cloneSource != null) retouchPicking = !retouchPicking }
+            onPick = { if (cloneSource != null) retouchPicking = !retouchPicking },
+            sizePreview = sizePreview
         ).takeIf { activeTool == EditTool.Retouch }
-        val toneControls = ToneControls(toneOptions, onToneOptions).takeIf { activeTool == EditTool.Tone }
+        val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
+        // 크기를 미리 볼 도구의 크기·단단함
+        val sizedBrush = when (activeTool) {
+            EditTool.Brush -> brush
+            EditTool.Eraser -> eraser
+            EditTool.Retouch -> retouch
+            EditTool.Tone -> toneOptions.brush
+            else -> null
+        }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -311,7 +322,8 @@ fun EditScreen(
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
         val railToolTitle = toolTitle?.takeIf { railTool != null }
         val railToolOptions = toolOptions?.takeIf { railTool != null }
-        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다
+        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다.
+        // 크기 슬라이더를 끄는 동안은 그 위에 브러시 크기 원을 보인다.
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
             if (ready != null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
@@ -369,6 +381,15 @@ fun EditScreen(
                     document = ready.documentSize,
                     view = { viewState.view },
                     onFrameChange = { cropFrame = it },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && sizedBrush != null && sizePreview.visible) {
+                SizePreviewOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    size = sizedBrush.size,
+                    hardness = sizedBrush.hardness,
                     modifier = Modifier.fillMaxSize()
                 )
             }

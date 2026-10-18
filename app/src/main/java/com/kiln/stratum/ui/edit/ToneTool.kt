@@ -56,9 +56,12 @@ interface ToneActions {
     }
 }
 
-/** 명암 옵션이 쓰는 값과 할 일. 설정은 ViewModel이 들고(앱을 끌 때까지 남음), 바꾸면 [onChange]로 알린다. */
+/**
+ * 명암 옵션이 쓰는 값과 할 일. 설정은 ViewModel이 들고(앱을 끌 때까지 남음), 바꾸면 [onChange]로 알린다.
+ * [sizePreview]는 크기 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태다(없으면 보이지 않음).
+ */
 @Stable
-class ToneControls(val options: ToneOptions, val onChange: (ToneOptions) -> Unit)
+class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? = null, val onChange: (ToneOptions) -> Unit)
 
 /**
  * 명암 옵션: 하위 도구(닷지·번), 범위(어두운 영역·중간 영역·밝은 영역), 노출, 크기, 단단함, 안내 한 줄.
@@ -80,13 +83,7 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
             tag = EditScreenTags.TONE_EXPOSURE
         )
-        OptionSlider(
-            label = stringResource(R.string.brush_size),
-            shown = stringResource(R.string.brush_size_value, brush.size.roundToInt()),
-            fraction = sizeToFraction(brush.size),
-            onFraction = { controls.onChange(options.copy(brush = brush.copy(size = fractionToSize(it)))) },
-            tag = EditScreenTags.TONE_SIZE
-        )
+        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.brush_hardness),
             shown = stringResource(R.string.layer_percent, (brush.hardness * 100).roundToInt()),

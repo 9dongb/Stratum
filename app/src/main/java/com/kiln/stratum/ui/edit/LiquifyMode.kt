@@ -136,6 +136,8 @@ interface LiquifyActions {
 fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier = Modifier) {
     BackHandler(enabled = !state.busy, onBack = actions::cancel)
     val viewState = rememberCanvasViewState(state.documentSize)
+    // 크기 슬라이더를 끄는 동안 캔버스 가운데에 브러시 크기를 보인다
+    val sizePreview = rememberSizePreviewState()
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = MaterialTheme.colorScheme.surface) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthClass = widthClassOf(maxWidth.value)
@@ -143,14 +145,14 @@ fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions)
                 val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
-                    LiquifyCanvas(state, viewState, actions, canvasModifier)
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, canvasModifier)
                 }
                 if (widthClass == WidthClass.Expanded) {
                     Row(Modifier.fillMaxSize()) {
                         canvas(Modifier.weight(1f).fillMaxHeight())
                         Surface(Modifier.width(320.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                             LiquifyOptions(
-                                state, actions,
+                                state, actions, sizePreview,
                                 Modifier
                                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
                                     .verticalScroll(rememberScrollState())
@@ -162,7 +164,7 @@ fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier
                     canvas(Modifier.weight(1f).fillMaxWidth())
                     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         LiquifyOptions(
-                            state, actions,
+                            state, actions, sizePreview,
                             Modifier
                                 .heightIn(max = maxOptionsHeight)
                                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
@@ -203,9 +205,12 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
     )
 }
 
-/** 비튼 미리 보기와 브러시 손가락 자리. 적용하는 동안 위쪽에 처리 중 막대를 보인다. */
+/**
+ * 비튼 미리 보기와 브러시 손가락 자리. 적용하는 동안 위쪽에 처리 중 막대를 보인다.
+ * [showSize]면(크기 슬라이더를 끄는 중) 가운데에 브러시 크기 원을 보인다.
+ */
 @Composable
-private fun LiquifyCanvas(state: LiquifyState, viewState: CanvasViewState, actions: LiquifyActions, modifier: Modifier) {
+private fun LiquifyCanvas(state: LiquifyState, viewState: CanvasViewState, actions: LiquifyActions, showSize: Boolean, modifier: Modifier) {
     val ready = remember(state.preview, state.documentSize) { EditorState.Ready(state.preview, state.documentSize) }
     Box(
         modifier
@@ -214,6 +219,9 @@ private fun LiquifyCanvas(state: LiquifyState, viewState: CanvasViewState, actio
     ) {
         CanvasViewport(ready, viewState, Modifier.fillMaxSize()) {
             LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
+            if (showSize) {
+                SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())
+            }
         }
         if (state.busy) {
             LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -283,18 +291,12 @@ fun LiquifyOverlay(
     }
 }
 
-/** 옵션: 도구, 크기, 압력, 안내 */
+/** 옵션: 도구, 크기(끄는 동안 [sizePreview]가 캔버스에 크기를 보임), 압력, 안내 */
 @Composable
-private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, modifier: Modifier) {
+private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState, modifier: Modifier) {
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.LIQUIFY_OPTIONS), gap = 8.dp, fillHeight = false) {
         LiquifyToolRow(state.tool, enabled = !state.busy, onTool = actions::setTool)
-        OptionSlider(
-            label = stringResource(R.string.brush_size),
-            shown = stringResource(R.string.brush_size_value, state.size.roundToInt()),
-            fraction = sizeToFraction(state.size),
-            onFraction = { actions.setSize(fractionToSize(it)) },
-            tag = EditScreenTags.LIQUIFY_SIZE
-        )
+        SizeSlider(state.size, actions::setSize, EditScreenTags.LIQUIFY_SIZE, sizePreview)
         OptionSlider(
             label = stringResource(R.string.liquify_strength),
             shown = stringResource(R.string.layer_percent, (state.strength * 100).roundToInt()),

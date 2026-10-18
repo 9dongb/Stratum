@@ -48,6 +48,9 @@ object EditScreenTags {
     const val BRUSH_OPACITY = "brushOpacity"
     const val BRUSH_COLORS = "brushColors"
     const val STROKE_OVERLAY = "strokeOverlay"
+
+    /** 크기 슬라이더를 끄는 동안 캔버스에 보이는 브러시 크기 원 */
+    const val SIZE_PREVIEW = "sizePreview"
     const val TEXT_OPTIONS = "textOptions"
     const val TEXT_SIZE = "textSize"
     const val TEXT_OVERLAY = "textOverlay"
