@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -81,6 +84,7 @@ import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
@@ -100,12 +104,10 @@ import kotlinx.coroutines.flow.emptyFlow
  * 편집 화면. 상단 바 아래를 화면 폭에 따라 세 가지로 배치한다(CLAUDE.md 6장).
  *
  * - Compact(커버·폰 세로): 위 캔버스, 아래 도구 탭 줄
- * - Medium(메인 세로): 왼쪽 도구 막대, 캔버스, 아래 접이식 패널
- * - Expanded(메인 가로): 왼쪽 도구 막대, 캔버스, 오른쪽 고정 패널
+ * - Medium(메인 세로)·Expanded(메인 가로): 왼쪽 도구 막대와 캔버스. 고정 패널은 없다(2026-10-19 사용자 요청).
  *
- * 도구는 자르기·변형, 조정, 레이어가 켜져 있다. 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이,
- * 메인 세로는 아래 패널, 메인 가로는 오른쪽 패널 맨 위에 보인다.
- * 조정·레이어는 커버 화면에서는 탭(도구)이고, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다.
+ * 도구를 고르면 그 옵션이 커버 화면은 캔버스와 탭 줄 사이, 메인 화면은 도구 막대 오른쪽의 좁은 띠(칸을 누르면 옵션 창)에 보인다.
+ * 조정·레이어는 커버 화면에서는 탭(도구)이고, 메인 화면에서는 상단 바 버튼으로 여는 떠 있는 패널(캔버스 오른쪽 위)이다.
  *
  * @param onCanvasSize 캔버스 영역의 크기(픽셀)가 정해지거나 바뀌면 알린다. 엔진이 알맞은 축소본을 그리는 데 쓴다.
  * @param onViewport 확대·이동으로 보기가 바뀌면 보이는 문서 영역을 알린다. 엔진이 보이는 곳을 선명하게 다시 그리는 데 쓴다.
@@ -188,16 +190,12 @@ fun EditScreen(
     eyedropper: () -> EyedropperState? = { null },
     eyedropperActions: EyedropperActions = EyedropperActions.None
 ) {
-    // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
-    var panelExpanded by rememberSaveable { mutableStateOf(true) }
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
     // 고른 도구. 커버에서 고른 도구가 펼친 뒤에도 그대로 이어지도록 배치를 고르기 전에 둔다.
     val selection = rememberToolSelection()
     // 메인 화면 캔버스 위에 떠 있는 옵션 창·패널(한 번에 하나)
     val floating = rememberFloatingState()
-    // 메인 세로 아래 패널의 탭. 커버에서 조정·레이어를 고른 채 펼치면 그 탭을 보인다.
-    var panelTab by rememberSaveable { mutableStateOf(PanelTab.ADJUST) }
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
@@ -212,12 +210,6 @@ fun EditScreen(
     val nothingToRedoText = stringResource(R.string.gesture_nothing_to_redo)
     // 세 손가락으로 미는 동안 시작할 때의 브러시 설정(그 값에서 움직인 거리만큼 바꾼다)
     val swipeAnchor = remember { SwipeAnchor<BrushSettings>() }
-    // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
-    LaunchedEffect(selection.active) {
-        if (selection.active != null) panelExpanded = true
-        if (selection.active == EditTool.Adjust) panelTab = PanelTab.ADJUST
-        if (selection.active == EditTool.Layers) panelTab = PanelTab.LAYERS
-    }
     val ready = state as? EditorState.Ready
     // 유동화는 도구로 남지 않고 작업 모드를 연다
     LaunchedEffect(selection.active) {
@@ -320,6 +312,7 @@ fun EditScreen(
                 // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 맞춘다.
                 // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠를 뺀 자리에 맞춘다(결정 기록 '편집 화면 도구 배치').
                 if (cropFrame == null) {
+                    floating.closePanel()
                     cropFrame = CropFrame.whole(ready.documentSize)
                     val start = if (widthClass != WidthClass.Compact && canvasArea.width > 0 && canvasArea.height > 0) {
                         val margin = with(density) { CropStartMargin.roundToPx() }
@@ -351,10 +344,9 @@ fun EditScreen(
         // 도구·하위 도구·배치가 바뀌거나, 자르기·유동화를 시작하거나, 다른 크기의 문서를 보면 옵션 창을 닫는다(칸이 바뀌거나 사라진다)
         val activeMode = activeTool?.let { selection.modeOf(it) }
         LaunchedEffect(activeTool, activeMode, widthClass, cropMode, ready?.documentSize, liquify != null) { floating.closeFlyout() }
-        // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이 뜨면 떠 있는 것을 닫는다
-        val dialogOpen = resizeInput != null || textAt != null || exportDraft != null || palette != null || state is EditorState.AskSize
+        // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 떠 있는 것을 닫는다
+        val dialogOpen = resizeInput != null || textAt != null || exportDraft != null || palette != null || state is EditorState.AskSize || liquify != null
         LaunchedEffect(dialogOpen) { if (dialogOpen) floating.close() }
-        val toolTitle = activeTool?.let { stringResource(it.label) }
         val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
             val document = checkNotNull(ready).documentSize
             CropControls(
@@ -449,8 +441,34 @@ fun EditScreen(
                 else -> null
             }
         }
-        val railToolTitle = toolTitle?.takeIf { railTool != null && stripItems == null }
-        val railToolOptions = toolOptions?.takeIf { railTool != null && stripItems == null }
+        // 도구 막대에서 도구를 고르면 떠 있는 패널을 닫는다(바로 칠할 수 있게). 다시 만들어질 때(접기·펼치기)는 닫지 않는다.
+        var lastRailTool by remember { mutableStateOf(railTool) }
+        LaunchedEffect(railTool) {
+            if (railTool != null && railTool != lastRailTool) floating.closePanel()
+            lastRailTool = railTool
+        }
+        // 접기·펼치기 잇기(결정 기록 '떠 있는 레이어·조정 패널'): 커버에서 고른 조정·레이어 탭은 펼치면 그 패널로 열고,
+        // 고른 도구 없이 패널을 연 채 접으면 커버에서 그 탭을 연다
+        LaunchedEffect(widthClass) {
+            if (widthClass == WidthClass.Compact) {
+                floating.panel?.let { panel ->
+                    if (selection.active == null) selection.tap(if (panel == MainPanel.ADJUST) EditTool.Adjust else EditTool.Layers)
+                    floating.closePanel()
+                }
+            } else {
+                when (selection.active) {
+                    EditTool.Adjust -> {
+                        selection.close()
+                        floating.openPanel(MainPanel.ADJUST)
+                    }
+                    EditTool.Layers -> {
+                        selection.close()
+                        floating.openPanel(MainPanel.LAYERS)
+                    }
+                    else -> Unit
+                }
+            }
+        }
         // 메인 화면은 띠에 안내 글이 들어갈 자리가 없어, 도구를 고를 때 캔버스 위쪽 가운데에 알림으로 한 번 보인다
         val toolHint = if (stripItems != null) toolHintText(railTool, activeMode, retouchPicks) else null
         var shownHints by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -467,6 +485,8 @@ fun EditScreen(
                 OptionStrip(stripItems, floating, Modifier.align(Alignment.CenterStart))
                 FlyoutHost(floating, stripItems, Modifier.fillMaxSize().windowInsetsPadding(insets))
             }
+            // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위)
+            FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
         }
         // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다.
         // 크기 슬라이더를 끄는 동안은 그 위에 브러시 크기 원을 보인다.
@@ -582,7 +602,13 @@ fun EditScreen(
                     onRedo = onRedo,
                     // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
                     canExport = ready != null && !ready.busy && !cropMode,
-                    onExport = { exportDraft = exportChoice }
+                    onExport = { exportDraft = exportChoice },
+                    // 메인 화면만: 조정·레이어 패널 버튼. 자르기 중에는 막는다(조정·레이어를 막으므로)
+                    panels = if (widthClass == WidthClass.Compact) {
+                        null
+                    } else {
+                        PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
+                    }
                 )
             },
             // 시스템 바·카메라 구멍은 영역마다 바깥쪽만 비켜 두므로, Scaffold는 상단 바 높이만 비운다
@@ -643,63 +669,19 @@ fun EditScreen(
             }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Horizontal, gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
+                    EditCanvas(state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode, WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
                     if (toolOptions != null) ToolOptionsSheet(toolOptions, maxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION)
                     ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                 }
 
-                WidthClass.Medium -> Row(body) {
-                    ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
-                    Column(Modifier.weight(1f)) {
-                        EditCanvas(
-                            state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.End, gestureToast,
-                            Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, floating = floatingUi
-                        )
-                        val adjustTab = adjustControls?.takeIf { panelTab == PanelTab.ADJUST }
-                        val layersTab = layerControls?.takeIf { panelTab == PanelTab.LAYERS }
-                        BottomPanel(
-                            expanded = panelExpanded,
-                            onToggle = { panelExpanded = !panelExpanded },
-                            toolTitle = railToolTitle,
-                            toolOptions = railToolOptions,
-                            tab = panelTab,
-                            onTab = { panelTab = it },
-                            tabsEnabled = toolsEnabled,
-                            tabAction = when {
-                                adjustTab != null -> {
-                                    { ResetAllButton(adjustTab) }
-                                }
-                                layersTab != null -> {
-                                    { LayerToolbar(layersTab) }
-                                }
-                                else -> null
-                            },
-                            tabContent = when {
-                                adjustTab != null -> {
-                                    { AdjustList(adjustTab, twoColumns = true) }
-                                }
-                                layersTab != null -> {
-                                    { LayerTwoColumns(layersTab) }
-                                }
-                                else -> null
-                            }
-                        )
-                    }
-                }
-
-                WidthClass.Expanded -> Row(body) {
+                // 메인 세로·가로: 도구 막대와 캔버스. 도구 옵션 띠·떠 있는 패널은 캔버스 위에 겹친다(floatingUi).
+                // 캔버스는 키보드 높이를 빼지 않는다(시스템 바·카메라 구멍만 피함). 글자·크기 변경 창에서 키보드가 열려도 다시 그리지 않는다.
+                else -> Row(body) {
                     ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
                     EditCanvas(
-                        state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode, WindowInsetsSides.Bottom, gestureToast,
-                        Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, floating = floatingUi
-                    )
-                    SidePanel(
-                        toolTitle = railToolTitle,
-                        toolOptions = railToolOptions,
-                        adjustAction = adjustControls?.let { controls -> { ResetAllButton(controls) } },
-                        adjustContent = adjustControls?.let { controls -> { AdjustList(controls, twoColumns = false) } },
-                        layersAction = layerControls?.let { controls -> { LayerToolbar(controls) } },
-                        layersContent = layerControls?.let { controls -> { LayerColumn(controls) } }
+                        state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode,
+                        WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
+                        gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, floating = floatingUi
                     )
                 }
             }
@@ -790,8 +772,11 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp) {
     }
 }
 
+/** 메인 화면 상단 바의 조정·레이어 패널 버튼: 열린 패널, 누를 수 있는지, 누르면 할 일(열고 닫음) */
+class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
+
 /**
- * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, 내보내기.
+ * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
  * 작업 공간을 넓게 쓰려고 버튼이 꼭 들어가는 높이(48dp)로 낮게 두고, 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
@@ -804,7 +789,8 @@ private fun EditTopBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     canExport: Boolean,
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    panels: PanelToggles? = null
 ) {
     val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
@@ -833,6 +819,22 @@ private fun EditTopBar(
                         contentDescription = stringResource(R.string.action_redo)
                     )
                 }
+                // 조정·레이어 패널 버튼(프로크리에이트처럼 켜고 끈다). 열린 패널의 버튼이 켜진 모양이다.
+                if (panels != null) {
+                    for (panel in MainPanel.entries) {
+                        StratumIconToggleButton(
+                            checked = panels.open == panel,
+                            onCheckedChange = { panels.onToggle(panel) },
+                            enabled = panels.enabled,
+                            modifier = Modifier.testTag(EditScreenTags.panelToggle(panel))
+                        ) {
+                            Icon(
+                                painter = painterResource(if (panel == MainPanel.ADJUST) R.drawable.ic_tune else R.drawable.ic_layers),
+                                contentDescription = stringResource(if (panel == MainPanel.ADJUST) R.string.tool_adjust else R.string.tool_layers)
+                            )
+                        }
+                    }
+                }
                 // 내보내기는 시안처럼 파란 글자 버튼이다(사용자 결정, 자리는 그대로)
                 AccentButton(
                     onClick = onExport,
@@ -852,7 +854,7 @@ private fun EditTopBar(
 /**
  * 캔버스 영역. 엔진이 그린 축소본을 보기 상태([viewState])대로 보여 주고, 두 손가락으로 확대·이동한다.
  * 화면 코드는 픽셀을 계산하지 않는다(CLAUDE.md 3장).
- * 배경은 영역 끝까지 칠하고, 안의 내용만 [insetSides] 쪽 시스템 바·카메라 구멍을 피한다.
+ * 배경은 영역 끝까지 칠하고, 안의 내용만 [insets](시스템 바·카메라 구멍)를 피한다.
  * 편집을 처리하는 동안 위쪽에 처리 중 막대를 보이고, [messages]는 아래쪽 알림 막대로 보인다.
  * [gestureToast]는 두 손가락·세 손가락 톡의 짧은 알림으로, 위쪽 가운데에 뜬다.
  * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
@@ -868,7 +870,7 @@ private fun EditCanvas(
     onViewport: (Viewport) -> Unit,
     overlay: @Composable BoxScope.() -> Unit,
     showZoomChip: Boolean,
-    insetSides: WindowInsetsSides,
+    insets: WindowInsets,
     gestureToast: GestureToastState,
     modifier: Modifier = Modifier,
     onTwoFingerTap: (() -> Unit)? = null,
@@ -919,7 +921,6 @@ private fun EditCanvas(
             }
         }
     }
-    val insets = WindowInsets.safeDrawing.only(insetSides)
     Box(modifier.fillMaxSize().background(StratumTheme.colors.workspace)) {
         Box(
             modifier = Modifier

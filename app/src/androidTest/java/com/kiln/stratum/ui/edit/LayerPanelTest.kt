@@ -358,11 +358,12 @@ class LayerPanelTest {
     }
 
     @Test
-    fun expanded_longPressOpensTheMenuInTheSidePanel() {
+    fun expanded_longPressOpensTheMenuInTheFloatingPanel() {
         val fake = FakeLayers(2)
         show(fake, 930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
 
-        composeRule.onNode(hasTestTag(EditScreenTags.layerRow(LayerId(1))) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
+        composeRule.onNode(hasTestTag(EditScreenTags.layerRow(LayerId(1))) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
             .performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsEnabled().performClick()
 
@@ -370,44 +371,19 @@ class LayerPanelTest {
     }
 
     @Test
-    fun medium_layersTab_hasTheToolbarInTheHeader_andAvoidsTheHinge() {
+    fun medium_layersPanel_hasTheToolbarInTheHeader_andAvoidsTheHinge() {
         val fake = FakeLayers(2)
         show(fake, 700, 900)
-
-        composeRule.onNodeWithTag(EditScreenTags.panelTab(PanelTab.LAYERS)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.LAYER_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
-            .assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).assertIsDisplayed()
-
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val middle = screen.center.y.roundToInt()
         val hinge = Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
-        composeRule.assertClickablesAvoid(hinge)
-    }
 
-    @Test
-    fun expanded_sectionsShareTheHeight_andCollapsingOneGivesTheOtherRoom() {
-        val fake = FakeLayers(2)
-        show(fake, 930, 700)
-        val list = composeRule.onNode(hasTestTag(EditScreenTags.LAYER_LIST) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
-        val before = list.fetchSemanticsNode().layoutBoundsInWindow().height
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.LAYER_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).assertIsDisplayed()
 
-        // 조정 칸을 접는다
-        val collapse = composeRule.activity.getString(R.string.section_collapse, composeRule.activity.getString(R.string.tool_adjust))
-        composeRule.onNode(
-            SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(collapse)) and
-                hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_ADJUST))
-        ).performClick()
-
-        val after = list.fetchSemanticsNode().layoutBoundsInWindow().height
-        assertTrue("list should grow: $before -> $after", after > before + 50)
-
-        // 가운데를 세로로 지나가는 힌지는 오른쪽 패널에 닿지 않는다
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.assertClickablesAvoid(hinge)
     }
 }

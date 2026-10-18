@@ -148,6 +148,17 @@ fun flyoutOffset(anchor: Region, width: Int, height: Int, region: Region, gap: I
 }
 
 /**
+ * 메인 화면 오른쪽 위에 띄우는 레이어·조정 패널이 들어갈 수 있는 영역(모두 창 좌표).
+ * [area](패널을 띄울 영역)에서 힌지 띠를 뺀 조각 가운데, 가로로는 가장 오른쪽 조각, 세로로는 가장 위 조각이다.
+ * 그래서 펼친 폴드의 메인 가로는 힌지 오른쪽, 메인 세로는 힌지 위에 뜬다.
+ */
+fun panelRegion(area: Region, verticalBands: List<Span>, horizontalBands: List<Span>): Region {
+    val columns = pieceAt(Span(area.left, area.right), verticalBands, area.right - 1)
+    val rows = pieceAt(Span(area.top, area.bottom), horizontalBands, area.top)
+    return Region(columns.start, rows.start, columns.end, rows.end)
+}
+
+/**
  * [range]에서 [bands]가 덮는 부분을 빼고 남은 구간 중 가장 긴 것. 길이가 같으면 앞의 것이다.
  * 띠가 다 덮어 남는 구간이 없으면 [range]를 그대로 돌려준다.
  */

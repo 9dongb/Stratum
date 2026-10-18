@@ -23,7 +23,6 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -243,53 +242,53 @@ class AdjustPanelTest {
     }
 
     @Test
-    fun medium_adjustTabShowsAllSliders_andAvoidsTheHinge() {
+    fun medium_adjustPanelShowsAllSliders_andAvoidsTheHinge() {
+        // 폴드8 메인 세로처럼 화면 가운데를 가로로 지나가는 힌지: 떠 있는 패널은 그 위에 있다
         show(700, 900)
-
-        composeRule.onNodeWithTag(EditScreenTags.panelTab(PanelTab.ADJUST)).assertIsSelected()
-        composeRule.onNode(hasTestTag(EditScreenTags.ADJUST_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.BOTTOM_PANEL)))
-            .assertIsDisplayed()
-        // 고른 탭이 탭 줄을 다 차지하지 않아, 오른쪽의 '모두 초기화'와 접기 버튼이 보인다
-        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.kiln.stratum.R.string.panel_collapse)).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.SATURATION)).performScrollTo().assertIsDisplayed()
-
-        // 폴드8 메인 세로처럼 화면 가운데를 가로로 지나가는 힌지: 패널은 그 아래에 있다
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val middle = screen.center.y.roundToInt()
         val hinge = Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
+
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.ADJUST_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.SATURATION)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).performScrollTo().assertIsDisplayed()
+
         composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test
-    fun medium_railToolOptionsGoToTheStrip_andTheAdjustTabStays() {
+    fun medium_railToolClosesTheAdjustPanel_andShowsItsStrip() {
         show(700, 900)
-
-        // 도구 옵션은 도구 막대 오른쪽 띠에 보이고 아래 패널의 탭은 그대로다(결정 기록 '편집 화면 도구 배치')
-        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+
+        // 도구 막대에서 도구를 고르면 패널이 닫히고, 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '떠 있는 레이어·조정 패널')
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
     }
 
     @Test
-    fun expanded_sidePanelShowsAdjust_avoidsTheHinge_andCropDisablesIt() {
+    fun expanded_adjustPanelAvoidsTheHinge_andCropClosesIt() {
         show(930, 700)
-        composeRule.onNode(hasTestTag(EditScreenTags.ADJUST_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.SIDE_PANEL)))
-            .assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         slider(AdjustItem.EXPOSURE).assertIsEnabled()
 
-        // 폴드8 메인 가로처럼 가운데를 세로로 지나가는 힌지
+        // 폴드8 메인 가로처럼 가운데를 세로로 지나가는 힌지: 패널은 오른쪽 조각에 있다
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
         val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.assertClickablesAvoid(hinge)
 
-        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로). 자르기 옵션은 왼쪽 띠에 있다.
+        // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로): 패널을 닫고 버튼을 끈다
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
-        slider(AdjustItem.EXPOSURE).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).assertIsNotEnabled()
     }
 
     @Test

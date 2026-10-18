@@ -115,13 +115,17 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun adjustChosenOnCover_isNotCaughtOnTheMainScreen() {
-        // 커버에서 조정을 고른 채 펼치면 메인에서는 보이지 않으므로 뒤로는 바로 홈이다
+    fun adjustChosenOnCover_opensThePanelOnTheMainScreen_andBackClosesItFirst() {
+        // 커버에서 조정을 고른 채 펼치면 메인에서는 떠 있는 조정 패널로 열린다. 뒤로는 그 패널을 먼저 닫는다.
         show(COVER)
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performScrollTo().performClick()
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertExists()
 
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, homeBacks) }
         back()
         composeRule.runOnIdle { assertEquals(1, homeBacks) }
     }

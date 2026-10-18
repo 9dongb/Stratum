@@ -11,14 +11,11 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.kiln.stratum.R
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -73,12 +70,12 @@ class EditScreenLayoutTest {
         composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
             .assertCountEquals(EditTool.tabTools.size)
         composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BOTTOM_PANEL).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.SIDE_PANEL).assertDoesNotExist()
+        // 커버는 조정·레이어가 탭이라 상단 바의 패널 버튼이 없다
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).assertDoesNotExist()
     }
 
     @Test
-    fun mediumWidth_showsToolRailAndBottomPanel() {
+    fun mediumWidth_showsToolRailAndPanelButtons_withoutAFixedPanel() {
         showEditScreen(700, 900)
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).assertExists()
@@ -86,20 +83,20 @@ class EditScreenLayoutTest {
         for (tool in EditTool.railTools) {
             composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).assertExists()
         }
-        composeRule.onNodeWithTag(EditScreenTags.BOTTOM_PANEL).assertExists()
+        for (panel in MainPanel.entries) composeRule.onNodeWithTag(EditScreenTags.panelToggle(panel)).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.SIDE_PANEL).assertDoesNotExist()
     }
 
     @Test
-    fun expandedWidth_showsToolRailAndSidePanel() {
+    fun expandedWidth_showsToolRailAndPanelButtons_withoutAFixedPanel() {
         showEditScreen(930, 700)
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.SIDE_PANEL).assertExists()
+        for (panel in MainPanel.entries) composeRule.onNodeWithTag(EditScreenTags.panelToggle(panel)).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BOTTOM_PANEL).assertDoesNotExist()
     }
 
     @Test
@@ -118,17 +115,6 @@ class EditScreenLayoutTest {
         // 상단 바: 버튼 높이(48dp)에 상태 표시줄(또는 버튼에 걸리는 카메라 구멍) 높이만 더한다
         val height = bar.layoutBoundsInWindow().height
         assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
-    }
-
-    @Test
-    fun bottomPanel_collapsesAndExpands() {
-        showEditScreen(700, 900)
-        val collapse = composeRule.activity.getString(R.string.panel_collapse)
-        val expand = composeRule.activity.getString(R.string.panel_expand)
-
-        composeRule.onNodeWithContentDescription(collapse).performClick()
-        composeRule.onNodeWithContentDescription(expand).performClick()
-        composeRule.onNodeWithContentDescription(collapse).assertExists()
     }
 
     @Test

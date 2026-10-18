@@ -220,4 +220,14 @@ class HingePlacementTest {
         assertEquals(76 to 280, flyoutOffset(Region(0, 350, 72, 400), width = 200, height = 120, region = region, gap = 4))
         assertEquals(100 to 0, flyoutOffset(Region(0, 0, 300, 56), width = 300, height = 120, region = region, gap = 4))
     }
+
+    @Test
+    fun panelRegion_isTheTopRightPiece() {
+        val area = Region(100, 50, 900, 700)
+        // 힌지가 없으면 영역 전체
+        assertEquals(area, panelRegion(area, emptyList(), emptyList()))
+        // 세로 힌지면 오른쪽 조각, 가로 힌지면 위 조각
+        assertEquals(Region(440, 50, 900, 700), panelRegion(area, listOf(Span(400, 440)), emptyList()))
+        assertEquals(Region(100, 50, 900, 380), panelRegion(area, emptyList(), listOf(Span(380, 420))))
+    }
 }

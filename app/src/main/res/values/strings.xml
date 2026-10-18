@@ -91,8 +91,6 @@
     <string name="tool_layers">Layers</string>
 
     <!-- 편집 패널 -->
-    <string name="panel_expand">Expand panel</string>
-    <string name="panel_collapse">Collapse panel</string>
 
     <!-- 새 캔버스 창. 프리셋 이름은 짧게, 크기·비율은 숫자 형식이다. -->
     <string name="new_canvas_title">New canvas</string>
@@ -166,8 +164,6 @@
     <string name="blend_multiply">Multiply</string>
     <string name="blend_screen">Screen</string>
     <string name="blend_overlay">Overlay</string>
-    <string name="section_expand">Expand %1$s</string>
-    <string name="section_collapse">Collapse %1$s</string>
 
     <!-- 브러시·지우개 -->
     <string name="brush_size">Size</string>
@@ -177,6 +173,7 @@
     <string name="color_current">Current color, %1$s</string>
     <string name="color_choose">Choose color</string>
     <string name="color_eyedropper">Eyedropper</string>
+    <string name="floating_panel_close">Close %1$s</string>
     <string name="strip_color">Color</string>
     <string name="strip_subtool">Sub-tool</string>
     <string name="strip_choice_description">%1$s: %2$s</string>

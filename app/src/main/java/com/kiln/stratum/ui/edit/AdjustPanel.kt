@@ -10,11 +10,9 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -53,7 +51,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.ToneCurve
@@ -61,7 +58,6 @@ import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSlider
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 
@@ -113,7 +109,7 @@ private val ValueWidth = 48.dp
 /** 커버 화면 곡선 그래프의 높이. 캔버스를 너무 가리지 않게 낮게 둔다. */
 private val CompactCurveHeight = 168.dp
 
-/** 메인 가로 오른쪽 패널 곡선 그래프(제목 포함)의 높이 */
+/** 메인 화면 조정 패널의 곡선 그래프(제목 포함) 높이 */
 private val ListCurveHeight = 232.dp
 
 /** 곡선 점의 반지름과, 점을 잡을 수 있는 거리(터치 영역 48dp의 절반) */
@@ -153,33 +149,15 @@ fun AdjustCompact(controls: AdjustControls, item: AdjustItem, onItem: (AdjustIte
 }
 
 /**
- * 메인 화면의 보정 옵션: 슬라이더를 모두 늘어놓고 곡선 편집기를 함께 보인다.
- * 메인 세로 아래 패널은 폭이 넉넉해 두 칸(왼쪽 슬라이더, 오른쪽 곡선)으로, 메인 가로 오른쪽 패널은 한 칸으로 쌓는다.
- * 슬라이더 칸은 위아래로 밀어 본다. 곡선 그래프 위에서 끌면 곡선이 바뀌므로, 밀 때는 슬라이더 쪽을 끈다.
- *
- * 두 칸일 때는 가로로 지나가는 힌지의 띠에 걸리면 띠 아래로 비켜 놓는다(아래 패널이 힌지보다 아래라 보통은 걸리지 않는다).
+ * 메인 화면의 보정 옵션(떠 있는 조정 패널): 슬라이더를 모두 늘어놓고 그 아래 곡선 편집기를 보인다. 패널 높이가 모자라면 밀어 본다.
+ * 곡선 그래프 위에서 끌면 곡선이 바뀌므로, 밀 때는 슬라이더 쪽을 끈다.
  */
 @Composable
-fun AdjustList(controls: AdjustControls, twoColumns: Boolean, modifier: Modifier = Modifier) {
+fun AdjustList(controls: AdjustControls, modifier: Modifier = Modifier) {
     CommitOnDispose(controls.actions)
-    if (twoColumns) {
-        HingeAvoidingColumn(modifier.testTag(EditScreenTags.ADJUST_PANEL), fillHeight = false) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                // 곡선 칸은 그래프가 정사각형에 가깝게, 슬라이더 칸이 너무 좁아지지 않게 정한다
-                val curveWidth = min(maxWidth * 0.42f, maxHeight + 48.dp)
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                        for (item in AdjustItem.sliders) AdjustSliderRow(item, controls)
-                    }
-                    CurveSection(controls, Modifier.width(curveWidth).fillMaxHeight().padding(bottom = 8.dp))
-                }
-            }
-        }
-    } else {
-        Column(modifier.testTag(EditScreenTags.ADJUST_PANEL).verticalScroll(rememberScrollState())) {
-            for (item in AdjustItem.sliders) AdjustSliderRow(item, controls)
-            CurveSection(controls, Modifier.fillMaxWidth().height(ListCurveHeight).padding(bottom = 8.dp))
-        }
+    Column(modifier.testTag(EditScreenTags.ADJUST_PANEL).verticalScroll(rememberScrollState())) {
+        for (item in AdjustItem.sliders) AdjustSliderRow(item, controls)
+        CurveSection(controls, Modifier.fillMaxWidth().height(ListCurveHeight).padding(bottom = 8.dp))
     }
 }
 

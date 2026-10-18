@@ -8,12 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -64,7 +62,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import androidx.compose.ui.zIndex
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.BlendMode
@@ -76,7 +73,6 @@ import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.components.StratumSlider
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.HiddenContentAlpha
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -198,35 +194,14 @@ fun LayerCompact(controls: LayerControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 메인 세로 아래 패널의 레이어 탭 내용: 왼쪽은 레이어 목록, 오른쪽은 고른 레이어의 불투명도와 혼합 모드.
- * 버튼 줄은 탭 줄 오른쪽에 놓는다([LayerToolbar]). 가로 힌지의 띠에 걸리면 띠 아래로 비켜 놓는다(보정 탭과 같다).
- */
-@Composable
-fun LayerTwoColumns(controls: LayerControls, modifier: Modifier = Modifier) {
-    CommitOpacityOnDispose(controls.actions)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.LAYER_PANEL), fillHeight = false) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val propertiesWidth = min(maxWidth * 0.45f, 300.dp)
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LayerList(controls, Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.width(propertiesWidth)) {
-                    LayerOpacityRow(controls)
-                    BlendModeRow(controls)
-                }
-            }
-        }
-    }
-}
-
-/**
- * 메인 가로 오른쪽 패널의 레이어 칸 내용: 레이어 목록(남는 높이), 그 아래 고른 레이어의 불투명도와 혼합 모드.
- * 버튼 줄은 칸 제목 줄 오른쪽에 놓는다([LayerToolbar]).
+ * 메인 화면 떠 있는 레이어 패널의 내용: 레이어 목록, 그 아래 고른 레이어의 불투명도와 혼합 모드.
+ * 목록은 줄이 적으면 그만큼만 차지하고(패널도 작아진다), 많으면 남는 높이에서 밀어 본다. 버튼 줄은 패널 제목 줄에 놓는다([LayerToolbar]).
  */
 @Composable
 fun LayerColumn(controls: LayerControls, modifier: Modifier = Modifier) {
     CommitOpacityOnDispose(controls.actions)
     Column(modifier.testTag(EditScreenTags.LAYER_PANEL)) {
-        LayerList(controls, Modifier.fillMaxWidth().weight(1f))
+        LayerList(controls, Modifier.fillMaxWidth().weight(1f, fill = false))
         LayerOpacityRow(controls)
         BlendModeRow(controls)
     }

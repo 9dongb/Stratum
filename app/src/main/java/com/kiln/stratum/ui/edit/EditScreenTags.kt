@@ -70,15 +70,17 @@ object EditScreenTags {
 
     /** 커버 탭 줄 안의 칸들(옆으로 밀어 보는 줄) */
     const val TOOL_TAB_ROW = "toolTabRow"
-    const val BOTTOM_PANEL = "bottomPanel"
-    const val SIDE_PANEL = "sidePanel"
+
+    /** 메인 화면의 떠 있는 레이어·조정 패널 */
+    const val FLOATING_PANEL = "floatingPanel"
+
+    /** 상단 바의 [panel] 패널 버튼(메인 화면) */
+    fun panelToggle(panel: MainPanel): String = "panelToggle_${panel.name}"
     const val ADJUST_PANEL = "adjustPanel"
     const val ADJUST_RESET_ALL = "adjustResetAll"
     const val CURVE_EDITOR = "curveEditor"
     const val CURVE_RESET = "curveReset"
     const val CURVE_DELETE_POINT = "curveDeletePoint"
-    const val SIDE_ADJUST = "sideAdjust"
-    const val SIDE_LAYERS = "sideLayers"
     const val LAYER_PANEL = "layerPanel"
     const val BRUSH_OPTIONS = "brushOptions"
     const val BRUSH_SIZE = "brushSize"
@@ -177,9 +179,6 @@ object EditScreenTags {
 
     /** 선택 도구 옵션의 합치는 방법 [mode] 버튼 */
     fun selectionMode(mode: com.kiln.stratum.engine.selection.SelectionMode): String = "selectionMode_${mode.name}"
-
-    /** 아래 패널의 [tab] 탭 */
-    fun panelTab(tab: PanelTab): String = "panelTab_${tab.name}"
 
     /** 보정 패널의 [item] 슬라이더 줄 */
     fun adjustSlider(item: AdjustItem): String = "adjustSlider_${item.name}"

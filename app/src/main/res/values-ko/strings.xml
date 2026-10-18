@@ -91,8 +91,6 @@
     <string name="tool_layers">레이어</string>
 
     <!-- 편집 패널 -->
-    <string name="panel_expand">패널 펼치기</string>
-    <string name="panel_collapse">패널 접기</string>
 
     <!-- 새 캔버스 창 -->
     <string name="new_canvas_title">새 캔버스</string>
@@ -164,8 +162,6 @@
     <string name="blend_multiply">곱하기</string>
     <string name="blend_screen">스크린</string>
     <string name="blend_overlay">오버레이</string>
-    <string name="section_expand">%1$s 펼치기</string>
-    <string name="section_collapse">%1$s 접기</string>
 
     <!-- 브러시·지우개 -->
     <string name="brush_size">크기</string>
@@ -175,6 +171,7 @@
     <string name="color_current">지금 색, %1$s</string>
     <string name="color_choose">색 고르기</string>
     <string name="color_eyedropper">스포이드</string>
+    <string name="floating_panel_close">%1$s 닫기</string>
     <string name="strip_color">색</string>
     <string name="strip_subtool">하위 도구</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
