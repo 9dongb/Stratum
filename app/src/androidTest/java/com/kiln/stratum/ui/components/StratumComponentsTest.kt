@@ -48,7 +48,11 @@ class StratumComponentsTest {
 
     private fun px(dp: Dp): Float = with(composeRule.density) { dp.toPx() }
 
-    private fun shot(tag: String): Bitmap = composeRule.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
+    /** 찍기 전에 화면이 다 그려지기를 기다린다(느린 에뮬레이터에서 첫 화면을 찍으면 시간이 넘을 수 있다) */
+    private fun shot(tag: String): Bitmap {
+        composeRule.waitForIdle()
+        return composeRule.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
+    }
 
     /** 그림의 [x] 세로줄에서 [color]인 픽셀 수(가운데 평평한 칸의 높이) */
     private fun Bitmap.rowsOf(color: Int, x: Int = width / 2): Int = (0 until height).count { getPixel(x, it) == color }
