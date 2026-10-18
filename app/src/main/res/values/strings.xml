@@ -231,4 +231,18 @@
     <string name="liquify_undo">Undo last stroke</string>
     <string name="liquify_reset">Restore all</string>
     <string name="liquify_hint">Drag with one finger to reshape the chosen layer. Pinch with two fingers to zoom. Apply records one undo step.</string>
+
+    <!-- 리터칭 -->
+    <string name="tool_retouch">Retouch</string>
+    <string name="subtool_spot_heal">Spot healing brush</string>
+    <string name="subtool_spot_heal_short">Spot heal</string>
+    <string name="subtool_heal">Healing brush</string>
+    <string name="subtool_heal_short">Heal</string>
+    <string name="subtool_clone">Clone stamp</string>
+    <string name="subtool_clone_short">Clone</string>
+    <string name="retouch_source">Set source</string>
+    <string name="retouch_hint_spot">Paint over a spot. It is filled from a similar place nearby.</string>
+    <string name="retouch_hint_pick">Touch where to take pixels from, then paint where to fix.</string>
+    <string name="retouch_hint_heal">Paint to bring the texture from the source. When you lift your finger, it blends with the brightness and color around.</string>
+    <string name="retouch_hint_clone">Paint to copy the source as it is.</string>
 </resources>

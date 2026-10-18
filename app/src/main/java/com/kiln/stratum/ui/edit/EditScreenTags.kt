@@ -29,6 +29,9 @@ object EditScreenTags {
     const val EXPORT_SAVE = "exportSave"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
+
+    /** 커버 탭 줄 안의 칸들(옆으로 밀어 보는 줄) */
+    const val TOOL_TAB_ROW = "toolTabRow"
     const val BOTTOM_PANEL = "bottomPanel"
     const val SIDE_PANEL = "sidePanel"
     const val ADJUST_PANEL = "adjustPanel"
@@ -99,6 +102,15 @@ object EditScreenTags {
     const val LIQUIFY_APPLY = "liquifyApply"
     const val LIQUIFY_SIZE = "liquifySize"
     const val LIQUIFY_STRENGTH = "liquifyStrength"
+
+    /** 리터칭(스팟 복구·복구 브러시·복제 도장) 옵션과 캔버스 터치 자리 */
+    const val RETOUCH_OPTIONS = "retouchOptions"
+    const val RETOUCH_OVERLAY = "retouchOverlay"
+    const val RETOUCH_SIZE = "retouchSize"
+    const val RETOUCH_HARDNESS = "retouchHardness"
+    const val RETOUCH_OPACITY = "retouchOpacity"
+    const val RETOUCH_SOURCE = "retouchSource"
+    const val RETOUCH_HINT = "retouchHint"
 
     /** 유동화 작업 모드의 [tool] 도구 버튼 */
     fun liquifyTool(tool: com.kiln.stratum.engine.liquify.LiquifyTool): String = "liquifyTool_${tool.name}"

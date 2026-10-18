@@ -67,6 +67,7 @@ import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
@@ -112,6 +113,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param liquify 열려 있는 픽셀 유동화 작업 모드. 있으면 편집 화면 전체를 덮는다.
  * @param liquifyActions 유동화 작업 모드가 보내는 일
  * @param onStartLiquify 유동화 도구를 골랐다(작업 모드를 연다)
+ * @param retouch 리터칭 설정(크기·단단함·불투명도), [onRetouch]로 바꾼다
+ * @param cloneSource 복제 도장·복구 브러시가 가져올 곳(정하지 않았으면 null)
+ * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
  */
 @Composable
 fun EditScreen(
@@ -146,7 +150,11 @@ fun EditScreen(
     selectionActions: SelectionActions = SelectionActions.None,
     liquify: LiquifyState? = null,
     liquifyActions: LiquifyActions = LiquifyActions.None,
-    onStartLiquify: () -> Unit = {}
+    onStartLiquify: () -> Unit = {},
+    retouch: BrushSettings = BrushSettings(),
+    onRetouch: (BrushSettings) -> Unit = {},
+    cloneSource: CloneSource? = null,
+    retouchActions: RetouchActions = RetouchActions.None
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -158,6 +166,8 @@ fun EditScreen(
     var panelTab by rememberSaveable { mutableStateOf(PanelTab.ADJUST) }
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
+    // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
+    var retouchPicking by rememberSaveable { mutableStateOf(false) }
     // 메인 세로에서 도구를 고르면 옵션이 보이게 아래 패널을 펼친다
     LaunchedEffect(selection.active) {
         if (selection.active != null) panelExpanded = true
@@ -261,6 +271,16 @@ fun EditScreen(
         val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
             SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
         }
+        // 리터칭: 고른 하위 도구의 획 종류와, 캔버스를 누르면 가져올 곳을 정하는지(복제·복구는 가져올 곳이 없으면 늘 정한다)
+        val retouchMode = selection.modeOf(EditTool.Retouch)?.retouchMode ?: RetouchMode.SPOT_HEAL
+        val retouchPicks = retouchMode != RetouchMode.SPOT_HEAL && (retouchPicking || cloneSource == null)
+        val retouchControls = RetouchControls(
+            settings = retouch,
+            onChange = onRetouch,
+            source = cloneSource,
+            picking = retouchPicks,
+            onPick = { if (cloneSource != null) retouchPicking = !retouchPicking }
+        ).takeIf { activeTool == EditTool.Retouch }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
             {
                 ToolOptions(
@@ -275,7 +295,8 @@ fun EditScreen(
                     layers = layerControls,
                     brush = brushControls,
                     text = textControls,
-                    select = selectionControls
+                    select = selectionControls,
+                    retouch = retouchControls
                 )
             }
         }
@@ -283,7 +304,7 @@ fun EditScreen(
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
         val railToolTitle = toolTitle?.takeIf { railTool != null }
         val railToolOptions = toolOptions?.takeIf { railTool != null }
-        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개를 고르면 그리는 터치 자리를 겹친다
+        // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭을 고르면 그리는 터치 자리를 겹친다
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
             if (ready != null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
@@ -292,6 +313,19 @@ fun EditScreen(
                     document = ready.documentSize,
                     erase = activeTool == EditTool.Eraser,
                     actions = strokeActions,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (ready != null && activeTool == EditTool.Retouch) {
+                RetouchOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    mode = retouchMode,
+                    picking = retouchPicks,
+                    source = cloneSource,
+                    radius = retouch.radius,
+                    actions = retouchActions,
+                    onPicked = { retouchPicking = false },
                     modifier = Modifier.fillMaxSize()
                 )
             }

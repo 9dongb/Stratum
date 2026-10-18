@@ -127,6 +127,20 @@ class RetouchStrokeTest {
     }
 
     @Test
+    fun spotHeal_besideAnEdge_keepsTheEdgeClean() {
+        // 흰 바탕의 45° 검은 줄(두께 40) 바로 옆을 줄을 따라 칠한다. 줄을 따라 옮긴 곳에서 가져와, 옆은 희고 줄은 그대로다(번지지 않는다).
+        val document = documentOf(1200, 1200) { x, y -> if (abs(x - y) <= 14) Color.BLACK else Color.WHITE }
+        val beside = StrokeDabs.place(listOf(StrokePoint(400f, 445f), StrokePoint(600f, 645f)), 6f)
+
+        val healed = RetouchStroke(LayerId(0), beside, BrushSettings(size = 60f, hardness = 0.5f), RetouchMode.SPOT_HEAL).applyTo(document)
+
+        for (y in listOf(480, 520, 560, 600)) {
+            for (x in y - 60..y - 20 step 5) assertTrue("($x, $y) ${Color.red(pixel(healed, x, y))}", Color.red(pixel(healed, x, y)) >= 235)
+            assertTrue(Color.red(pixel(healed, y, y)) <= 20)
+        }
+    }
+
+    @Test
     fun retouch_staysInsideTheSelection_andSharesUntouchedTiles() {
         // 왼쪽 400픽셀만 고르고, 경계를 지나는 획을 복제한다
         val document = SelectShape(SelectionShape.Rectangle(0f, 0f, 400f, 600f), SelectionMode.REPLACE).applyTo(grayWithSpot(100f, 300f))

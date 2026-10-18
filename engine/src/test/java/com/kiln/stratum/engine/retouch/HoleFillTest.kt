@@ -63,6 +63,24 @@ class HoleFillTest {
     }
 
     @Test
+    fun lowInfluence_keepsAnOutlierFromSpreadingIntoTheHole() {
+        // 둘레는 0인데 위쪽 띠 하나만 1(어긋난 경계). 몫을 줄이면 구멍 안이 0에 가깝고, 띠 자신은 그대로 1이다.
+        val size = 64
+        val weights = holeWeights(size, 16f)
+        val values = FloatArray(size * size) { i -> if (weights[i] == 1f && i % size in 28 until 36 && i / size < 32) 1f else 0f }
+        val influence = FloatArray(size * size) { i -> if (values[i] == 1f) 0.01f else 1f }
+        val center = (size / 2) * size + size / 2
+
+        val spread = HoleFill.fill(values, weights, size, size, 1)
+        val kept = HoleFill.fill(values, weights, size, size, 1, influence)
+
+        assertTrue("${spread[center]}", spread[center] > 0.05f)
+        assertTrue("${kept[center]}", kept[center] < 0.02f)
+        val stripe = 5 * size + 30
+        assertEquals(1f, kept[stripe], 0f)
+    }
+
+    @Test
     fun nothingKnown_meansZero() {
         val filled = HoleFill.fill(FloatArray(10 * 6 * 4) { 3f }, FloatArray(10 * 6), 10, 6, 4)
 

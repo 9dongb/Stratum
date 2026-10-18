@@ -20,13 +20,19 @@ object HoleFill {
     /**
      * [values](픽셀마다 [channels]개, 줄마다 이어 붙인 값)의 모르는 곳을 채운 새 배열.
      * [weights]는 픽셀마다 아는 정도(0..1)다. 아는 곳이 하나도 없으면 모두 0이다.
+     * [influence]가 있으면 아는 픽셀이 둘레(거친 단계)에 주는 몫을 그만큼(0..1) 줄인다. 그 픽셀 자신의 값은 그대로 남는다.
+     * 다른 값들과 크게 다른 픽셀(어긋난 경계)이 안쪽으로 번지지 않게 할 때 쓴다.
      */
-    fun fill(values: FloatArray, weights: FloatArray, width: Int, height: Int, channels: Int): FloatArray {
+    fun fill(values: FloatArray, weights: FloatArray, width: Int, height: Int, channels: Int, influence: FloatArray? = null): FloatArray {
         require(width > 0 && height > 0 && channels > 0) { "Bad size: ${width}x$height×$channels" }
         require(values.size == width * height * channels && weights.size == width * height) { "Bad buffers for ${width}x$height×$channels" }
+        require(influence == null || influence.size == weights.size) { "Bad influence for ${width}x$height" }
         val first = Level(values, FloatArray(weights.size) { weights[it].coerceIn(0f, 1f) }, width, height)
         if (width == 1 && height == 1) return FloatArray(channels) { values[it] * first.weights[0] }
         val levels = arrayListOf(first)
+        // 첫 단계에서 줄일 때만 몫을 줄인다(키울 때는 원래 무게로 제 값을 지킨다)
+        val pulled = if (influence == null) first else Level(values, FloatArray(weights.size) { first.weights[it] * influence[it].coerceIn(0f, 1f) }, width, height)
+        levels += pull(pulled, channels)
         while (levels.last().width > 1 || levels.last().height > 1) levels += pull(levels.last(), channels)
         // 가장 거친 단계(1×1)는 아는 값 전체의 평균이다(아는 곳이 없으면 0)
         var filled = levels.last().values

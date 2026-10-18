@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
@@ -242,7 +243,8 @@ class LiquifyModeTest {
             }
         }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Liquify)).performClick()
+        // 탭 줄 뒤쪽에 있어 커버 폭에서는 밀어야 다 보인다
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Liquify)).performScrollTo().performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(1, started) }

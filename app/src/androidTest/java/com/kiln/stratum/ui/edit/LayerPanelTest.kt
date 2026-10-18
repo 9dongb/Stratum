@@ -23,6 +23,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -139,7 +140,8 @@ class LayerPanelTest {
 
     private fun openCompactLayers(fake: FakeLayers) {
         show(fake, 411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Layers)).performClick()
+        // 탭 줄 끝에 있어 커버 폭에서는 밀어야 보인다
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Layers)).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
     }
 

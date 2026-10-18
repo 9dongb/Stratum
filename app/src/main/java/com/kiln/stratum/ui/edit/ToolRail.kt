@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -28,10 +29,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
+import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 
 /**
- * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 기능이 있는 도구(지금은 자르기·변형)만 누를 수 있다.
+ * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 기능이 있는 도구만 누를 수 있다.
  * 누르면 그 도구를 고르고, 다시 누르면 내려놓는다. 하위 도구가 있는 도구는 길게 누르면 하위 도구 메뉴가 뜬다.
  * 배경은 아래 끝까지 칠하고, 버튼만 시스템 바·카메라 구멍을 피한다.
  * 가로로 지나가는 힌지가 막대를 지나면, 그 자리의 버튼을 힌지 띠 아래로 비켜 놓는다(CLAUDE.md 6장).
@@ -49,7 +50,8 @@ fun ToolRail(
         modifier = modifier.fillMaxHeight().testTag(EditScreenTags.TOOL_RAIL),
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        HingeAvoidingColumn(
+        // 도구가 막대 높이보다 많으면(가로로 눕힌 폰처럼 낮은 화면) 위아래로 밀어 본다
+        HingeAvoidingScrollColumn(
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                 .width(72.dp)
@@ -57,7 +59,9 @@ fun ToolRail(
             gap = 4.dp
         ) {
             for (tool in EditTool.railTools) {
-                RailToolButton(tool, selection, enabled && tool.available, onChoose)
+                Box(Modifier.width(72.dp), contentAlignment = Alignment.Center) {
+                    RailToolButton(tool, selection, enabled && tool.available, onChoose)
+                }
             }
         }
     }

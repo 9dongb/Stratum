@@ -54,9 +54,12 @@ import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
+import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.retouch.RetouchMode
+import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.text.TextStyle
@@ -86,6 +89,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** 보기가 이만큼(밀리초) 멈춰 있으면 보이는 곳을 선명하게 다시 그린다. 움직이는 동안 그려 화면이 멈칫하지 않게 한다. */
 internal const val SHARPEN_DELAY_MILLIS = 150L
@@ -337,12 +341,52 @@ class EditorViewModel internal constructor(
     /** 글자 크기를 직접 골랐는지 */
     private var textSizeChosen = false
 
-    /** 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국 */
-    private class Stroke(val layer: LayerId, val settings: BrushSettings, val erase: Boolean, val selection: Selection?) {
+    private val _retouch = MutableStateFlow(BrushSettings(size = 60f, hardness = 0.5f))
+
+    /**
+     * 리터칭(스팟 복구 브러시·복구 브러시·복제 도장) 설정. 크기·단단함은 셋이 함께 쓰고, 불투명도는 복제 도장만 쓴다(색은 쓰지 않는다).
+     * 앱을 끌 때까지 남는다(브러시와 같다).
+     */
+    val retouch: StateFlow<BrushSettings> = _retouch.asStateFlow()
+
+    private val _cloneSource = MutableStateFlow<CloneSource?>(null)
+
+    /** 복제 도장·복구 브러시가 가져올 곳. 다른 문서를 열거나 문서 크기가 바뀌면(자르기·회전·크기 변경) 지운다. */
+    val cloneSource: StateFlow<CloneSource?> = _cloneSource.asStateFlow()
+
+    /**
+     * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
+     * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
+     */
+    private class Stroke(
+        val layer: LayerId,
+        val settings: BrushSettings,
+        val erase: Boolean,
+        val selection: Selection?,
+        val retouch: RetouchMode? = null,
+        val offset: SourceOffset? = null
+    ) {
         val dabs = StrokeDabs(settings.spacing)
 
-        /** 그리는 동안 바뀌지 않는 미리 보기용 사본 */
-        fun live(): LiveStroke = LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection)
+        /**
+         * 그리는 동안 바뀌지 않는 미리 보기용 사본. 복제 도장·복구 브러시는 가져올 곳을 베껴 보이고(복구는 손을 뗀 뒤 둘레에 맞춘다),
+         * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다).
+         */
+        fun live(): LiveStroke = when (retouch) {
+            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection)
+            RetouchMode.SPOT_HEAL -> LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
+            else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
+        }
+
+        /** 손을 뗀 뒤 기록할 명령 */
+        fun command(): CancellableCommand = when (retouch) {
+            null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
+            else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset)
+        }
+
+        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
+        val readsLayer: Boolean
+            get() = erase || offset != null
     }
 
     /** 끄는 중인 획 */
@@ -367,6 +411,15 @@ class EditorViewModel internal constructor(
     /** 캔버스의 브러시·지우개 손가락이 보내는 일 */
     val strokeActions: StrokeActions = object : StrokeActions {
         override fun begin(x: Float, y: Float, erase: Boolean) = beginStroke(StrokePoint(x, y), erase)
+        override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
+        override fun end() = endStroke()
+        override fun cancel() = cancelStroke()
+    }
+
+    /** 캔버스의 리터칭 손가락이 보내는 일(가져올 곳 정하기와 획) */
+    val retouchActions: RetouchActions = object : RetouchActions {
+        override fun setSource(x: Float, y: Float) = setCloneSource(x, y)
+        override fun begin(x: Float, y: Float, mode: RetouchMode) = beginRetouch(StrokePoint(x, y), mode)
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
@@ -953,15 +1006,57 @@ class EditorViewModel internal constructor(
         _eraser.value = settings
     }
 
+    /** 리터칭 설정을 바꾼다. 다음 획부터 쓴다. */
+    fun setRetouch(settings: BrushSettings) {
+        _retouch.value = settings
+    }
+
+    /** 복제 도장·복구 브러시가 가져올 곳을 정한다(문서 밖이면 무시한다). 다음 획이 새 간격을 정한다. */
+    fun setCloneSource(x: Float, y: Float) {
+        if (_state.value !is EditorState.Ready) return
+        val document = history?.document ?: return
+        if (x < 0f || y < 0f || x >= document.width || y >= document.height) return
+        _cloneSource.value = CloneSource(x, y)
+    }
+
     /**
      * 고른 레이어에 획을 그리기 시작한다([erase]면 지우개). 손가락을 떼면([endStroke]) 실행 취소 한 단계로 기록한다.
      * 앞 획을 기록하는 동안에도 그릴 수 있다(차례로 기록한다). 다른 종류의 편집을 처리하는 중이거나 슬라이더를 끄는 중이면 무시한다.
      */
     fun beginStroke(point: StrokePoint, erase: Boolean) {
-        val ready = _state.value as? EditorState.Ready ?: return
-        if (drawing != null || hasLiveValues || (editing && !strokeCommitting)) return
+        if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        val stroke = Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection)
+        startStroke(Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection), point)
+    }
+
+    /**
+     * 고른 레이어에 리터칭 획을 시작한다. 복제 도장·복구 브러시는 가져올 곳이 있어야 하고(없으면 무시한다),
+     * 가져올 곳을 정한 뒤 첫 획이 간격(칠한 곳 - 가져올 곳)을 정한다. 그 뒤의 획은 같은 간격으로 가져온다(포토샵의 '정렬').
+     * 손가락을 떼면 실행 취소 한 단계로 기록한다(브러시와 같은 차례). 복구는 기록할 때 둘레에 맞춘다.
+     */
+    fun beginRetouch(point: StrokePoint, mode: RetouchMode) {
+        if (!canBeginStroke()) return
+        val layer = currentLayer() ?: return
+        val offset = if (mode == RetouchMode.SPOT_HEAL) {
+            null
+        } else {
+            val source = _cloneSource.value ?: return
+            source.offset ?: SourceOffset((point.x - source.x).roundToInt(), (point.y - source.y).roundToInt()).also {
+                _cloneSource.value = source.copy(offset = it)
+            }
+        }
+        // 복구는 둘레에 맞춰 섞으므로 불투명도를 쓰지 않는다
+        val settings = _retouch.value.let { if (mode == RetouchMode.CLONE) it else it.copy(opacity = 1f) }
+        startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, mode, offset), point)
+    }
+
+    /** 획을 시작할 수 있는지. 끄는 획이나 끄는 슬라이더가 있거나, 획이 아닌 편집을 처리하는 중이면 안 된다. */
+    private fun canBeginStroke(): Boolean =
+        _state.value is EditorState.Ready && drawing == null && !hasLiveValues && (!editing || strokeCommitting)
+
+    /** [stroke]를 끄는 획으로 두고 첫 자국 [point]를 놓아 미리 보인다 */
+    private fun startStroke(stroke: Stroke, point: StrokePoint) {
+        val ready = _state.value as? EditorState.Ready ?: return
         stroke.dabs.add(point)
         drawing = stroke
         if (detailStrokes.isEmpty()) detailBeforeStroke = ready.detail
@@ -1141,7 +1236,7 @@ class EditorViewModel internal constructor(
         val stroke = queuedStrokes.firstOrNull() ?: return
         strokeCommitting = true
         runEdit(
-            PaintStroke(stroke.layer, ArrayList(stroke.dabs.dabs), stroke.settings, stroke.erase),
+            stroke.command(),
             onCommitted = { queuedStrokes.remove(stroke) }
         ) {
             // 기록하지 못했거나(메모리) 바뀐 것이 없어도 목록에서 뺀다
@@ -1190,13 +1285,13 @@ class EditorViewModel internal constructor(
 
     /**
      * 확대 그림 위에 획을 바로 얹어도 결과가 같은지. 획들이 모두 맨 위 보이는 레이어(표준, 불투명도 1, 보정 없음)에 그리고,
-     * 지우개는 그 레이어가 보이는 유일한 레이어일 때다. 그러면 그 위에 아무것도 없어 합친 그림에 바로 그린 것과 같다.
+     * 지우개·복제(레이어 픽셀을 읽는 획)는 그 레이어가 보이는 유일한 레이어일 때다. 그러면 그 위에 아무것도 없어 합친 그림에 바로 그린 것과 같다.
      */
     private fun strokesFitDetail(document: Document): Boolean {
         val visible = document.layers.filter { it.opacity > 0f }
         val top = visible.lastOrNull() ?: return false
         if (top.blendMode != BlendMode.NORMAL || top.opacity < 1f || !top.adjustments.isIdentity) return false
-        return detailStrokes.all { it.layer == top.id && (!it.erase || visible.size == 1) }
+        return detailStrokes.all { it.layer == top.id && (!it.readsLayer || visible.size == 1) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -1537,6 +1632,8 @@ class EditorViewModel internal constructor(
             if (!sameDocument) {
                 revision++
                 shownDocument = document
+                // 문서 크기가 바뀌면(자르기·회전·크기 변경과 그 실행 취소) 가져올 곳이 다른 자리를 가리키므로 지운다
+                if (previous != null && (previous.width != document.width || previous.height != document.height)) _cloneSource.value = null
             }
             // 화면 크기가 바뀌어 같은 문서를 다시 그린 것이면, 부분 그림이 새 축소본보다 선명할 때만 남긴다.
             // 문서가 바뀌었으면(뒤집기처럼 크기가 같아도) 버린다. 선택 영역만 바뀌었으면 남긴다(픽셀이 같다).
@@ -1660,6 +1757,10 @@ class EditorViewModel internal constructor(
         /** 오목·볼록·재구성을 누르고 있을 때 다시 거는 간격(밀리초) */
         const val LIQUIFY_HOLD_MILLIS = 40L
 
+        /** 스팟 복구 브러시를 끄는 동안 칠한 곳을 보이는 색과 불투명도(포토샵처럼 반투명 검정) */
+        const val SPOT_PREVIEW_COLOR = 0xFF000000.toInt()
+        const val SPOT_PREVIEW_OPACITY = 0.5f
+
         /** '가볍게' 미리 보기에서 전체 축소본을 화면에서 키워 보여도 되는 정도 */
         const val LIGHT_PREVIEW_MAGNIFICATION = 2.0
 
@@ -1682,6 +1783,7 @@ class EditorViewModel internal constructor(
     private fun newHistory(document: Document): EditHistory {
         previewQuality = appSettings.values.value.previewQuality
         fitTextSize(document)
+        _cloneSource.value = null
         return EditHistory(document, maxBytes = MemoryBudget.historyBudgetBytes(getApplication()))
     }
 
@@ -1707,6 +1809,7 @@ class EditorViewModel internal constructor(
         layerPreviews.clear()
         outlined = null
         detailOutlined = null
+        _cloneSource.value = null
         closeLiquify()
     }
 

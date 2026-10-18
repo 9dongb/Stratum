@@ -229,4 +229,18 @@
     <string name="liquify_undo">한 획 되돌리기</string>
     <string name="liquify_reset">모두 되돌리기</string>
     <string name="liquify_hint">한 손가락으로 끌어 고른 레이어의 모양을 바꿔요. 두 손가락으로 확대해요. 적용하면 실행 취소 한 단계로 남아요.</string>
+
+    <!-- 리터칭 -->
+    <string name="tool_retouch">리터칭</string>
+    <string name="subtool_spot_heal">스팟 복구 브러시</string>
+    <string name="subtool_spot_heal_short">스팟 복구</string>
+    <string name="subtool_heal">복구 브러시</string>
+    <string name="subtool_heal_short">복구</string>
+    <string name="subtool_clone">복제 도장</string>
+    <string name="subtool_clone_short">복제</string>
+    <string name="retouch_source">가져올 곳 정하기</string>
+    <string name="retouch_hint_spot">고칠 곳을 칠하면 둘레의 비슷한 곳에서 가져와 메워요.</string>
+    <string name="retouch_hint_pick">가져올 곳을 누른 뒤 고칠 곳을 칠하세요.</string>
+    <string name="retouch_hint_heal">칠하면 가져올 곳의 무늬를 가져오고, 손을 떼면 둘레의 밝기·색에 맞춰요.</string>
+    <string name="retouch_hint_clone">칠하면 가져올 곳을 그대로 베껴 와요.</string>
 </resources>

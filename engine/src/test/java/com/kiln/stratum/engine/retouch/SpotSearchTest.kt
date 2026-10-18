@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.retouch
 
+import kotlin.math.abs
 import kotlin.math.hypot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -75,6 +76,39 @@ class SpotSearchTest {
         val shift = checkNotNull(SpotSearch.find(pixels, painted, width, height, radius = 3f))
 
         assertTrue("$shift", kotlin.math.abs(shift.dy) >= 6)
+    }
+
+    @Test
+    fun reach_followsTheWidestExtent_andLimitsTheCandidates() {
+        // 작은 점은 반지름의 5배까지, 긴 획·큰 덩어리는 그 길이를 비켜 가는 거리(1.5배 + 띠)까지 간다
+        assertEquals(15f, SpotSearch.maxReach(radius = 3f, extent = 6f), 0.001f)
+        assertEquals(151.5f, SpotSearch.maxReach(radius = 3f, extent = 100f), 0.001f)
+
+        // 가장 먼 거리가 가장 가까운 후보(반지름의 2.5배)보다 짧으면 찾지 못한다
+        val pixels = IntArray(100 * 100) { gray }
+        val painted = disc(100, 100, 50f, 50f, 6f)
+        assertNull(SpotSearch.find(pixels, painted, 100, 100, radius = 6f, reach = 10f))
+        assertNotNull(SpotSearch.find(pixels, painted, 100, 100, radius = 6f, reach = SpotSearch.maxReach(6f, 12f)))
+    }
+
+    @Test
+    fun alongASlantedEdge_findsTheAlignedPlace() {
+        // 비스듬한(약 27°) 어두운 띠 바로 옆을 띠를 따라 길게 칠했다. 띠를 따라 옮긴 곳(띠가 같은 자리에 오는 곳)을 찾아야 한다.
+        val width = 400
+        val height = 300
+        fun onBand(x: Int, y: Int) = abs((y - 50) - (x - 20) / 2.0) < 8
+        val pixels = IntArray(width * height) { i -> if (onBand(i % width, i / width)) dark else gray }
+        // 띠의 아래 가장자리를 따라 지름 16의 자국들(가운데 x 150..250)
+        val painted = BooleanArray(width * height) { i ->
+            val x = i % width
+            val y = i / width
+            (150..250 step 4).any { cx -> hypot(x - cx.toDouble(), y - (50 + (cx - 20) / 2.0 + 12)) <= 8.0 }
+        }
+
+        val shift = checkNotNull(SpotSearch.find(pixels, painted, width, height, radius = 8f, reach = SpotSearch.maxReach(8f, 130f)))
+
+        // 띠를 따라 옮긴 곳: 세로로 옮긴 양이 가로로 옮긴 양의 절반(±2픽셀)
+        assertTrue("$shift", abs(shift.dy - shift.dx / 2.0) <= 2.0)
     }
 
     @Test
