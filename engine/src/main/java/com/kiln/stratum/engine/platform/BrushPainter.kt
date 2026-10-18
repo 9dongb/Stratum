@@ -19,6 +19,7 @@ import kotlin.math.roundToInt
  * - 한 획의 자국들은 따로 그린 뒤(saveLayer) 불투명도로 한 번 얹는다. 그래서 자국이 겹쳐도 획은 불투명도보다 짙어지지 않는다.
  * - 지우개는 같은 자국으로, 얹을 때 아래를 지운다(DST_OUT). 브러시는 그 위에 칠한다(SRC_OVER).
  * - 선택 영역이 있으면 얹기 전에 획을 선택 영역 알파로 자른다(DST_IN). 고르지 않은 곳에는 그려지지 않는다.
+ * - 채울 그림(복제 도장·복구 브러시가 가져온 픽셀)이 있으면, 자국 모양만 남기고 색은 그 그림으로 바꾼다(SRC_IN).
  * - 셰이더 프로그램(RuntimeShader)이나 하드웨어 비트맵을 쓰지 않아 소프트웨어 캔버스에서도 그려진다.
  */
 internal object BrushPainter {
@@ -36,6 +37,7 @@ internal object BrushPainter {
      * [canvas]에 [dabs]를 [settings]로 그린다([erase]면 지운다). 자국은 문서 좌표이고,
      * 캔버스 좌표는 (문서 - ([left], [top])) × [scale]이다. 캔버스의 그릴 자리는 [width]×[height]이고, 그 밖의 자국은 건너뛴다.
      * [clip]이 있으면 캔버스 (0, 0)에 맞춘 알파 그림(선택 영역)으로 획을 자른다. 크기는 그릴 자리와 같다.
+     * [fill]이 있으면 획을 브러시 색 대신 그 셰이더(캔버스 좌표)로 칠한다. 지우개에는 쓰지 않는다.
      */
     fun drawStroke(
         canvas: Canvas,
@@ -47,8 +49,10 @@ internal object BrushPainter {
         top: Float,
         width: Float,
         height: Float,
-        clip: Bitmap? = null
+        clip: Bitmap? = null,
+        fill: Shader? = null
     ) {
+        require(fill == null || !erase) { "Eraser does not fill" }
         if (dabs.isEmpty()) return
         val stroke = Paint().apply {
             alpha = (settings.opacity * 255).roundToInt()
@@ -57,8 +61,8 @@ internal object BrushPainter {
         val saved = canvas.saveLayer(0f, 0f, width, height, stroke)
         val radius = settings.radius * scale
         val dab = Paint().apply {
-            // 지우개는 지울 몫(알파)만 쓴다
-            color = if (erase) Color.WHITE else settings.opaqueColor
+            // 지우개와 채울 그림은 자국의 몫(알파)만 쓴다
+            color = if (erase || fill != null) Color.WHITE else settings.opaqueColor
             isAntiAlias = true
             isFilterBitmap = true
         }
@@ -75,6 +79,11 @@ internal object BrushPainter {
                 canvas.drawBitmap(mask, null, target, dab)
             }
         }
+        // 자국 모양 안을 채울 그림으로 바꾼다(그림이 투명한 곳은 획도 투명해진다)
+        if (fill != null) canvas.drawRect(0f, 0f, width, height, Paint().apply {
+            shader = fill
+            blendMode = BlendMode.SRC_IN
+        })
         // 알파를 셰이더로 그려야 소프트웨어 그리기에서도 DST_IN이 곱해진다(MaskTiles.drawAlpha)
         if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
         canvas.restoreToCount(saved)
