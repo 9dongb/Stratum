@@ -84,7 +84,7 @@ val SubTool.retouchMode: RetouchMode?
  * @property source 정한 가져올 곳(없으면 null)
  * @property picking 캔버스를 누르면 가져올 곳을 정하는 중인지(가져올 곳이 없으면 늘 그렇다)
  * @property onPick 가져올 곳 정하기 버튼을 눌렀다(켜고 끈다)
- * @property sizePreview 크기 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
+ * @property sizePreview 크기·단단함 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
  */
 @Stable
 class RetouchControls(
@@ -130,13 +130,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
             style = MaterialTheme.typography.bodySmall
         )
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.brush_hardness),
-            shown = stringResource(R.string.layer_percent, (settings.hardness * 100).roundToInt()),
-            fraction = settings.hardness,
-            onFraction = { controls.onChange(settings.copy(hardness = (it * 100).roundToInt() / 100f)) },
-            tag = EditScreenTags.RETOUCH_HARDNESS
-        )
+        HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview)
         // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
         if (mode == SubTool.RETOUCH_CLONE) {
             OptionSlider(

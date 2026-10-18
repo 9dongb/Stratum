@@ -2,10 +2,8 @@ package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -18,65 +16,36 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
- * 크기 슬라이더를 끄는 동안 캔버스에 브러시 크기를 보일지. 값이 바뀌면 보이고, 손을 떼면 [LINGER_MILLIS] 뒤 사라진다.
- * 슬라이더를 톡 누르기만 해도(값이 바뀌고 바로 손을 뗌) 잠깐 보인다.
+ * 크기·단단함 슬라이더를 끄는 동안 캔버스에 브러시 크기를 보일지. 값이 바뀌면 보이고, 손을 떼면 바로 사라진다.
  */
 @Stable
 class SizePreviewState {
     /** 슬라이더를 끄는 중 */
-    private var dragging by mutableStateOf(false)
-
-    /** 손을 뗀 뒤 잠깐 남아 있는 중 */
-    private var lingering by mutableStateOf(false)
-
-    /** 손을 뗀 횟수. 늘 때마다 남아 있는 시간을 처음부터 센다([rememberSizePreviewState]). */
-    internal var releases by mutableIntStateOf(0)
+    var visible: Boolean by mutableStateOf(false)
         private set
 
-    /** 캔버스에 크기를 보인다 */
-    val visible: Boolean
-        get() = dragging || lingering
-
-    /** 크기 슬라이더의 값이 바뀌었다 */
+    /** 슬라이더의 값이 바뀌었다 */
     fun onChange() {
-        dragging = true
+        visible = true
     }
 
-    /** 크기 슬라이더에서 손을 뗐다 */
+    /** 슬라이더에서 손을 뗐다 */
     fun onFinished() {
-        dragging = false
-        lingering = true
-        releases++
-    }
-
-    internal fun endLinger() {
-        lingering = false
+        visible = false
     }
 }
 
-/** 손을 뗀 뒤 크기를 더 보이는 시간(밀리초) */
-const val LINGER_MILLIS = 800L
-
-/** 크기 미리 보기 상태. 손을 떼면 [LINGER_MILLIS] 뒤 감춘다. */
+/** 크기 미리 보기 상태 */
 @Composable
-fun rememberSizePreviewState(): SizePreviewState {
-    val state = remember { SizePreviewState() }
-    LaunchedEffect(state.releases) {
-        if (state.releases > 0) {
-            delay(LINGER_MILLIS)
-            state.endLinger()
-        }
-    }
-    return state
-}
+fun rememberSizePreviewState(): SizePreviewState = remember { SizePreviewState() }
 
 /**
  * 캔버스 가운데에 지름 [size](문서 픽셀)의 원을 지금 보기 배율로 그린다. 그 크기로 칠하면 얼마나 덮는지 보인다.
  * [hardness]가 있으면(0과 1 사이) 안쪽에 단단함 자리(이 안은 다 칠해지고 바깥으로 옅어짐)를 옅은 원으로 함께 그린다.
+ * 단단함 슬라이더를 끄는 동안에도 같은 원을 보여, 단단함 자리가 어떻게 바뀌는지 보인다.
  * 캔버스 밖은 자른다. 터치를 받지 않아 아래 도구 터치 자리에 그대로 간다.
  */
 @Composable

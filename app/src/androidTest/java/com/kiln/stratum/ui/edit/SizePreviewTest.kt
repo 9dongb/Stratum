@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.captureToImage
@@ -17,7 +16,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -36,7 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 크기 슬라이더를 끄는 동안 캔버스에 보이는 브러시 크기 원(그 크기·배율, 보이고 사라지는 때)을 확인한다. */
+/** 크기·단단함 슬라이더를 끄는 동안 캔버스에 보이는 브러시 크기 원(그 크기·배율, 끄는 동안만 보임)을 확인한다. */
 @RunWith(AndroidJUnit4::class)
 class SizePreviewTest {
 
@@ -118,55 +116,57 @@ class SizePreviewTest {
         }
     }
 
-    @Test
-    fun cover_brushSizeSlider_showsTheSizeWhileDragging_andHidesItAfterRelease() {
-        showEditScreen(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performScrollTo().performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
+    /** [sliderTag] 슬라이더를 누른 채 끄는 동안 크기 원이 보이고, 손을 떼면 바로 사라진다 */
+    private fun dragShowsTheSizeUntilRelease(sliderTag: String) {
+        composeRule.waitForIdle()
         composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
 
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput {
+        composeRule.onNodeWithTag(sliderTag).performTouchInput {
             down(center)
-            moveBy(Offset(width / 4f, 0f))
+            moveBy(Offset(width / 8f, 0f))
         }
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
 
-        // 손을 떼도 잠깐 남았다가 사라진다
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput { up() }
-        composeRule.mainClock.advanceTimeBy(LINGER_MILLIS / 2)
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
-        composeRule.mainClock.advanceTimeBy(LINGER_MILLIS)
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
-    }
-
-    /** 도구 막대로 [tool]을 고르고 [sizeTag] 크기 슬라이더를 한 번 바꾸면 크기 원이 잠깐 보인다 */
-    private fun railSliderShowsTheSize(tool: EditTool, sizeTag: String) {
-        composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.mainClock.autoAdvance = false
-
-        composeRule.onNodeWithTag(sizeTag).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        composeRule.onNodeWithTag(sliderTag).performTouchInput { up() }
         composeRule.mainClock.advanceTimeByFrame()
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
-        composeRule.mainClock.advanceTimeBy(LINGER_MILLIS * 2)
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
         composeRule.mainClock.autoAdvance = true
     }
 
     @Test
-    fun mainPortrait_retouchAndToneSizes_showTheSize() {
-        showEditScreen(700, 900)
+    fun cover_brushSizeAndHardness_showTheSizeWhileDragging_andHideItOnRelease() {
+        showEditScreen(411, 800)
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performScrollTo().performClick()
 
-        railSliderShowsTheSize(EditTool.Retouch, EditScreenTags.RETOUCH_SIZE)
-        railSliderShowsTheSize(EditTool.Tone, EditScreenTags.TONE_SIZE)
+        dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_SIZE)
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performScrollTo()
+        dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_HARDNESS)
+    }
+
+    /** 도구 막대로 [tool]을 고르고 [tags] 슬라이더마다 끄는 동안만 크기 원이 보이는지 본다 */
+    private fun railSlidersShowTheSize(tool: EditTool, vararg tags: String) {
+        composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performScrollTo().performClick()
+        for (tag in tags) {
+            composeRule.onNodeWithTag(tag).performScrollTo()
+            dragShowsTheSizeUntilRelease(tag)
+        }
     }
 
     @Test
-    fun mainLandscape_eraserSize_showsTheSize() {
+    fun mainPortrait_retouchAndToneSizeAndHardness_showTheSize() {
+        showEditScreen(700, 900)
+
+        railSlidersShowTheSize(EditTool.Retouch, EditScreenTags.RETOUCH_SIZE, EditScreenTags.RETOUCH_HARDNESS)
+        railSlidersShowTheSize(EditTool.Tone, EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS)
+    }
+
+    @Test
+    fun mainLandscape_eraserSizeAndHardness_showTheSize() {
         showEditScreen(930, 700)
 
-        railSliderShowsTheSize(EditTool.Eraser, EditScreenTags.BRUSH_SIZE)
+        railSlidersShowTheSize(EditTool.Eraser, EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS)
     }
 
     @Test
@@ -182,13 +182,7 @@ class SizePreviewTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
-        composeRule.mainClock.autoAdvance = false
 
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
-        composeRule.mainClock.advanceTimeByFrame()
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
-        composeRule.mainClock.advanceTimeBy(LINGER_MILLIS * 2)
-        composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
+        dragShowsTheSizeUntilRelease(EditScreenTags.LIQUIFY_SIZE)
     }
 }

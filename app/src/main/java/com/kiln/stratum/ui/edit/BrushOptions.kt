@@ -42,7 +42,7 @@ import kotlin.math.roundToInt
  * 브러시·지우개 옵션이 쓰는 값과 할 일. 설정은 ViewModel이 들고(앱을 끌 때까지 남음), 바꾸면 [onChange]로 알린다.
  *
  * @property erase 지우개 옵션인지. 지우개는 색을 고르지 않는다.
- * @property sizePreview 크기 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
+ * @property sizePreview 크기·단단함 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
  */
 @Stable
 class BrushControls(
@@ -69,13 +69,7 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), fillHeight = false) {
         if (!controls.erase) ColorSwatches(settings.color) { controls.onChange(settings.copy(color = it)) }
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.BRUSH_SIZE, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.brush_hardness),
-            shown = stringResource(R.string.layer_percent, (settings.hardness * 100).roundToInt()),
-            fraction = settings.hardness,
-            onFraction = { controls.onChange(settings.copy(hardness = (it * 100).roundToInt() / 100f)) },
-            tag = EditScreenTags.BRUSH_HARDNESS
-        )
+        HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.layer_opacity),
             shown = stringResource(R.string.layer_percent, (settings.opacity * 100).roundToInt()),
@@ -88,7 +82,7 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 크기 슬라이더(1~1000px, 로그 눈금). 끄는 동안 [preview]가 캔버스에 그 크기를 보인다(손을 떼면 잠깐 뒤 사라짐).
+ * 크기 슬라이더(1~1000px, 로그 눈금). 끄는 동안 [preview]가 캔버스에 그 크기를 보인다(손을 떼면 사라짐).
  * 브러시·지우개·리터칭·명암·유동화가 같이 쓴다.
  */
 @Composable
@@ -100,6 +94,25 @@ internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, previ
         onFraction = {
             preview?.onChange()
             onSize(fractionToSize(it))
+        },
+        tag = tag,
+        onFinished = { preview?.onFinished() }
+    )
+}
+
+/**
+ * 단단함 슬라이더(0~100%). 끄는 동안 [preview]가 캔버스에 브러시 크기와 단단함 자리를 보인다(손을 떼면 사라짐).
+ * 브러시·지우개·리터칭·명암이 같이 쓴다.
+ */
+@Composable
+internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
+    OptionSlider(
+        label = stringResource(R.string.brush_hardness),
+        shown = stringResource(R.string.layer_percent, (hardness * 100).roundToInt()),
+        fraction = hardness,
+        onFraction = {
+            preview?.onChange()
+            onHardness((it * 100).roundToInt() / 100f)
         },
         tag = tag,
         onFinished = { preview?.onFinished() }
