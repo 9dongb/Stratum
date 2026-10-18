@@ -24,6 +24,7 @@ import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.tone.ToneFill
 import java.util.IdentityHashMap
 import kotlin.math.roundToInt
 
@@ -245,6 +246,7 @@ class LayerPreviewCache {
      * 레이어 축소본 위에 그리거나(합치기 전), 쉬운 경우에는 확대 그림 위에 바로 그린다(맨 위 표준 레이어에 그릴 때, ViewModel이 고른다).
      * 획에 선택 영역이 있으면 그 영역 안으로 자른다(기록할 때와 같다).
      * 복제 획([LiveStroke.clone])은 [image]에서 옮긴 자리를 베껴 보인다. 그림 밖에서 가져올 곳은 비워 둔다.
+     * 명암 획([LiveStroke.tone])은 [image]를 닷지·번으로 바꾼 색을 획 모양으로 보인다.
      */
     fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>): Bitmap? {
         val width = region.previewWidth
@@ -255,15 +257,16 @@ class LayerPreviewCache {
         if (image != null) canvas.drawBitmap(image, 0f, 0f, null)
         for (stroke in strokes) {
             val clone = stroke.clone
-            // 가져올 그림이 없으면(빈 레이어) 복제할 것이 없다
-            if (clone != null && image == null) continue
-            val fill = if (clone != null && image != null) {
+            val tone = stroke.tone
+            // 읽을 그림이 없으면(빈 레이어) 복제하거나 바꿀 색이 없다
+            if ((clone != null || tone != null) && image == null) continue
+            val fill = when {
                 // 캔버스 자리 q는 그림의 q - 옮긴 양을 읽는다
-                BitmapShader(image, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+                clone != null && image != null -> BitmapShader(image, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
                     setLocalMatrix(Matrix().apply { setTranslate(clone.x * scale, clone.y * scale) })
                 }
-            } else {
-                null
+                tone != null && image != null -> ToneShader.of(BitmapShader(image, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), tone)
+                else -> null
             }
             BrushPainter.drawStroke(
                 canvas, stroke.dabs, stroke.settings, stroke.erase,
@@ -311,6 +314,7 @@ class LayerPreviewCache {
  * [dabs]는 그리는 동안 바뀌지 않는 목록이어야 한다(끄는 쪽이 복사해 넘긴다).
  * [selection]은 획을 시작할 때의 선택 영역이다. 있으면 미리 보기도 그 안으로 자른다.
  * [clone]이 있으면 칠하는 대신 '획 자리 - 그 양'의 레이어 픽셀을 베껴 보인다(복제 도장·복구 브러시를 끄는 동안).
+ * [tone]이 있으면 칠하는 대신 레이어 픽셀을 닷지·번으로 바꾼 색을 보인다(명암 도구를 끄는 동안).
  */
 class LiveStroke(
     val layerId: LayerId,
@@ -318,5 +322,6 @@ class LiveStroke(
     val settings: BrushSettings,
     val erase: Boolean,
     val selection: Selection? = null,
-    val clone: SourceOffset? = null
+    val clone: SourceOffset? = null,
+    val tone: ToneFill? = null
 )
