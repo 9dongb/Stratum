@@ -17,11 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,11 +46,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.project.ProjectInfo
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Span
 import com.kiln.stratum.ui.layout.insetsAvoiding
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -136,7 +138,7 @@ private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> U
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
+                .clip(StratumShapes.Card)
                 .combinedClickable(onClick = onOpen, onLongClick = { menuOpen = true }, onLongClickLabel = menuLabel)
                 .semantics(mergeDescendants = true) {
                     contentDescription = description
@@ -144,7 +146,7 @@ private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> U
                 }
                 .testTag(HomeTags.project(info.id))
         ) {
-            ProjectThumbnail(info, Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.medium))
+            ProjectThumbnail(info, Modifier.fillMaxWidth().aspectRatio(1f).clip(StratumShapes.Card))
             Text(
                 text = date,
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp),
@@ -155,12 +157,12 @@ private fun ProjectCard(info: ProjectInfo, onOpen: () -> Unit, onDelete: () -> U
             Text(
                 text = stringResource(R.string.home_project_size, info.width, info.height),
                 modifier = Modifier.padding(horizontal = 4.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1
             )
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        StratumDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
                 text = { Text(deleteLabel) },
                 onClick = {
@@ -178,7 +180,7 @@ private fun ProjectThumbnail(info: ProjectInfo, modifier: Modifier) {
     val image by produceState<ImageBitmap?>(null, info.thumbnail.path, info.modifiedMillis) {
         value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(info.thumbnail.path)?.asImageBitmap() }
     }
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+    Box(modifier.background(StratumTheme.colors.panel), contentAlignment = Alignment.Center) {
         image?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
     }
 }
@@ -191,9 +193,10 @@ fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         title = stringResource(R.string.home_delete_title),
         buttons = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
-                TextButton(onClick = onConfirm, modifier = Modifier.testTag(HomeTags.DELETE_CONFIRM)) {
-                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
+                QuietButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+                // 되돌릴 수 없는 지우기는 주요 버튼이 아니라 오류 색 글자 버튼이다
+                QuietButton(onClick = onConfirm, color = StratumTheme.colors.error, modifier = Modifier.testTag(HomeTags.DELETE_CONFIRM)) {
+                    Text(stringResource(R.string.action_delete))
                 }
             }
         }

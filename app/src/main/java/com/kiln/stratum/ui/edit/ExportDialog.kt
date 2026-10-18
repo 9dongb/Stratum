@@ -19,11 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.Saver
@@ -42,11 +38,16 @@ import com.kiln.stratum.engine.export.ExportSizes
 import com.kiln.stratum.engine.export.MAX_EXPORT_QUALITY
 import com.kiln.stratum.engine.export.MIN_EXPORT_QUALITY
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 창 내용이 이 폭 이상이면 형식과 품질을 한 줄에 둔다. 펼친 화면을 세로로 들면 창이 접히는 선 위쪽 절반에 들어가 높이가 모자라서다. */
@@ -125,14 +126,14 @@ private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, hdr: Boole
                     size.width,
                     size.height
                 ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 style = MaterialTheme.typography.bodyMedium
             )
             if (hdr) {
                 Text(
                     text = stringResource(if (choice.format == ExportFormat.JPEG) R.string.export_hdr_jpeg else R.string.export_hdr_lost),
                     modifier = Modifier.testTag(EditScreenTags.EXPORT_HDR_HINT),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = StratumTheme.colors.textDescription,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -143,13 +144,13 @@ private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, hdr: Boole
 /** 형식: JPEG | PNG | WebP */
 @Composable
 private fun FormatRow(choice: ExportChoice, onChoiceChange: (ExportChoice) -> Unit) {
-    SingleChoiceSegmentedButtonRow {
+    StratumSegmentedRow {
         ExportFormat.entries.forEachIndexed { index, format ->
-            SegmentedButton(
+            StratumSegment(
                 selected = choice.format == format,
                 onClick = { onChoiceChange(choice.copy(format = format)) },
-                shape = SegmentedButtonDefaults.itemShape(index, ExportFormat.entries.size),
-                icon = {},
+                index = index,
+                count = ExportFormat.entries.size,
                 modifier = Modifier.testTag(EditScreenTags.exportFormat(format))
             ) {
                 Text(
@@ -179,7 +180,7 @@ private fun QualityRow(choice: ExportChoice, onChoiceChange: (ExportChoice) -> U
         Box(modifier.heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
             Text(
                 stringResource(R.string.export_lossless),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -220,17 +221,17 @@ private fun SizeRow(choice: ExportChoice, documentSize: PixelSize, onChoiceChang
     val choices = ExportSizes.choices(documentSize, choice.format)
     if (choices.size < 2) return
     val selected = choice.sizeFor(documentSize)
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+    StratumSegmentedRow(Modifier.fillMaxWidth()) {
         choices.forEachIndexed { index, size ->
             val description = when (size) {
                 ExportSize.Original -> null
                 is ExportSize.LongEdge -> stringResource(R.string.export_size_long_edge, size.pixels)
             }
-            SegmentedButton(
+            StratumSegment(
                 selected = selected == size,
                 onClick = { onChoiceChange(choice.copy(size = size)) },
-                shape = SegmentedButtonDefaults.itemShape(index, choices.size),
-                icon = {},
+                index = index,
+                count = choices.size,
                 // 좁은 화면(메인 가로의 오른쪽 절반)에서도 네 개가 한 줄에 들어가게 안쪽 여백을 줄인다
                 contentPadding = PaddingValues(horizontal = 8.dp),
                 modifier = Modifier
@@ -259,17 +260,17 @@ private fun ExportButtons(
     modifier: Modifier = Modifier
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = onCancel) {
+        QuietButton(onClick = onCancel) {
             Text(stringResource(R.string.action_cancel))
         }
-        TextButton(
+        QuietButton(
             onClick = { onExport(ExportTarget.SHARE) },
             enabled = !busy,
             modifier = Modifier.testTag(EditScreenTags.EXPORT_SHARE)
         ) {
             Text(stringResource(R.string.action_share))
         }
-        TextButton(
+        AccentButton(
             onClick = { onExport(ExportTarget.GALLERY) },
             enabled = !busy,
             modifier = Modifier.testTag(EditScreenTags.EXPORT_SAVE)

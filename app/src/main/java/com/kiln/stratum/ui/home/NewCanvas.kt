@@ -16,16 +16,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -51,10 +46,16 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.canvas.CanvasSizeCheck
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_PIXELS
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_SIDE
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /** 새 캔버스 창의 화면 테스트용 이름표. */
 object NewCanvasTags {
@@ -177,12 +178,13 @@ private fun NewCanvasForm(input: NewCanvasInput) {
         SizeFields(input)
         Spacer(Modifier.height(16.dp))
         SectionTitle(stringResource(R.string.new_canvas_background))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        StratumSegmentedRow(Modifier.fillMaxWidth()) {
             CanvasBackground.entries.forEachIndexed { index, background ->
-                SegmentedButton(
+                StratumSegment(
                     selected = input.background == background,
                     onClick = { input.background = background },
-                    shape = SegmentedButtonDefaults.itemShape(index, CanvasBackground.entries.size),
+                    index = index,
+                    count = CanvasBackground.entries.size,
                     modifier = Modifier.testTag(NewCanvasTags.background(background))
                 ) {
                     Text(stringResource(background.label))
@@ -197,7 +199,7 @@ private fun SectionTitle(text: String) {
     Text(
         text = text,
         modifier = Modifier.padding(vertical = 8.dp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = StratumTheme.colors.textDescription,
         style = MaterialTheme.typography.titleSmall
     )
 }
@@ -227,7 +229,7 @@ private fun PresetRow(preset: CanvasPreset, selected: Boolean, onClick: () -> Un
                 } else {
                     stringResource(R.string.new_canvas_preset_detail, preset.width, preset.height)
                 },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -247,7 +249,7 @@ private fun SizeFields(input: NewCanvasInput) {
             imeAction = ImeAction.Next,
             modifier = Modifier.weight(1f).testTag(NewCanvasTags.WIDTH)
         )
-        IconButton(onClick = input::swap, modifier = Modifier.testTag(NewCanvasTags.SWAP)) {
+        StratumIconButton(onClick = input::swap, modifier = Modifier.testTag(NewCanvasTags.SWAP)) {
             Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.new_canvas_swap))
         }
         SizeField(
@@ -270,7 +272,7 @@ private fun SizeFields(input: NewCanvasInput) {
             text = error,
             // 고쳐 쓰는 동안 바뀌는 까닭을 화면 읽기 기능이 알려 준다
             modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
-            color = MaterialTheme.colorScheme.error,
+            color = StratumTheme.colors.error,
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -305,10 +307,10 @@ private fun NewCanvasButtons(
     modifier: Modifier = Modifier
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = onCancel) {
+        QuietButton(onClick = onCancel) {
             Text(stringResource(R.string.action_cancel))
         }
-        TextButton(
+        AccentButton(
             onClick = onCreate,
             enabled = input.check == CanvasSizeCheck.OK,
             modifier = Modifier.testTag(NewCanvasTags.CREATE)

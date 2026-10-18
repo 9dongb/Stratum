@@ -7,12 +7,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
@@ -33,6 +31,8 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 창 카드의 화면 테스트용 이름표. */
@@ -43,11 +43,8 @@ private val DialogMinWidth = 280.dp
 private val DialogMaxWidth = 560.dp
 private val DialogMargin = 24.dp
 
-/** 창 뒤 화면을 어둡게 덮는 정도. Material 모달 시트와 같다. */
-private const val ScrimAlpha = 0.32f
-
 /**
- * 접히는 부분(힌지)을 피해 띄우는 창. Material 대화상자(AlertDialog)와 같은 모양이다.
+ * 접히는 부분(힌지)을 피해 띄우는 창. Material 대화상자(AlertDialog)와 같은 구성이고, 모양은 앱 테마(모서리 12dp, 패널 색)다.
  *
  * 힌지가 없으면 화면 가운데에 뜬다. 힌지가 있으면 시스템 바·키보드·힌지 띠를 뺀 영역 중 카드가 잘 들어가는 쪽
  * 가운데에 뜬다(같으면 오른쪽·위쪽, [dialogRegion]). 그래서 펼친 폴드에서도 버튼이 힌지에 놓이지 않는다(CLAUDE.md 6장).
@@ -71,7 +68,7 @@ fun HingeAwareDialog(
 ) {
     val hinges = LocalHinges.current
     BackHandler(onBack = onDismissRequest)
-    val scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = ScrimAlpha)
+    val scrimColor = StratumTheme.colors.scrim
     Layout(
         contents = listOf(
             {
@@ -136,20 +133,20 @@ private fun DialogCard(title: String, buttons: @Composable () -> Unit, content: 
             // 키보드 초점(Tab·방향키)이 창 밖 화면으로 나가지 않게 한다
             .focusProperties { onExit = { cancelFocusChange() } }
             .focusGroup(),
-        shape = AlertDialogDefaults.shape,
-        color = AlertDialogDefaults.containerColor,
-        tonalElevation = AlertDialogDefaults.TonalElevation
+        shape = StratumShapes.Dialog,
+        color = StratumTheme.colors.panel,
+        contentColor = StratumTheme.colors.textPrimary
     ) {
         Column(Modifier.padding(24.dp)) {
             Text(
                 text = title,
-                color = AlertDialogDefaults.titleContentColor,
+                color = StratumTheme.colors.textPrimary,
                 style = MaterialTheme.typography.headlineSmall
             )
             Spacer(Modifier.height(16.dp))
             // 카드 높이가 모자라면 내용만 줄어들고 스크롤된다. 버튼은 늘 보인다.
             Box(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor) {
+                CompositionLocalProvider(LocalContentColor provides StratumTheme.colors.textSecondary) {
                     ProvideTextStyle(MaterialTheme.typography.bodyMedium, content)
                 }
             }

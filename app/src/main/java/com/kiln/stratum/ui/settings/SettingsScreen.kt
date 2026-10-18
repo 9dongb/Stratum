@@ -23,19 +23,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,7 +44,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -69,7 +62,14 @@ import com.kiln.stratum.engine.export.MAX_EXPORT_QUALITY
 import com.kiln.stratum.engine.export.MIN_EXPORT_QUALITY
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.SettingsValues
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSlider
+import com.kiln.stratum.ui.components.StratumSwitch
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 import com.kiln.stratum.ui.layout.HingeSplitRow
@@ -78,6 +78,7 @@ import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 설정의 분류 */
@@ -137,13 +138,14 @@ fun SettingsScreen(
                 val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
                 TopAppBar(
                     title = { Text(stringResource(R.string.settings_title), Modifier.topBarItem(barInsets, "title")) },
+                    modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider),
                     navigationIcon = {
-                        IconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
+                        StratumIconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
                             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
                         }
                     },
                     windowInsets = barInsets.windowInsets(),
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                    colors = stratumTopAppBarColors()
                 )
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -160,7 +162,7 @@ fun SettingsScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(ItemGap)) {
                             CategoryItems(entry, values, onChange, versionName)
                         }
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = StratumTheme.colors.divider)
                     }
                 }
             } else {
@@ -194,16 +196,15 @@ fun SettingsScreen(
     }
 }
 
-/** 2단 왼쪽의 분류 한 줄. 고른 분류는 바탕을 칠한다. 누르는 영역은 높이 56dp다. */
+/** 2단 왼쪽의 분류 한 줄. 레이어 줄처럼 평평한 줄이고, 고른 분류는 선택 배경과 선택 색 글자다. 누르는 영역은 높이 56dp다. */
 @Composable
 private fun CategoryRow(category: SettingsCategory, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val colors = StratumTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(if (selected) colors.secondaryContainer else Color.Transparent)
+            .background(if (selected) colors.selectedBackground else Color.Transparent)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 24.dp)
             .testTag(SettingsTags.category(category)),
@@ -211,7 +212,7 @@ private fun CategoryRow(category: SettingsCategory, selected: Boolean, onClick: 
     ) {
         Text(
             text = stringResource(category.label),
-            color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+            color = if (selected) colors.selectedContent else colors.textPrimary,
             style = MaterialTheme.typography.titleSmall
         )
     }
@@ -223,7 +224,7 @@ private fun SectionTitle(@StringRes label: Int) {
     Text(
         text = stringResource(label),
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp).semantics { heading() },
-        color = MaterialTheme.colorScheme.primary,
+        color = StratumTheme.colors.textDescription,
         style = MaterialTheme.typography.titleSmall
     )
 }
@@ -253,13 +254,13 @@ private fun ExportItems(values: SettingsValues, onChange: ((SettingsValues) -> S
     val export = values.export
     Description(R.string.settings_export_description)
     LabeledItem(R.string.export_format) {
-        SingleChoiceSegmentedButtonRow {
+        StratumSegmentedRow {
             ExportFormat.entries.forEachIndexed { index, format ->
-                SegmentedButton(
+                StratumSegment(
                     selected = export.format == format,
                     onClick = { onChange { it.copy(export = it.export.copy(format = format)) } },
-                    shape = SegmentedButtonDefaults.itemShape(index, ExportFormat.entries.size),
-                    icon = {},
+                    index = index,
+                    count = ExportFormat.entries.size,
                     modifier = Modifier.testTag(SettingsTags.format(format))
                 ) {
                     Text(
@@ -284,15 +285,15 @@ private fun ExportItems(values: SettingsValues, onChange: ((SettingsValues) -> S
     }
     LabeledItem(R.string.export_size) {
         val sizes = listOf(ExportSize.Original) + ExportSizes.LONG_EDGE_PRESETS.map { ExportSize.LongEdge(it) }
-        SingleChoiceSegmentedButtonRow {
+        StratumSegmentedRow {
             sizes.forEachIndexed { index, size ->
                 // 숫자만 보이므로 화면 읽기 기능에는 '긴 변 N px'로 알린다(내보내기 창과 같다)
                 val description = (size as? ExportSize.LongEdge)?.let { stringResource(R.string.export_size_long_edge, it.pixels) }
-                SegmentedButton(
+                StratumSegment(
                     selected = export.size == size,
                     onClick = { onChange { it.copy(export = it.export.copy(size = size)) } },
-                    shape = SegmentedButtonDefaults.itemShape(index, sizes.size),
-                    icon = {},
+                    index = index,
+                    count = sizes.size,
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     modifier = Modifier
                         .testTag(SettingsTags.size(size))
@@ -369,7 +370,7 @@ private fun PreviewItems(values: SettingsValues, onChange: ((SettingsValues) -> 
                 )
                 Text(
                     stringResource(if (quality == PreviewQuality.STANDARD) R.string.settings_preview_standard_description else R.string.settings_preview_light_description),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = StratumTheme.colors.textDescription,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -411,12 +412,12 @@ private fun SwitchItem(checked: Boolean, onCheckedChange: (Boolean) -> Unit, @St
             Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
             Text(
                 stringResource(description),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 style = MaterialTheme.typography.bodySmall
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = null)
+        StratumSwitch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -443,7 +444,7 @@ private fun AboutItems(versionName: String) {
             Icon(
                 painterResource(if (showLicenses) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = StratumTheme.colors.textSecondary
             )
         }
         if (showLicenses) Description(R.string.settings_licenses_text)
@@ -462,11 +463,11 @@ private fun LabeledItem(@StringRes label: Int, content: @Composable ColumnScope.
 /** 항목 이름 */
 @Composable
 private fun ItemLabel(@StringRes label: Int) {
-    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = StratumTheme.colors.textSecondary)
 }
 
 /** 설명 글 */
 @Composable
 private fun Description(@StringRes text: Int) {
-    Text(stringResource(text), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(text), color = StratumTheme.colors.textDescription, style = MaterialTheme.typography.bodySmall)
 }

@@ -14,6 +14,20 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 창·시트·홈·설정(디자인 시안 작업 6단계)
+
+- 요청: 시안 디자인을 앱 전체에 적용(질문에 대한 사용자 답 "앱 전체 (추천)")
+- 의도: "목표는 포토샵 플랫하고 촘촘한 디자인이야."
+- 커밋:
+  - "창·아래 시트·홈·설정 화면을 시안 부품과 색으로 바꿈(창 12dp 패널 카드, 확인은 주요 버튼, 평평한 설정 분류)"
+- 바꾼 것:
+  - `HingeAwareDialog.kt`: 카드 12dp 패널 색, 제목 기본색·내용 보조색, 막 토큰.
+  - `ExportDialog.kt`·`ResizeDialog.kt`: 분할 버튼, 저장·적용은 주요 버튼, 취소·공유는 글자 버튼, 안내·오류 색, 스위치.
+  - `home/HomeScreen.kt`: 상단 바(기본 배경·구분선), 사진 열기(주요)·새 캔버스(보조), 빈 안내 카드. `home/NewCanvas.kt`: 배경 분할 버튼(체크 표시 없음), 만들기(주요). `home/RecentProjects.kt`: 카드 8dp, 앱 메뉴, 지우기 창의 오류 색 버튼.
+  - `settings/SettingsScreen.kt`: 상단 바, 평평한 분류 줄, 분류 제목 설명색, 분할 버튼·스위치, 안내 색.
+  - 이제 화면 코드에 `MaterialTheme.colorScheme`·`MaterialTheme.shapes`가 남지 않는다(테마와 부품 안에만).
+- 확인한 것: 빌드와 단위 테스트, 에뮬레이터(Pixel_Fold)에서 AdjustPanelTest·BrushToolsTest·EditToolsTest·EditCropTest·SelectionToolTest·ToneToolTest·RetouchToolTest·ColorPaletteTest·EyedropperTest·LayerPanelTest·EditScreenEditingTest와 6단계의 창·홈·설정 테스트를 함께 돌려 146개 중 141개가 통과했다. 실패 5개 중 4개(ColorPaletteTest·HingeAwareDialogTest·ResizeDialogTest·NewCanvasTest의 메인 세로 힌지)는 접힌 커버 화면에서만 실패하는 테스트이고, 1개(StratumComponentsTest의 선택 상자)는 누른 직후 번지는 표시가 남은 채 찍은 테스트 순서 문제라 찍은 뒤 누르게 고쳐 통과했다(6개).
+
 ## 2026-10-18 · 도구 옵션과 패널 안(디자인 시안 작업 5단계)
 
 - 요청: "칩: 테두리형, 선택 시 #2A3550 배경 + #4C7BD9 테두리", "레이어 줄: 둥근 카드 대신 평평한 줄, 선택 시 배경만 #2A3550", "혼합 모드 선택: 알약 버튼 대신 모서리 6dp의 작은 선택 상자 (테두리 #3A3C43)", 버튼·슬라이더 모양과 글자 색

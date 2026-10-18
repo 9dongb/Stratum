@@ -18,12 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,10 +36,16 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasSizeCheck
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_PIXELS
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_SIDE
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
+import com.kiln.stratum.ui.components.StratumSwitch
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
  * 이미지 크기 변경 창. 새 캔버스 창과 같은 방식으로, 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트,
@@ -106,13 +107,13 @@ private fun ResizeForm(input: ResizeInput) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically
         ) {
-            SingleChoiceSegmentedButtonRow {
+            StratumSegmentedRow {
                 ResizeUnit.entries.forEachIndexed { index, unit ->
-                    SegmentedButton(
+                    StratumSegment(
                         selected = input.unit == unit,
                         onClick = { input.changeUnit(unit) },
-                        shape = SegmentedButtonDefaults.itemShape(index, ResizeUnit.entries.size),
-                        icon = {},
+                        index = index,
+                        count = ResizeUnit.entries.size,
                         modifier = Modifier.testTag(EditScreenTags.resizeUnit(unit))
                     ) {
                         Text(
@@ -139,7 +140,7 @@ private fun ResizeForm(input: ResizeInput) {
             ) {
                 Text(stringResource(R.string.resize_keep_ratio), style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = input.locked, onCheckedChange = null)
+                StratumSwitch(checked = input.locked, onCheckedChange = null)
             }
         }
         // 안내는 칸 바로 위 한 줄이다. 창이 낮아 내용이 스크롤되어도(키보드가 열리면 고치는 칸이 보이게 스크롤된다)
@@ -195,7 +196,7 @@ private fun ResizeStatus(input: ResizeInput) {
         text = text,
         // 고쳐 쓰는 동안 생긴 오류의 까닭을 화면 읽기 기능이 알려 준다
         modifier = if (error != null) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier,
-        color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (error != null) StratumTheme.colors.error else StratumTheme.colors.textDescription,
         style = MaterialTheme.typography.bodyMedium
     )
 }
@@ -236,10 +237,10 @@ private fun ResizeButtons(
     modifier: Modifier = Modifier
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = onCancel) {
+        QuietButton(onClick = onCancel) {
             Text(stringResource(R.string.action_cancel))
         }
-        TextButton(
+        AccentButton(
             onClick = onApply,
             enabled = input.canApply && !busy,
             modifier = Modifier.testTag(EditScreenTags.RESIZE_APPLY)

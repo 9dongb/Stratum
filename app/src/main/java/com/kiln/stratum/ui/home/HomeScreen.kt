@@ -9,12 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -36,12 +33,19 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.engine.canvas.CanvasFill
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.SecondaryButton
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -83,15 +87,17 @@ fun HomeScreen(
                 val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name), Modifier.topBarItem(barInsets, "title")) },
+                    modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider),
                     actions = {
-                        IconButton(onClick = onOpenSettings, modifier = Modifier.topBarItem(barInsets, "settings")) {
+                        StratumIconButton(onClick = onOpenSettings, modifier = Modifier.topBarItem(barInsets, "settings")) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_settings),
                                 contentDescription = stringResource(R.string.action_settings)
                             )
                         }
                     },
-                    windowInsets = barInsets.windowInsets()
+                    windowInsets = barInsets.windowInsets(),
+                    colors = stratumTopAppBarColors()
                 )
             }
         ) { innerPadding ->
@@ -108,10 +114,7 @@ fun HomeScreen(
                         // 펼친 화면 가운데의 접히는 부분(힌지)이 버튼 줄을 지나면, 두 버튼을 힌지 양쪽에 하나씩 놓는다.
                         HingeSplitRow(
                             first = {
-                                Button(
-                                    onClick = onOpenPhoto,
-                                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                                ) {
+                                AccentButton(onClick = onOpenPhoto) {
                                     Icon(
                                         painter = painterResource(R.drawable.ic_photo_library),
                                         contentDescription = null,
@@ -122,10 +125,7 @@ fun HomeScreen(
                                 }
                             },
                             second = {
-                                FilledTonalButton(
-                                    onClick = { showNewCanvas = true },
-                                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding
-                                ) {
+                                SecondaryButton(onClick = { showNewCanvas = true }) {
                                     Icon(
                                         painter = painterResource(R.drawable.ic_add),
                                         contentDescription = null,
@@ -152,13 +152,13 @@ fun HomeScreen(
                     ) {
                         Surface(
                             modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                            shape = StratumShapes.Card,
+                            color = StratumTheme.colors.panel
                         ) {
                             Text(
                                 text = stringResource(R.string.home_recent_projects_empty),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 48.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = StratumTheme.colors.textDescription,
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.bodyMedium
                             )
