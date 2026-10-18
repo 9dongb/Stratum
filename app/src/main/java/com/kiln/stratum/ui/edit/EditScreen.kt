@@ -622,7 +622,7 @@ fun EditScreen(
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
         if (liquify != null) {
-            LiquifyMode(liquify, liquifyActions)
+            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo)
         }
     }
 }

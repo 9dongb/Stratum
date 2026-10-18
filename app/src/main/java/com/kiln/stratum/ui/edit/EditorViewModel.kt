@@ -516,6 +516,9 @@ class EditorViewModel internal constructor(
         val displacements = FloatArray(mesh.columns * mesh.rows * 2)
         val halves = ShortArray(mesh.columns * mesh.rows * 4)
         val undo = ArrayList<LiquifyMesh>()
+
+        /** 되돌린 획(다시 실행). 되돌리면 그 획이 여기로 와서, 되돌리기와 합쳐도 단계 수가 늘지 않는다. */
+        val redo = ArrayList<LiquifyMesh>()
         var lastX = 0f
         var lastY = 0f
         var pressed = false
@@ -536,6 +539,7 @@ class EditorViewModel internal constructor(
         override fun begin(x: Float, y: Float) = liquifyBegin(x, y)
         override fun move(x: Float, y: Float) = liquifyMove(x, y)
         override fun end() = liquifyEnd()
+        override fun cancelStroke() = cancelLiquifyStroke()
         override fun setTool(tool: LiquifyTool) {
             liquifyTool = tool
             republishLiquify()
@@ -549,6 +553,7 @@ class EditorViewModel internal constructor(
             republishLiquify()
         }
         override fun undo() = undoLiquify()
+        override fun redo() = redoLiquify()
         override fun reset() = resetLiquify()
         override fun apply() = applyLiquify()
         override fun cancel() = cancelLiquify()
@@ -812,6 +817,7 @@ class EditorViewModel internal constructor(
             size = checkNotNull(liquifySize),
             strength = liquifyStrength,
             canUndo = session.undo.isNotEmpty(),
+            canRedo = session.redo.isNotEmpty(),
             changed = !session.mesh.isIdentity(),
             busy = busy,
             colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB
@@ -858,8 +864,24 @@ class EditorViewModel internal constructor(
 
     private fun liquifyEnd() {
         val session = liquifySession ?: return
+        // 남긴 획은 새 변화라, 되돌렸던 획은 다시 실행할 수 없다
+        if (session.pressed) session.redo.clear()
         session.pressed = false
         liquifyHoldJob?.cancel()
+        republishLiquify()
+    }
+
+    /**
+     * 끄던 획을 버린다(두 번째 손가락이 닿음, 결정 기록 '픽셀 유동화'). 획을 시작할 때 되돌리기에 남긴 격자로 돌아가고 그것을 지운다.
+     * 브러시와 같아서, 두 손가락 톡·확대를 하려다 첫 손가락이 찍은 작은 획이 남지 않는다. 다시 실행 목록은 그대로다.
+     */
+    private fun cancelLiquifyStroke() {
+        val session = liquifySession ?: return
+        if (!session.pressed) return
+        session.pressed = false
+        liquifyHoldJob?.cancel()
+        if (session.undo.isNotEmpty()) session.mesh = session.undo.removeAt(session.undo.lastIndex)
+        requestLiquifyRender()
         republishLiquify()
     }
 
@@ -895,7 +917,19 @@ class EditorViewModel internal constructor(
     private fun undoLiquify() {
         val session = liquifySession ?: return
         if (session.pressed || session.undo.isEmpty() || _liquify.value?.busy == true) return
+        session.redo += session.mesh
         session.mesh = session.undo.removeAt(session.undo.lastIndex)
+        requestLiquifyRender()
+        republishLiquify()
+    }
+
+    /** 되돌린 한 획을 다시 건다(작업 모드 안에서) */
+    private fun redoLiquify() {
+        val session = liquifySession ?: return
+        if (session.pressed || session.redo.isEmpty() || _liquify.value?.busy == true) return
+        session.undo += session.mesh
+        if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        session.mesh = session.redo.removeAt(session.redo.lastIndex)
         requestLiquifyRender()
         republishLiquify()
     }
@@ -906,6 +940,7 @@ class EditorViewModel internal constructor(
         if (session.pressed || session.mesh.isIdentity() || _liquify.value?.busy == true) return
         session.undo += session.mesh.copy()
         if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        session.redo.clear()
         session.mesh.reset()
         requestLiquifyRender()
         republishLiquify()

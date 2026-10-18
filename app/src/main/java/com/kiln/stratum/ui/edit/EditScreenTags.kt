@@ -138,6 +138,7 @@ object EditScreenTags {
     const val LIQUIFY_OPTIONS = "liquifyOptions"
     const val LIQUIFY_CANCEL = "liquifyCancel"
     const val LIQUIFY_UNDO = "liquifyUndo"
+    const val LIQUIFY_REDO = "liquifyRedo"
     const val LIQUIFY_RESET = "liquifyReset"
     const val LIQUIFY_APPLY = "liquifyApply"
     const val LIQUIFY_SIZE = "liquifySize"

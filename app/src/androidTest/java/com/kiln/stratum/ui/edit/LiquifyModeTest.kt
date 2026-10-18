@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
@@ -74,6 +77,10 @@ class LiquifyModeTest {
             calls += "end"
         }
 
+        override fun cancelStroke() {
+            calls += "cancelStroke"
+        }
+
         override fun setTool(tool: LiquifyTool) {
             chosenTool = tool
         }
@@ -88,6 +95,10 @@ class LiquifyModeTest {
 
         override fun undo() {
             calls += "undo"
+        }
+
+        override fun redo() {
+            calls += "redo"
         }
 
         override fun reset() {
@@ -113,14 +124,23 @@ class LiquifyModeTest {
         LiquifyState(preview, document, LiquifyTool.PUSH, size = 150f, strength = 0.5f, canUndo = false, changed = false)
     )
 
-    private fun show(widthDp: Int, heightDp: Int) {
+    private fun show(widthDp: Int, heightDp: Int, twoFingerTapUndo: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { LiquifyMode(state, actions) }
+                    StratumTheme { LiquifyMode(state, actions, twoFingerTapUndo = twoFingerTapUndo) }
                 }
             }
         }
+    }
+
+    /** 두 손가락을 잠깐 대었다가 뗀다(두 손가락 톡) */
+    private fun TouchInjectionScope.twoFingerTap() {
+        down(0, center - Offset(60f, 0f))
+        down(1, center + Offset(60f, 0f))
+        advanceEventTime(80)
+        up(0)
+        up(1)
     }
 
     @Test
@@ -129,16 +149,18 @@ class LiquifyModeTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).assertIsEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_UNDO).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_REDO).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_RESET).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).assertIsNotEnabled()
 
-        composeRule.runOnIdle { state = state.copy(canUndo = true, changed = true) }
+        composeRule.runOnIdle { state = state.copy(canUndo = true, canRedo = true, changed = true) }
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_UNDO).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_REDO).assertIsEnabled().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_RESET).assertIsEnabled().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).assertIsEnabled().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).performClick()
 
-        composeRule.runOnIdle { assertEquals(listOf("undo", "reset", "apply", "cancel"), actions.calls) }
+        composeRule.runOnIdle { assertEquals(listOf("undo", "redo", "reset", "apply", "cancel"), actions.calls) }
     }
 
     @Test
@@ -153,6 +175,54 @@ class LiquifyModeTest {
         // 편집 화면 상단 바와 같은 48dp에 상태 표시줄(또는 버튼·제목에 걸리는 카메라 구멍) 높이만 더한다
         val height = bar.layoutBoundsInWindow().height
         assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
+    }
+
+    @Test
+    fun aSecondFinger_dropsTheStroke() {
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput {
+            down(0, center)
+            moveBy(0, Offset(30f, 0f))
+            down(1, center + Offset(150f, 0f))
+            up(1)
+            up(0)
+        }
+
+        composeRule.runOnIdle { assertEquals(listOf("begin", "move", "cancelStroke"), actions.calls) }
+    }
+
+    @Test
+    fun twoFingerTap_undoesAStroke_andTellsSo() {
+        state = state.copy(canUndo = true, changed = true)
+        show(411, 800, twoFingerTapUndo = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { twoFingerTap() }
+
+        // 첫 손가락이 시작한 획은 버리고, 앞 획을 되돌린다
+        composeRule.runOnIdle { assertEquals(listOf("begin", "cancelStroke", "undo"), actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.action_undo))
+    }
+
+    @Test
+    fun twoFingerTap_withNothingToUndo_tellsSo() {
+        show(411, 800, twoFingerTapUndo = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { twoFingerTap() }
+
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.gesture_nothing_to_undo))
+        composeRule.runOnIdle { assertTrue("undo" !in actions.calls) }
+    }
+
+    @Test
+    fun twoFingerTap_turnedOff_doesNothing() {
+        state = state.copy(canUndo = true, changed = true)
+        show(411, 800, twoFingerTapUndo = false)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { twoFingerTap() }
+
+        composeRule.runOnIdle { assertTrue("undo" !in actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
     }
 
     @Test
@@ -187,10 +257,10 @@ class LiquifyModeTest {
 
     @Test
     fun whileApplying_everythingIsBlocked() {
-        state = state.copy(canUndo = true, changed = true, busy = true)
+        state = state.copy(canUndo = true, canRedo = true, changed = true, busy = true)
         show(411, 800)
 
-        for (tag in listOf(EditScreenTags.LIQUIFY_CANCEL, EditScreenTags.LIQUIFY_UNDO, EditScreenTags.LIQUIFY_RESET, EditScreenTags.LIQUIFY_APPLY)) {
+        for (tag in listOf(EditScreenTags.LIQUIFY_CANCEL, EditScreenTags.LIQUIFY_UNDO, EditScreenTags.LIQUIFY_REDO, EditScreenTags.LIQUIFY_RESET, EditScreenTags.LIQUIFY_APPLY)) {
             composeRule.onNodeWithTag(tag).assertIsNotEnabled()
         }
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { down(center); moveBy(Offset(50f, 0f)); up() }

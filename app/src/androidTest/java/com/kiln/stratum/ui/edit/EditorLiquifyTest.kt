@@ -90,6 +90,52 @@ class EditorLiquifyTest {
     }
 
     @Test
+    fun undoThenRedo_bringsTheStrokeBack_andANewStrokeClearsRedo() {
+        openWithLine()
+        onMain { viewModel.startLiquify() }
+        awaitLiquify { it != null }
+        pushRight()
+        val pushed = checkNotNull(awaitLiquify { it?.changed == true })
+        assertFalse(pushed.canRedo)
+
+        onMain { viewModel.liquifyActions.undo() }
+        val undone = checkNotNull(awaitLiquify { it != null && !it.changed })
+        assertTrue(undone.canRedo)
+        assertFalse(undone.canUndo)
+
+        onMain { viewModel.liquifyActions.redo() }
+        val redone = checkNotNull(awaitLiquify { it?.changed == true })
+        assertTrue(redone.canUndo)
+        assertFalse(redone.canRedo)
+
+        // 되돌린 뒤 새 획을 그으면 다시 실행할 것이 없다
+        onMain { viewModel.liquifyActions.undo() }
+        awaitLiquify { it != null && !it.changed && it.canRedo }
+        pushRight()
+        val fresh = checkNotNull(awaitLiquify { it?.changed == true })
+        assertFalse(fresh.canRedo)
+    }
+
+    @Test
+    fun aDroppedStroke_leavesNothing() {
+        openWithLine()
+        onMain { viewModel.startLiquify() }
+        awaitLiquify { it != null }
+
+        onMain {
+            viewModel.liquifyActions.setTool(LiquifyTool.PUSH)
+            viewModel.liquifyActions.setStrength(1f)
+            viewModel.liquifyActions.begin(500f, 400f)
+            for (step in 1..8) viewModel.liquifyActions.move(500f + step * 5f, 400f)
+            // 두 번째 손가락이 닿았다
+            viewModel.liquifyActions.cancelStroke()
+        }
+
+        val dropped = checkNotNull(awaitLiquify { it != null && !it.changed })
+        assertFalse(dropped.canUndo)
+    }
+
+    @Test
     fun apply_recordsOneUndoStep_andMovesThePixels() {
         val before = openWithLine()
         onMain { viewModel.startLiquify() }

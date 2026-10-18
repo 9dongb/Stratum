@@ -253,6 +253,7 @@
     <string name="liquify_reconstruct">재구성</string>
     <string name="liquify_strength">압력</string>
     <string name="liquify_undo">한 획 되돌리기</string>
+    <string name="liquify_redo">한 획 다시 실행</string>
     <string name="liquify_reset">모두 되돌리기</string>
     <string name="liquify_hint">한 손가락으로 끌어 고른 레이어의 모양을 바꿔요. 두 손가락으로 확대해요. 적용하면 실행 취소 한 단계로 남아요.</string>
 
