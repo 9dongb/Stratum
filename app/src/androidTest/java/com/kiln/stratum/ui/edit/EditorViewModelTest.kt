@@ -43,10 +43,7 @@ class EditorViewModelTest {
 
     /** 테스트가 만든 캔버스·사진은 자동 저장되므로, 끝나면 그 프로젝트들을 지운다 */
     @org.junit.After
-    fun deleteProjects() {
-        runBlocking { com.kiln.stratum.project.ProjectLibrary.get(context).awaitSaves() }
-        File(context.filesDir, "projects").deleteRecursively()
-    }
+    fun deleteProjects() = deleteTestProjects(context, viewModel)
 
     /** 편집 상태는 메인 스레드에서만 다루므로, 부르는 것도 메인 스레드에서 한다. */
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)

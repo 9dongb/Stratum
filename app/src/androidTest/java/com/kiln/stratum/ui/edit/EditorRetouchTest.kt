@@ -15,8 +15,6 @@ import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
-import com.kiln.stratum.project.ProjectLibrary
-import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -36,10 +34,7 @@ class EditorRetouchTest {
     private val viewModel = EditorViewModel(context)
 
     @After
-    fun deleteProjects() {
-        runBlocking { ProjectLibrary.get(context).awaitSaves() }
-        File(context.filesDir, "projects").deleteRecursively()
-    }
+    fun deleteProjects() = deleteTestProjects(context, viewModel)
 
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 

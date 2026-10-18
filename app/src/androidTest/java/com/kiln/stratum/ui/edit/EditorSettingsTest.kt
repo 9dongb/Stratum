@@ -10,10 +10,8 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.project.ProjectLibrary
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.settings.PreviewQuality
-import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -33,10 +31,7 @@ class EditorSettingsTest {
 
     /** 테스트가 만든 캔버스는 자동 저장되므로, 끝나면 그 프로젝트들을 지운다 */
     @After
-    fun deleteProjects() {
-        runBlocking { ProjectLibrary.get(context).awaitSaves() }
-        File(context.filesDir, "projects").deleteRecursively()
-    }
+    fun deleteProjects() = deleteTestProjects(context, viewModel)
 
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 

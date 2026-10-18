@@ -10,7 +10,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 
 ## 진행 중
 
-- 없음. 마지막으로 마친 일: 사용자 피드백 세 가지(크기 미리 보기·레이어 메뉴·색감 유지), 최종 보고(2026-10-18, history.md)
+- 없음. 마지막으로 마친 일: 테스트 정리 세션의 브랜치를 main에 합침(2026-10-18, history.md). 그 앞은 사용자 피드백 세 가지(크기 미리 보기·레이어 메뉴·색감 유지)의 최종 보고다.
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -423,7 +423,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - FileProvider는 매니페스트에 그대로 쓰지 말고 작은 하위 클래스로 쓴다(`ShareFileProvider`). 공유 창은 앱이 화면에 있을 때(STARTED) 띄운다.
 - 폰을 무선 디버깅으로 연결해 두면 기기가 둘이 되어, adb 명령은 기기를 골라야 한다(`adb -s emulator-5554 …`). `connectedDebugAndroidTest`도 연결된 모든 기기에서 돈다.
   - 에뮬레이터에서만 돌리려면 `ANDROID_SERIAL=emulator-5554`를 붙인다. AGP가 이 환경 변수로 기기를 고른다(라이브러리 안에서 확인, 아직 실제로 써 보지는 않았다).
+  - 확실한 방법은 gradle로 APK만 만들고 `adb -s emulator-5554`로 설치·실행하는 것이다(`docs/emulator.md` '에뮬레이터 테스트', 2026-10-18에 씀).
 - `EditorViewModel`은 `(Application, SavedStateHandle)` 생성자를 쓴다. 안드로이드의 기본 ViewModel 공장이 이 생성자를 고른다. 테스트용으로 `(Application)` 생성자를 따로 둔다.
+  - 테스트가 직접 만든 ViewModel은 화면이 갖지 않아 테스트가 끝나도 정리되지 않는다. 편집 뒤 잡아 둔 자동 저장(1.5초 뒤)이 테스트가 폴더를 지운 다음에 돌아 프로젝트를 다시 만든다(에뮬레이터 홈에 테스트 캔버스가 남았다).
+  - 그래서 실제 ViewModel로 문서를 여는 테스트는 `@After`에서 `deleteTestProjects(context, viewModel)`를 부른다(`TestProjects.kt`: 닫고, 저장이 끝나기를 기다린 뒤 지움).
 - Pixel_Fold 에뮬레이터는 화면이 둘이라 `adb exec-out screencap -p`에 `-d <화면 번호>`를 준다(`adb shell dumpsys SurfaceFlinger --display-id`).
 - 화면 테스트에서 화면 읽기 동작을 이름으로 부르는 `performCustomAccessibilityActionWithLabel`은 실험 기능(`ExperimentalTestApi`)이다.
 - 화면 테스트에서 노드의 `layoutInfo.coordinates`는 모든 Modifier 안쪽, 곧 눈에 보이는 부분이다. Material 버튼의 48dp 최소 터치 영역은 그 바깥이므로, 힌지 검사는 `touchBoundsInWindow`로 48dp까지 넓혀 본다(`HingeAssertions.kt`).

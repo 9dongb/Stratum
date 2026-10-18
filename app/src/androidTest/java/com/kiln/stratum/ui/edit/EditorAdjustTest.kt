@@ -10,8 +10,6 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.platform.FlipImage
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.project.ProjectLibrary
-import java.io.File
 import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -32,10 +30,7 @@ class EditorAdjustTest {
     private val viewModel = EditorViewModel(context)
 
     @After
-    fun deleteProjects() {
-        runBlocking { ProjectLibrary.get(context).awaitSaves() }
-        File(context.filesDir, "projects").deleteRecursively()
-    }
+    fun deleteProjects() = deleteTestProjects(context, viewModel)
 
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 
