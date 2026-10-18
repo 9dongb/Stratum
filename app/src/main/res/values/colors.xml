@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- 앱 아이콘의 바탕색(docs/icon). 시작 화면과 그려지기 전의 창 바탕에 써서 아이콘·앱 화면과 이어 보이게 한다. -->
+    <color name="launch_background">#FF16171A</color>
 </resources>

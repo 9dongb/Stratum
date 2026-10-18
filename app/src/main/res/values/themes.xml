@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- 다크 테마만 쓴다. 화면이 그려지기 전의 창 배경도 어둡게 해서 흰 화면이 번쩍이지 않게 한다. -->
-    <style name="Theme.Stratum" parent="android:Theme.Material.NoActionBar" />
+    <!-- 다크 테마만 쓴다. 화면이 그려지기 전의 창 배경도 어둡게 해서 흰 화면이 번쩍이지 않게 한다.
+         시작 화면(안드로이드 12 이상)과 창 바탕은 앱 아이콘의 바탕색이라, 아이콘에서 앱 화면까지 이어 보인다. -->
+    <style name="Theme.Stratum" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_background</item>
+    </style>
 </resources>
