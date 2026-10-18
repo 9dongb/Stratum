@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.kiln.stratum.ui.StratumApp
 import com.kiln.stratum.ui.edit.EditorViewModel
 import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.hideStatusBar
 import com.kiln.stratum.ui.layout.rememberWindowHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 
@@ -26,6 +27,8 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
+        // 전체 화면: 상태 표시줄을 숨긴다. 위에서 밀면 잠깐 보인다(결정 기록 '전체 화면').
+        hideStatusBar(window)
         setContent {
             // 접히는 부분(힌지) 정보를 화면 어디서나 읽을 수 있게 넘긴다(LocalHinges)
             CompositionLocalProvider(LocalHinges provides rememberWindowHinges(this)) {
@@ -34,6 +37,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 사진 선택기·공유 창 같은 다른 화면에서 돌아오면 다시 숨긴다
+        if (hasFocus) hideStatusBar(window)
     }
 
     override fun onStop() {

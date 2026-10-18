@@ -6,6 +6,9 @@ import com.kiln.stratum.engine.export.ExportSize
 /** 화면 테스트가 편집 화면의 부분을 찾을 때 쓰는 이름표(testTag). 화면에는 보이지 않는다. */
 object EditScreenTags {
     const val CANVAS = "editCanvas"
+
+    /** 편집 화면 상단 바 */
+    const val TOP_BAR = "editTopBar"
     const val ZOOM_CHIP = "zoomChip"
     const val BUSY = "editBusy"
     const val UNDO = "undo"
@@ -105,6 +108,7 @@ object EditScreenTags {
 
     /** 픽셀 유동화 작업 모드 */
     const val LIQUIFY_MODE = "liquifyMode"
+    const val LIQUIFY_TOP_BAR = "liquifyTopBar"
     const val LIQUIFY_CANVAS = "liquifyCanvas"
     const val LIQUIFY_OVERLAY = "liquifyOverlay"
     const val LIQUIFY_OPTIONS = "liquifyOptions"

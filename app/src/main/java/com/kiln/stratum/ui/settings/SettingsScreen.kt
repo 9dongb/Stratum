@@ -74,7 +74,10 @@ import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
+import com.kiln.stratum.ui.layout.windowInsets
 import kotlin.math.roundToInt
 
 /** 설정의 분류 */
@@ -129,13 +132,16 @@ fun SettingsScreen(
         val widthClass = widthClassOf(maxWidth.value)
         Scaffold(
             topBar = {
+                // 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 카메라 구멍이 제목·버튼에 걸릴 때만 내린다(결정 기록 '전체 화면').
+                val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
                 TopAppBar(
-                    title = { Text(stringResource(R.string.settings_title)) },
+                    title = { Text(stringResource(R.string.settings_title), Modifier.topBarItem(barInsets, "title")) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
                             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
                         }
                     },
+                    windowInsets = barInsets.windowInsets(),
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 )
             },

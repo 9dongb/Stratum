@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -144,6 +145,7 @@ fun TextPrompt(widthClass: WidthClass, busy: Boolean, onDismiss: () -> Unit, onA
     if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+            HideStatusBarInSheet()
             Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)) {
                 Text(title, style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))

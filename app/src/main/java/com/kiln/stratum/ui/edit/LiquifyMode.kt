@@ -57,7 +57,11 @@ import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
+import com.kiln.stratum.ui.layout.windowInsets
 import kotlin.math.roundToInt
 
 /**
@@ -181,29 +185,39 @@ fun LiquifyMode(state: LiquifyState, actions: LiquifyActions, modifier: Modifier
     }
 }
 
-/** 위쪽 막대: 취소, 이름, 한 획 되돌리기, 모두 되돌리기, 적용 */
+/** 위쪽 막대: 취소, 이름, 한 획 되돌리기, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(48dp)다. */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
+    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
-        title = { Text(stringResource(R.string.tool_liquify)) },
+        title = { Text(stringResource(R.string.tool_liquify), Modifier.topBarItem(barInsets, "title")) },
+        modifier = Modifier.testTag(EditScreenTags.LIQUIFY_TOP_BAR),
         navigationIcon = {
-            IconButton(onClick = actions::cancel, enabled = !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_CANCEL)) {
+            IconButton(
+                onClick = actions::cancel,
+                enabled = !state.busy,
+                modifier = Modifier.topBarItem(barInsets, "cancel").testTag(EditScreenTags.LIQUIFY_CANCEL)
+            ) {
                 Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
             }
         },
         actions = {
-            IconButton(onClick = actions::undo, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
-                Icon(painterResource(R.drawable.ic_undo), contentDescription = stringResource(R.string.liquify_undo))
-            }
-            TextButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
-                Text(stringResource(R.string.liquify_reset))
-            }
-            TextButton(onClick = actions::apply, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_APPLY)) {
-                Text(stringResource(R.string.action_apply))
+            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = actions::undo, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
+                    Icon(painterResource(R.drawable.ic_undo), contentDescription = stringResource(R.string.liquify_undo))
+                }
+                TextButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
+                    Text(stringResource(R.string.liquify_reset))
+                }
+                TextButton(onClick = actions::apply, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_APPLY)) {
+                    Text(stringResource(R.string.action_apply))
+                }
             }
         },
+        expandedHeight = WorkTopBarHeight,
+        windowInsets = barInsets.windowInsets(),
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     )
 }

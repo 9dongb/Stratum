@@ -79,7 +79,11 @@ import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
+import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -556,7 +560,10 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp) {
     }
 }
 
-/** 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, 내보내기 */
+/**
+ * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, 내보내기.
+ * 작업 공간을 넓게 쓰려고 버튼이 꼭 들어가는 높이(48dp)로 낮게 두고, 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
+ */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -569,10 +576,12 @@ private fun EditTopBar(
     canExport: Boolean,
     onExport: () -> Unit
 ) {
+    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
         title = {},
+        modifier = Modifier.testTag(EditScreenTags.TOP_BAR),
         navigationIcon = {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
                 Icon(
                     painter = painterResource(R.drawable.ic_arrow_back),
                     contentDescription = stringResource(R.string.action_back)
@@ -580,25 +589,29 @@ private fun EditTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_undo),
-                    contentDescription = stringResource(R.string.action_undo)
-                )
-            }
-            IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_redo),
-                    contentDescription = stringResource(R.string.action_redo)
-                )
-            }
-            IconButton(onClick = onExport, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_ios_share),
-                    contentDescription = stringResource(R.string.action_export)
-                )
+            Row(Modifier.topBarItem(barInsets, "actions")) {
+                IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_undo),
+                        contentDescription = stringResource(R.string.action_undo)
+                    )
+                }
+                IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_redo),
+                        contentDescription = stringResource(R.string.action_redo)
+                    )
+                }
+                IconButton(onClick = onExport, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_ios_share),
+                        contentDescription = stringResource(R.string.action_export)
+                    )
+                }
             }
         },
+        expandedHeight = WorkTopBarHeight,
+        windowInsets = barInsets.windowInsets(),
         // 캔버스와 구분되게 상단 바를 한 단계 밝게 칠한다
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer

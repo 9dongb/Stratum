@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,7 +38,10 @@ import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
+import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -75,16 +79,19 @@ fun HomeScreen(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
+                // 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 카메라 구멍이 제목·버튼에 걸릴 때만 내린다(결정 기록 '전체 화면').
+                val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
                 TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
+                    title = { Text(stringResource(R.string.app_name), Modifier.topBarItem(barInsets, "title")) },
                     actions = {
-                        IconButton(onClick = onOpenSettings) {
+                        IconButton(onClick = onOpenSettings, modifier = Modifier.topBarItem(barInsets, "settings")) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_settings),
                                 contentDescription = stringResource(R.string.action_settings)
                             )
                         }
-                    }
+                    },
+                    windowInsets = barInsets.windowInsets()
                 )
             }
         ) { innerPadding ->

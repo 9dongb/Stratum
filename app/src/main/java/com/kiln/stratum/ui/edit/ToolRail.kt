@@ -34,6 +34,7 @@ import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 /**
  * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 기능이 있는 도구만 누를 수 있다.
  * 누르면 그 도구를 고르고, 다시 누르면 내려놓는다. 하위 도구가 있는 도구는 길게 누르면 하위 도구 메뉴가 뜬다.
+ * 작업 공간을 넓게 쓰려고 폭은 버튼(48dp)에 양쪽 4dp만 더한 [ToolRailWidth]다(결정 기록 '화면 공간').
  * 배경은 아래 끝까지 칠하고, 버튼만 시스템 바·카메라 구멍을 피한다.
  * 가로로 지나가는 힌지가 막대를 지나면, 그 자리의 버튼을 힌지 띠 아래로 비켜 놓는다(CLAUDE.md 6장).
  *
@@ -54,18 +55,21 @@ fun ToolRail(
         HingeAvoidingScrollColumn(
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
-                .width(72.dp)
+                .width(ToolRailWidth)
                 .padding(vertical = 8.dp),
             gap = 4.dp
         ) {
             for (tool in EditTool.railTools) {
-                Box(Modifier.width(72.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.width(ToolRailWidth), contentAlignment = Alignment.Center) {
                     RailToolButton(tool, selection, enabled && tool.available, onChoose)
                 }
             }
         }
     }
 }
+
+/** 도구 막대 폭(시스템 바·카메라 구멍 여백은 빼고) */
+internal val ToolRailWidth = 56.dp
 
 /** 도구 막대의 버튼 하나. 고른 도구는 배경을 칠해 보인다. */
 @Composable

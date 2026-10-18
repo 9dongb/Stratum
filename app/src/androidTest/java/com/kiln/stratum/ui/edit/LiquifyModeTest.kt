@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
+import android.view.WindowInsets
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -137,6 +138,20 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("undo", "reset", "apply", "cancel"), actions.calls) }
+    }
+
+    @Test
+    fun topBar_isAsLowAsTheEditScreens() {
+        show(411, 800)
+        val bar = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_TOP_BAR).fetchSemanticsNode()
+        val density = bar.layoutInfo.density.density
+        val insets = composeRule.runOnIdle { composeRule.activity.window.decorView.rootWindowInsets }
+        val statusTop = insets.getInsets(WindowInsets.Type.statusBars()).top
+        val safeTop = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
+
+        // 편집 화면 상단 바와 같은 48dp에 상태 표시줄(또는 버튼·제목에 걸리는 카메라 구멍) 높이만 더한다
+        val height = bar.layoutBoundsInWindow().height
+        assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
     }
 
     @Test

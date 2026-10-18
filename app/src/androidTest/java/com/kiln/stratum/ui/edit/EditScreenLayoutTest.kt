@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import android.view.WindowInsets
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +100,24 @@ class EditScreenLayoutTest {
         composeRule.onNodeWithTag(EditScreenTags.SIDE_PANEL).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.BOTTOM_PANEL).assertDoesNotExist()
+    }
+
+    @Test
+    fun topBarAndToolRail_leaveRoomForTheCanvas() {
+        showEditScreen(700, 900)
+        val rail = composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).fetchSemanticsNode()
+        val bar = composeRule.onNodeWithTag(EditScreenTags.TOP_BAR).fetchSemanticsNode()
+        val density = rail.layoutInfo.density.density
+        val insets = composeRule.runOnIdle { composeRule.activity.window.decorView.rootWindowInsets }
+        val statusTop = insets.getInsets(WindowInsets.Type.statusBars()).top
+        val safeTop = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
+        val start = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()).left
+
+        // 도구 막대: 버튼 48dp에 양쪽 4dp(56dp), 그리고 옆쪽 시스템 바·카메라 구멍 여백
+        assertEquals(56 * density + start, rail.layoutBoundsInWindow().width, 1f)
+        // 상단 바: 버튼 높이(48dp)에 상태 표시줄(또는 버튼에 걸리는 카메라 구멍) 높이만 더한다
+        val height = bar.layoutBoundsInWindow().height
+        assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
     }
 
     @Test

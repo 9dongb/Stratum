@@ -51,6 +51,7 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.canvas.CanvasSizeCheck
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_PIXELS
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_SIDE
+import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
@@ -139,6 +140,7 @@ fun NewCanvasPrompt(
         // 처음부터 끝까지 펼쳐야 '만들기'가 가려지지 않는다
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+            HideStatusBarInSheet()
             Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)) {
                 Text(title, style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))
