@@ -32,17 +32,22 @@ class EditorProjectTest {
     private val library = ProjectLibrary.get(context)
     private val projectsRoot = File(context.filesDir, "projects")
 
+    /** 테스트가 만든 ViewModel. 끝나면 닫는다([deleteTestProjects]). */
+    private val viewModels = ArrayList<EditorViewModel>()
+
     /** 테스트마다 빈 프로젝트 모음에서 시작한다 */
     @Before
     @After
     fun deleteProjects() {
-        runBlocking { library.awaitSaves() }
-        projectsRoot.deleteRecursively()
+        deleteTestProjects(context, *viewModels.toTypedArray())
         runBlocking { library.refresh().join() }
     }
 
     /** 편집 상태는 메인 스레드에서만 다루므로, 부르는 것도 메인 스레드에서 한다. */
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
+
+    /** [viewModel]을 테스트가 끝날 때 닫도록 적어 둔다 */
+    private fun closeAfter(viewModel: EditorViewModel): EditorViewModel = viewModel.also { viewModels += it }
 
     private fun awaitState(viewModel: EditorViewModel, predicate: (EditorState) -> Boolean): EditorState = runBlocking {
         withTimeout(30_000) { viewModel.state.first(predicate) }
@@ -56,7 +61,7 @@ class EditorProjectTest {
     }
 
     private fun newCanvas(width: Int, height: Int): EditorViewModel {
-        val viewModel = EditorViewModel(context)
+        val viewModel = closeAfter(EditorViewModel(context))
         onMain { viewModel.newCanvas(width, height, CanvasFill.Solid(Color.WHITE)) }
         awaitReady(viewModel, width, height)
         return viewModel
@@ -86,7 +91,7 @@ class EditorProjectTest {
         Thread.sleep(EditorViewModel.AUTOSAVE_DELAY_MILLIS + 500)
         runBlocking { library.awaitSaves() }
 
-        val reopened = EditorViewModel(context)
+        val reopened = closeAfter(EditorViewModel(context))
         onMain { reopened.openProject(id) }
         val ready = awaitReady(reopened, 480, 640)
         // 실행 취소 기록은 남기지 않는다(결정 기록 '자동 저장')
@@ -106,7 +111,7 @@ class EditorProjectTest {
         runBlocking { library.awaitSaves() }
 
         assertEquals(PixelSize(480, 640), awaitProject(id).let { PixelSize(it.width, it.height) })
-        val reopened = EditorViewModel(context)
+        val reopened = closeAfter(EditorViewModel(context))
         onMain { reopened.openProject(id) }
         awaitReady(reopened, 480, 640)
     }
@@ -119,7 +124,7 @@ class EditorProjectTest {
 
         // 안드로이드가 앱을 종료했다가 되살린 것처럼, 저장된 상태에 프로젝트 번호만 있는 새 ViewModel을 만든다
         lateinit var restored: EditorViewModel
-        onMain { restored = EditorViewModel(context, SavedStateHandle(mapOf(EditorViewModel.KEY_PROJECT to id))) }
+        onMain { restored = closeAfter(EditorViewModel(context, SavedStateHandle(mapOf(EditorViewModel.KEY_PROJECT to id)))) }
 
         awaitReady(restored, 700, 500)
         assertEquals(id, restored.projectId)
@@ -130,7 +135,7 @@ class EditorProjectTest {
         val id = UUID.randomUUID().toString()
         File(projectsRoot, id).mkdirs()
         File(File(projectsRoot, id), "project.bin").writeBytes(byteArrayOf(1, 2, 3, 4))
-        val viewModel = EditorViewModel(context)
+        val viewModel = closeAfter(EditorViewModel(context))
 
         onMain { viewModel.openProject(id) }
 

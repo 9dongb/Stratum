@@ -10,8 +10,6 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
-import com.kiln.stratum.project.ProjectLibrary
-import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -32,10 +30,7 @@ class EditorSelectionTest {
     private val viewModel = EditorViewModel(context)
 
     @After
-    fun deleteProjects() {
-        runBlocking { ProjectLibrary.get(context).awaitSaves() }
-        File(context.filesDir, "projects").deleteRecursively()
-    }
+    fun deleteProjects() = deleteTestProjects(context, viewModel)
 
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 

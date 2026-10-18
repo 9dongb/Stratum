@@ -33,6 +33,13 @@
 - 테스트 클래스 하나만: `./gradlew :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=<패키지.클래스>"`
   - 쉼표로 여러 클래스를 주면 첫 클래스만 돈다(2026-10-17 확인). 하나씩 돌린다. 메서드 하나는 `<패키지.클래스>#<메서드>`
 - 끝나면 테스트 앱을 지운다. `adb shell am instrument`로 직접 돌리려면 먼저 `./gradlew installDebug installDebugAndroidTest`
+- 폰이 연결돼 있으면 gradle의 `installDebug`·`connectedDebugAndroidTest`는 폰에도 설치한다. 에뮬레이터에서만 돌리는 방법(2026-10-18):
+  1. `./gradlew assembleDebug assembleDebugAndroidTest`로 APK만 만든다.
+  2. `adb -s emulator-5554 install -r -t app/build/outputs/apk/debug/app-debug.apk`, 같은 명령으로 `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`
+  3. `adb -s emulator-5554 shell am instrument -w -r -e class <패키지.클래스> com.kiln.stratum.test/androidx.test.runner.AndroidJUnitRunner`
+  - 결과는 마지막의 `OK (N tests)`로 본다. 실패하면 `FAILURES!!!`와 `Tests run`이 나온다.
+  - 여기서는 쉼표로 여러 클래스를 주면 준 순서대로 모두 돈다. `<패키지.클래스>#<메서드>`도 섞어 쓸 수 있다.
+  - 끝나면 `adb -s emulator-5554 uninstall com.kiln.stratum.test`
 - 화면 테스트(Compose)는 하나에 25~40초 걸릴 수 있다. 멈춘 것이 아니다.
   - 이 PC(2026-10-17)의 에뮬레이터는 그래픽을 GPU가 아니라 CPU로 그려서(켤 때 로그의 `lavapipe`·`swangle`) 시스템 화면까지 느리다.
 
