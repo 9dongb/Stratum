@@ -35,7 +35,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -70,6 +69,7 @@ import com.kiln.stratum.engine.export.MAX_EXPORT_QUALITY
 import com.kiln.stratum.engine.export.MIN_EXPORT_QUALITY
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.SettingsValues
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 import com.kiln.stratum.ui.layout.HingeSplitRow
@@ -328,7 +328,7 @@ private fun QualitySlider(quality: Int, onQuality: (Int) -> Unit) {
         onDispose { finish() }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Slider(
+        StratumSlider(
             value = dragging ?: quality.toFloat(),
             onValueChange = { dragging = it },
             onValueChangeFinished = { finish() },

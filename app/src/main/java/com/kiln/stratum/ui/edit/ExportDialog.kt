@@ -22,7 +22,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -43,6 +42,7 @@ import com.kiln.stratum.engine.export.ExportSizes
 import com.kiln.stratum.engine.export.MAX_EXPORT_QUALITY
 import com.kiln.stratum.engine.export.MIN_EXPORT_QUALITY
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -188,7 +188,7 @@ private fun QualityRow(choice: ExportChoice, onChoiceChange: (ExportChoice) -> U
     val label = stringResource(R.string.export_quality)
     Row(modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
-        Slider(
+        StratumSlider(
             value = choice.quality.toFloat(),
             onValueChange = { value ->
                 val quality = value.roundToInt().coerceIn(MIN_EXPORT_QUALITY, MAX_EXPORT_QUALITY)

@@ -77,6 +77,7 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.DocumentColors
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
@@ -568,7 +569,7 @@ private fun LayerOpacityRow(controls: LayerControls) {
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
-        ThinSlider(
+        StratumSlider(
             value = controls.opacity,
             onValueChange = { controls.actions.previewOpacity((it * 100).roundToInt() / 100f) },
             onValueChangeFinished = controls.actions::commitOpacity,

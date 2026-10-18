@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import kotlin.math.exp
 import kotlin.math.ln
@@ -116,7 +117,7 @@ internal fun OptionSlider(label: String, shown: String, fraction: Float, onFract
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
-        ThinSlider(
+        StratumSlider(
             value = fraction,
             onValueChange = onFraction,
             onValueChangeFinished = onFinished,

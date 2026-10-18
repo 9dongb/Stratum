@@ -8,7 +8,6 @@ import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,14 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SliderState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -62,12 +56,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.ToneCurve
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 
 /** 보정 패널이 엔진 쪽(ViewModel)에 보내는 일 */
@@ -120,10 +114,6 @@ private val CompactCurveHeight = 168.dp
 
 /** 메인 가로 오른쪽 패널 곡선 그래프(제목 포함)의 높이 */
 private val ListCurveHeight = 232.dp
-
-/** 슬라이더 막대의 두께와 손잡이 크기. 여러 줄을 쌓으므로 기본(16dp 막대, 44dp 손잡이)보다 가늘고 낮게 둔다. */
-private val TrackHeight = 6.dp
-private val ThumbSize = DpSize(4.dp, 28.dp)
 
 /** 곡선 점의 반지름과, 점을 잡을 수 있는 거리(터치 영역 48dp의 절반) */
 private val PointRadius = 6.dp
@@ -262,7 +252,7 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
-        ThinSlider(
+        StratumSlider(
             value = value,
             onValueChange = { newValue -> actions.preview { item.applyTo(it, newValue) } },
             onValueChangeFinished = actions::commit,
@@ -292,59 +282,6 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge
         )
-    }
-}
-
-/**
- * 패널에 여러 줄 쌓는 가는 슬라이더(보정·불투명도). 기본 슬라이더보다 막대가 가늘고 손잡이가 낮다.
- * [centered]면 0을 가운데에 두고 0에서 지금 값까지 칠한다(양쪽으로 바꾸는 보정 값). 아니면 왼쪽 끝부터 칠한다(불투명도).
- */
-// 손잡이·막대를 바꾸는 Slider는 아직 실험 기능이라 opt-in이 필요하다
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun ThinSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    onValueChangeFinished: () -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    enabled: Boolean,
-    centered: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        onValueChangeFinished = onValueChangeFinished,
-        valueRange = valueRange,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        thumb = { SliderDefaults.Thumb(interactionSource = interactionSource, enabled = enabled, thumbSize = ThumbSize) },
-        track = { state -> ThinTrack(state, enabled, centered) },
-        modifier = modifier
-    )
-}
-
-/**
- * 가는 슬라이더 막대. [centered]면 0 자리에 짧은 눈금을 두고 0에서 지금 값까지, 아니면 왼쪽 끝에서 지금 값까지 칠한다.
- * 보정은 양쪽으로 바꾸는 값이라, 왼쪽 끝부터 칠하는 기본 막대보다 얼마나 바꿨는지 잘 보인다(라이트룸과 같다).
- * 손잡이 가운데가 막대의 같은 비율 자리에 오도록 슬라이더가 막대를 놓으므로, 비율대로 그리면 손잡이와 맞는다.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ThinTrack(state: SliderState, enabled: Boolean, centered: Boolean) {
-    val colors = MaterialTheme.colorScheme
-    val active = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f)
-    val inactive = if (enabled) colors.secondaryContainer else colors.onSurface.copy(alpha = 0.12f)
-    val tick = if (enabled) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f)
-    Canvas(Modifier.fillMaxWidth().height(TrackHeight)) {
-        val range = state.valueRange
-        val origin = if (centered) ((0f - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f) * size.width else 0f
-        val value = state.coercedValueAsFraction * size.width
-        val middle = size.height / 2
-        drawLine(inactive, Offset(0f, middle), Offset(size.width, middle), strokeWidth = size.height, cap = StrokeCap.Round)
-        drawLine(active, Offset(minOf(origin, value), middle), Offset(maxOf(origin, value), middle), strokeWidth = size.height, cap = if (centered) StrokeCap.Butt else StrokeCap.Round)
-        if (centered) drawLine(tick, Offset(origin, -2.dp.toPx()), Offset(origin, size.height + 2.dp.toPx()), strokeWidth = 2.dp.toPx())
     }
 }
 

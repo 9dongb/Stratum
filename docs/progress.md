@@ -20,8 +20,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 사용자 결정(질문): 테마는 다크·라이트·시스템(기본 다크), 앱 전체에 적용, 커버 탭 줄은 도구 막대와 같은 선택 표시, 상단 바 내보내기는 파란 '내보내기' 버튼(유동화 '적용'도).
   - 시안(재 본 값, 약 2.14px/dp): 상단 바 48dp·도구 막대 56dp는 기본 배경과 1dp 구분선, 버튼 보이는 높이 약 29dp, 분할 버튼·선택 상자 약 25dp, 슬라이더 트랙 약 3dp·손잡이 흰 원 약 14dp, 탭 밑줄 2dp(#6EA2FF, 글자 폭), 선택된 탭 글자는 기본색, 도구 선택 사각형 약 40dp, 입력칸·선택 상자 안은 기본 배경.
   - 계획(사용자 승인, 단계마다 커밋): 1 뒤로 가기 2 테마 토대(색·모서리·크기 토큰) 3 부품·슬라이더 4 편집 화면 틀 5 도구 옵션·패널 6 창·시트·홈·설정 7 테마 고르기·라이트 색 8 검사·전체 테스트·최종 보고. 라이트 색은 Claude가 제안해 계획에 넣었다.
-  - 한 일: 1(뒤로 가기로 도구 닫기), 2(테마 토대)
-  - 남은 일: 3~8
+  - 한 일: 1(뒤로 가기로 도구 닫기), 2(테마 토대), 3(부품·슬라이더)
+  - 남은 일: 4~8
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -393,6 +393,14 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 사용자: "색·글자 크기·모서리 값은 테마 파일에 모아두고, 화면 코드에는 직접 쓰지 마"
   - 캔버스 위 그림(브러시 커서·자르기·선택 윤곽·스포이드·크기 미리 보기)은 흰 선을 검은 테두리로 감싸는 지금 방식 그대로이고 테마와 상관없다(`CanvasOverlayColors`). 이유: 어떤 사진 위에서도 보여야 한다.
   - 글자 크기는 상단 바 제목(22→18sp)과 창 제목(24→20sp)만 줄인다. 이유: 버튼·분할 버튼·칩·본문 글자를 줄이면 폭이 바뀌어 줄 바꿈과 옵션 위치가 움직인다(배치는 그대로라는 요청).
+  - 부품(`ui/components`, 모양은 사용자 지정, 나머지는 Claude 판단):
+    - 보이는 높이만 줄이고(버튼 30dp, 분할 버튼·선택 상자 28dp, 시안은 약 29·25dp) 누르는 영역과 차지하는 자리는 48dp 그대로다. 그래서 부품을 바꿔도 배치가 움직이지 않는다.
+    - 버튼: 주요(파란 채움)·글자 버튼(선택 색 #8DB6FF 글자, 어두운 패널에서 주요 색 글자는 대비가 모자람)·보조(테두리). 모서리 8dp, 좌우 여백 12dp(M3 글자 버튼과 같아 버튼 줄 폭이 그대로).
+    - 아이콘 위에 이름이 있는 동작 버튼(회전·뒤집기·선택 동작)은 보조 색 아이콘·이름이고 M3 글자 버튼 여백 그대로다(커버 옵션 높이가 바뀌지 않게).
+    - 아이콘 버튼: 누를 때 번짐·고른 표시가 동그라미 대신 모서리 8dp 사각형(40dp). 고르면 선택 배경과 선택 색 아이콘.
+    - 슬라이더: 트랙 3dp(끝 각짐), 채움 #6EA2FF, 빈 트랙 #3A3C43, 흰 원 손잡이 14dp, ± 값은 가운데부터 채움. 0 눈금 선은 시안처럼 없앴다. 앱의 슬라이더는 모두 이것이다(설정·내보내기 품질 포함).
+    - 칩: 테두리형 8dp, 높이 32dp(M3 그대로), 고르면 선택 배경·선택 칩 테두리·선택 색 글자. 분할 버튼: 8dp, 테두리, 고른 칸은 선택 배경·선택 색 글자, 체크 표시 없음.
+    - 혼합 모드 선택 상자: 6dp, 안은 입력칸 바탕, 테두리, 오른쪽 ▾(Material Icons arrow_drop_down). 메뉴: 6dp, 패널 색, 1dp 테두리. 스위치: 꺼져도 보이게 설명색 손잡이·테두리.
 - **화면 확인:** 당분간 실기기 대신 에뮬레이터(Medium_Phone_API_37.0, Pixel_Fold)로 확인한다. 한 번에 하나만 켠다.
   - 이유: 말하지 않음
 - **저장소:** GitHub `9dongb/Stratum`(공개). 사용자가 직접 만들어 주소를 알려 줬다. push는 사용자가 요청할 때만 한다.
@@ -466,6 +474,9 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 캔버스 위 표시의 색은 `CanvasOverlayColors`, 색 팔레트가 그리는 색(색상 띠 등)은 `ColorPickerColors`다. 숨긴 레이어 흐림은 `HiddenContentAlpha`.
   - M3 색 역할은 `stratumColorScheme`이 모두 정한다. 새 토큰이나 역할을 더하면 `ThemeColorsTest`의 목록도 함께 고친다.
   - `StratumTheme(darkTheme = true)`가 기본이라 테스트·미리 보기는 인자 없이 다크로 그린다.
+- **부품:** 버튼·칩·분할 버튼·슬라이더·스위치·메뉴·아이콘 버튼은 `ui/components`의 것만 쓴다(`AccentButton`·`QuietButton`·`SecondaryButton`·`ToolActionButton`, `StratumIconButton`·`StratumIconToggleButton`, `StratumFilterChip`, `StratumSegmentedRow`·`StratumSegment`, `SelectBox`, `StratumSlider`, `StratumDropdownMenu`, `StratumSwitch`, `stratumTopAppBarColors`, `Modifier.edgeDivider`).
+  - 이유: M3 1.4.0은 버튼 모양을 테마로 바꿀 수 없어(늘 알약) 부품마다 정해야 한다. 한곳에 모아 두면 화면 코드에 모양·색이 흩어지지 않는다.
+  - 새 부품이 필요하면 `ui/components`에 같은 방식(토큰만 씀, 보이는 높이만 줄이고 자리 48dp)으로 더한다.
 - **넓은 색:** 엔진의 비트맵은 모두 sRGB 꼬리표이고 값만 문서 색 공간(`Document.colorSpace`)의 값이다(`DocumentColors`).
   - 새 비트맵을 만들 때 색 공간을 주지 않는다(sRGB). 화면에 그릴 때만 `DocumentColors.forScreen`, 압축하기 전에만 `tagForEncoding`으로 꼬리표를 바꾼다. 엔진이 다시 쓰는 그림의 꼬리표는 바꾸지 않는다.
   - 새 명령이 sRGB로 고른 색을 칠하면 `DocumentColors.paintColor`를 거친다. 임시 문서(`Document.create`)는 sRGB라 색을 칠하지 않는 계산에만 쓴다.
@@ -502,6 +513,12 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - material3 1.4.0 테마:
   - 표면 색 섞기는 `LocalTonalElevationEnabled provides false`로 끈다(표면 색이 surface와 같으면 높이만큼 주 색이 섞인다).
   - `ColorScheme` 생성자가 공개라 고정 색(primaryFixed 등)까지 모든 역할을 한 번에 정한다. `darkColorScheme()`에서 빠뜨린 역할은 M3 기본값이 남는다.
+- material3 1.4.0 부품:
+  - Button·SegmentedButton의 최소 높이(40dp, `defaultMinSize`)는 들어온 최소값이 0일 때만 걸린다. 부르는 쪽에서 `heightIn(min = …)`을 주면 그 높이까지 낮아지고, Surface의 `minimumInteractiveComponentSize`가 차지하는 자리·누르는 영역을 48dp로 지킨다.
+  - 하나 고르기 SegmentedButton은 늘 `weight(1f)`(칸 폭이 같음)이고, 기본 안쪽 여백은 글자 버튼과 같다(좌우 12dp·위아래 8dp). 보이는 높이를 낮추려면 위아래 여백을 줄인다.
+  - Slider는 손잡이 자리를 16dp보다 작게 두지 않는다(`requiredSizeIn`). 더 작은 원은 그 자리 가운데에 그린다.
+  - IconButton·IconToggleButton은 `shape` 매개변수가 있다(공개). 버튼 모양이 들어간 `ButtonDefaults.shape`는 늘 알약이다.
+  - `LocalRippleConfiguration provides null`이면 그 안의 부품은 누를 때 번지는 표시를 그리지 않는다.
 - 아이콘은 Android Studio 'Vector Asset'의 Material Icons 파일을 쓰고, `android:tint="?attr/colorControlNormal"` 줄은 뺀다. 이 프로젝트에는 AppCompat이 없어서 그 줄이 있으면 빌드가 실패한다.
 - `List.removeFirst()`·`removeLast()`는 안드로이드 13·14 기기에서 오류가 나므로 `removeAt(0)` 등을 쓴다.
 - 색 공간:

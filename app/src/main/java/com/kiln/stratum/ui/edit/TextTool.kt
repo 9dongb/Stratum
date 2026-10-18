@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAwareDialog
@@ -76,7 +77,7 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
         controls.colors?.let { ColorRow(it) }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text = label, modifier = Modifier.width(88.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-            ThinSlider(
+            StratumSlider(
                 value = textSizeToFraction(style.size),
                 onValueChange = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
                 onValueChangeFinished = {},
