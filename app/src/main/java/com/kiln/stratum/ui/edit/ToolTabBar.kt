@@ -7,11 +7,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemColors
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -19,6 +22,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -35,6 +42,11 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.theme.StratumDimens
+import com.kiln.stratum.ui.theme.StratumRadius
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -56,9 +68,11 @@ fun ToolTabBar(
     val tools = EditTool.tabTools
     val scroll = rememberScrollState()
     val density = LocalDensity.current
+    // 누를 때 번지는 표시는 M3 안쪽에서 알약 모양이라 이 줄에서만 끈다(고른 칸은 사각형이 바로 보인다)
+    CompositionLocalProvider(LocalRippleConfiguration provides null) {
     NavigationBar(
-        modifier = modifier.testTag(EditScreenTags.TOOL_TAB_BAR),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer
+        modifier = modifier.edgeDivider(DividerEdge.Top, StratumTheme.colors.divider).testTag(EditScreenTags.TOOL_TAB_BAR),
+        containerColor = StratumTheme.colors.background
     ) {
         BoxWithConstraints(Modifier.weight(1f)) {
             val itemWidth = maxOf(maxWidth / tools.size, MIN_TAB_WIDTH)
@@ -84,9 +98,14 @@ fun ToolTabBar(
             }
         }
     }
+    }
 }
 
-/** 탭 칸 하나. 칸에는 짧은 이름을 보이고, 화면 읽기 기능은 긴 이름(예: 자르기·변형)을 읽는다. */
+/**
+ * 탭 칸 하나. 칸에는 짧은 이름을 보이고, 화면 읽기 기능은 긴 이름(예: 자르기·변형)을 읽는다.
+ * 고른 칸은 도구 막대처럼 아이콘 뒤 모서리 8dp 사각형(선택 배경)과 선택 색 아이콘·이름으로 보인다(사용자 결정).
+ * M3의 고른 표시는 알약 모양만 되어 끄고(투명), 사각형은 아이콘 뒤에 그린다(칸 크기는 그대로).
+ */
 @Composable
 private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabled: Boolean, onChoose: (SubTool) -> Unit) {
     val haptic = LocalHapticFeedback.current
@@ -105,7 +124,7 @@ private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabl
         enabled = itemEnabled,
         icon = {
             // 메뉴는 아이콘 옆에 붙인다. 칸 자체를 감싸면 칸의 폭 나누기(weight)가 깨진다.
-            Box {
+            Box(if (selected) Modifier.selectedToolSquare(StratumTheme.colors.selectedBackground) else Modifier) {
                 ToolIcon(tool, contentDescription = null)
                 if (tool.hasSubTools) {
                     SubToolMenu(
@@ -122,6 +141,7 @@ private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabl
             }
         },
         label = { Text(stringResource(tool.shortLabel), maxLines = 1, overflow = TextOverflow.Clip) },
+        colors = tabItemColors(),
         modifier = Modifier
             .testTag(EditScreenTags.tabTool(tool))
             .then(if (itemEnabled && tool.hasSubTools) Modifier.longPressFirst(openMenu) else Modifier)
@@ -145,6 +165,32 @@ private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabl
                     disabled()
                 }
             }
+    )
+}
+
+/** 탭 칸 색: M3 고른 표시(알약)는 투명, 고른 칸은 선택 색, 나머지 아이콘은 보조 색·이름은 설명색 */
+@Composable
+private fun tabItemColors(): NavigationBarItemColors {
+    val colors = StratumTheme.colors
+    return NavigationBarItemDefaults.colors(
+        selectedIconColor = colors.selectedContent,
+        selectedTextColor = colors.selectedContent,
+        indicatorColor = Color.Transparent,
+        unselectedIconColor = colors.textSecondary,
+        unselectedTextColor = colors.textDescription,
+        disabledIconColor = colors.textDisabled,
+        disabledTextColor = colors.textDisabled
+    )
+}
+
+/** 아이콘 뒤에 고른 도구 사각형을 그린다. 아이콘 밖으로 그리지만 크기를 바꾸지 않아 칸 배치는 그대로다. */
+private fun Modifier.selectedToolSquare(color: Color): Modifier = drawBehind {
+    val square = StratumDimens.TabToolSquare.toSize()
+    drawRoundRect(
+        color = color,
+        topLeft = Offset((size.width - square.width) / 2, (size.height - square.height) / 2),
+        size = square,
+        cornerRadius = CornerRadius(StratumRadius.Control.toPx())
     )
 }
 

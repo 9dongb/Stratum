@@ -16,6 +16,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.layout.HingeAvoidingTopStart
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
  * 캔버스 왼쪽 위의 배율 표시(예: 250%). 확대하거나 옮겼을 때만 보이고, 누르면 화면에 맞춘다.
@@ -43,9 +45,9 @@ fun CanvasZoomChip(viewState: CanvasViewState, modifier: Modifier = Modifier) {
                         true
                     }
                 },
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface
+            shape = StratumShapes.Card,
+            color = StratumTheme.colors.panel,
+            contentColor = StratumTheme.colors.textPrimary
         ) {
             Text(
                 text = stringResource(R.string.canvas_zoom_percent, percent),

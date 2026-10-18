@@ -20,11 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +41,11 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.theme.StratumDimens
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /** 아래 패널을 펼쳤을 때 내용이 들어갈 자리의 높이. 조정은 슬라이더 칸을 밀어 보고, 곡선 그래프가 이 높이에 들어간다. */
 private val BottomPanelBodyHeight = 240.dp
@@ -85,8 +88,11 @@ fun BottomPanel(
     tabContent: (@Composable () -> Unit)? = null
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth().testTag(EditScreenTags.BOTTOM_PANEL),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        modifier = modifier
+            .fillMaxWidth()
+            .edgeDivider(DividerEdge.Top, StratumTheme.colors.divider)
+            .testTag(EditScreenTags.BOTTOM_PANEL),
+        color = StratumTheme.colors.panel
     ) {
         Column(
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
@@ -111,7 +117,7 @@ fun BottomPanel(
                 }
                 Spacer(Modifier.weight(1f))
                 if (!showingTool && expanded) tabAction?.invoke()
-                IconButton(onClick = onToggle) {
+                StratumIconButton(onClick = onToggle) {
                     Icon(
                         painter = painterResource(if (expanded) R.drawable.ic_expand_more else R.drawable.ic_expand_less),
                         contentDescription = stringResource(if (expanded) R.string.panel_collapse else R.string.panel_expand)
@@ -136,16 +142,16 @@ fun BottomPanel(
 }
 
 /**
- * 아래 패널의 탭 하나. 고른 탭은 글자색과 아래 막대로 보인다. 누르는 영역은 높이 48dp 이상이다.
+ * 아래 패널의 탭 하나. 고른 탭은 기본색 글자와 글자 폭의 2dp 밑줄로 보이고, 나머지는 설명색이다(시안). 누르는 영역은 높이 48dp 이상이다.
  * 화면 읽기 기능에는 '탭'으로 알리고 고른 상태를 함께 알린다.
  */
 @Composable
 private fun PanelTabButton(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
+    val colors = StratumTheme.colors
     val color = when {
-        !enabled -> colors.onSurface.copy(alpha = 0.38f)
-        selected -> colors.primary
-        else -> colors.onSurfaceVariant
+        !enabled -> colors.textDisabled
+        selected -> colors.textPrimary
+        else -> colors.textDescription
     }
     Box(
         modifier = modifier
@@ -163,8 +169,8 @@ private fun PanelTabButton(label: String, selected: Boolean, enabled: Boolean, o
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(3.dp)
-                        .background(colors.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                        .height(StratumDimens.TabIndicator)
+                        .background(colors.tabIndicator)
                 )
             }
         }
@@ -200,8 +206,12 @@ fun SidePanel(
     val showingTool = toolOptions != null && toolTitle != null
     val adjustExpanded = if (showingTool) adjustOpenWithTool else adjustOpen
     Surface(
-        modifier = modifier.fillMaxHeight().width(SidePanelWidth).testTag(EditScreenTags.SIDE_PANEL),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        modifier = modifier
+            .fillMaxHeight()
+            .width(SidePanelWidth)
+            .edgeDivider(DividerEdge.Start, StratumTheme.colors.divider)
+            .testTag(EditScreenTags.SIDE_PANEL),
+        color = StratumTheme.colors.panel
     ) {
         BoxWithConstraints(
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
@@ -220,7 +230,7 @@ fun SidePanel(
                     ) {
                         checkNotNull(toolOptions)()
                     }
-                    HorizontalDivider()
+                    HorizontalDivider(color = StratumTheme.colors.divider)
                 }
                 PanelSection(
                     title = R.string.tool_adjust,
@@ -231,7 +241,7 @@ fun SidePanel(
                     content = adjustContent,
                     tag = EditScreenTags.SIDE_ADJUST
                 )
-                HorizontalDivider()
+                HorizontalDivider(color = StratumTheme.colors.divider)
                 PanelSection(
                     title = R.string.tool_layers,
                     open = layersOpen,
@@ -252,7 +262,7 @@ private fun PanelTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         modifier = modifier.padding(horizontal = 8.dp, vertical = 12.dp).semantics { heading() },
-        color = MaterialTheme.colorScheme.onSurface,
+        color = StratumTheme.colors.textPrimary,
         style = MaterialTheme.typography.titleSmall
     )
 }
@@ -280,11 +290,11 @@ private fun PanelSection(
             Text(
                 text = name,
                 modifier = Modifier.weight(1f).semantics { heading() },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textPrimary,
                 style = MaterialTheme.typography.titleSmall
             )
             if (open) action?.invoke()
-            IconButton(onClick = onToggle) {
+            StratumIconButton(onClick = onToggle) {
                 Icon(
                     painter = painterResource(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
                     contentDescription = stringResource(if (open) R.string.section_collapse else R.string.section_expand, name)

@@ -28,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -38,9 +37,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +74,12 @@ import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
@@ -682,7 +685,7 @@ fun EditScreen(
  */
 @Composable
 private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+    Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
         Box(
             Modifier
                 .heightIn(max = maxHeight)
@@ -714,9 +717,10 @@ private fun EditTopBar(
     val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
         title = {},
-        modifier = Modifier.testTag(EditScreenTags.TOP_BAR),
+        // 캔버스(작업 공간)와 기본 배경 바를 1dp 구분선으로 나눈다(시안)
+        modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.TOP_BAR),
         navigationIcon = {
-            IconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
+            StratumIconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
                 Icon(
                     painter = painterResource(R.drawable.ic_arrow_back),
                     contentDescription = stringResource(R.string.action_back)
@@ -724,33 +728,32 @@ private fun EditTopBar(
             }
         },
         actions = {
-            Row(Modifier.topBarItem(barInsets, "actions")) {
-                IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
+            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
+                StratumIconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_undo),
                         contentDescription = stringResource(R.string.action_undo)
                     )
                 }
-                IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
+                StratumIconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_redo),
                         contentDescription = stringResource(R.string.action_redo)
                     )
                 }
-                IconButton(onClick = onExport, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_ios_share),
-                        contentDescription = stringResource(R.string.action_export)
-                    )
+                // 내보내기는 시안처럼 파란 글자 버튼이다(사용자 결정, 자리는 그대로)
+                AccentButton(
+                    onClick = onExport,
+                    enabled = canExport,
+                    modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.EXPORT)
+                ) {
+                    Text(stringResource(R.string.action_export))
                 }
             }
         },
         expandedHeight = WorkTopBarHeight,
         windowInsets = barInsets.windowInsets(),
-        // 캔버스와 구분되게 상단 바를 한 단계 밝게 칠한다
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        )
+        colors = stratumTopAppBarColors()
     )
 }
 
@@ -823,7 +826,7 @@ private fun EditCanvas(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .background(StratumTheme.colors.workspace)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(insetSides))
             .onSizeChanged { onCanvasSize(it.width, it.height) }
             .testTag(EditScreenTags.CANVAS),
@@ -860,7 +863,7 @@ private fun EditCanvas(
                     }
                 ),
                 modifier = Modifier.padding(24.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = StratumTheme.colors.textDescription,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyLarge
             )
@@ -919,7 +922,7 @@ private fun ProgressIndicator(message: String) {
         CircularProgressIndicator()
         Text(
             text = message,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textSecondary,
             style = MaterialTheme.typography.bodyMedium
         )
     }
@@ -943,13 +946,13 @@ private fun LargePhotoDialog(
         // 위에서부터 메모리를 덜 쓰는 '줄여서', '원본 크기', '취소'
         buttons = {
             Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = { onChooseSize(false) }) {
+                QuietButton(onClick = { onChooseSize(false) }) {
                     Text(stringResource(R.string.large_photo_open_reduced, state.reducedMegapixels))
                 }
-                TextButton(onClick = { onChooseSize(true) }, enabled = state.originalAllowed) {
+                QuietButton(onClick = { onChooseSize(true) }, enabled = state.originalAllowed) {
                     Text(stringResource(R.string.large_photo_open_original, state.originalMegapixels))
                 }
-                TextButton(onClick = onCancel) {
+                QuietButton(onClick = onCancel) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }

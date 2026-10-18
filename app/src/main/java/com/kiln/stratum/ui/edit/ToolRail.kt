@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,7 +26,11 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
  * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 기능이 있는 도구만 누를 수 있다.
@@ -48,8 +49,11 @@ fun ToolRail(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.fillMaxHeight().testTag(EditScreenTags.TOOL_RAIL),
-        color = MaterialTheme.colorScheme.surfaceContainer
+        modifier = modifier
+            .fillMaxHeight()
+            .edgeDivider(DividerEdge.End, StratumTheme.colors.divider)
+            .testTag(EditScreenTags.TOOL_RAIL),
+        color = StratumTheme.colors.background
     ) {
         // 도구가 막대 높이보다 많으면(가로로 눕힌 폰처럼 낮은 화면) 위아래로 밀어 본다
         HingeAvoidingScrollColumn(
@@ -71,7 +75,7 @@ fun ToolRail(
 /** 도구 막대 폭(시스템 바·카메라 구멍 여백은 빼고) */
 internal val ToolRailWidth = 56.dp
 
-/** 도구 막대의 버튼 하나. 고른 도구는 배경을 칠해 보인다. */
+/** 도구 막대의 버튼 하나. 고른 도구는 모서리 8dp 사각형 배경(선택 배경)과 선택 색 아이콘으로 보인다(결정 기록 '디자인(시안)'). */
 @Composable
 private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Boolean, onChoose: (SubTool) -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -83,17 +87,10 @@ private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Bo
         menuOpen = true
     }
     Box {
-        IconButton(
+        StratumIconButton(
             onClick = { selection.tap(tool) },
             enabled = enabled,
-            colors = if (selected) {
-                IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            } else {
-                IconButtonDefaults.iconButtonColors()
-            },
+            selected = selected,
             modifier = Modifier
                 .testTag(EditScreenTags.railTool(tool))
                 .then(

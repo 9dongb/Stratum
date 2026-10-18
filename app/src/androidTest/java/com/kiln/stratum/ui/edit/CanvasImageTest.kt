@@ -6,7 +6,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -49,8 +48,8 @@ class CanvasImageTest {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
                 StratumTheme {
-                    outline = MaterialTheme.colorScheme.outlineVariant
-                    background = MaterialTheme.colorScheme.surfaceContainerLowest
+                    outline = StratumTheme.colors.canvasOutline
+                    background = StratumTheme.colors.workspace
                     EditScreen(
                         state = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document),
                         onBack = {},

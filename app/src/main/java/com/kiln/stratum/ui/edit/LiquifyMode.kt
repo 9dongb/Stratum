@@ -23,17 +23,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +47,13 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.StratumSegment
+import com.kiln.stratum.ui.components.StratumSegmentedRow
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.WorkTopBarHeight
@@ -60,6 +61,7 @@ import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -214,7 +216,8 @@ fun LiquifyMode(
     } else {
         null
     }
-    Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = MaterialTheme.colorScheme.surface) {
+    // 바탕은 편집 화면처럼 작업 공간 색이다(캔버스 주변). 위 막대와 옵션은 제 색을 칠한다.
+    Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = StratumTheme.colors.workspace) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthClass = widthClassOf(maxWidth.value)
             val maxOptionsHeight = maxHeight * 0.4f
@@ -226,7 +229,13 @@ fun LiquifyMode(
                 if (widthClass == WidthClass.Expanded) {
                     Row(Modifier.fillMaxSize()) {
                         canvas(Modifier.weight(1f).fillMaxHeight())
-                        Surface(Modifier.width(320.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Surface(
+                            Modifier
+                                .width(320.dp)
+                                .fillMaxHeight()
+                                .edgeDivider(DividerEdge.Start, StratumTheme.colors.divider),
+                            color = StratumTheme.colors.panel
+                        ) {
                             LiquifyOptions(
                                 state, actions, sizePreview,
                                 Modifier
@@ -238,7 +247,7 @@ fun LiquifyMode(
                     }
                 } else {
                     canvas(Modifier.weight(1f).fillMaxWidth())
-                    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
                         LiquifyOptions(
                             state, actions, sizePreview,
                             Modifier
@@ -265,9 +274,9 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
     val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
         title = { Text(stringResource(R.string.tool_liquify), Modifier.topBarItem(barInsets, "title")) },
-        modifier = Modifier.testTag(EditScreenTags.LIQUIFY_TOP_BAR),
+        modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.LIQUIFY_TOP_BAR),
         navigationIcon = {
-            IconButton(
+            StratumIconButton(
                 onClick = actions::cancel,
                 enabled = !state.busy,
                 modifier = Modifier.topBarItem(barInsets, "cancel").testTag(EditScreenTags.LIQUIFY_CANCEL)
@@ -277,23 +286,28 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
         },
         actions = {
             Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = actions::undo, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
+                StratumIconButton(onClick = actions::undo, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
                     Icon(painterResource(R.drawable.ic_undo), contentDescription = stringResource(R.string.liquify_undo))
                 }
-                IconButton(onClick = actions::redo, enabled = state.canRedo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_REDO)) {
+                StratumIconButton(onClick = actions::redo, enabled = state.canRedo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_REDO)) {
                     Icon(painterResource(R.drawable.ic_redo), contentDescription = stringResource(R.string.liquify_redo))
                 }
-                IconButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
+                StratumIconButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
                     Icon(painterResource(R.drawable.ic_restart_alt), contentDescription = stringResource(R.string.liquify_reset))
                 }
-                TextButton(onClick = actions::apply, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_APPLY)) {
+                // 적용은 편집 화면의 내보내기처럼 파란 글자 버튼이다(사용자 결정)
+                AccentButton(
+                    onClick = actions::apply,
+                    enabled = state.changed && !state.busy,
+                    modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.LIQUIFY_APPLY)
+                ) {
                     Text(stringResource(R.string.action_apply))
                 }
             }
         },
         expandedHeight = WorkTopBarHeight,
         windowInsets = barInsets.windowInsets(),
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        colors = stratumTopAppBarColors()
     )
 }
 
@@ -413,7 +427,7 @@ private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePre
         Text(
             stringResource(R.string.liquify_hint),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -423,14 +437,14 @@ private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePre
 @Composable
 private fun LiquifyToolRow(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
     val tools = LiquifyTool.entries
-    SingleChoiceSegmentedButtonRow {
+    StratumSegmentedRow {
         tools.forEachIndexed { index, entry ->
-            SegmentedButton(
+            StratumSegment(
                 selected = entry == tool,
                 onClick = { onTool(entry) },
+                index = index,
+                count = tools.size,
                 enabled = enabled,
-                shape = SegmentedButtonDefaults.itemShape(index, tools.size),
-                icon = {},
                 modifier = Modifier.testTag(EditScreenTags.liquifyTool(entry))
             ) {
                 Text(

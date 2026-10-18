@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +22,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.layout.HingeAvoidingTop
+import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlinx.coroutines.delay
 
 /**
@@ -75,9 +76,9 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
     HingeAvoidingTop(modifier, margin = GESTURE_TOAST_TOP) {
         AnimatedVisibility(visible = state.text != null, enter = fadeIn(), exit = fadeOut()) {
             Surface(
-                shape = RoundedCornerShape(percent = 50),
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shape = StratumShapes.Card,
+                color = StratumTheme.colors.inverseBackground,
+                contentColor = StratumTheme.colors.inverseText,
                 shadowElevation = 3.dp
             ) {
                 Text(

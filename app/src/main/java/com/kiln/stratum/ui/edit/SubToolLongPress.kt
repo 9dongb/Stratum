@@ -2,7 +2,6 @@ package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -17,6 +16,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import com.kiln.stratum.ui.components.StratumDropdownMenu
 
 /**
  * 길게 누르기를 안쪽 버튼보다 먼저 알아챈다.
@@ -63,7 +63,7 @@ fun SubToolMenu(
     onDismiss: () -> Unit,
     onChoose: (SubTool) -> Unit
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    StratumDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         for (subTool in tool.subTools) {
             DropdownMenuItem(
                 text = { Text(stringResource(subTool.label)) },

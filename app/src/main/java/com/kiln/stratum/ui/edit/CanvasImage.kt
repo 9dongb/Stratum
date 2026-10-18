@@ -5,7 +5,6 @@ import android.graphics.BitmapShader
 import android.graphics.Matrix
 import android.graphics.Shader
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -34,6 +33,7 @@ import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
+import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -68,7 +68,7 @@ fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modi
         detailImage?.let { DocumentColors.forScreen(it.bitmap, state.colorSpace, state.gainmap, it.region.rect, state.documentSize).asImageBitmap() }
     }
     val checker = remember { checkerBitmap() }
-    val outline = MaterialTheme.colorScheme.outlineVariant
+    val outline = StratumTheme.colors.canvasOutline
     val description = stringResource(R.string.edit_canvas_description)
     Spacer(
         modifier
