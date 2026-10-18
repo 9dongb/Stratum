@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -298,6 +299,11 @@ fun EditScreen(
         // 문서가 열려 있어야 도구를 쓴다. 고른 도구가 있으면 그 옵션을 보인다.
         val toolsEnabled = ready != null
         val activeTool = selection.active.takeIf { toolsEnabled }
+        // 뒤로 가기: 도구를 골랐으면 그 도구를 닫는다(결정 기록 '뒤로 가기로 도구 닫기'). 스포이드·자르기는 도구를 닫으면 함께 끝난다.
+        // 메인 화면에서는 도구 막대의 도구만 본다. 커버에서 고른 조정·레이어는 메인에서 보이지 않아 뒤로를 먹지 않는다.
+        // 늘 두고 켜고 끄기만 해서, 홈으로 가는 처리(StratumApp)보다 나중에·창과 유동화보다 먼저 등록된 순서를 지킨다.
+        val closableTool = if (widthClass == WidthClass.Compact) activeTool else activeTool?.takeIf { it in EditTool.railTools }
+        BackHandler(enabled = closableTool != null, onBack = selection::close)
         val toolTitle = activeTool?.let { stringResource(it.label) }
         val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
             val document = checkNotNull(ready).documentSize
