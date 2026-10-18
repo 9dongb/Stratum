@@ -14,6 +14,23 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-18 · 앱 아이콘 교체(사용자 피드백 3차 ⓪)
+
+- 요청: "stratum-icon 폴더의 res/ 안에 있는 앱 아이콘 파일로 기존 기본 아이콘을 교체해줘. 기존 ic_launcher 관련 파일(mipmap 폴더의 webp, 기존 drawable 아이콘 등)은 지우고, AndroidManifest.xml이 새 아이콘을 쓰는지 확인한 뒤 빌드해줘. store/와 source/ 폴더는 docs/icon/으로 옮겨줘. 앱에 아이콘 적용이 다 된 것이라면 다음으로 넘어가고, 더 적용할 부분이 있으면 적용하세요."
+  - 같은 메시지의 나머지 요청(유동화 두 손가락, 브러시 원, 세 손가락 제스처, 제스처 알림)은 progress.md '진행 중'에 사용자의 말 그대로 있다.
+- 의도: 말하지 않음
+- 커밋:
+  - "앱 아이콘을 사용자가 만든 Stratum 아이콘(어댑티브·단색 벡터)으로 바꾸고 원본·스토어 그림을 docs/icon으로 옮김"
+- 바꾼 것:
+  - `res/drawable/ic_launcher_background.xml`·`ic_launcher_foreground.xml`(바꿈), `ic_launcher_monochrome.xml`(새), `res/mipmap-anydpi/ic_launcher.xml`·`ic_launcher_round.xml`(단색 레이어를 새 파일로)
+  - 지운 것: 밀도별 기본 아이콘 `mipmap-hdpi`~`mipmap-xxxhdpi`의 `ic_launcher.webp`·`ic_launcher_round.webp` 10개(폴더째)
+  - `docs/icon/source/stratum-icon.svg`, `docs/icon/store/stratum-playstore-512.png`(옮김). 비게 된 `stratum-icon/` 폴더는 지웠다.
+  - `AndroidManifest.xml`은 이미 `@mipmap/ic_launcher`·`@mipmap/ic_launcher_round`를 써서 고칠 것이 없었다.
+- 정한 것: progress.md 결정 기록 '앱 아이콘(사용자 제공)'
+- 확인한 것:
+  - 빌드가 통과했고, APK의 앱 아이콘이 새 어댑티브 아이콘(`mipmap-anydpi`)으로 잡혔다(`aapt2 dump badging`).
+  - 에뮬레이터(Pixel_Fold) 앱 서랍에 새 아이콘이 보였다.
+
 ## 2026-10-18 · 사용자 피드백 2차 마무리(최종 보고)
 
 - 요청: 사용자 피드백 2차 다섯 가지(progress.md에 있던 '진행 중'의 말 그대로를 아래 ①~⑤ 항목에 옮겼다)

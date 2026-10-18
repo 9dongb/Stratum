@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="18 18 72 72">
+  <!-- Stratum 앱 아이콘 원본 (보이는 영역 72x72, 전체 캔버스 108x108 기준 좌표) -->
+  <defs>
+    <clipPath id="b-clip"><circle cx="54" cy="54" r="28"/></clipPath>
+  </defs>
+  <rect x="0" y="0" width="108" height="108" fill="#16171A"/>
+  <g clip-path="url(#b-clip)">
+    <rect x="18" y="18" width="72" height="72" fill="#A9C6FF"/>
+    <path d="M18 0 C32 -6 44 6 58 0 S80 -6 90 0 V60 H18 Z" transform="translate(0 38)" fill="#6EA2FF" stroke="#16171A" stroke-width="1.6"/>
+    <path d="M18 0 C32 -6 44 6 58 0 S80 -6 90 0 V60 H18 Z" transform="translate(0 50)" fill="#2F6FE4" stroke="#16171A" stroke-width="1.6"/>
+    <path d="M18 0 C32 -6 44 6 58 0 S80 -6 90 0 V60 H18 Z" transform="translate(0 61)" fill="#1D3A80" stroke="#16171A" stroke-width="1.6"/>
+    <path d="M18 0 C32 -6 44 6 58 0 S80 -6 90 0 V60 H18 Z" transform="translate(0 72)" fill="#E8784A" stroke="#16171A" stroke-width="1.6"/>
+  </g>
+</svg>

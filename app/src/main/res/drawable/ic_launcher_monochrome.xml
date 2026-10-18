@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stratum 테마 아이콘(단색) 레이어: 시스템이 배경화면 색으로 칠하며, 투명도만 사용된다 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group>
+        <clip-path android:pathData="M54,26a28,28 0,1 1,0 56a28,28 0,1 1,0 -56z" />
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.3"
+            android:pathData="M18,18h72v72h-72z" />
+
+        <group android:translateY="38">
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.3"
+                android:pathData="M18,0C32,-6 44,6 58,0S80,-6 90,0V60H18Z" />
+        </group>
+        <group android:translateY="50">
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.3"
+                android:pathData="M18,0C32,-6 44,6 58,0S80,-6 90,0V60H18Z" />
+        </group>
+        <group android:translateY="61">
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.3"
+                android:pathData="M18,0C32,-6 44,6 58,0S80,-6 90,0V60H18Z" />
+        </group>
+        <group android:translateY="72">
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.5"
+                android:pathData="M18,0C32,-6 44,6 58,0S80,-6 90,0V60H18Z" />
+        </group>
+    </group>
+</vector>
