@@ -25,6 +25,8 @@ data class TargetTile(val key: TileKey, val width: Int, val height: Int, val par
 class TransformPlan private constructor(
     val sourceSize: PixelSize,
     val targetSize: PixelSize,
+    /** 원본에서 남기는 사각형(돌리기·뒤집기는 원본 전체) */
+    val crop: PixelRect,
     val orientation: Orientation,
     /** 대상 타일들. 위 줄부터, 한 줄 안에서는 왼쪽부터 놓인다. */
     val targets: List<TargetTile>
@@ -81,7 +83,7 @@ class TransformPlan private constructor(
                 }
                 TargetTile(key, targetBounds.width, targetBounds.height, parts)
             }
-            return TransformPlan(source, target, orientation, targets)
+            return TransformPlan(source, target, crop, orientation, targets)
         }
     }
 }

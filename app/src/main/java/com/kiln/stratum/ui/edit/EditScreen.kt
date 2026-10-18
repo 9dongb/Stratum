@@ -525,7 +525,8 @@ fun EditScreen(
                 onExport = { target ->
                     onExport(draft, target)
                     exportDraft = null
-                }
+                },
+                hdr = ready.hdr
             )
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)

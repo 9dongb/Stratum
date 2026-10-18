@@ -5,6 +5,7 @@ import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelRect
@@ -61,6 +62,47 @@ class RasterTransformTest {
                 if (actual != expected(x, y)) fail("($x, $y) is ${actual.toUInt().toString(16)}")
             }
         }
+    }
+
+    /** [document] 레이어 0에 [photo] 무늬의 게인맵(크기 [size])을 단 문서 */
+    private fun withGainmap(document: Document, size: PixelSize): Document {
+        val gainmap = HdrGainmap(size.width, size.height, photo(size).raster())
+        return document.copy(layers = listOf(document.layers[0].copy(gainmap = gainmap)))
+    }
+
+    private fun HdrGainmap.pixelAt(x: Int, y: Int): Int =
+        raster.tiles[TileKey(x / TILE_SIZE, y / TILE_SIZE)]?.pixelAt(x % TILE_SIZE, y % TILE_SIZE) ?: 0
+
+    @Test
+    fun gainmap_turnsWithTheDocument() {
+        val source = withGainmap(photo(PixelSize(800, 600)), PixelSize(200, 150))
+
+        val turned = RasterTransform.apply(source, TransformPlan.orient(PixelSize(800, 600), Orientation.ROTATE_CLOCKWISE), composer)
+
+        val gainmap = checkNotNull(turned.layers[0].gainmap)
+        assertEquals(150, gainmap.width)
+        assertEquals(200, gainmap.height)
+        for ((x, y) in listOf(0 to 0, 149 to 199, 37 to 120)) {
+            val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x, y, 150, 200)
+            assertEquals(colorAt(from.x, from.y), gainmap.pixelAt(x, y))
+        }
+    }
+
+    @Test
+    fun gainmap_isCroppedAtTheSameProportion_toTheNearestGainmapPixel() {
+        val source = withGainmap(photo(PixelSize(800, 600)), PixelSize(200, 150))
+
+        // 문서 (402, 2)~(800, 599)는 게인맵 (100.5, 0.5)~(200, 149.75): 가장 가까운 칸 경계는 (101, 1)~(200, 150)
+        val cropped = RasterTransform.apply(source, TransformPlan.crop(PixelSize(800, 600), PixelRect(402, 2, 800, 599)), composer)
+
+        val gainmap = checkNotNull(cropped.layers[0].gainmap)
+        assertEquals(99, gainmap.width)
+        assertEquals(149, gainmap.height)
+        assertEquals(colorAt(101, 1), gainmap.pixelAt(0, 0))
+        assertEquals(colorAt(199, 149), gainmap.pixelAt(98, 148))
+        // 아주 좁게 잘라도 게인맵은 적어도 한 칸이다
+        val thin = RasterTransform.apply(source, TransformPlan.crop(PixelSize(800, 600), PixelRect(0, 0, 1, 1)), composer)
+        assertEquals(1, checkNotNull(thin.layers[0].gainmap).width)
     }
 
     @Test

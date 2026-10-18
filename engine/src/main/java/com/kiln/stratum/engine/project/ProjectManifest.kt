@@ -5,6 +5,9 @@ import com.kiln.stratum.engine.adjust.CurvePoint
 import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.GainRgb
+import com.kiln.stratum.engine.document.HdrInfo
+import com.kiln.stratum.engine.document.HdrPrimaries
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -24,6 +27,7 @@ const val PROJECT_FORMAT_VERSION = 1
  * @property createdMillis 프로젝트를 처음 만든 시각(밀리초)
  * @property modifiedMillis 마지막으로 저장한 시각(밀리초). 홈의 최근 프로젝트 순서다.
  * @property colorSpace 픽셀 값의 색 공간(Document.colorSpace). sRGB가 아니면 문서 덧붙임(꼬리표 1)에 적는다.
+ * @property hdr 게인맵을 읽는 값(Document.hdr). 있으면 문서 덧붙임(꼬리표 2)에 적는다.
  */
 data class ProjectManifest(
     val width: Int,
@@ -32,7 +36,8 @@ data class ProjectManifest(
     val createdMillis: Long,
     val modifiedMillis: Long,
     val layers: List<LayerEntry>,
-    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+    val hdr: HdrInfo? = null
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }
@@ -44,15 +49,21 @@ data class ProjectManifest(
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
 }
 
-/** 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에 적고, 보정이 없으면 적지 않는다. */
+/**
+ * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에 적고, 없으면 적지 않는다.
+ */
 data class LayerEntry(
     val id: Long,
     val name: String,
     val opacity: Float,
     val blendMode: BlendMode,
     val content: ContentEntry,
-    val adjustments: Adjustments = Adjustments.NONE
+    val adjustments: Adjustments = Adjustments.NONE,
+    val gainmap: GainmapEntry? = null
 )
+
+/** 레이어의 게인맵: 크기와, 게인맵 격자의 자리마다 어떤 타일이 있는지(Layer.gainmap) */
+data class GainmapEntry(val width: Int, val height: Int, val tiles: List<TileEntry>)
 
 /** 레이어 내용. 나중에 텍스트 같은 종류가 더해진다. */
 sealed interface ContentEntry
@@ -100,8 +111,14 @@ object ProjectManifestCodec {
     /** 레이어 덧붙임 꼬리표: 기본 보정 값 */
     private const val EXTRA_ADJUSTMENTS = 1
 
+    /** 레이어 덧붙임 꼬리표: 게인맵(크기와 타일 목록) */
+    private const val EXTRA_GAINMAP = 2
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
+
+    /** 문서 덧붙임 꼬리표: 게인맵을 읽는 값(HdrInfo) */
+    private const val EXTRA_HDR = 2
     private const val TILE_FILE: Byte = 0
     private const val TILE_SOLID: Byte = 1
 
@@ -124,38 +141,22 @@ object ProjectManifestCodec {
             when (val content = layer.content) {
                 is RasterEntry -> {
                     out.writeInt(CONTENT_RASTER)
-                    out.writeInt(content.tiles.size)
-                    for (tile in content.tiles) {
-                        out.writeInt(tile.column)
-                        out.writeInt(tile.row)
-                        when (val ref = tile.ref) {
-                            is TileRef.File -> {
-                                out.writeByte(TILE_FILE.toInt())
-                                out.writeUTF(ref.name)
-                            }
-                            is TileRef.Solid -> {
-                                out.writeByte(TILE_SOLID.toInt())
-                                out.writeInt(ref.argb)
-                            }
-                        }
-                    }
+                    writeTiles(out, content.tiles)
                 }
             }
-            // 레이어 덧붙임: 보정 값(있을 때만)
-            if (layer.adjustments.isIdentity) {
-                out.writeInt(0)
-            } else {
-                out.writeInt(1)
-                writeExtra(out, EXTRA_ADJUSTMENTS, adjustmentBytes(layer.adjustments))
-            }
+            // 레이어 덧붙임: 보정 값·게인맵(있을 때만)
+            val extras = ArrayList<Pair<Int, ByteArray>>()
+            if (!layer.adjustments.isIdentity) extras += EXTRA_ADJUSTMENTS to adjustmentBytes(layer.adjustments)
+            layer.gainmap?.let { extras += EXTRA_GAINMAP to gainmapBytes(it) }
+            writeExtras(out, extras)
         }
-        // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)
-        if (manifest.colorSpace == DocumentColorSpace.SRGB) {
-            out.writeInt(0)
-        } else {
-            out.writeInt(1)
-            writeExtra(out, EXTRA_COLOR_SPACE, ByteArrayOutputStream().also { DataOutputStream(it).writeInt(colorSpaceCode(manifest.colorSpace)) }.toByteArray())
+        // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
+        val extras = ArrayList<Pair<Int, ByteArray>>()
+        if (manifest.colorSpace != DocumentColorSpace.SRGB) {
+            extras += EXTRA_COLOR_SPACE to ByteArrayOutputStream().also { DataOutputStream(it).writeInt(colorSpaceCode(manifest.colorSpace)) }.toByteArray()
         }
+        manifest.hdr?.let { extras += EXTRA_HDR to hdrBytes(it) }
+        writeExtras(out, extras)
         out.flush()
     }
 
@@ -171,29 +172,28 @@ object ProjectManifestCodec {
                 val opacity = data.readFloat()
                 val blendMode = blendOf(data.readInt())
                 val content = when (val type = data.readInt()) {
-                    CONTENT_RASTER -> RasterEntry(
-                        List(data.readCount()) {
-                            val column = data.readInt()
-                            val row = data.readInt()
-                            val ref = when (val kind = data.readByte()) {
-                                TILE_FILE -> TileRef.File(data.readUTF())
-                                TILE_SOLID -> TileRef.Solid(data.readInt())
-                                else -> throw UnreadableProjectException("Unknown tile kind $kind")
-                            }
-                            TileEntry(column, row, ref)
-                        }
-                    )
+                    CONTENT_RASTER -> RasterEntry(readTiles(data))
                     else -> throw UnreadableProjectException("Unknown layer content $type")
                 }
                 var adjustments = Adjustments.NONE
-                data.readExtras { tag, bytes -> if (tag == EXTRA_ADJUSTMENTS) adjustments = adjustmentsOf(bytes) }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments)
+                var gainmap: GainmapEntry? = null
+                data.readExtras { tag, bytes ->
+                    when (tag) {
+                        EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
+                        EXTRA_GAINMAP -> gainmap = gainmapOf(bytes)
+                    }
+                }
+                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap)
             }
             var colorSpace = DocumentColorSpace.SRGB
+            var hdr: HdrInfo? = null
             data.readExtras { tag, bytes ->
-                if (tag == EXTRA_COLOR_SPACE) colorSpace = colorSpaceOf(DataInputStream(ByteArrayInputStream(bytes)).readInt())
+                when (tag) {
+                    EXTRA_COLOR_SPACE -> colorSpace = colorSpaceOf(DataInputStream(ByteArrayInputStream(bytes)).readInt())
+                    EXTRA_HDR -> hdr = hdrOf(bytes)
+                }
             }
-            return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers, colorSpace)
+            return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers, colorSpace, hdr)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken project: ${e.message}")
         }
@@ -231,11 +231,111 @@ object ProjectManifestCodec {
         }
     }
 
-    private fun writeExtra(out: DataOutputStream, tag: Int, bytes: ByteArray) {
-        out.writeInt(tag)
-        out.writeInt(bytes.size)
-        out.write(bytes)
+    /** 덧붙임들: 개수와 (꼬리표, 길이, 바이트) 묶음 */
+    private fun writeExtras(out: DataOutputStream, extras: List<Pair<Int, ByteArray>>) {
+        out.writeInt(extras.size)
+        for ((tag, bytes) in extras) {
+            out.writeInt(tag)
+            out.writeInt(bytes.size)
+            out.write(bytes)
+        }
     }
+
+    /** 타일 목록: 개수와 타일마다 자리·종류·파일 이름 또는 색 */
+    private fun writeTiles(out: DataOutputStream, tiles: List<TileEntry>) {
+        out.writeInt(tiles.size)
+        for (tile in tiles) {
+            out.writeInt(tile.column)
+            out.writeInt(tile.row)
+            when (val ref = tile.ref) {
+                is TileRef.File -> {
+                    out.writeByte(TILE_FILE.toInt())
+                    out.writeUTF(ref.name)
+                }
+                is TileRef.Solid -> {
+                    out.writeByte(TILE_SOLID.toInt())
+                    out.writeInt(ref.argb)
+                }
+            }
+        }
+    }
+
+    private fun readTiles(data: DataInputStream): List<TileEntry> =
+        List(data.readCount()) {
+            val column = data.readInt()
+            val row = data.readInt()
+            val ref = when (val kind = data.readByte()) {
+                TILE_FILE -> TileRef.File(data.readUTF())
+                TILE_SOLID -> TileRef.Solid(data.readInt())
+                else -> throw UnreadableProjectException("Unknown tile kind $kind")
+            }
+            TileEntry(column, row, ref)
+        }
+
+    /** 게인맵: 가로, 세로, 타일 목록 */
+    private fun gainmapBytes(gainmap: GainmapEntry): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeInt(gainmap.width)
+            out.writeInt(gainmap.height)
+            writeTiles(out, gainmap.tiles)
+            out.flush()
+        }.toByteArray()
+
+    private fun gainmapOf(bytes: ByteArray): GainmapEntry {
+        val data = DataInputStream(ByteArrayInputStream(bytes))
+        val width = data.readInt()
+        val height = data.readInt()
+        if (width <= 0 || height <= 0) throw UnreadableProjectException("Broken gainmap size ${width}x$height")
+        return GainmapEntry(width, height, readTiles(data))
+    }
+
+    /** HDR 값: 채널마다 세 값인 것 다섯(비율 최소·최대, 감마, 엡실론 SDR·HDR), 화면 비율 둘, 1채널(바이트), 대체 색 영역 코드(-1 없음) */
+    private fun hdrBytes(hdr: HdrInfo): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            for (rgb in listOf(hdr.ratioMin, hdr.ratioMax, hdr.gamma, hdr.epsilonSdr, hdr.epsilonHdr)) {
+                out.writeFloat(rgb.r)
+                out.writeFloat(rgb.g)
+                out.writeFloat(rgb.b)
+            }
+            out.writeFloat(hdr.displayRatioForFullHdr)
+            out.writeFloat(hdr.minDisplayRatioForHdrTransition)
+            out.writeByte(if (hdr.singleChannel) 1 else 0)
+            out.writeInt(hdr.alternatePrimaries?.let { primariesCode(it) } ?: -1)
+            out.flush()
+        }.toByteArray()
+
+    private fun hdrOf(bytes: ByteArray): HdrInfo {
+        val data = DataInputStream(ByteArrayInputStream(bytes))
+        val rgb = List(5) { GainRgb(data.readFloat(), data.readFloat(), data.readFloat()) }
+        return HdrInfo(
+            ratioMin = rgb[0],
+            ratioMax = rgb[1],
+            gamma = rgb[2],
+            epsilonSdr = rgb[3],
+            epsilonHdr = rgb[4],
+            displayRatioForFullHdr = data.readFloat(),
+            minDisplayRatioForHdrTransition = data.readFloat(),
+            singleChannel = data.readByte().toInt() != 0,
+            alternatePrimaries = data.readInt().let { if (it < 0) null else primariesOf(it) }
+        )
+    }
+
+    private fun primariesCode(primaries: HdrPrimaries): Int =
+        when (primaries) {
+            HdrPrimaries.SRGB -> 0
+            HdrPrimaries.DISPLAY_P3 -> 1
+            HdrPrimaries.BT2020 -> 2
+        }
+
+    private fun primariesOf(code: Int): HdrPrimaries =
+        when (code) {
+            0 -> HdrPrimaries.SRGB
+            1 -> HdrPrimaries.DISPLAY_P3
+            2 -> HdrPrimaries.BT2020
+            else -> throw UnreadableProjectException("Unknown HDR primaries $code")
+        }
 
     /** 보정 값: 실수 7개(노출, 색온도, 그림자, 하이라이트, 밝기, 대비, 채도), 곡선 점 수와 점들(x, y) */
     private fun adjustmentBytes(adjustments: Adjustments): ByteArray =

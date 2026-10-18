@@ -5,6 +5,9 @@ import com.kiln.stratum.engine.adjust.CurvePoint
 import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.GainRgb
+import com.kiln.stratum.engine.document.HdrInfo
+import com.kiln.stratum.engine.document.HdrPrimaries
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -122,6 +125,26 @@ class ProjectManifestTest {
         assertEquals(adjusted, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(adjusted))))
         // 보정이 없는 레이어는 덧붙임을 쓰지 않아 크기가 그대로다
         assertTrue(bytesOf(adjusted).size > bytesOf(manifest).size)
+    }
+
+    @Test
+    fun gainmapAndHdrValues_roundTrip() {
+        val hdr = HdrInfo(
+            ratioMin = GainRgb(1f),
+            ratioMax = GainRgb(4f, 3.5f, 3f),
+            gamma = GainRgb(1f),
+            epsilonSdr = GainRgb(0.015625f),
+            epsilonHdr = GainRgb(0.015625f),
+            displayRatioForFullHdr = 4f,
+            minDisplayRatioForHdrTransition = 1f,
+            singleChannel = true,
+            alternatePrimaries = HdrPrimaries.BT2020
+        )
+        val gainmap = GainmapEntry(1000, 750, listOf(TileEntry(0, 0, TileRef.File("g.tile")), TileEntry(3, 2, TileRef.Solid(0xFF000000.toInt()))))
+        val photo = manifest.copy(layers = listOf(manifest.layers[0].copy(gainmap = gainmap), manifest.layers[1]), hdr = hdr)
+
+        assertEquals(photo, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(photo))))
+        assertEquals(null, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).hdr)
     }
 
     @Test

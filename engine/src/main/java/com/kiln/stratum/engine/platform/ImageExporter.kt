@@ -16,6 +16,7 @@ import java.io.Closeable
 import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import kotlin.math.roundToInt
 
 /**
  * 문서를 내보낼 크기로 그리고([render]), 형식대로 압축한다([RenderedImage.writeTo]). 문서는 바꾸지 않는다.
@@ -55,6 +56,8 @@ object ImageExporter {
             }
             // 다 그린 뒤에 꼬리표를 문서 색 공간으로 바꾼다(그리기 전에 바꾸면 sRGB 꼬리표의 타일이 변환된다)
             DocumentColors.tagForEncoding(bitmap, document.colorSpace)
+            // HDR 문서를 JPEG로 내보내면 게인맵을 붙여 Ultra HDR로 쓴다(안드로이드 14 이상, PNG·WebP는 압축기가 담지 못한다)
+            if (settings.format == ExportFormat.JPEG && Gainmaps.supported) attachGainmap(document, bitmap, checkCanceled)
             return RenderedImage(bitmap, settings)
         } catch (e: OutOfMemoryError) {
             bitmap.recycle()
@@ -63,6 +66,20 @@ object ImageExporter {
             bitmap.recycle()
             throw e
         }
+    }
+
+    /**
+     * 내보낼 그림 [into]에 문서의 게인맵(레이어 게인맵을 겹친 것, [GainmapComposer])을 붙인다. HDR 문서가 아니면 그대로다.
+     * 게인맵 크기는 사진의 게인맵과 같은 비율로 내보낼 크기에 맞춘다. 그리지 못하면 게인맵 없이(보통 사진으로) 내보낸다.
+     */
+    private fun attachGainmap(document: Document, into: Bitmap, checkCanceled: () -> Unit) {
+        val info = document.hdr ?: return
+        val source = document.layers.firstNotNullOfOrNull { it.gainmap } ?: return
+        val width = (into.width * source.width.toDouble() / document.width).roundToInt().coerceAtLeast(1)
+        val height = (into.height * source.height.toDouble() / document.height).roundToInt().coerceAtLeast(1)
+        val composed = GainmapComposer.compose(document, width, height, checkCanceled) ?: return
+        val contents = if (info.singleChannel) Gainmaps.toSingleChannel(composed).also { composed.recycle() } else composed
+        into.gainmap = Gainmaps.toAndroid(info, contents)
     }
 
     /**
@@ -131,6 +148,7 @@ object ImageExporter {
 /**
  * 내보낼 크기로 그린 이미지. [writeTo]로 압축해 쓰고, 다 쓰면 [close]한다.
  * 압축은 안드로이드 `Bitmap.compress`다. 사진 정보(EXIF)는 쓰지 않는다. 문서 색 공간(sRGB·Display P3)의 색 정보가 붙는다.
+ * HDR 문서의 JPEG는 게인맵이 붙어 Ultra HDR JPEG가 된다(안드로이드 14 이상).
  */
 class RenderedImage internal constructor(
     private val bitmap: Bitmap,

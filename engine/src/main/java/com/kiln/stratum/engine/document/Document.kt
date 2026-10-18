@@ -16,6 +16,7 @@ import com.kiln.stratum.engine.selection.Selection
  * @property selection 선택 영역. 없으면 null(모든 곳을 편집한다). 비어 있는 선택 영역은 두지 않는다([withSelection]).
  *   실행 취소 기록에는 남지만 프로젝트 파일에는 저장하지 않는다(결정 기록 '선택 도구').
  * @property colorSpace 픽셀 값이 뜻하는 색 공간. 넓은 색 사진은 Display P3, 그 밖은 sRGB다([DocumentColorSpace]).
+ * @property hdr HDR 사진의 게인맵을 읽는 값. 게인맵은 레이어마다([Layer.gainmap]), 읽는 값은 문서에 하나다. 없으면 null.
  */
 data class Document(
     val width: Int,
@@ -23,7 +24,8 @@ data class Document(
     val layers: List<Layer>,
     val nextLayerId: Long,
     val selection: Selection? = null,
-    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+    val hdr: HdrInfo? = null
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }
@@ -33,6 +35,10 @@ data class Document(
             "Layer ids must be within 0 until $nextLayerId"
         }
     }
+
+    /** HDR 문서인지: 게인맵을 읽는 값이 있고 게인맵이 있는 레이어가 하나라도 있다 */
+    val hasHdr: Boolean
+        get() = hdr != null && layers.any { it.gainmap != null }
 
     /** [id] 레이어의 위치(0이 맨 아래). 없으면 -1. */
     fun indexOfLayer(id: LayerId): Int = layers.indexOfFirst { it.id == id }

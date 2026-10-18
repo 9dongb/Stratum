@@ -74,6 +74,8 @@
     <string name="export_size_long_edge">긴 변 %1$d px</string>
     <string name="export_result">%1$d × %2$d px로 내보내요.</string>
     <string name="export_result_jpeg">%1$d × %2$d px로 내보내요. 투명한 곳은 흰색이 돼요.</string>
+    <string name="export_hdr_jpeg">HDR 밝기를 그대로 담아요(Ultra HDR).</string>
+    <string name="export_hdr_lost">HDR 밝기는 JPEG로 내보낼 때만 남아요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
 

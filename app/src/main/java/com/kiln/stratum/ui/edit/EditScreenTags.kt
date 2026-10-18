@@ -27,6 +27,9 @@ object EditScreenTags {
     const val EXPORT_QUALITY = "exportQuality"
     const val EXPORT_SHARE = "exportShare"
     const val EXPORT_SAVE = "exportSave"
+
+    /** 내보내기 창의 HDR 안내 한 줄(HDR 문서만) */
+    const val EXPORT_HDR_HINT = "exportHdrHint"
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
 

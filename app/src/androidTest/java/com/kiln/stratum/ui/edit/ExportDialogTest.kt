@@ -15,6 +15,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -53,10 +54,10 @@ class ExportDialogTest {
     private val exports = mutableListOf<Pair<ExportChoice, ExportTarget>>()
     private var lastChoice by mutableStateOf(ExportChoice())
 
-    /** [document] 크기 문서가 열린 상태. 축소본은 1/8 단계로 작게 만든다. */
-    private fun ready(document: PixelSize, busy: Boolean = false): EditorState.Ready {
+    /** [document] 크기 문서가 열린 상태([hdr]이면 HDR 문서). 축소본은 1/8 단계로 작게 만든다. */
+    private fun ready(document: PixelSize, busy: Boolean = false, hdr: Boolean = false): EditorState.Ready {
         val preview = Bitmap.createBitmap((document.width + 7) / 8, (document.height + 7) / 8, Bitmap.Config.ARGB_8888)
-        return EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 3)), document, busy = busy)
+        return EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 3)), document, busy = busy, hdr = hdr)
     }
 
     @Composable
@@ -75,8 +76,8 @@ class ExportDialogTest {
         )
     }
 
-    private fun show(document: PixelSize = PixelSize(4000, 3000), widthDp: Int = 411, heightDp: Int = 800, busy: Boolean = false) {
-        val state = ready(document, busy)
+    private fun show(document: PixelSize = PixelSize(4000, 3000), widthDp: Int = 411, heightDp: Int = 800, busy: Boolean = false, hdr: Boolean = false) {
+        val state = ready(document, busy, hdr)
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
@@ -111,6 +112,24 @@ class ExportDialogTest {
         composeRule.onNodeWithTag(EditScreenTags.EXPORT_QUALITY).assertDoesNotExist()
         composeRule.onNodeWithText(text(R.string.export_lossless)).assertExists()
         composeRule.onNodeWithText(text(R.string.export_result, 4000, 3000)).assertExists()
+    }
+
+    @Test
+    fun hdrPhoto_tellsThatOnlyJpegKeepsTheHdr() {
+        show(hdr = true)
+        open()
+
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT_HDR_HINT).assertTextEquals(text(R.string.export_hdr_jpeg))
+        composeRule.onNodeWithTag(EditScreenTags.exportFormat(ExportFormat.WEBP)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT_HDR_HINT).assertTextEquals(text(R.string.export_hdr_lost))
+    }
+
+    @Test
+    fun sdrPhoto_hasNoHdrHint() {
+        show()
+        open()
+
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT_HDR_HINT).assertDoesNotExist()
     }
 
     @Test

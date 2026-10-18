@@ -40,6 +40,7 @@ data class RasterContent(val raster: Raster) : LayerContent
  * @property name 화면에 보이는 이름. 엔진은 문구를 만들지 않으므로 앱이 strings.xml에서 만들어 넘긴다.
  * @property opacity 불투명도. 0(투명)부터 1(불투명)까지.
  * @property adjustments 기본 보정 값(비파괴). 픽셀은 그대로 두고 그릴 때 이 값대로 보정한다.
+ * @property gainmap HDR 사진에서 온 레이어의 게인맵(밝기 지도). 픽셀과 함께 다닌다(결정 기록 'HDR'). 없으면 null.
  */
 data class Layer(
     val id: LayerId,
@@ -47,7 +48,8 @@ data class Layer(
     val content: LayerContent,
     val opacity: Float = 1f,
     val blendMode: BlendMode = BlendMode.NORMAL,
-    val adjustments: Adjustments = Adjustments.NONE
+    val adjustments: Adjustments = Adjustments.NONE,
+    val gainmap: HdrGainmap? = null
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }

@@ -61,7 +61,7 @@ private val Document.size: PixelSize
 
 /**
  * [area]에 걸친 타일을 옮길 때 새로 생길 메모리의 어림값. 한 가지 색 타일은 그대로 쓰므로 세지 않는다.
- * 새 타일은 원본 타일보다 크지 않아, 원본 타일의 메모리를 더한다.
+ * 새 타일은 원본 타일보다 크지 않아, 원본 타일의 메모리를 더한다. 게인맵 타일은 작아 모두 더한다.
  */
 private fun newTileBytes(document: Document, area: PixelRect): Long {
     var bytes = 0L
@@ -70,6 +70,7 @@ private fun newTileBytes(document: Document, area: PixelRect): Long {
         for ((key, tile) in raster.tiles) {
             if (tile.solidColor == null && key.overlaps(area)) bytes += tile.byteCount
         }
+        layer.gainmap?.let { gainmap -> bytes += gainmap.raster.tiles.values.sumOf { it.byteCount.toLong() } }
     }
     return bytes
 }

@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -201,6 +202,7 @@ sealed interface EditorState {
      * @property selection 선택 영역 윤곽선(문서 전체, 줄인 마스크에서 찾음). 없으면 고른 곳이 없다(모든 곳을 편집한다).
      * @property selectionDetail 확대해 볼 때 [detail]과 같은 자리에서 더 정확하게 다시 찾은 윤곽선. 없으면 [selection]만 그린다.
      * @property colorSpace 문서 색 공간. 축소본 값이 이 색 공간의 값이라, 화면은 그릴 때 그 꼬리표로 보이고 창을 넓은 색 모드로 둔다.
+     * @property hdr HDR 문서이고 이 기기가 게인맵을 다루는지(안드로이드 14 이상). JPEG로 내보내면 HDR이 남는다.
      */
     data class Ready(
         val base: PreviewImage,
@@ -214,7 +216,8 @@ sealed interface EditorState {
         val activeLayer: LayerId? = null,
         val selection: SelectionOutline? = null,
         val selectionDetail: SelectionOutline? = null,
-        val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
+        val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+        val hdr: Boolean = false
     ) : EditorState {
 
         /** 고른 레이어의 속성 */
@@ -1738,7 +1741,8 @@ class EditorViewModel internal constructor(
                 activeLayer = activeLayerIn(document),
                 selection = outline,
                 selectionDetail = selectionDetail,
-                colorSpace = document.colorSpace
+                colorSpace = document.colorSpace,
+                hdr = document.hasHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다

@@ -73,6 +73,8 @@
     <string name="export_size_long_edge">Long edge %1$d px</string>
     <string name="export_result">Exports at %1$d × %2$d px.</string>
     <string name="export_result_jpeg">Exports at %1$d × %2$d px. Transparent areas become white.</string>
+    <string name="export_hdr_jpeg">Keeps the HDR brightness (Ultra HDR).</string>
+    <string name="export_hdr_lost">HDR brightness is kept only in JPEG.</string>
     <!-- 캔버스 배율 표시. %1$s는 배율 숫자다(예: 250, 7.5). 누르면 화면에 맞춘다. -->
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">Zoom %1$s%%. Tap to fit to screen.</string>

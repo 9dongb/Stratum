@@ -3,9 +3,11 @@ package com.kiln.stratum.engine.platform
 import android.graphics.Bitmap
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.project.GainmapEntry
 import com.kiln.stratum.engine.project.LayerEntry
 import com.kiln.stratum.engine.project.ProjectHeader
 import com.kiln.stratum.engine.project.ProjectManifest
@@ -78,7 +80,18 @@ class ProjectFolder(val directory: File) {
                 checkCanceled()
                 TileEntry(key.column, key.row, refOf(tile, referenced))
             }
-            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments)
+            // 게인맵 타일도 같은 타일 파일로 둔다(같은 객체는 한 번만 쓴다)
+            val gainmap = layer.gainmap?.let { gainmap ->
+                GainmapEntry(
+                    gainmap.width,
+                    gainmap.height,
+                    gainmap.raster.tiles.map { (key, tile) ->
+                        checkCanceled()
+                        TileEntry(key.column, key.row, refOf(tile, referenced))
+                    }
+                )
+            }
+            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments, gainmap)
         }
         val manifest = ProjectManifest(
             width = document.width,
@@ -87,7 +100,8 @@ class ProjectFolder(val directory: File) {
             createdMillis = createdMillis,
             modifiedMillis = modifiedMillis,
             layers = layers,
-            colorSpace = document.colorSpace
+            colorSpace = document.colorSpace,
+            hdr = document.hdr
         )
         checkCanceled()
         writeAtomically(manifestFile) { ProjectManifestCodec.write(manifest, it) }
@@ -107,32 +121,38 @@ class ProjectFolder(val directory: File) {
         val solidTiles = HashMap<Int, Tile>()
         val fileTiles = HashMap<String, Tile>()
         val loaded = IdentityHashMap<Tile, String>()
-        val layers = manifest.layers.map { entry ->
+        // 같은 파일을 가리키는 자리는 같은 타일 객체를 함께 쓰고, 한 가지 색 타일은 색마다 한 장만 만든다
+        fun rasterOf(entries: List<TileEntry>, grid: TileGrid): Raster {
             val tiles = HashMap<TileKey, Tile?>()
-            when (val content = entry.content) {
-                is RasterEntry -> for (tileEntry in content.tiles) {
-                    checkCanceled()
-                    if (tileEntry.column !in 0 until grid.columns || tileEntry.row !in 0 until grid.rows) {
-                        throw UnreadableProjectException("Tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
+            for (tileEntry in entries) {
+                checkCanceled()
+                if (tileEntry.column !in 0 until grid.columns || tileEntry.row !in 0 until grid.rows) {
+                    throw UnreadableProjectException("Tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
+                }
+                tiles[TileKey(tileEntry.column, tileEntry.row)] = when (val ref = tileEntry.ref) {
+                    is TileRef.Solid -> solidTiles.getOrPut(ref.argb) {
+                        BlankCanvas.solidTile(ref.argb) ?: throw NotEnoughMemoryException()
                     }
-                    tiles[TileKey(tileEntry.column, tileEntry.row)] = when (val ref = tileEntry.ref) {
-                        is TileRef.Solid -> solidTiles.getOrPut(ref.argb) {
-                            BlankCanvas.solidTile(ref.argb) ?: throw NotEnoughMemoryException()
-                        }
-                        is TileRef.File -> fileTiles.getOrPut(ref.name) {
-                            TileFiles.read(File(tilesDirectory, ref.name)).also { loaded[it] = ref.name }
-                        }
+                    is TileRef.File -> fileTiles.getOrPut(ref.name) {
+                        TileFiles.read(File(tilesDirectory, ref.name)).also { loaded[it] = ref.name }
                     }
                 }
             }
+            return Raster.EMPTY.withTiles(tiles)
+        }
+        val layers = manifest.layers.map { entry ->
+            val raster = when (val content = entry.content) {
+                is RasterEntry -> rasterOf(content.tiles, grid)
+            }
             try {
-                Layer(LayerId(entry.id), entry.name, RasterContent(Raster.EMPTY.withTiles(tiles)), entry.opacity, entry.blendMode, entry.adjustments)
+                val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
+                Layer(LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap)
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")
             }
         }
         val document = try {
-            Document(manifest.width, manifest.height, layers, manifest.nextLayerId, colorSpace = manifest.colorSpace)
+            Document(manifest.width, manifest.height, layers, manifest.nextLayerId, colorSpace = manifest.colorSpace, hdr = manifest.hdr)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken document: ${e.message}")
         }
@@ -151,12 +171,13 @@ class ProjectFolder(val directory: File) {
         val files = HashSet<String>()
         val solids = HashSet<Int>()
         for (layer in manifest.layers) {
-            when (val content = layer.content) {
-                is RasterEntry -> for (tile in content.tiles) {
-                    when (val ref = tile.ref) {
-                        is TileRef.File -> files += ref.name
-                        is TileRef.Solid -> solids += ref.argb
-                    }
+            val entries = when (val content = layer.content) {
+                is RasterEntry -> content.tiles
+            } + layer.gainmap?.tiles.orEmpty()
+            for (tile in entries) {
+                when (val ref = tile.ref) {
+                    is TileRef.File -> files += ref.name
+                    is TileRef.Solid -> solids += ref.argb
                 }
             }
         }

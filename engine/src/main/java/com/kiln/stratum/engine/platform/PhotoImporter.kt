@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.raster.PixelSize
@@ -29,6 +30,7 @@ data class PhotoInfo(val size: PixelSize, val mimeType: String?)
  *
  * 해독한 픽셀을 256px 타일마다 바꿀 수 없는 비트맵으로 나눠 담는다(자바 힙 밖, CLAUDE.md 4장).
  * 8비트로 풀고, sRGB보다 넓은 색 사진은 Display P3 문서로, 나머지는 sRGB 문서로 만든다(결정 기록 '사진 불러오기'·'넓은 색').
+ * HDR 사진(Ultra HDR 등 게인맵이 있는 사진)은 안드로이드 14 이상에서 게인맵을 사진 레이어에 지닌다(결정 기록 'HDR').
  * 원본 파일은 읽기만 하고 바꾸지 않는다. 오래 걸리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PhotoImporter {
@@ -100,7 +102,13 @@ object PhotoImporter {
         try {
             val raster = splitIntoTiles(decoded, colorSpace, checkCanceled)
                 ?: return failure(ImportFailure.NOT_ENOUGH_MEMORY, null)
-            return ImportResult.Success(Document.create(decoded.width, decoded.height, layerName, raster).copy(colorSpace = colorSpace))
+            val document = Document.create(decoded.width, decoded.height, layerName, raster).copy(colorSpace = colorSpace)
+            val hdr = if (Gainmaps.supported) Gainmaps.read(decoded) else null
+            if (hdr == null) return ImportResult.Success(document)
+            val (info, contents) = hdr
+            val gainmap = Gainmaps.split(contents, checkCanceled) ?: return failure(ImportFailure.NOT_ENOUGH_MEMORY, null)
+            val photo = document.layers[0].copy(gainmap = HdrGainmap(contents.width, contents.height, gainmap))
+            return ImportResult.Success(document.copy(layers = listOf(photo), hdr = info))
         } catch (e: OutOfMemoryError) {
             return failure(ImportFailure.NOT_ENOUGH_MEMORY, e)
         } finally {

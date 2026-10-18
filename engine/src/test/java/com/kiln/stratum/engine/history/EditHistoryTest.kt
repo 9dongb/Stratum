@@ -6,6 +6,7 @@ import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.documentWithLayers
@@ -210,6 +211,16 @@ class EditHistoryTest {
 
         // 픽셀을 가진 알파 타일 한 장(픽셀당 1바이트)만 늘고, 다 고른 타일은 메모리를 쓰지 않는다
         assertEquals(before + TILE_PIXEL_COUNT, history.bytesInUse)
+    }
+
+    @Test
+    fun bytesInUse_countsGainmapTiles() {
+        val gainmapTile = newTile()
+        val photo = canvas.copy(layers = listOf(canvas.layers[0].copy(gainmap = HdrGainmap(64, 64, Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to gainmapTile))))))
+
+        val history = EditHistory(photo)
+
+        assertEquals(2 * tileBytes, history.bytesInUse)
     }
 
     @Test

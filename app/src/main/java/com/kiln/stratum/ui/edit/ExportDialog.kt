@@ -55,6 +55,7 @@ private val WideFormWidth = 480.dp
  * 내보내기 창. 크기 변경 창과 같은 방식으로, 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트,
  * 그 밖에는 접히는 선을 피해 뜨는 창이다. 그래서 화면 전체를 덮는 자리에 놓아야 한다.
  * 형식·품질·크기를 고르고([onChoiceChange]) '공유'나 '저장'을 누른다([onExport]). 숫자 칸이 없어 키보드가 뜨지 않는다.
+ * [hdr]이면(HDR 문서) HDR 밝기가 남는지 한 줄로 알린다(JPEG만 담긴다).
  */
 // ModalBottomSheet가 아직 실험 기능이라 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +67,8 @@ fun ExportPrompt(
     busy: Boolean,
     onChoiceChange: (ExportChoice) -> Unit,
     onDismiss: () -> Unit,
-    onExport: (ExportTarget) -> Unit
+    onExport: (ExportTarget) -> Unit,
+    hdr: Boolean = false
 ) {
     val title = stringResource(R.string.action_export)
     if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
@@ -78,7 +80,7 @@ fun ExportPrompt(
                 Spacer(Modifier.height(16.dp))
                 // 내용만 스크롤되고 버튼은 아래에 고정된다
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    ExportForm(choice, documentSize, onChoiceChange)
+                    ExportForm(choice, documentSize, hdr, onChoiceChange)
                 }
                 Spacer(Modifier.height(16.dp))
                 ExportButtons(busy, onCancel = onDismiss, onExport = onExport, Modifier.align(Alignment.End))
@@ -90,17 +92,17 @@ fun ExportPrompt(
             title = title,
             buttons = { ExportButtons(busy, onCancel = onDismiss, onExport = onExport) }
         ) {
-            ExportForm(choice, documentSize, onChoiceChange)
+            ExportForm(choice, documentSize, hdr, onChoiceChange)
         }
     }
 }
 
 /**
- * 형식·품질, 크기, 안내 한 줄.
+ * 형식·품질, 크기, 안내 한 줄(HDR 문서면 한 줄 더).
  * 폭이 넉넉하면(메인 세로) 형식과 품질을 한 줄에 두어 접히는 선 위쪽 창에 스크롤 없이 들어가게 한다. 좁으면 위아래로 쌓는다.
  */
 @Composable
-private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, onChoiceChange: (ExportChoice) -> Unit) {
+private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, hdr: Boolean, onChoiceChange: (ExportChoice) -> Unit) {
     BoxWithConstraints {
         val wide = maxWidth >= WideFormWidth
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -124,6 +126,14 @@ private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, onChoiceCh
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium
             )
+            if (hdr) {
+                Text(
+                    text = stringResource(if (choice.format == ExportFormat.JPEG) R.string.export_hdr_jpeg else R.string.export_hdr_lost),
+                    modifier = Modifier.testTag(EditScreenTags.EXPORT_HDR_HINT),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }

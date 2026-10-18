@@ -65,7 +65,7 @@ class EditHistory(
 
     /**
      * 남겨 둔 모든 문서(실행 취소·다시 실행할 것 포함)의 타일이 쓰는 메모리(바이트). 같은 타일 객체는 한 번만 센다.
-     * 선택 영역의 알파 타일도 센다.
+     * 선택 영역의 알파 타일과 게인맵 타일도 센다.
      */
     val bytesInUse: Long
         get() {
@@ -145,6 +145,7 @@ class EditHistory(
             when (val content = layer.content) {
                 is RasterContent -> into.addAll(content.raster.tiles.values)
             }
+            layer.gainmap?.let { into.addAll(it.raster.tiles.values) }
         }
     }
 
