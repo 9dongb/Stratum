@@ -45,6 +45,7 @@ import com.kiln.stratum.engine.platform.Deselect
 import com.kiln.stratum.engine.platform.InvertSelection
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
+import com.kiln.stratum.engine.platform.ScreenGainmap
 import com.kiln.stratum.engine.platform.SelectAll
 import com.kiln.stratum.engine.platform.SelectShape
 import com.kiln.stratum.engine.platform.SelectSimilarColor
@@ -203,6 +204,7 @@ sealed interface EditorState {
      * @property selectionDetail 확대해 볼 때 [detail]과 같은 자리에서 더 정확하게 다시 찾은 윤곽선. 없으면 [selection]만 그린다.
      * @property colorSpace 문서 색 공간. 축소본 값이 이 색 공간의 값이라, 화면은 그릴 때 그 꼬리표로 보이고 창을 넓은 색 모드로 둔다.
      * @property hdr HDR 문서이고 이 기기가 게인맵을 다루는지(안드로이드 14 이상). JPEG로 내보내면 HDR이 남는다.
+     * @property gainmap 화면 그림에 붙일 HDR 게인맵([hdr]일 때). 화면은 그릴 때 붙이고 창을 HDR 모드로 둔다.
      */
     data class Ready(
         val base: PreviewImage,
@@ -217,7 +219,8 @@ sealed interface EditorState {
         val selection: SelectionOutline? = null,
         val selectionDetail: SelectionOutline? = null,
         val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
-        val hdr: Boolean = false
+        val hdr: Boolean = false,
+        val gainmap: ScreenGainmap? = null
     ) : EditorState {
 
         /** 고른 레이어의 속성 */
@@ -1697,6 +1700,9 @@ class EditorViewModel internal constructor(
             val outline = withContext(Dispatchers.Default) { outlineOf(document) }
             // 레이어 패널의 작은 그림. 바뀐 레이어만 새로 만든다.
             val thumbnails = withContext(Dispatchers.Default) { layerPreviews.thumbnails(document, level) { ensureActive() } }
+            // HDR 문서는 화면 그림에 붙일 게인맵(안드로이드 14 이상). 레이어가 그대로면 다시 만들지 않는다.
+            val hdr = document.hasHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            val gainmap = if (hdr) withContext(Dispatchers.Default) { layerPreviews.screenGainmap(document, level) } else null
             if (preview == null) {
                 // GPU가 축소본을 그리지 못했다. 대개 그래픽 메모리가 모자랄 때다.
                 Log.w(TAG, "Could not render preview level $level for ${document.width}x${document.height}")
@@ -1742,7 +1748,8 @@ class EditorViewModel internal constructor(
                 selection = outline,
                 selectionDetail = selectionDetail,
                 colorSpace = document.colorSpace,
-                hdr = document.hasHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                hdr = hdr,
+                gainmap = gainmap
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다

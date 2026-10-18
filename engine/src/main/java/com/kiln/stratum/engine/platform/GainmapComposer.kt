@@ -9,6 +9,7 @@ import android.graphics.Rect
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.raster.Raster
 import kotlin.math.roundToInt
 
 /**
@@ -27,10 +28,23 @@ internal object GainmapComposer {
      * HDR 문서가 아니거나 GPU가 그리지 못하면 null. [checkCanceled]는 레이어 사이마다 부른다.
      */
     fun compose(document: Document, width: Int, height: Int, checkCanceled: () -> Unit = {}): Bitmap? {
+        val level = alphaLevel(document, width, height)
+        return compose(document, width, height, checkCanceled) { raster ->
+            PreviewRenderer.render(Document.create(document.width, document.height, "", raster), level)?.let { Alpha(it, owned = true) }
+        }
+    }
+
+    /** 레이어 알파 그림(문서 전체를 덮는 축소본)과, 다 쓰면 돌려줄 것인지(캐시의 그림은 돌려주지 않는다) */
+    class Alpha(val bitmap: Bitmap, val owned: Boolean)
+
+    /**
+     * [compose]와 같고, 레이어 알파 그림을 [alphaOf]가 준다(화면용 게인맵은 이미 그린 레이어 축소본을 쓴다, [LayerPreviewCache]).
+     * [alphaOf]가 null을 주면(그리지 못함) null이다.
+     */
+    fun compose(document: Document, width: Int, height: Int, checkCanceled: () -> Unit = {}, alphaOf: (Raster) -> Alpha?): Bitmap? {
         val info = document.hdr ?: return null
         if (!document.hasHdr) return null
         val neutral = Gainmaps.neutralColor(info)
-        val level = alphaLevel(document, width, height)
         val temporary = ArrayList<Bitmap>()
         try {
             val picture = Picture()
@@ -41,8 +55,7 @@ internal object GainmapComposer {
                 val raster = (layer.content as RasterContent).raster
                 if (raster.tiles.isEmpty()) continue
                 checkCanceled()
-                val alpha = PreviewRenderer.render(Document.create(document.width, document.height, "", raster), level)
-                    ?.also { temporary += it } ?: return null
+                val alpha = alphaOf(raster)?.also { if (it.owned) temporary += it.bitmap }?.bitmap ?: return null
                 val map = mapOf(layer)?.also { temporary += it }
                 if (layer.gainmap != null && map == null) return null
                 cover(canvas, width, height, layer.opacity, alpha, map, neutral)

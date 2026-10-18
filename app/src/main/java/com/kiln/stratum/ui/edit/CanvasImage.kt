@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.platform.DocumentColors
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -60,13 +61,15 @@ internal val CanvasOutlineWidth = 1.dp
  */
 @Composable
 fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modifier = Modifier) {
-    // 그림이 바뀔 때만 Compose용 이미지로 감싼다. 넓은 색 문서는 그 색 공간의 꼬리표로 보인다(엔진 그림은 그대로 둔다).
-    val base = remember(state.base.bitmap, state.colorSpace) {
-        DocumentColors.forScreen(state.base.bitmap, state.colorSpace).asImageBitmap()
+    // 그림이 바뀔 때만 Compose용 이미지로 감싼다. 넓은 색 문서는 그 색 공간의 꼬리표로 보이고,
+    // HDR 문서는 그 자리만큼의 게인맵을 붙여 HDR 화면에서 밝게 보인다(엔진 그림은 그대로 둔다).
+    val documentRect = PixelRect.of(state.documentSize)
+    val base = remember(state.base.bitmap, state.colorSpace, state.gainmap) {
+        DocumentColors.forScreen(state.base.bitmap, state.colorSpace, state.gainmap, documentRect, state.documentSize).asImageBitmap()
     }
-    val detailBitmap = state.detail?.bitmap
-    val detail = remember(detailBitmap, state.colorSpace) {
-        detailBitmap?.let { DocumentColors.forScreen(it, state.colorSpace).asImageBitmap() }
+    val detailImage = state.detail
+    val detail = remember(detailImage, state.colorSpace, state.gainmap) {
+        detailImage?.let { DocumentColors.forScreen(it.bitmap, state.colorSpace, state.gainmap, it.region.rect, state.documentSize).asImageBitmap() }
     }
     val checker = remember { checkerBitmap() }
     val outline = MaterialTheme.colorScheme.outlineVariant

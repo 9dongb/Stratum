@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ColorSpace
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.raster.PixelSize
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -44,23 +46,38 @@ object DocumentColors {
 
     /**
      * 화면에 그릴 그림. P3 문서면 같은 GPU 메모리를 P3 꼬리표로 감싼 새 비트맵이고(복사 없음), sRGB 문서면 [bitmap] 그대로다.
+     * [gainmap]이 있으면(HDR 문서, 안드로이드 14 이상) 새 비트맵에 그림이 보이는 문서 자리 [shown]만큼의 게인맵을 붙여,
+     * HDR 창에서 HDR 화면이면 밝게 보인다(문서 크기 [document]).
      *
-     * 엔진이 캐시해 다시 쓰는 그림의 꼬리표는 바꾸지 않는다. 바꾸면 다음 합성에서 P3 → sRGB로 색이 변환된다.
+     * 엔진이 캐시해 다시 쓰는 그림의 꼬리표·게인맵은 바꾸지 않는다. 바꾸면 다음 합성에서 P3 → sRGB로 색이 변환된다.
      * 그래서 화면에 그리기 바로 전에만 부른다. 소프트웨어 그림(테스트 등)은 꼬리표를 바꾼 복사본이다.
      */
-    fun forScreen(bitmap: Bitmap, space: DocumentColorSpace): Bitmap {
-        if (space == DocumentColorSpace.SRGB) return bitmap
+    fun forScreen(
+        bitmap: Bitmap,
+        space: DocumentColorSpace,
+        gainmap: ScreenGainmap? = null,
+        shown: PixelRect? = null,
+        document: PixelSize? = null
+    ): Bitmap {
+        val attach = gainmap != null && shown != null && document != null && Gainmaps.supported
+        if (space == DocumentColorSpace.SRGB && !attach) return bitmap
         val target = androidColorSpace(space)
-        return try {
+        val wrapped = try {
             if (bitmap.config == Bitmap.Config.HARDWARE) {
-                bitmap.hardwareBuffer.use { buffer -> Bitmap.wrapHardwareBuffer(buffer, target) } ?: bitmap
+                bitmap.hardwareBuffer.use { buffer -> Bitmap.wrapHardwareBuffer(buffer, target) }
             } else {
-                bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)?.also { it.setColorSpace(target) } ?: bitmap
+                bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)?.also { it.setColorSpace(target) }
             }
         } catch (e: IllegalArgumentException) {
-            // 감쌀 수 없는 그림이면 sRGB로 보인다(색이 조금 옅을 뿐 그대로 쓸 수 있다)
-            bitmap
+            null
         }
+        // 감쌀 수 없는 그림이면 sRGB 보통 화면으로 보인다(색이 조금 옅을 뿐 그대로 쓸 수 있다)
+        if (wrapped == null) return bitmap
+        if (attach) {
+            val contents = checkNotNull(gainmap).crop(checkNotNull(shown), checkNotNull(document))
+            if (contents != null) wrapped.gainmap = Gainmaps.toAndroid(gainmap.info, contents)
+        }
+        return wrapped
     }
 
     /** 압축할 그림 [bitmap]의 꼬리표를 문서 색 공간으로 바꾼다. 값은 그대로다. 압축하면 그 색 정보가 파일에 붙는다. */

@@ -223,8 +223,8 @@ fun EditScreen(
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
     // 공유 창은 앱이 화면에 있을 때만 띄운다. 뒤로 가 있는 동안 끝난 것은 돌아왔을 때 띄운다.
     val context = LocalContext.current
-    // 넓은 색 문서를 여는 동안 창을 넓은 색 모드로 둔다(진한 색이 깎이지 않게 보인다). 닫으면 되돌린다.
-    WindowColorMode(wideColor = ready?.colorSpace == DocumentColorSpace.DISPLAY_P3)
+    // 넓은 색 문서를 여는 동안 창을 넓은 색 모드로, HDR 문서는 HDR 모드로 둔다. 닫으면 되돌린다.
+    WindowColorMode(wideColor = ready?.colorSpace == DocumentColorSpace.DISPLAY_P3, hdr = ready?.gainmap != null)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(shareRequests, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -719,16 +719,22 @@ private fun EditCanvas(
 }
 
 /**
- * [wideColor]인 동안 창을 넓은 색 모드(`COLOR_MODE_WIDE_COLOR_GAMUT`)로 둔다. 화면이 넓은 색을 지원하지 않으면 안드로이드가 무시한다.
- * 화면을 떠나거나 끄면 기본 모드로 되돌린다.
+ * 창 색 모드를 문서에 맞춘다: [hdr]이면 HDR 모드(`COLOR_MODE_HDR`, 넓은 색도 담는다), 아니고 [wideColor]이면 넓은 색 모드,
+ * 아니면 기본. 화면이 지원하지 않으면 안드로이드가 무시한다. 화면을 떠나거나 바뀌면 기본 모드로 되돌린다.
+ * HDR 모드는 게인맵이 붙은 그림을 HDR 화면에서 밝게 그린다(안드로이드 14 이상, [hdr]은 그때만 참이다).
  */
 @Composable
-private fun WindowColorMode(wideColor: Boolean) {
+private fun WindowColorMode(wideColor: Boolean, hdr: Boolean) {
     val window = LocalContext.current.findActivity()?.window
-    DisposableEffect(window, wideColor) {
-        if (window != null && wideColor) window.colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+    val mode = when {
+        hdr -> ActivityInfo.COLOR_MODE_HDR
+        wideColor -> ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+        else -> ActivityInfo.COLOR_MODE_DEFAULT
+    }
+    DisposableEffect(window, mode) {
+        if (window != null && mode != ActivityInfo.COLOR_MODE_DEFAULT) window.colorMode = mode
         onDispose {
-            if (window != null && wideColor) window.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+            if (window != null && mode != ActivityInfo.COLOR_MODE_DEFAULT) window.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
         }
     }
 }

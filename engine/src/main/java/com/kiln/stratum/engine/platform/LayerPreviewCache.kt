@@ -154,11 +154,46 @@ class LayerPreviewCache {
         return result
     }
 
+    /** 마지막으로 만든 화면용 게인맵과 그것을 만든 레이어들(래스터·게인맵·불투명도·혼합 모드)과 단계 */
+    private var lastGainmap: Pair<List<Any>, ScreenGainmap>? = null
+
+    /**
+     * 화면 축소본에 붙일 HDR 게인맵(편집 화면 HDR, 결정 기록 'HDR'). HDR 문서가 아니면 null.
+     * 내보내기와 같은 겹치기이고([GainmapComposer]), 레이어 알파는 [level] 단계의 레이어 축소본(이미 그린 것)을 써서 타일을 다시 읽지 않는다.
+     * 크기는 게인맵 원래 크기와 축소본 크기 중 작은 쪽이다. 레이어의 래스터·게인맵·불투명도·혼합 모드가 같으면 다시 만들지 않아,
+     * 보정 슬라이더를 끄는 동안 느려지지 않는다. [render]와 같은 잠금 안에서 부른다.
+     */
+    fun screenGainmap(document: Document, level: Int): ScreenGainmap? {
+        val info = document.hdr ?: return null
+        if (!document.hasHdr) return null
+        val key: List<Any> = listOf(level, document.width, document.height, info) +
+            document.layers.map { listOf(IdentityKey(rasterOf(it)), IdentityKey(it.gainmap?.raster), it.opacity, it.blendMode) }
+        lastGainmap?.let { (lastKey, gainmap) -> if (lastKey == key) return gainmap }
+        val size = PixelSize(document.width, document.height)
+        val region = PreviewLevels.wholeRegion(size, level)
+        val largest = document.layers.mapNotNull { it.gainmap }.maxBy { it.width.toLong() * it.height }
+        val width = minOf(region.previewWidth, largest.width)
+        val height = minOf(region.previewHeight, largest.height)
+        val composed = GainmapComposer.compose(document, width, height) { raster ->
+            val preview = entries[raster]?.takeIf { it.level == level }?.bitmap
+                ?: renderLayer(size, raster, level)?.also { entries[raster] = Entry(level, it) }
+            preview?.let { GainmapComposer.Alpha(it, owned = false) }
+        } ?: return null
+        return ScreenGainmap(composed, info).also { lastGainmap = key to it }
+    }
+
+    /** 객체가 같은지로 견주는 열쇠(래스터·게인맵은 바꾸지 않는 값이라 객체가 같으면 내용도 같다) */
+    private class IdentityKey(val value: Any?) {
+        override fun equals(other: Any?): Boolean = other is IdentityKey && other.value === value
+        override fun hashCode(): Int = System.identityHashCode(value)
+    }
+
     /** 기억한 축소본을 모두 놓아 준다(문서를 닫을 때) */
     fun clear() {
         entries.clear()
         thumbnails.clear()
         lastRasters.clear()
+        lastGainmap = null
     }
 
     /** [document]에 없는 래스터의 축소본·작은 그림과, [level]이 아닌 단계의 축소본을 놓아 준다. */

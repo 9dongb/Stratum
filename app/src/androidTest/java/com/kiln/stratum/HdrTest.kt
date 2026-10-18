@@ -9,10 +9,13 @@ import android.graphics.ImageDecoder
 import android.graphics.Paint
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
+import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
@@ -24,7 +27,9 @@ import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.CropImage
+import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
@@ -51,6 +56,8 @@ import java.nio.ByteBuffer
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -263,6 +270,47 @@ class HdrTest {
             assertNear(200, gainmap.value(30, 120))
             assertNear(50, gainmap.value(180, 120))
         }
+    }
+
+    @Test
+    fun screenGainmap_isTheComposedGainmap_andIsReusedUntilTheLayersChange() {
+        val document = import(ultraHdrJpeg())
+        val cache = LayerPreviewCache()
+        checkNotNull(cache.render(document, level = 1))
+
+        val gainmap = checkNotNull(cache.screenGainmap(document, level = 1))
+
+        // 축소본(400×300)과 게인맵(200×150) 중 작은 쪽
+        val shown = DocumentColors.forScreen(checkNotNull(cache.render(document, level = 1)), DocumentColorSpace.SRGB, gainmap, PixelRect(0, 0, width, height), PixelSize(width, height))
+        assertTrue(shown.hasGainmap())
+        val contents = checkNotNull(shown.gainmap).gainmapContents
+        assertEquals(width / 4, contents.width)
+        assertNear(200, contents.gainValue(30, 75))
+        assertNear(50, contents.gainValue(170, 75))
+        // 보정만 바뀌면 다시 만들지 않고, 픽셀이 바뀌면 다시 만든다
+        val adjusted = SetLayerAdjustments(LayerId(0), Adjustments(exposure = 0.5f)).applyTo(document)
+        assertSame(gainmap, cache.screenGainmap(adjusted, level = 1))
+        val painted = PaintStroke(LayerId(0), listOf(StrokePoint(200f, 300f)), bigBrush, erase = false).applyTo(document)
+        checkNotNull(cache.render(painted, level = 1))
+        assertNotSame(gainmap, cache.screenGainmap(painted, level = 1))
+        assertNull(LayerPreviewCache().screenGainmap(document.copy(hdr = null), level = 1))
+    }
+
+    @Test
+    fun forScreen_attachesOnlyThePartTheDetailShows() {
+        val document = import(ultraHdrJpeg())
+        val cache = LayerPreviewCache()
+        val preview = checkNotNull(cache.render(document, level = 1))
+        val gainmap = checkNotNull(cache.screenGainmap(document, level = 1))
+
+        // 오른쪽 절반을 그린 부분 그림에는 오른쪽 절반(50)의 게인맵만 붙는다
+        val detail = DocumentColors.forScreen(preview, DocumentColorSpace.SRGB, gainmap, PixelRect(400, 0, 800, 600), PixelSize(width, height))
+
+        assertNotSame(preview, detail)
+        assertFalse(preview.hasGainmap())
+        val contents = checkNotNull(detail.gainmap).gainmapContents
+        assertEquals(width / 8, contents.width)
+        assertNear(50, contents.gainValue(10, 75))
     }
 
     @Test
