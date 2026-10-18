@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -50,8 +51,10 @@ class NewCanvasTest {
     /** 가짜 힌지. 테스트 중에 바꾸면 창이 다시 배치된다. */
     private val hinges = mutableStateOf(emptyList<Hinge>())
 
-    /** '만들기'로 넘어온 값들 */
-    private val created = mutableListOf<Triple<Int, Int, CanvasFill>>()
+    /** '만들기'로 넘어온 값 */
+    private data class Created(val width: Int, val height: Int, val fill: CanvasFill, val name: String)
+
+    private val created = mutableListOf<Created>()
 
     private fun string(id: Int, vararg args: Any): String = composeRule.activity.getString(id, *args)
 
@@ -62,7 +65,7 @@ class NewCanvasTest {
                     StratumTheme {
                         HomeScreen(
                             onOpenPhoto = {},
-                            onCreateCanvas = { width, height, fill -> created += Triple(width, height, fill) }
+                            onCreateCanvas = { width, height, fill, name -> created += Created(width, height, fill, name) }
                         )
                     }
                 }
@@ -70,9 +73,9 @@ class NewCanvasTest {
         }
     }
 
-    /** 홈의 '새 캔버스' 버튼을 누른다. 창 제목과 글자가 같아서 누를 수 있는 것으로 찾는다. */
+    /** 홈 위 줄의 '+'(새 캔버스) 버튼을 누른다 */
     private fun openNewCanvas() {
-        composeRule.onNode(hasText(string(R.string.home_new_canvas)) and hasClickAction()).performClick()
+        composeRule.onNodeWithTag(HomeTags.NEW_CANVAS).performClick()
     }
 
     @Test
@@ -84,7 +87,8 @@ class NewCanvasTest {
         composeRule.onNodeWithTag(NewCanvasTags.background(CanvasBackground.TRANSPARENT)).performScrollTo().performClick()
         composeRule.onNodeWithTag(NewCanvasTags.CREATE).performClick()
 
-        composeRule.runOnIdle { assertEquals(listOf(Triple(3840, 2160, CanvasFill.Transparent)), created) }
+        // 이름을 적지 않으면 이름 없음('제목 없음')이다
+        composeRule.runOnIdle { assertEquals(listOf(Created(3840, 2160, CanvasFill.Transparent, "")), created) }
     }
 
     @Test
@@ -103,16 +107,32 @@ class NewCanvasTest {
     }
 
     @Test
-    fun swap_flipsSizeAndSelectedPresetFollows() {
+    fun orientation_turnsTheSize_andSelectedPresetFollows() {
         showHome(411, 800)
         openNewCanvas()
         composeRule.onNodeWithTag(NewCanvasTags.preset(CanvasPreset.LANDSCAPE)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(NewCanvasTags.orientation(portrait = false)).performScrollTo().assertIsSelected()
 
-        composeRule.onNodeWithTag(NewCanvasTags.SWAP).performScrollTo().performClick()
+        composeRule.onNodeWithTag(NewCanvasTags.orientation(portrait = true)).performScrollTo().performClick()
 
         composeRule.onNodeWithTag(NewCanvasTags.WIDTH).assert(hasText("2160"))
         composeRule.onNodeWithTag(NewCanvasTags.HEIGHT).assert(hasText("3840"))
         composeRule.onNodeWithTag(NewCanvasTags.preset(CanvasPreset.STORY)).assertIsSelected()
+        // 정사각형은 어느 방향도 고른 것으로 보이지 않는다
+        composeRule.onNodeWithTag(NewCanvasTags.preset(CanvasPreset.SQUARE)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(NewCanvasTags.orientation(portrait = true)).performScrollTo().assertIsNotSelected()
+        composeRule.onNodeWithTag(NewCanvasTags.orientation(portrait = false)).assertIsNotSelected()
+    }
+
+    @Test
+    fun name_isPassedToCreate_cleaned() {
+        showHome(411, 800)
+        openNewCanvas()
+
+        composeRule.onNodeWithTag(NewCanvasTags.NAME).performScrollTo().performTextReplacement("  Night   sky ")
+        composeRule.onNodeWithTag(NewCanvasTags.CREATE).performClick()
+
+        composeRule.runOnIdle { assertEquals("Night sky", created.single().name) }
     }
 
     @Test
@@ -125,13 +145,15 @@ class NewCanvasTest {
 
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
+        // 넓은 창은 접히는 선 양쪽에 걸치고, 프리셋 목록은 왼쪽, 이름·크기는 오른쪽 칸에 있다(선 위에는 누르는 것이 없다)
         composeRule.assertClickablesAvoid(hinge)
-        val card = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-        // 띠의 반쪽 폭은 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다
         val margin = with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
             HingeMargin.roundToPx()
         }
-        assertTrue("card $card is not right of the band", card.left >= centerX + margin)
+        val presets = composeRule.onNodeWithTag(NewCanvasTags.PRESETS).fetchSemanticsNode().layoutBoundsInWindow()
+        val name = composeRule.onNodeWithTag(NewCanvasTags.NAME).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("presets $presets should be left of the band", presets.right <= centerX - margin + 1f)
+        assertTrue("name $name should be right of the band", name.left >= centerX + margin - 1f)
     }
 
     @Test

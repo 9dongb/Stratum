@@ -104,6 +104,7 @@ fun HingeAvoidingScrollColumn(
 
 /**
  * [first]와 [second]를 같은 폭으로 가로로 나란히 놓는다. 세로로 지나가는 힌지의 띠가 줄을 지나면 띠 양쪽에 하나씩 놓는다.
+ * 두 개는 세로 가운데에 맞추고, [alignTop]이면 위에 맞춘다(새 캔버스 창의 두 칸).
  *
  * 두 개의 폭은 힌지의 위치와 상관없이 띠의 너비로만 정하고, 자리는 배치하는 순간 자기 위치를 읽어 정한다(한 프레임 늦지 않음).
  * 그래서 세로 힌지가 있으면 줄을 지나지 않아도 간격이 띠의 너비만큼 벌어진다. 힌지가 없으면 [gap]만큼 띄운다.
@@ -114,7 +115,8 @@ fun HingeSplitRow(
     first: @Composable () -> Unit,
     second: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    gap: Dp = 0.dp
+    gap: Dp = 0.dp,
+    alignTop: Boolean = false
 ) {
     val verticalHinges = LocalHinges.current.filter { it.isVertical }
     Layout(contents = listOf(first, second), modifier = modifier) { (firstMeasurables, secondMeasurables), constraints ->
@@ -138,8 +140,8 @@ fun HingeSplitRow(
                         .firstOrNull { it.end > 0 && it.start < width }
                 }
             val (firstX, secondX) = splitAround(width, childWidth, band)
-            firstPlaceable.place(firstX, (height - firstPlaceable.height) / 2)
-            secondPlaceable.place(secondX, (height - secondPlaceable.height) / 2)
+            firstPlaceable.place(firstX, if (alignTop) 0 else (height - firstPlaceable.height) / 2)
+            secondPlaceable.place(secondX, if (alignTop) 0 else (height - secondPlaceable.height) / 2)
         }
     }
 }

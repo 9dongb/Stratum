@@ -70,7 +70,7 @@ class HomeProjectsTest {
                     StratumTheme {
                         HomeScreen(
                             onOpenPhoto = {},
-                            onCreateCanvas = { _, _, _ -> },
+                            onCreateCanvas = { _, _, _, _ -> },
                             projects = projects,
                             onOpenProject = { opened += it },
                             onDeleteProjects = { deleted += it },

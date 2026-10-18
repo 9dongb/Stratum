@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.dialog
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -57,6 +58,12 @@ private val DialogMargin = 24.dp
  *   키보드가 열리고 닫히면 다시 배치된다.
  *
  * [content]는 길면 스크롤되고, [buttons]는 카드 아래에 고정된다(오른쪽 정렬).
+ *
+ * 두 칸 창(새 캔버스)은 다음을 바꾼다:
+ * - [maxWidth]: 카드의 최대 폭(기본은 Material 대화상자의 560dp)
+ * - [spanVerticalHinge]: 세로 힌지 한쪽이 아니라 양쪽에 걸쳐 띄운다. 내용이 힌지 양쪽으로 나눠 놓아야 한다(HingeSplitRow).
+ *   제목은 왼쪽 위, 버튼은 오른쪽 아래라 힌지에 놓이지 않는다. 가로 힌지는 그대로 한쪽에 띄운다.
+ * - [scrollContent]: false면 내용 전체를 스크롤하지 않고 남는 높이만 준다. 내용의 칸이 스스로 밀어 본다.
  */
 @Composable
 fun HingeAwareDialog(
@@ -64,6 +71,9 @@ fun HingeAwareDialog(
     title: String,
     buttons: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    maxWidth: Dp = DialogMaxWidth,
+    spanVerticalHinge: Boolean = false,
+    scrollContent: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val hinges = LocalHinges.current
@@ -79,7 +89,7 @@ fun HingeAwareDialog(
                         .pointerInput(onDismissRequest) { detectTapGestures { onDismissRequest() } }
                 )
             },
-            { DialogCard(title, buttons, content) }
+            { DialogCard(title, buttons, scrollContent, content) }
         ),
         // 화면 전체를 덮는 '창'이라고 알려, 화면 읽기 기능이 뒤의 화면을 읽지 않게 한다
         modifier = modifier.semantics { dialog() }
@@ -89,7 +99,7 @@ fun HingeAwareDialog(
         val scrim = scrimMeasurables.single().measure(Constraints.fixed(width, height))
         val marginPx = DialogMargin.roundToPx()
         val minCardPx = DialogMinWidth.roundToPx()
-        val maxCardPx = DialogMaxWidth.roundToPx()
+        val maxCardPx = maxWidth.roundToPx()
         val hingeMarginPx = HingeMargin.roundToPx()
         layout(width, height) {
             scrim.place(0, 0)
@@ -104,16 +114,19 @@ fun HingeAwareDialog(
             )
             val region = dialogRegion(
                 area = area,
-                verticalBands = hinges.filter { it.isVertical }
-                    .map { it.band(hingeMarginPx).shiftedBy(-origin.x.roundToInt()) },
+                verticalBands = if (spanVerticalHinge) {
+                    emptyList()
+                } else {
+                    hinges.filter { it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-origin.x.roundToInt()) }
+                },
                 horizontalBands = hinges.filter { !it.isVertical }
                     .map { it.band(hingeMarginPx).shiftedBy(-origin.y.roundToInt()) },
                 maxCardWidth = maxCardPx + 2 * marginPx
             )
-            val maxWidth = minOf(maxCardPx, region.width - 2 * marginPx).coerceAtLeast(0)
+            val cardMaxWidth = minOf(maxCardPx, region.width - 2 * marginPx).coerceAtLeast(0)
             val maxHeight = (region.height - 2 * marginPx).coerceAtLeast(0)
             val card = cardMeasurables.single().measure(
-                Constraints(minWidth = minOf(minCardPx, maxWidth), maxWidth = maxWidth, maxHeight = maxHeight)
+                Constraints(minWidth = minOf(minCardPx, cardMaxWidth), maxWidth = cardMaxWidth, maxHeight = maxHeight)
             )
             card.place(
                 region.left + (region.width - card.width) / 2,
@@ -123,9 +136,9 @@ fun HingeAwareDialog(
     }
 }
 
-/** 창 카드: 제목, 스크롤되는 내용, 아래에 고정된 버튼. */
+/** 창 카드: 제목, 스크롤되는 내용([scrollContent]가 false면 남는 높이만 주는 내용), 아래에 고정된 버튼. */
 @Composable
-private fun DialogCard(title: String, buttons: @Composable () -> Unit, content: @Composable () -> Unit) {
+private fun DialogCard(title: String, buttons: @Composable () -> Unit, scrollContent: Boolean, content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier
             .testTag(HINGE_AWARE_DIALOG_CARD)
@@ -145,7 +158,7 @@ private fun DialogCard(title: String, buttons: @Composable () -> Unit, content: 
             )
             Spacer(Modifier.height(16.dp))
             // 카드 높이가 모자라면 내용만 줄어들고 스크롤된다. 버튼은 늘 보인다.
-            Box(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            Box(Modifier.weight(1f, fill = false).then(if (scrollContent) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 CompositionLocalProvider(LocalContentColor provides StratumTheme.colors.textSecondary) {
                     ProvideTextStyle(MaterialTheme.typography.bodyMedium, content)
                 }

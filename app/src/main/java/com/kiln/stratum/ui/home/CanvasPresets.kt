@@ -6,17 +6,25 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.canvas.CanvasLimits
 import com.kiln.stratum.engine.canvas.CanvasSizeCheck
 
+/** 새 캔버스 프리셋 목록의 묶음(목록 제목) */
+enum class PresetGroup(@get:StringRes val label: Int) {
+    BASIC(R.string.preset_group_basic),
+    FOLD8(R.string.preset_group_fold8)
+}
+
 /**
  * 새 캔버스 프리셋. 크기(픽셀)는 progress.md 결정 기록 '새 캔버스'대로다.
  *
  * @property ratioWidth 화면에 보일 비율의 가로. 폴드8 배경화면처럼 비율이 딱 떨어지지 않으면 0이고, 비율을 보이지 않는다.
+ * @property group 목록에서 묶이는 곳
  */
 enum class CanvasPreset(
     @get:StringRes val label: Int,
     val width: Int,
     val height: Int,
     val ratioWidth: Int = 0,
-    val ratioHeight: Int = 0
+    val ratioHeight: Int = 0,
+    val group: PresetGroup = PresetGroup.BASIC
 ) {
     SQUARE(R.string.preset_square, 3000, 3000, 1, 1),
     PORTRAIT(R.string.preset_portrait, 2400, 3000, 4, 5),
@@ -26,10 +34,10 @@ enum class CanvasPreset(
     PHOTO_4_3(R.string.preset_photo, 4000, 3000, 4, 3),
 
     /** 폴드8 커버 화면 해상도(기획서 '대상 화면 사양') */
-    FOLD8_COVER(R.string.preset_fold8_cover, 1248, 1972),
+    FOLD8_COVER(R.string.preset_fold8_cover, 1248, 1972, group = PresetGroup.FOLD8),
 
     /** 폴드8 메인 화면을 세로로 든 해상도(기획서 '대상 화면 사양') */
-    FOLD8_MAIN(R.string.preset_fold8_main, 1848, 2448);
+    FOLD8_MAIN(R.string.preset_fold8_main, 1848, 2448, group = PresetGroup.FOLD8);
 
     companion object {
         /**

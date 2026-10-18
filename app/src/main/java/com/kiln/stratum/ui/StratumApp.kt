@@ -55,8 +55,8 @@ fun StratumApp(editor: EditorViewModel) {
                 onOpenPhoto = {
                     pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
-                onCreateCanvas = { width, height, fill ->
-                    editor.newCanvas(width, height, fill)
+                onCreateCanvas = { width, height, fill, name ->
+                    editor.newCanvas(width, height, fill, name)
                     screen = AppScreen.Edit
                 },
                 projects = projects,

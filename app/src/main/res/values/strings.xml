@@ -101,6 +101,12 @@
 
     <!-- 새 캔버스 창. 프리셋 이름은 짧게, 크기·비율은 숫자 형식이다. -->
     <string name="new_canvas_title">New canvas</string>
+    <string name="new_canvas_name">Name</string>
+    <string name="new_canvas_orientation">Orientation</string>
+    <string name="new_canvas_portrait">Portrait</string>
+    <string name="new_canvas_landscape">Landscape</string>
+    <string name="preset_group_basic">Aspect ratios</string>
+    <string name="preset_group_fold8">Fold8 wallpapers</string>
     <string name="new_canvas_size">Size</string>
     <string name="new_canvas_background">Background</string>
     <string name="preset_square">Square</string>
@@ -116,7 +122,6 @@
     <string name="new_canvas_width">Width</string>
     <string name="new_canvas_height">Height</string>
     <string name="new_canvas_px">px</string>
-    <string name="new_canvas_swap">Swap width and height</string>
     <string name="new_canvas_background_white">White</string>
     <string name="new_canvas_background_black">Black</string>
     <string name="new_canvas_background_transparent">Transparent</string>

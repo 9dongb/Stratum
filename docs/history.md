@@ -14,6 +14,23 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-19 · 새 캔버스 화면(사용자 피드백 5차 7단계)
+
+- 요청: "그리고 새 캔버스 만들 때 화면을 5번 혹은 6번을 참고해서(혹은 합치든) 개선시키세요."(사진 5: 프로크리에이트 새 캔버스 목록, 사진 6: 포토샵 새 캔버스 창)
+- 의도: 말하지 않음
+- 커밋:
+  - "새 캔버스 화면을 두 칸(프리셋 목록·이름·크기·방향·배경)으로 바꾸고, 이름으로 프로젝트를 만들게 함"
+- 바꾼 것:
+  - `NewCanvas.kt`: 왼쪽 프리셋 목록(묶음·비율 모양 그림·크기), 오른쪽 이름·크기·방향·배경. 커버는 시트에 한 줄로. 가로·세로 바꾸기 버튼을 방향 고르기로 바꿨다. 만들면 다듬은 이름을 넘긴다.
+  - `CanvasPresets`: 프리셋 묶음(`PresetGroup`).
+  - `HingeAwareDialog`: 최대 폭, 세로 힌지에 걸치기, 내용 스크롤 끄기. `HingeSplitRow`: 위에 맞추기.
+  - 홈·`StratumApp`: 새 캔버스 이름을 `EditorViewModel.newCanvas`로 보낸다.
+  - 아이콘 crop_portrait·crop_landscape, 문구(이름·방향·세로·가로·묶음 이름), 가로·세로 바꾸기 문구는 지움. 기획서 화면 목록의 새 캔버스 줄.
+- 정한 것(결정 기록 '새 캔버스 화면'): 두 칸 창(메인 가로는 접히는 선 양쪽), 해상도·단위·색상 모드는 넣지 않음, 정사각형은 방향을 고르지 않은 모양.
+- 확인한 것: 단위 테스트(`CanvasPresetsTest` 묶음)와 에뮬레이터 테스트 `NewCanvasTest`(프리셋·배경·이름 없음으로 만들기, 이름 다듬어 넘기기, 방향 바꾸기와 정사각형, 한도 문구, 메인 가로는 목록이 선 왼쪽·이름이 선 오른쪽)와 홈·창 테스트(`HomeProjectsTest`·`HomeScreenHingeTest`·`HingeAwareDialogTest`·`SettingsScreenTest`·`ExportDialogTest`·`ResizeDialogTest`)를 Pixel_Fold(접은 상태)에서 돌려 52개 중 48개가 통과했다.
+  - 실패 4개 중 3개(`NewCanvasTest.mediumDialog_avoidsHorizontalHinge`·`HingeAwareDialogTest.horizontalHinge_putsCardOnTheTopSide`·`ResizeDialogTest.medium_statusAndControlsStayInViewAboveHorizontalHinge`)는 접은 상태에서만 실패하는 것으로 알려진 테스트다.
+  - `ExportDialogTest.saveAndShare_sendTheChoice_andTheNextDialogStartsFromIt`는 다시 혼자 돌리면 통과했다(느린 에뮬레이터에서 창을 다시 여는 순간의 시간 문제로 보인다). 마지막 전체 테스트에서 다시 본다.
+
 ## 2026-10-19 · 홈 갤러리(사용자 피드백 5차 6단계)
 
 - 요청: "홈화면 디자인을 변경하려합니다. 첫번째로 업로드한 사진(프로크리에이트 홈화면)을 벤치마킹해서 적용하려합니다."

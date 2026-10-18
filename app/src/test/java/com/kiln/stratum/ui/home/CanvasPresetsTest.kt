@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.home
 import com.kiln.stratum.engine.canvas.CanvasLimits
 import com.kiln.stratum.engine.canvas.CanvasSizeCheck
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -43,5 +44,11 @@ class CanvasPresetsTest {
         assertEquals(CanvasSizeCheck.SIDE_OUT_OF_RANGE, checkSizeInput("16384", "100"))
         assertEquals(CanvasSizeCheck.TOO_MANY_PIXELS, checkSizeInput("16383", "3052"))
         assertEquals(CanvasSizeCheck.OK, checkSizeInput("3000", "3000"))
+    }
+
+    @Test
+    fun groups_putTheFold8WallpapersTogether_afterTheRatios() {
+        assertEquals(listOf(CanvasPreset.FOLD8_COVER, CanvasPreset.FOLD8_MAIN), CanvasPreset.entries.filter { it.group == PresetGroup.FOLD8 })
+        assertTrue(CanvasPreset.entries.filter { it.group == PresetGroup.BASIC }.all { it.ratioWidth > 0 })
     }
 }

@@ -63,7 +63,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * - 선택: [선택]을 누르면 카드를 눌러 여러 개 고르고 [지우기]로 한꺼번에 지운다(되돌릴 수 없어 한 번 더 묻는다). 뒤로 가기는 선택을 끝낸다.
  * - 프로젝트가 없으면 가운데에 안내와 사진 열기·새 캔버스 버튼을 보인다.
  *
- * @param onCreateCanvas 새 캔버스 창에서 '만들기'를 눌렀다. 고른 가로·세로(픽셀)와 배경을 받는다.
+ * @param onCreateCanvas 새 캔버스 창에서 '만들기'를 눌렀다. 고른 가로·세로(픽셀), 배경, 다듬은 이름(빈 글자는 '제목 없음')을 받는다.
  * @param projects 최근 프로젝트. 고친 시각이 늦은 것부터다.
  * @param onOpenProject 프로젝트 카드를 눌렀다.
  * @param onDeleteProjects 지울지 묻는 창에서 '지우기'를 눌렀다(하나 또는 '선택'으로 고른 여럿).
@@ -74,7 +74,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 @Composable
 fun HomeScreen(
     onOpenPhoto: () -> Unit,
-    onCreateCanvas: (width: Int, height: Int, fill: CanvasFill) -> Unit,
+    onCreateCanvas: (width: Int, height: Int, fill: CanvasFill, name: String) -> Unit,
     modifier: Modifier = Modifier,
     projects: List<ProjectInfo> = emptyList(),
     onOpenProject: (String) -> Unit = {},
@@ -173,9 +173,9 @@ fun HomeScreen(
                 input = newCanvasInput,
                 widthClass = widthClass,
                 onDismiss = { showNewCanvas = false },
-                onCreate = { width, height, fill ->
+                onCreate = { width, height, fill, name ->
                     showNewCanvas = false
-                    onCreateCanvas(width, height, fill)
+                    onCreateCanvas(width, height, fill, name)
                 }
             )
         }
@@ -290,6 +290,6 @@ private fun EmptyGallery(onOpenPhoto: () -> Unit, onNewCanvas: () -> Unit, modif
 @Composable
 private fun HomeScreenPreview() {
     StratumTheme {
-        HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _ -> })
+        HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _, _ -> })
     }
 }

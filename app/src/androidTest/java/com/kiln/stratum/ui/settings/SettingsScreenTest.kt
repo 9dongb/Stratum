@@ -210,7 +210,7 @@ class SettingsScreenTest {
     fun homeSettingsButton_opensSettings() {
         var opened = 0
         composeRule.setContent {
-            StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _ -> }, onOpenSettings = { opened++ }) }
+            StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _, _ -> }, onOpenSettings = { opened++ }) }
         }
 
         composeRule.onNodeWithContentDescription(string(R.string.action_settings)).performClick()
