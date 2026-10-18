@@ -390,7 +390,9 @@ fun EditScreen(
                     erase = activeTool == EditTool.Eraser,
                     actions = strokeActions,
                     modifier = Modifier.fillMaxSize(),
-                    hold = brushHold.takeIf { activeTool == EditTool.Brush }
+                    hold = brushHold.takeIf { activeTool == EditTool.Brush },
+                    // 칠하는 손가락 자리에 브러시 크기 원(결정 기록 '브러시 커서')
+                    cursorSize = if (activeTool == EditTool.Eraser) eraser.size else brush.size
                 )
             }
             if (ready != null && activeTool == EditTool.Retouch) {
@@ -412,7 +414,8 @@ fun EditScreen(
                     document = ready.documentSize,
                     dodge = selection.modeOf(EditTool.Tone) != SubTool.TONE_BURN,
                     actions = toneActions,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    cursorSize = toneOptions.brush.size
                 )
             }
             if (ready != null && activeTool == EditTool.Select) {

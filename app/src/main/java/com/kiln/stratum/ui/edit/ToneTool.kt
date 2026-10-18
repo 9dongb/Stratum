@@ -124,9 +124,10 @@ private fun toneRangeLabel(range: ToneRange): Int =
 
 /**
  * 명암 도구를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 끌어 닷지([dodge]) 또는 번 획을 그린다(브러시와 같은 손가락 처리).
+ * [cursorSize](문서 픽셀 지름)가 있으면 칠하는 손가락 자리에 브러시 커서를 보인다.
  */
 @Composable
-fun ToneOverlay(view: () -> CanvasView, document: PixelSize, dodge: Boolean, actions: ToneActions, modifier: Modifier = Modifier) {
+fun ToneOverlay(view: () -> CanvasView, document: PixelSize, dodge: Boolean, actions: ToneActions, modifier: Modifier = Modifier, cursorSize: Float? = null) {
     PaintGestureOverlay(
         view = view,
         document = document,
@@ -135,6 +136,7 @@ fun ToneOverlay(view: () -> CanvasView, document: PixelSize, dodge: Boolean, act
         onExtend = actions::extend,
         onEnd = actions::end,
         onCancel = actions::cancel,
-        modifier = modifier
+        modifier = modifier,
+        cursorSize = cursorSize
     )
 }

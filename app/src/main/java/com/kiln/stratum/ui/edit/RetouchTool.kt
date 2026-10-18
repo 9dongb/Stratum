@@ -152,6 +152,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
  *
  * 가져올 곳은 표시(브러시 크기의 원과 십자)로 보인다. 정하는 중에는 손가락 자리에, 칠하는 동안에는 가져오는 자리(손가락 - 간격)에,
  * 정했지만 아직 칠하지 않았으면 정한 자리에 있다. 스팟 복구는 가져올 곳을 보이지 않는다.
+ * 칠하는 동안에는 손가락 자리에 브러시 커서(크기 원)도 보인다(브러시와 같다).
  */
 @Composable
 fun RetouchOverlay(
@@ -229,12 +230,14 @@ fun RetouchOverlay(
                 }
             }
     ) {
+        // 칠하는 손가락 자리의 브러시 커서(가져올 곳을 정하는 손가락은 아래 표시만 보인다)
+        val touching = finger
+        if (touching != null && !fingerPicks) BrushCursor(touching, radius * 2f, view, document)
         if (mode != RetouchMode.SPOT_HEAL) {
             Canvas(Modifier.matchParentSize()) {
                 val area = PixelSize(size.width.roundToInt(), size.height.roundToInt())
                 if (area.width <= 0 || area.height <= 0) return@Canvas
                 val transform = view().transform(area, document)
-                val touching = finger
                 val marker: Offset? = when {
                     touching != null && fingerPicks -> touching
                     touching != null -> source?.offset?.let { offset ->

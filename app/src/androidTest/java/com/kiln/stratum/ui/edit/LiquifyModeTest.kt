@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -152,6 +153,36 @@ class LiquifyModeTest {
         // 편집 화면 상단 바와 같은 48dp에 상태 표시줄(또는 버튼·제목에 걸리는 카메라 구멍) 높이만 더한다
         val height = bar.layoutBoundsInWindow().height
         assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
+    }
+
+    @Test
+    fun pressing_showsTheBrushCursor() {
+        show(411, 800)
+        val overlay = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY)
+
+        overlay.performTouchInput { down(center) }
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_CURSOR).assertExists()
+        overlay.performTouchInput { up() }
+
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_CURSOR).assertDoesNotExist()
+    }
+
+    @Test
+    fun pinch_zoomsTheCanvas() {
+        show(411, 800)
+        val overlay = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY)
+        // 확대 전: 가운데에서 오른쪽으로 100px 떨어진 화면 자리의 문서 좌표
+        overlay.performTouchInput { down(center + Offset(100f, 0f)); up() }
+        val before = composeRule.runOnIdle { actions.points.last().first }
+
+        overlay.performTouchInput {
+            pinch(start0 = center - Offset(20f, 0f), end0 = center - Offset(200f, 0f), start1 = center + Offset(20f, 0f), end1 = center + Offset(200f, 0f))
+        }
+        overlay.performTouchInput { down(center + Offset(100f, 0f)); up() }
+        val after = composeRule.runOnIdle { actions.points.last().first }
+
+        // 확대했으면 같은 화면 자리가 문서 가운데(500)에 더 가깝다
+        assertTrue("$before -> $after", abs(after - 500f) < abs(before - 500f) / 2)
     }
 
     @Test

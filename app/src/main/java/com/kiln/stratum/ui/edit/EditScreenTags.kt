@@ -7,6 +7,9 @@ import com.kiln.stratum.engine.export.ExportSize
 object EditScreenTags {
     const val CANVAS = "editCanvas"
 
+    /** 칠하는 손가락 자리의 브러시 커서(크기 원) */
+    const val BRUSH_CURSOR = "brushCursor"
+
     /** 색 줄의 지금 색(누르면 팔레트) */
     const val COLOR_CURRENT = "colorCurrent"
 

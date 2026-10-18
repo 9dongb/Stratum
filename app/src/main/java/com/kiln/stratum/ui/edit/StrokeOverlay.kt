@@ -1,20 +1,30 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
+import kotlin.math.roundToInt
 
 /** 캔버스의 브러시·지우개 손가락이 엔진 쪽(ViewModel)에 보내는 일. 좌표는 문서 픽셀이다. */
 interface StrokeActions {
@@ -58,7 +68,8 @@ interface HoldActions {
 
 /**
  * 브러시·지우개를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 끌면 획을 그린다(눌렀다 떼기만 해도 점 하나).
- * [hold]가 있으면(브러시) 움직이지 않고 꾹 누를 때 그 손가락을 넘긴다(스포이드). 손가락 처리는 [PaintGestureOverlay]와 같다.
+ * [hold]가 있으면(브러시) 움직이지 않고 꾹 누를 때 그 손가락을 넘긴다(스포이드). [cursorSize]는 브러시 커서의 지름(문서 픽셀)이다.
+ * 손가락 처리는 [PaintGestureOverlay]와 같다.
  */
 @Composable
 fun StrokeOverlay(
@@ -67,7 +78,8 @@ fun StrokeOverlay(
     erase: Boolean,
     actions: StrokeActions,
     modifier: Modifier = Modifier,
-    hold: HoldActions? = null
+    hold: HoldActions? = null,
+    cursorSize: Float? = null
 ) {
     PaintGestureOverlay(
         view = view,
@@ -78,7 +90,8 @@ fun StrokeOverlay(
         onEnd = actions::end,
         onCancel = actions::cancel,
         modifier = modifier,
-        hold = hold
+        hold = hold,
+        cursorSize = cursorSize
     )
 }
 
@@ -89,6 +102,8 @@ fun StrokeOverlay(
  * 두 번째 손가락이 닿아도 버린다(두 손가락으로 확대·이동하려는 것으로 본다).
  * [hold]가 있으면, 닿은 뒤 길게 누르기 시간(약 0.4초) 동안 터치 허용 거리보다 움직이지 않으면 그리던 점을 버리고([onCancel])
  * 그 손가락을 [hold]로 넘긴다. 그 안에 움직이면 지금처럼 획이다.
+ * [cursorSize](문서 픽셀 지름)가 있으면 칠하는 손가락 자리에 그 크기의 원(브러시 커서)을 보인다. 손을 떼거나 획을 버리거나
+ * 손가락을 [hold]로 넘기면 지운다(결정 기록 '브러시 커서').
  */
 @Composable
 fun PaintGestureOverlay(
@@ -100,13 +115,16 @@ fun PaintGestureOverlay(
     onEnd: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
-    hold: HoldActions? = null
+    hold: HoldActions? = null,
+    cursorSize: Float? = null
 ) {
     val begin by rememberUpdatedState(onBegin)
     val extend by rememberUpdatedState(onExtend)
     val end by rememberUpdatedState(onEnd)
     val cancel by rememberUpdatedState(onCancel)
     val currentHold by rememberUpdatedState(hold)
+    // 칠하는 손가락의 화면 자리(브러시 커서). 칠하지 않으면 null.
+    var finger by remember { mutableStateOf<Offset?>(null) }
     Box(
         modifier.testTag(tag).pointerInput(document) {
             awaitEachGesture {
@@ -119,6 +137,7 @@ fun PaintGestureOverlay(
                 }
                 toDocument(down.position) { x, y -> begin(x, y) }
                 down.consume()
+                finger = down.position
                 // 두 손가락이면 버리고(false), 손을 떼면 기록한다(true). 그 전에 이 자리가 사라지면(도구를 바꿈, 접기·펼치기)
                 // 터치를 기다리던 일이 취소되어 아래 finally에서 끄던 획까지 기록한다(보정 슬라이더와 같다).
                 var keep: Boolean? = null
@@ -129,15 +148,18 @@ fun PaintGestureOverlay(
                     val change = event.changes.firstOrNull { it.id == down.id }
                     if (change == null || change.isConsumed || event.changes.count { it.pressed } > 1) {
                         keep = false
+                        finger = null
                         return null
                     }
                     for (point in change.historical) toDocument(point.position) { x, y -> extend(x, y) }
                     toDocument(change.position) { x, y -> extend(x, y) }
                     if (!change.pressed) {
                         keep = true
+                        finger = null
                         return null
                     }
                     change.consume()
+                    finger = change.position
                     return change
                 }
                 try {
@@ -156,6 +178,7 @@ fun PaintGestureOverlay(
                         }
                         if (decided == null) {
                             held = true
+                            finger = null
                             cancel()
                             followHold(down.id, last, holdActions, ::toDocument)
                             return@awaitEachGesture
@@ -163,13 +186,32 @@ fun PaintGestureOverlay(
                     }
                     while (keep == null) follow(awaitPointerEvent())
                 } finally {
+                    finger = null
                     if (!held) {
                         if (keep == false) cancel() else end()
                     }
                 }
             }
         }
-    )
+    ) {
+        val at = finger
+        if (cursorSize != null && at != null) BrushCursor(at, cursorSize, view, document)
+    }
+}
+
+/** 브러시 커서: 손가락 자리 [center](화면 좌표)에 지름 [size](문서 픽셀)의 원을 지금 보기 배율로 그린다 */
+@Composable
+internal fun BrushCursor(center: Offset, size: Float, view: () -> CanvasView, document: PixelSize) {
+    Canvas(Modifier.fillMaxSize().testTag(EditScreenTags.BRUSH_CURSOR)) {
+        val scale = view().transform(PixelSize(this.size.width.roundToInt(), this.size.height.roundToInt()), document).scaleX.toFloat()
+        drawBrushCursor(center, size / 2f * scale)
+    }
+}
+
+/** 브러시 커서 모양: 흰 선에 검은 테두리를 둘러 어떤 사진 위에서도 보인다(유동화와 같다) */
+internal fun DrawScope.drawBrushCursor(center: Offset, radius: Float) {
+    drawCircle(Color.White, radius, center, style = Stroke(width = 2.dp.toPx()))
+    drawCircle(Color.Black, radius + 1.dp.toPx(), center, style = Stroke(width = 1.dp.toPx()))
 }
 
 /**
