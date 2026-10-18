@@ -116,8 +116,6 @@
     <string name="preset_photo">사진</string>
     <string name="preset_fold8_cover">폴드8 커버 배경화면</string>
     <string name="preset_fold8_main">폴드8 메인 배경화면</string>
-    <string name="new_canvas_preset_detail_ratio">%1$d:%2$d · %3$d × %4$d px</string>
-    <string name="new_canvas_preset_detail">%1$d × %2$d px</string>
     <string name="new_canvas_width">가로</string>
     <string name="new_canvas_height">세로</string>
     <string name="new_canvas_px">px</string>

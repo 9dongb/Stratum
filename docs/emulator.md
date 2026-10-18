@@ -28,7 +28,7 @@
 - Pixel_Fold(API 37 Play 이미지)에서 UWB 시스템 서비스(`vendor.uwb_hal`)가 5초마다 죽고 다시 켜지면 화면 테스트 하나가 1분 가까이 걸릴 만큼 느려진다(2026-10-19 겪음).
   - 확인: `adb -s emulator-5554 logcat -d -b crash`에 `android.hardware.uwb-service`가 되풀이된다.
   - 해결: 끄고 `emulator -avd Pixel_Fold -no-boot-anim -feature -Uwb`로 켠다(UWB를 쓰지 않는 앱이라 꺼도 된다).
-  - PC 메모리가 모자라 스왑을 많이 쓰면(`sysctl vm.swapusage`) 그래도 느리다. 펼친 상태보다 접은 상태(커버 화면)가 몇 배 빠르므로, 중간 확인은 접어서 돌리고 마지막 전체 테스트만 펼쳐서 돌린다(접은 상태에서만 실패하는 테스트 5개는 progress.md '기술 주의점').
+  - PC 메모리가 모자라 스왑을 많이 쓰면(`sysctl vm.swapusage`) 그래도 느리다. 펼친 상태보다 접은 상태(커버 화면)가 두 배쯤 빠르므로, 중간 확인은 접어서 돌린다. 마지막 전체 테스트도 펼친 상태로 3시간이 넘으면 접은 상태로 돌리고, 접은 상태에서만 실패하는 5개와 배치(힌지) 테스트만 펼쳐서 따로 돌린다(progress.md '기술 주의점', 2026-10-19).
 
 ## 에뮬레이터 테스트
 
@@ -44,7 +44,7 @@
   - 결과는 마지막의 `OK (N tests)`로 본다. 실패하면 `FAILURES!!!`와 `Tests run`이 나온다.
   - 여기서는 쉼표로 여러 클래스를 주면 준 순서대로 모두 돈다. `<패키지.클래스>#<메서드>`도 섞어 쓸 수 있다.
   - 끝나면 `adb -s emulator-5554 uninstall com.kiln.stratum.test`
-- 테스트 전체는 Pixel_Fold를 펼친 상태(`adb emu unfold`)에서 돌린다. 접은 상태(커버)에서는 화면보다 큰 강제 크기를 쓰는 메인 세로(가로 힌지) 테스트 4개와 체크 무늬 색 테스트 1개가 실패한다(코드 문제가 아님, 2026-10-18 확인).
+- 테스트 전체는 Pixel_Fold를 펼친 상태(`adb emu unfold`)에서 돌린다(너무 느리면 위 UWB 항목의 마지막 줄처럼 나눠 돌린다). 접은 상태(커버)에서는 화면보다 큰 강제 크기를 쓰는 메인 세로(가로 힌지) 테스트 4개와 체크 무늬 색 테스트 1개가 실패한다(코드 문제가 아님, 2026-10-18 확인).
 - 화면 테스트(Compose)는 하나에 25~40초 걸릴 수 있다. 멈춘 것이 아니다.
   - 이 PC(2026-10-17)의 에뮬레이터는 그래픽을 GPU가 아니라 CPU로 그려서(켤 때 로그의 `lavapipe`·`swangle`) 시스템 화면까지 느리다.
 
@@ -76,6 +76,7 @@
   - 테스트가 끝나면 앱이 지워지면서 앱 폴더도 지워진다. `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`를 붙여 돌리고, 받은 뒤 `adb uninstall com.kiln.stratum.test`, `adb uninstall com.kiln.stratum`으로 지운다.
   - 두 손가락 조작 바로 뒤에 찍으면 조작 전 화면이 찍힌다(그래픽을 CPU로 그려 느림). 1초쯤 기다린 뒤 찍는다.
 - 화면 구성 읽기(`uiautomator dump`)는 화면이 바뀌는 중에 실패하고, 그러면 예전 파일이 대신 읽힌다.
+- 글자 칸을 누른 뒤 키보드가 다 열리기 전에 `adb shell input text`를 보내면 첫 글자가 두 번 들어갈 수 있다(Sunset → SSunset, 앱 문제 아님, 2026-10-19). 칸을 누르고 3~4초 기다린 뒤 보낸다.
   - 매번 예전 파일을 지운다(기기 쪽 기본 위치: `/sdcard/window_dump.xml`).
   - 실패하면 다시 시도한다.
 
@@ -107,6 +108,7 @@
 - 바꾸기 전에 원래 값을 적어 둔다: `adb shell settings get system accelerometer_rotation`, `adb shell settings get system user_rotation`
 - 가로로: `adb shell settings put system accelerometer_rotation 0` 다음에 `adb shell settings put system user_rotation 1`
 - 끝나면 적어 둔 값으로 돌린다.
+- `adb emu rotate`는 누를 때마다 90°씩 돌리고, 접은 화면(커버)에도 그 방향이 남는다(두 번이면 커버가 거꾸로 서서 카메라 구멍이 아래로 간다). 네 번 돌려 원래대로 하거나 위 방법을 쓴다(2026-10-19).
   - 명령 결과를 변수에 담아 되돌릴 때는 끝의 `\r`을 지운다(`tr -d '\r'`). 안 지우면 값이 0으로 들어간다(2026-10-17 겪음).
 
 ## 앱 언어

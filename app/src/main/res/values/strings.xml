@@ -117,8 +117,6 @@
     <string name="preset_fold8_cover">Fold8 cover wallpaper</string>
     <string name="preset_fold8_main">Fold8 main wallpaper</string>
     <!-- %1$d:%2$d는 비율, %3$d × %4$d는 픽셀 크기다. -->
-    <string name="new_canvas_preset_detail_ratio">%1$d:%2$d · %3$d × %4$d px</string>
-    <string name="new_canvas_preset_detail">%1$d × %2$d px</string>
     <string name="new_canvas_width">Width</string>
     <string name="new_canvas_height">Height</string>
     <string name="new_canvas_px">px</string>
