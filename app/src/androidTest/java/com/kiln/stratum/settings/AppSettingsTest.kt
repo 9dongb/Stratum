@@ -44,7 +44,8 @@ class AppSettingsTest {
         val changed = SettingsValues(
             export = ExportChoice(ExportFormat.WEBP, 75, ExportSize.LongEdge(2048)),
             previewQuality = PreviewQuality.LIGHT,
-            twoFingerTapUndo = false
+            twoFingerTapUndo = false,
+            recentColors = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
         )
 
         AppSettings(preferences()).update { changed }
@@ -70,6 +71,7 @@ class AppSettingsTest {
             .putInt("exportQuality", 500)
             .putString("exportSize", "big")
             .putString("previewQuality", "ULTRA")
+            .putString("recentColors", "FF1E88E5,red,,FF1E88E5,123456789")
             .commit()
 
         val values = AppSettings(preferences()).values.value
@@ -79,6 +81,8 @@ class AppSettingsTest {
         assertEquals(ExportSize.Original, values.export.size)
         assertEquals(PreviewQuality.STANDARD, values.previewQuality)
         assertTrue(values.twoFingerTapUndo)
+        // 망가진 최근 색은 건너뛰고 같은 색은 한 번만 읽는다
+        assertEquals(listOf(0xFF1E88E5.toInt()), values.recentColors)
     }
 
     @Test

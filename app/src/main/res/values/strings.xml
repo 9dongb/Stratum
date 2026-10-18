@@ -171,7 +171,20 @@
     <string name="brush_size">Size</string>
     <string name="brush_size_value">%1$d px</string>
     <string name="brush_hardness">Hardness</string>
-    <string name="brush_color">Color %1$d, %2$s</string>
+    <string name="action_ok">OK</string>
+    <string name="color_current">Current color, %1$s</string>
+    <string name="color_choose">Choose color</string>
+    <string name="color_recent">Recent color %1$d, %2$s</string>
+    <string name="color_saturation_value">Saturation and brightness</string>
+    <string name="color_saturation_value_state">Saturation %1$d%%, brightness %2$d%%</string>
+    <string name="color_brighter">Brighter</string>
+    <string name="color_darker">Darker</string>
+    <string name="color_more_saturated">More saturated</string>
+    <string name="color_less_saturated">Less saturated</string>
+    <string name="color_hue">Hue</string>
+    <string name="color_hue_state">%1$d degrees</string>
+    <string name="color_new_state">New color, %1$s</string>
+    <string name="color_revert">Original color %1$s. Tap to go back to it.</string>
 
     <!-- 글자 -->
     <string name="text_hint">Tap the canvas where the text should start (its top-left corner).</string>

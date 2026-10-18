@@ -1,30 +1,17 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -43,20 +30,16 @@ import kotlin.math.roundToInt
  *
  * @property erase 지우개 옵션인지. 지우개는 색을 고르지 않는다.
  * @property sizePreview 크기·단단함 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
+ * @property colors 색 줄(지금 색·최근 색, 브러시만). 없으면 색 줄을 보이지 않는다.
  */
 @Stable
 class BrushControls(
     val settings: BrushSettings,
     val erase: Boolean,
     val onChange: (BrushSettings) -> Unit,
-    val sizePreview: SizePreviewState? = null
+    val sizePreview: SizePreviewState? = null,
+    val colors: ColorControls? = null
 )
-
-/** 옵션에 보일 색(`0xAARRGGBB`). 검정·흰색·회색과 무지개 차례의 기본색이다. */
-val BrushPalette: List<Int> = listOf(
-    0xFF000000, 0xFFFFFFFF, 0xFF808080, 0xFFE53935, 0xFFFB8C00, 0xFFFDD835,
-    0xFF43A047, 0xFF00ACC1, 0xFF1E88E5, 0xFF8E24AA, 0xFFD81B60, 0xFF6D4C41
-).map { it.toInt() }
 
 /**
  * 브러시·지우개 옵션: (브러시만) 색, 크기, 단단함, 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
@@ -67,7 +50,7 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
     val settings = controls.settings
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), fillHeight = false) {
-        if (!controls.erase) ColorSwatches(settings.color) { controls.onChange(settings.copy(color = it)) }
+        if (!controls.erase) controls.colors?.let { ColorRow(it) }
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.BRUSH_SIZE, controls.sizePreview)
         HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview)
         OptionSlider(
@@ -157,47 +140,6 @@ internal fun OptionSlider(label: String, shown: String, fraction: Float, onFract
         )
     }
 }
-
-/** 색 고르기: 기본색 동그라미 줄. 폭이 모자라면 옆으로 밀어 본다. 고른 색은 테두리로 보인다. */
-@Composable
-fun ColorSwatches(selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
-    val outline = MaterialTheme.colorScheme.outline
-    val ring = MaterialTheme.colorScheme.primary
-    val selectedLabel = stringResource(R.string.layer_selected)
-    Row(
-        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(EditScreenTags.BRUSH_COLORS),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        BrushPalette.forEachIndexed { index, color ->
-            val isSelected = color == (selected or 0xFF000000.toInt())
-            val name = stringResource(R.string.brush_color, index + 1, colorHex(color))
-            // 누르는 영역은 48dp, 보이는 동그라미는 32dp
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { onSelect(color) })
-                    .semantics {
-                        contentDescription = name
-                        if (isSelected) stateDescription = selectedLabel
-                    }
-                    .testTag(EditScreenTags.brushColor(index)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    Modifier
-                        .size(32.dp)
-                        .border(BorderStroke(if (isSelected) 3.dp else 1.dp, if (isSelected) ring else outline), CircleShape)
-                        .padding(if (isSelected) 4.dp else 1.dp)
-                        .background(Color(color), CircleShape)
-                )
-            }
-        }
-    }
-}
-
-/** 색을 '#RRGGBB'로(화면 읽기 기능이 읽는 이름) */
-private fun colorHex(color: Int): String = String.format(java.util.Locale.ROOT, "#%06X", color and 0xFFFFFF)
 
 /** 크기 슬라이더의 눈금(0..1)을 크기(px)로. 로그 눈금이라 1~10px도 슬라이더의 1/3을 쓴다. */
 internal fun fractionToSize(fraction: Float): Float {

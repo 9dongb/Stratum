@@ -169,7 +169,20 @@
     <string name="brush_size">크기</string>
     <string name="brush_size_value">%1$d px</string>
     <string name="brush_hardness">단단함</string>
-    <string name="brush_color">색 %1$d, %2$s</string>
+    <string name="action_ok">확인</string>
+    <string name="color_current">지금 색, %1$s</string>
+    <string name="color_choose">색 고르기</string>
+    <string name="color_recent">최근 색 %1$d, %2$s</string>
+    <string name="color_saturation_value">채도·밝기</string>
+    <string name="color_saturation_value_state">채도 %1$d%%, 밝기 %2$d%%</string>
+    <string name="color_brighter">더 밝게</string>
+    <string name="color_darker">더 어둡게</string>
+    <string name="color_more_saturated">채도 높이기</string>
+    <string name="color_less_saturated">채도 낮추기</string>
+    <string name="color_hue">색상</string>
+    <string name="color_hue_state">%1$d도</string>
+    <string name="color_new_state">새 색, %1$s</string>
+    <string name="color_revert">원래 색 %1$s. 누르면 이 색으로 돌아가요.</string>
 
     <!-- 글자 -->
     <string name="text_hint">글자를 넣을 자리(글자의 왼쪽 위)를 캔버스에서 누르세요.</string>

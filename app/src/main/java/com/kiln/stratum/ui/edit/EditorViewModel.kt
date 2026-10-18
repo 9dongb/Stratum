@@ -79,6 +79,7 @@ import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectLibrary
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.settings.PreviewQuality
+import com.kiln.stratum.settings.RecentColors
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -1056,6 +1057,19 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (hasLiveValues || document.indexOfLayer(id) < 0) return
         edit(SetLayerVisible(id, visible))
+    }
+
+    /**
+     * [target](브러시·글자)의 색을 [color]로 바꾸고 최근 색 맨 앞에 둔다(최근 색 누르기·팔레트 확인).
+     * 최근 색은 설정 저장소에 남아 앱을 다시 켜도 있다(결정 기록 '색 팔레트·최근 색').
+     */
+    fun chooseColor(target: ColorTarget, color: Int) {
+        val opaque = color or 0xFF000000.toInt()
+        when (target) {
+            ColorTarget.BRUSH -> setBrush(_brush.value.copy(color = opaque))
+            ColorTarget.TEXT -> setTextStyle(_textStyle.value.copy(color = opaque))
+        }
+        appSettings.update { it.copy(recentColors = RecentColors.add(it.recentColors, opaque)) }
     }
 
     /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */

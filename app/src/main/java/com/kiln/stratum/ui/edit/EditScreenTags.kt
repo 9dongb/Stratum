@@ -7,6 +7,19 @@ import com.kiln.stratum.engine.export.ExportSize
 object EditScreenTags {
     const val CANVAS = "editCanvas"
 
+    /** 색 줄의 지금 색(누르면 팔레트) */
+    const val COLOR_CURRENT = "colorCurrent"
+
+    /** 색 팔레트와 그 안의 채도·밝기 네모, 색상 띠, 16진 코드, 원래 색, 버튼 */
+    const val PALETTE = "palette"
+    const val PALETTE_SQUARE = "paletteSquare"
+    const val PALETTE_HUE = "paletteHue"
+    const val PALETTE_HEX = "paletteHex"
+    const val PALETTE_NEW = "paletteNew"
+    const val PALETTE_ORIGINAL = "paletteOriginal"
+    const val PALETTE_OK = "paletteOk"
+    const val PALETTE_CANCEL = "paletteCancel"
+
     /** 편집 화면 상단 바 */
     const val TOP_BAR = "editTopBar"
     const val ZOOM_CHIP = "zoomChip"
@@ -160,8 +173,8 @@ object EditScreenTags {
     /** 레이어 줄의 눈(보이기·숨기기) */
     fun layerVisibility(id: com.kiln.stratum.engine.document.LayerId): String = "layerVisibility_${id.value}"
 
-    /** 브러시 색 줄의 [index]번째 색 */
-    fun brushColor(index: Int): String = "brushColor_$index"
+    /** 색 줄의 [index]번째 최근 색 */
+    fun recentColor(index: Int): String = "recentColor_$index"
 
     /** 혼합 모드 메뉴의 [mode] 항목 */
     fun blendMode(mode: com.kiln.stratum.engine.document.BlendMode): String = "blendMode_${mode.name}"

@@ -113,6 +113,24 @@ class EditorSettingsTest {
         awaitState { it is EditorState.Ready && it.base.region.level == 2 }
     }
 
+    @Test
+    fun choosingAColor_setsTheBrushOrTextColor_andPutsItFirstInTheRecentColors() {
+        val blue = 0xFF1E88E5.toInt()
+        val black = 0xFF000000.toInt()
+        val white = 0xFFFFFFFF.toInt()
+        assertEquals(listOf(black, white), settings.values.value.recentColors)
+
+        onMain { viewModel.chooseColor(ColorTarget.BRUSH, blue) }
+        assertEquals(blue, viewModel.brush.value.color)
+        assertEquals(listOf(blue, black, white), settings.values.value.recentColors)
+
+        // 글자 색도 같은 최근 색에 들어가고, 이미 있는 색은 앞으로 옮긴다
+        onMain { viewModel.chooseColor(ColorTarget.TEXT, white) }
+        assertEquals(white, viewModel.textStyle.value.color)
+        assertEquals(blue, viewModel.brush.value.color)
+        assertEquals(listOf(white, blue, black), settings.values.value.recentColors)
+    }
+
     private companion object {
         val CANVAS_AREA = PixelSize(1000, 800)
         val WIDE = PixelSize(2600, 520)

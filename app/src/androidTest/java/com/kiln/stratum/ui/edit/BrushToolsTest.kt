@@ -79,6 +79,10 @@ class BrushToolsTest {
     private var textStyle by mutableStateOf(TextStyle(size = 60f))
     private val added = mutableListOf<Triple<String, Float, Float>>()
 
+    /** 최근 색과 고른 색(대상, 색) */
+    private val recent = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
+    private val chosen = mutableListOf<Pair<ColorTarget, Int>>()
+
     /** 1000×1000 문서. 정사각형이라 화면에 맞추면 캔버스 가운데가 문서 가운데다. */
     private val document = PixelSize(1000, 1000)
     private val preview = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
@@ -104,7 +108,9 @@ class BrushToolsTest {
                             strokeActions = strokes,
                             textStyle = textStyle,
                             onTextStyle = { textStyle = it },
-                            onAddText = { text, x, y -> added += Triple(text, x, y) }
+                            onAddText = { text, x, y -> added += Triple(text, x, y) },
+                            recentColors = recent,
+                            onChooseColor = { target, color -> chosen += target to color }
                         )
                     }
                 }
@@ -118,11 +124,12 @@ class BrushToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
 
-        composeRule.onNodeWithTag(EditScreenTags.brushColor(3)).performClick()
+        // 최근 색을 누르면 그 색을 고른다(최근 색 맨 앞으로 옮기는 것은 ViewModel이 한다)
+        composeRule.onNodeWithTag(EditScreenTags.recentColor(0)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(100f)) }
 
         composeRule.runOnIdle {
-            assertEquals(BrushPalette[3], brush.color)
+            assertEquals(listOf(ColorTarget.BRUSH to 0xFF1E88E5.toInt()), chosen)
             assertEquals(100f, brush.size, 0f)
         }
     }

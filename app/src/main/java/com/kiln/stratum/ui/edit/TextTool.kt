@@ -48,9 +48,12 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
-/** 글자 옵션이 쓰는 모양과 바꾸기. 모양은 ViewModel이 든다(앱을 끌 때까지 남음). */
+/**
+ * 글자 옵션이 쓰는 모양과 바꾸기. 모양은 ViewModel이 든다(앱을 끌 때까지 남음).
+ * [colors]는 색 줄(지금 색·최근 색)이고, 없으면 색 줄을 보이지 않는다.
+ */
 @Stable
-class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit)
+class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit, val colors: ColorControls? = null)
 
 /**
  * 글자 옵션: 안내 한 줄, 색, 크기. 캔버스를 누르면 그 자리에 글자를 넣는 창이 뜬다(편집 화면).
@@ -70,7 +73,7 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
-        ColorSwatches(style.color) { controls.onChange(style.copy(color = it)) }
+        controls.colors?.let { ColorRow(it) }
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text = label, modifier = Modifier.width(88.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             ThinSlider(

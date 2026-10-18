@@ -138,7 +138,9 @@ fun StratumApp(editor: EditorViewModel) {
                 retouchActions = editor.retouchActions,
                 toneOptions = toneOptions,
                 onToneOptions = editor::setTone,
-                toneActions = editor.toneActions
+                toneActions = editor.toneActions,
+                recentColors = settingsValues.recentColors,
+                onChooseColor = editor::chooseColor
             )
         }
     }

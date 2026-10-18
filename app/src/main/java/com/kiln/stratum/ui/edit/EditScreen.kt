@@ -128,6 +128,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
  * @param toneOptions 명암 도구 설정(범위·노출·크기·단단함), [onToneOptions]로 바꾼다
  * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
+ * @param recentColors 최근 색(브러시·글자의 색 줄, 맨 앞이 가장 최근)
+ * @param onChooseColor 브러시·글자의 색을 골랐다(최근 색 누르기·팔레트 확인). 최근 색에도 더한다.
  */
 @Composable
 fun EditScreen(
@@ -169,7 +171,9 @@ fun EditScreen(
     retouchActions: RetouchActions = RetouchActions.None,
     toneOptions: ToneOptions = ToneOptions(),
     onToneOptions: (ToneOptions) -> Unit = {},
-    toneActions: ToneActions = ToneActions.None
+    toneActions: ToneActions = ToneActions.None,
+    recentColors: List<Int> = emptyList(),
+    onChooseColor: (ColorTarget, Int) -> Unit = { _, _ -> }
 ) {
     // 아래 패널을 펼쳤는지. 접기·펼치기나 회전으로 배치가 바뀌어도 이어진다.
     var panelExpanded by rememberSaveable { mutableStateOf(true) }
@@ -225,6 +229,15 @@ fun EditScreen(
     }
     // 내보내기 창에서 고르던 것. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
+    // 색 팔레트에서 고르던 색. 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
+    var palette by rememberSaveable(stateSaver = PaletteDraft.Saver) { mutableStateOf<PaletteDraft?>(null) }
+    // 브러시·글자의 색 줄: 최근 색을 누르면 그 색, 지금 색을 누르면 팔레트
+    fun colorControls(target: ColorTarget, color: Int) = ColorControls(
+        color = color,
+        recent = recentColors,
+        onChoose = { onChooseColor(target, it) },
+        onOpenPalette = { palette = PaletteDraft.start(target, color) }
+    )
     // 공유 창은 앱이 화면에 있을 때만 띄운다. 뒤로 가 있는 동안 끝난 것은 돌아왔을 때 띄운다.
     val context = LocalContext.current
     // 넓은 색 문서를 여는 동안 창을 넓은 색 모드로, HDR 문서는 HDR 모드로 둔다. 닫으면 되돌린다.
@@ -282,11 +295,11 @@ fun EditScreen(
         }
         // 고른 브러시·지우개의 설정
         val brushControls = when (activeTool) {
-            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush, sizePreview = sizePreview)
+            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush, sizePreview = sizePreview, colors = colorControls(ColorTarget.BRUSH, brush.color))
             EditTool.Eraser -> BrushControls(eraser, erase = true, onChange = onEraser, sizePreview = sizePreview)
             else -> null
         }
-        val textControls = TextControls(textStyle, onTextStyle).takeIf { activeTool == EditTool.Text }
+        val textControls = TextControls(textStyle, onTextStyle, colorControls(ColorTarget.TEXT, textStyle.color)).takeIf { activeTool == EditTool.Text }
         val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
             SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
         }
@@ -531,6 +544,19 @@ fun EditScreen(
                     exportDraft = null
                 },
                 hdr = ready.hdr
+            )
+        }
+        palette?.let { draft ->
+            ColorPalettePrompt(
+                draft = draft,
+                widthClass = widthClass,
+                windowHeight = windowHeight,
+                onChange = { palette = it },
+                onDismiss = { palette = null },
+                onConfirm = {
+                    onChooseColor(draft.target, draft.color)
+                    palette = null
+                }
             )
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
