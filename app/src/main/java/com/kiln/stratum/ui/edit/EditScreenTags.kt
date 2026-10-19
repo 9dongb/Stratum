@@ -8,6 +8,7 @@ object EditScreenTags {
     const val CANVAS = "editCanvas"
 
     /** 제스처 알림(두 손가락·세 손가락 톡의 짧은 알림) */
+    const val MESSAGE_BAR = "messageBar"
     const val GESTURE_TOAST = "gestureToast"
 
     /** 메인 화면의 도구 옵션 띠, 칸을 누르면 뜨는 옵션 창, 떠 있는 동안 캔버스를 덮어 누르면 닫는 바탕 */

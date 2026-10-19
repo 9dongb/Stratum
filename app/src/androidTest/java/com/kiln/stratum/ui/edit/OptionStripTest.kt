@@ -10,16 +10,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.document.BlendMode
@@ -44,6 +46,8 @@ import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -98,6 +102,9 @@ class OptionStripTest {
     private val document = PixelSize(1000, 1000)
     private val preview = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
 
+    /** 편집 화면에 보내는 알림(알림 막대) */
+    private val messages = Channel<EditorMessage>(Channel.UNLIMITED)
+
     private fun show(screen: DpSize = MAIN_PORTRAIT) {
         size.value = screen
         composeRule.setContent {
@@ -119,6 +126,7 @@ class OptionStripTest {
                             onViewport = {},
                             onChooseSize = {},
                             onUndo = { undos++ },
+                            messages = messages.receiveAsFlow(),
                             brush = brush,
                             onBrush = { brush = it },
                             eraser = eraser,
@@ -157,6 +165,26 @@ class OptionStripTest {
     private fun back() {
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun withTheStrip_theHintToastAndTheMessageBarAreCenteredOnTheCanvas() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Text)
+        composeRule.runOnIdle { messages.trySend(EditorMessage.HiddenLayer) }
+        composeRule.waitForIdle()
+
+        // 사용자 요청: 띠가 떠 있어도 살짝 오른쪽이 아니라 캔버스 정중앙
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
+        val toast = composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).fetchSemanticsNode().layoutBoundsInWindow()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_hidden_layer)).assertExists()
+        val bar = composeRule.onNodeWithTag(EditScreenTags.MESSAGE_BAR).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(canvas.center.x, toast.center.x, 2f)
+        assertEquals(canvas.center.x, bar.center.x, 2f)
+        // 띠는 덮지 않는다
+        val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("toast $toast strip $strip", toast.left >= strip.right)
+        assertTrue("bar $bar strip $strip", bar.left >= strip.right)
     }
 
     @Test

@@ -72,6 +72,13 @@ fun fitInside(area: PixelSize, document: PixelSize, insetStart: Int, insetEnd: I
 }
 
 /**
+ * 메인 화면에서 자르기를 시작할 때의 보기: 왼쪽 도구 옵션 띠 자리([strip], 픽셀)와 둘레 [margin]을 왼쪽·오른쪽에 똑같이 비우고 사진 전체를 맞춘다.
+ * 그래서 테두리 손잡이가 띠에 가리지 않으면서 사진이 캔버스 정중앙에 온다(2026-10-20 사용자 요청, 전에는 띠를 뺀 오른쪽 자리의 가운데라 살짝 오른쪽이었다).
+ */
+fun cropStartView(area: PixelSize, document: PixelSize, strip: Int, margin: Int): CanvasView.Free =
+    fitInside(area, document, insetStart = strip + margin, insetEnd = strip + margin, insetTop = margin, insetBottom = margin)
+
+/**
  * 이 보기로 그릴 때의 변환.
  * 맞춤은 [fitRect]의 정수 사각형을 그대로 써서, 지금까지의 표시(테두리·1px 최소)와 똑같다.
  */

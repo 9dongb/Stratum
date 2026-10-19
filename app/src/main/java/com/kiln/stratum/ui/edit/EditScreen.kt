@@ -323,18 +323,15 @@ fun EditScreen(
         LaunchedEffect(cropMode, ready?.revision) {
             if (cropMode && ready != null) {
                 // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 맞춘다.
-                // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠를 뺀 자리에 맞춘다(결정 기록 '편집 화면 도구 배치').
+                // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠 자리를 양쪽에 비워 캔버스 정중앙에 맞춘다(결정 기록 '도구 옵션 띠').
                 if (cropFrame == null) {
                     cropFrame = CropFrame.whole(ready.documentSize)
                     val start = if (widthClass != WidthClass.Compact && canvasArea.width > 0 && canvasArea.height > 0) {
-                        val margin = with(density) { CropStartMargin.roundToPx() }
-                        fitInside(
+                        cropStartView(
                             area = PixelSize(canvasArea.width, canvasArea.height),
                             document = ready.documentSize,
-                            insetStart = with(density) { (OptionStripWidth + OptionStripGap).roundToPx() } + margin,
-                            insetEnd = margin,
-                            insetTop = margin,
-                            insetBottom = margin
+                            strip = with(density) { (OptionStripWidth + OptionStripGap).roundToPx() },
+                            margin = with(density) { CropStartMargin.roundToPx() }
                         )
                     } else {
                         CanvasView.Fit
@@ -966,7 +963,8 @@ private fun EditTopBar(
  * [gestureToast]는 두 손가락·세 손가락 톡의 짧은 알림으로, 위쪽 가운데에 뜬다.
  * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
  * [floating]은 캔버스 위에 겹치는 메인 화면의 띠·옵션 창·패널이다. 캔버스 영역 전체(시스템 바 쪽 포함)를 받고, 내용이 피할 여백을 함께 받는다.
- * 배율 표시와 알림 막대는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 제스처 알림과 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
+ * 배율 표시는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 제스처 알림과 알림 막대는 양쪽을 [overlayStart]만큼 비워
+ * 띠를 덮지 않으면서 캔버스 정중앙에 둔다(2026-10-20 사용자 요청). 제스처 알림과 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
  * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
  */
 @Composable
@@ -1044,11 +1042,11 @@ private fun EditCanvas(
         floating(insets)
         // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(가로로 접히는 선은 피함). 떠 있는 패널은 직접 끌 때까지 남아 알림과 겹칠 수 있어,
         // 알림이 가려지지 않게 그 위에 그린다. 알림은 터치를 받지 않아 그 밑의 패널·옵션 창을 그대로 누를 수 있다.
-        // 왼쪽 도구 옵션 띠는 가리지 않게 띠 오른쪽 자리의 가운데에 둔다(도구를 고를 때 뜨는 안내가 띠의 칸을 덮지 않게).
-        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart))
-        // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠, 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
-        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart, bottom = overlayBottom), margin = 8.dp) {
-            SnackbarHost(snackbarHostState)
+        // 캔버스 정중앙에 두고, 양쪽을 띠 폭만큼 비워 도구를 고를 때 뜨는 긴 안내도 띠의 칸을 덮지 않게 한다
+        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(horizontal = overlayStart))
+        // 알림 막대는 캔버스 아래쪽 정중앙에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠(양쪽을 띠 폭만큼 비움), 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
+        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart, end = overlayStart, bottom = overlayBottom), margin = 8.dp) {
+            SnackbarHost(snackbarHostState, Modifier.testTag(EditScreenTags.MESSAGE_BAR))
         }
     }
 }

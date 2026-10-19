@@ -133,6 +133,19 @@ class CanvasViewTest {
     }
 
     @Test
+    fun cropStartView_keepsTheStripClear_andCentersThePhoto() {
+        // 1200×500 영역, 띠 자리 100px·둘레 20px을 양쪽에 비운다. 1000×1000 문서는 남은 960×460에 맞춰 배율 0.46이다.
+        val view = cropStartView(PixelSize(1200, 500), PixelSize(1000, 1000), strip = 100, margin = 20)
+        assertEquals(0.46, view.scale, 1e-9)
+        val transform = view.transform(PixelSize(1200, 500), PixelSize(1000, 1000))
+        // 사용자 요청: 사진이 캔버스 정중앙(600, 250)에 온다
+        assertEquals(600.0, transform.toScreenX(500.0), 1e-6)
+        assertEquals(250.0, transform.toScreenY(500.0), 1e-6)
+        // 테두리 왼쪽 끝은 띠와 둘레 바깥이다
+        assertTrue(transform.toScreenX(0.0) >= 120.0 - 1e-6)
+    }
+
+    @Test
     fun fitInside_withoutRoom_fallsBackToTheFitScale() {
         val view = fitInside(PixelSize(100, 100), PixelSize(200, 200), insetStart = 100)
         assertEquals(0.5, view.scale, 1e-9)
