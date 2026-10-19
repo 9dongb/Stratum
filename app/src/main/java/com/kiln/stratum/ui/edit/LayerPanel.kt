@@ -213,7 +213,7 @@ fun LayerColumn(controls: LayerControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 레이어 버튼 줄: 더하기, 지우기(고른 레이어에 한다), 화면 좌우 반전, 화면 상하 반전(켜고 끔).
+ * 레이어 버튼 줄: 더하기, 지우기(고른 레이어에 한다), 화면 상하 반전, 화면 좌우 반전(켜고 끔, 좌우가 오른쪽 끝, 2026-10-20 사용자 요청).
  * 지우기는 레이어가 둘 이상일 때만 누를 수 있고, 실행 취소로 되돌릴 수 있어 따로 묻지 않는다.
  * 반전은 레이어가 아니라 캔버스 보기를 뒤집는다(픽셀·기록은 그대로, 결정 기록 '화면 반전'). 처리 중에도 누를 수 있다.
  * 전에 있던 위로·아래로 버튼은 사용자 요청으로 뺐다(2026-10-20). 순서는 손잡이 끌기와 화면 읽기 기능의 '위로'·'아래로' 동작으로 바꾼다.
@@ -227,12 +227,12 @@ fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
         ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.layers.size > 1, EditScreenTags.LAYER_DELETE) {
             actions.delete()
         }
-        FlipToggle(R.string.view_flip_horizontal, flip.horizontal, controls.enabled, EditScreenTags.VIEW_FLIP_HORIZONTAL, iconRotation = 0f) {
-            controls.onViewFlip(flip.copy(horizontal = it))
-        }
         // 상하는 같은 아이콘을 90° 돌린다(자르기·변형의 상하 뒤집기와 같다)
         FlipToggle(R.string.view_flip_vertical, flip.vertical, controls.enabled, EditScreenTags.VIEW_FLIP_VERTICAL, iconRotation = 90f) {
             controls.onViewFlip(flip.copy(vertical = it))
+        }
+        FlipToggle(R.string.view_flip_horizontal, flip.horizontal, controls.enabled, EditScreenTags.VIEW_FLIP_HORIZONTAL, iconRotation = 0f) {
+            controls.onViewFlip(flip.copy(horizontal = it))
         }
     }
 }

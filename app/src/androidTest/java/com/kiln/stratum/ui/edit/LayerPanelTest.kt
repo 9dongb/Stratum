@@ -192,7 +192,10 @@ class LayerPanelTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsEnabled()
-        // 사용자 요청: 위로·아래로 버튼 자리에 화면 좌우·상하 반전(보기만 뒤집어 레이어 일을 보내지 않음)
+        // 사용자 요청: 위로·아래로 버튼 자리에 화면 상하·좌우 반전(보기만 뒤집어 레이어 일을 보내지 않음). 좌우 반전이 오른쪽이다.
+        val vertical = composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_VERTICAL).fetchSemanticsNode().layoutBoundsInWindow()
+        val horizontal = composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$horizontal should be right of $vertical", horizontal.left >= vertical.right)
         composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).assertIsOff().performClick().assertIsOn()
         composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_VERTICAL).assertIsOff().performClick().assertIsOn()
         composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).performClick().assertIsOff()
