@@ -481,6 +481,8 @@ class EditorViewModel internal constructor(
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
+        override fun moveSource(x: Float, y: Float) = moveCloneSource(x, y)
+        override fun toggleSourceLock() = toggleCloneSourceLock()
     }
 
     private val _selectionOptions = MutableStateFlow(SelectionOptions())
@@ -1254,12 +1256,32 @@ class EditorViewModel internal constructor(
         _retouch.value = settings
     }
 
-    /** 복제 도장·복구 브러시가 가져올 곳을 정한다(문서 밖이면 무시한다). 다음 획이 새 간격을 정한다. */
+    /** 복제 도장·복구 브러시가 가져올 곳을 정한다(문서 밖이면 무시한다). 다음 획이 새 간격을 정한다. 고정은 그대로 둔다. */
     fun setCloneSource(x: Float, y: Float) {
         if (_state.value !is EditorState.Ready) return
         val document = history?.document ?: return
         if (x < 0f || y < 0f || x >= document.width || y >= document.height) return
-        _cloneSource.value = CloneSource(x, y)
+        _cloneSource.value = CloneSource(x, y, locked = _cloneSource.value?.locked == true)
+    }
+
+    /** 가져올 곳 표시를 [x],[y]로 옮긴다(끌어서, 문서 밖은 가장자리로 맞춤). 풀린 상태면 다음 획이 간격을 다시 정한다. */
+    fun moveCloneSource(x: Float, y: Float) {
+        val source = _cloneSource.value ?: return
+        val document = history?.document ?: return
+        _cloneSource.value = source.copy(
+            x = x.coerceIn(0f, document.width - 1f),
+            y = y.coerceIn(0f, document.height - 1f),
+            offset = null
+        )
+    }
+
+    /**
+     * 가져올 곳 고정을 켜고 끈다(표시를 꾹 누름, 사용자 요청). 고정하면 새 획마다 표시된 자리에서 다시 가져온다(포토샵 '정렬' 끔).
+     * 풀면 다음 획이 표시 자리에서 간격을 다시 정한다.
+     */
+    fun toggleCloneSourceLock() {
+        val source = _cloneSource.value ?: return
+        _cloneSource.value = source.copy(locked = !source.locked, offset = null)
     }
 
     /**
@@ -1282,12 +1304,24 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        retouchOffsetFixedByStroke = false
         val offset = if (mode == RetouchMode.SPOT_HEAL) {
             null
         } else {
             val source = _cloneSource.value ?: return
-            source.offset ?: SourceOffset((point.x - source.x).roundToInt(), (point.y - source.y).roundToInt()).also {
-                _cloneSource.value = source.copy(offset = it)
+            val fromMarker = SourceOffset((point.x - source.x).roundToInt(), (point.y - source.y).roundToInt())
+            when {
+                // 고정: 획마다 표시된 자리에서 다시 가져온다(이 간격은 이 획에만 쓴다)
+                source.locked -> fromMarker
+                source.offset != null -> source.offset
+                else -> fromMarker.also {
+                    // 정렬: 첫 획이 간격을 정한다. 가져올 곳에서 바로 칠해 간격이 0이면 남기지 않는다
+                    // (남기면 다음 획도 모두 제자리를 베껴 아무것도 바뀌지 않는다)
+                    if (it != SourceOffset(0, 0)) {
+                        _cloneSource.value = source.copy(offset = it)
+                        retouchOffsetFixedByStroke = true
+                    }
+                }
             }
         }
         // 복구는 둘레에 맞춰 섞으므로 불투명도를 쓰지 않는다
@@ -1310,6 +1344,12 @@ class EditorViewModel internal constructor(
     /** 숨긴 레이어 알림을 마지막으로 보낸 때(SystemClock.uptimeMillis). 보낸 적이 없으면 null이다. */
     private var lastHiddenLayerMessage: Long? = null
 
+    /** 지금 끄는 리터칭 획이 가져올 곳의 간격을 처음 정했는지(두 손가락으로 버리면 되돌린다) */
+    private var retouchOffsetFixedByStroke = false
+
+    /** 끄는 획의 마지막 손가락 자리(문서 좌표). 리터칭 획이 끝나면 가져올 곳 표시를 옮기는 데 쓴다. */
+    private var lastStrokePoint: StrokePoint? = null
+
     /** 획을 시작할 수 있는지. 끄는 획이나 끄는 슬라이더가 있거나, 획이 아닌 편집을 처리하는 중이면 안 된다. */
     private fun canBeginStroke(): Boolean =
         _state.value is EditorState.Ready && drawing == null && !hasLiveValues && (!editing || strokeCommitting)
@@ -1318,6 +1358,7 @@ class EditorViewModel internal constructor(
     private fun startStroke(stroke: Stroke, point: StrokePoint) {
         val ready = _state.value as? EditorState.Ready ?: return
         stroke.dabs.add(point)
+        lastStrokePoint = point
         drawing = stroke
         if (detailStrokes.isEmpty()) detailBeforeStroke = ready.detail
         detailStrokes += stroke
@@ -1327,6 +1368,7 @@ class EditorViewModel internal constructor(
     /** 끄는 손가락이 [point]까지 왔다. 새 자국이 생기면 미리 보기를 다시 그린다. */
     fun extendStroke(point: StrokePoint) {
         val stroke = drawing ?: return
+        lastStrokePoint = point
         if (stroke.dabs.add(point).isNotEmpty()) showStrokes()
     }
 
@@ -1334,14 +1376,37 @@ class EditorViewModel internal constructor(
     fun endStroke() {
         val stroke = drawing ?: return
         drawing = null
+        retouchOffsetFixedByStroke = false
+        keepSourceAfter(stroke)
         queuedStrokes += stroke
         commitNextStroke()
     }
 
-    /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. */
+    /**
+     * 풀린(정렬) 상태면 가져올 곳 표시를 이 획이 마지막으로 가져온 자리로 옮긴다. 그래서 한 번 칠한 뒤에도 표시가 보인다(사용자 요청).
+     * 고정 상태면 표시는 고정된 자리에 그대로 둔다.
+     */
+    private fun keepSourceAfter(stroke: Stroke) {
+        if (stroke.retouch == null || stroke.retouch == RetouchMode.SPOT_HEAL) return
+        val source = _cloneSource.value ?: return
+        if (source.locked) return
+        val offset = stroke.offset ?: return
+        val last = lastStrokePoint ?: return
+        val document = history?.document ?: return
+        _cloneSource.value = source.copy(
+            x = (last.x - offset.x).coerceIn(0f, document.width - 1f),
+            y = (last.y - offset.y).coerceIn(0f, document.height - 1f)
+        )
+    }
+
+    /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. 리터칭 첫 획이 정한 간격도 되돌린다. */
     fun cancelStroke() {
         val stroke = drawing ?: return
         drawing = null
+        if (retouchOffsetFixedByStroke) {
+            _cloneSource.value = _cloneSource.value?.copy(offset = null)
+            retouchOffsetFixedByStroke = false
+        }
         detailStrokes.remove(stroke)
         showStrokes()
     }
@@ -2097,6 +2162,8 @@ class EditorViewModel internal constructor(
         _liveOpacity.value = null
         liveCommitPending = false
         drawing = null
+        retouchOffsetFixedByStroke = false
+        lastStrokePoint = null
         queuedStrokes.clear()
         strokeCommitting = false
         detailBeforeStroke = null

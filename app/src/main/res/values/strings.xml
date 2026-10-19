@@ -295,8 +295,14 @@
     <string name="retouch_source">Set source</string>
     <string name="retouch_hint_spot">Paint over a spot. It is filled from a similar place nearby.</string>
     <string name="retouch_hint_pick">Touch where to take pixels from, then paint where to fix.</string>
-    <string name="retouch_hint_heal">Paint to bring the texture from the source. When you lift your finger, it blends with the brightness and color around.</string>
-    <string name="retouch_hint_clone">Paint to copy the source as it is.</string>
+    <string name="retouch_hint_heal">Paint to bring the texture from the source. When you lift your finger, it blends with the brightness and color around. Drag the marker to move it, or hold it to lock it.</string>
+    <string name="retouch_hint_clone">Paint to copy the source as it is. Drag the marker to move it, or hold it to lock it.</string>
+    <string name="retouch_marker">Source marker</string>
+    <string name="retouch_marker_locked">Locked</string>
+    <string name="retouch_lock">Lock source</string>
+    <string name="retouch_unlock">Unlock source</string>
+    <string name="retouch_source_locked">Source locked</string>
+    <string name="retouch_source_unlocked">Source unlocked</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">Dodge &amp; burn</string>

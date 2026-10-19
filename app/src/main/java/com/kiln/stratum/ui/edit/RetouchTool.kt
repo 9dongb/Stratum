@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,10 +21,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
@@ -37,10 +49,13 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
- * 복제 도장·복구 브러시가 가져올 곳(문서 좌표). 정한 뒤 처음 칠할 때 [offset](칠한 곳 - 가져올 곳)이 정해지고,
- * 그 뒤의 획은 모두 같은 간격으로 가져온다(포토샵의 '정렬'). 가져올 곳을 다시 정하면 간격도 새로 정한다.
+ * 복제 도장·복구 브러시가 가져올 곳. [x]·[y]는 표시가 놓인 자리(문서 좌표)로, 손을 뗀 뒤에도 늘 보인다(사용자 요청).
+ * - 풀린 상태(기본, 포토샵의 '정렬'): 정한 뒤 처음 칠할 때 [offset](칠한 곳 - 가져올 곳)이 정해지고, 그 뒤의 획은 같은 간격으로 가져온다.
+ *   획이 끝나면 표시는 그 획이 마지막으로 가져온 자리로 옮겨 간다.
+ * - [locked](표시를 꾹 누름): 새 획마다 표시된 자리에서 다시 가져온다(포토샵 '정렬' 끔, 획 안에서는 붓을 따라감). 표시는 그 자리에 남는다.
+ * 가져올 곳을 다시 정하거나 표시를 끌어 옮기면 간격도 새로 정한다.
  */
-data class CloneSource(val x: Float, val y: Float, val offset: SourceOffset? = null)
+data class CloneSource(val x: Float, val y: Float, val offset: SourceOffset? = null, val locked: Boolean = false)
 
 /** 캔버스의 리터칭 손가락이 엔진 쪽(ViewModel)에 보내는 일. 좌표는 문서 픽셀이다. */
 interface RetouchActions {
@@ -59,6 +74,12 @@ interface RetouchActions {
 
     /** 두 손가락 조작이 시작돼 획을 버린다 */
     fun cancel()
+
+    /** 가져올 곳 표시를 끌어 [x],[y]로 옮겼다 */
+    fun moveSource(x: Float, y: Float) {}
+
+    /** 가져올 곳 표시를 꾹 눌러 고정을 켜고 끈다 */
+    fun toggleSourceLock() {}
 
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : RetouchActions {
@@ -149,10 +170,12 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
  * 리터칭 도구를 고르면 캔버스 위에 겹치는 터치 자리.
  *
  * - 가져올 곳을 정하는 중([picking])이면, 누른 채 움직여 자리를 맞추고 손을 떼면 그곳을 가져올 곳으로 정한다([onPicked]도 부른다).
+ * - 가져올 곳 표시를 누르면(복구 브러시·복제 도장, 결정 기록 '리터칭'): 끌면 표시가 따라오고 손을 떼면 그 자리가 새 가져올 곳이다.
+ *   움직이지 않고 길게 누르면 고정을 켜고 끈다([onLockChanged]에 새 상태를 알린다). 표시를 누른 터치는 칠하지 않는다.
  * - 아니면 한 손가락으로 끌어 [mode] 획을 그린다(브러시와 같다). 두 손가락 조작이 시작되거나 두 번째 손가락이 닿으면 끄던 획을 버린다.
  *
- * 가져올 곳은 표시(브러시 크기의 원과 십자)로 보인다. 정하는 중에는 손가락 자리에, 칠하는 동안에는 가져오는 자리(손가락 - 간격)에,
- * 정했지만 아직 칠하지 않았으면 정한 자리에 있다. 스팟 복구는 가져올 곳을 보이지 않는다.
+ * 가져올 곳은 표시(브러시 크기의 원과 십자, 고정이면 굵은 원과 가운데 점)로 늘 보인다. 정하는 중에는 손가락 자리에,
+ * 칠하는 동안에는 가져오는 자리(손가락 - 간격)에, 쉬는 동안에는 [source] 자리에 있다. 스팟 복구는 가져올 곳을 보이지 않는다.
  * 칠하는 동안에는 손가락 자리에 브러시 커서(크기 원)도 보인다(브러시와 같다).
  */
 @Composable
@@ -165,15 +188,33 @@ fun RetouchOverlay(
     radius: Float,
     actions: RetouchActions,
     onPicked: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLockChanged: (locked: Boolean) -> Unit = {}
 ) {
     val currentActions by rememberUpdatedState(actions)
     val currentMode by rememberUpdatedState(mode)
     val currentPicking by rememberUpdatedState(picking)
+    val currentSource by rememberUpdatedState(source)
+    val currentRadius by rememberUpdatedState(radius)
     val currentOnPicked by rememberUpdatedState(onPicked)
+    val currentOnLockChanged by rememberUpdatedState(onLockChanged)
+    val haptic = LocalHapticFeedback.current
     // 누르고 있는 손가락의 화면 자리와, 그것이 가져올 곳을 정하는 손가락인지. 놓으면 null.
     var finger by remember { mutableStateOf<Offset?>(null) }
     var fingerPicks by remember { mutableStateOf(false) }
+    // 칠하는 획이 가져오는 간격(문서 픽셀, 칠한 곳 - 가져올 곳). 표시가 붓과 같은 간격으로 따라가게 그린다.
+    var strokeOffset by remember { mutableStateOf<SourceOffset?>(null) }
+    // 끌어 옮기는 표시의 자리(문서 좌표). 손을 뗀 뒤에는 새 가져올 곳이 들어올 때까지 이 자리에 그린다(옛 자리가 번쩍이지 않게).
+    var movedMarker by remember { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(source) { movedMarker = null }
+
+    /** 고정을 켜고 끈다(꾹 누름·화면 읽기 기능의 동작) */
+    fun toggleLock() {
+        val locked = currentSource?.locked != true
+        currentActions.toggleSourceLock()
+        currentOnLockChanged(locked)
+    }
+
     Box(
         modifier
             .testTag(EditScreenTags.RETOUCH_OVERLAY)
@@ -187,10 +228,52 @@ fun RetouchOverlay(
                         send(transform.toDocumentX(position.x.toDouble()).toFloat(), transform.toDocumentY(position.y.toDouble()).toFloat())
                     }
                     down.consume()
+                    movedMarker = null
                     val picks = currentPicking && currentMode != RetouchMode.SPOT_HEAL
+                    // 가져올 곳 표시를 눌렀으면 칠하지 않고 표시를 옮기거나 고정한다
+                    val marker = currentSource?.takeIf { !picks && currentMode != RetouchMode.SPOT_HEAL }
+                    if (marker != null) {
+                        val transform = view().transform(area, document)
+                        val center = Offset(transform.toScreenX(marker.x.toDouble()).toFloat(), transform.toScreenY(marker.y.toDouble()).toFloat())
+                        val grab = (currentRadius * transform.scaleX).toFloat().coerceIn(MarkerGrabMin.toPx(), MarkerGrabMax.toPx())
+                        if ((down.position - center).getDistance() <= grab) {
+                            /** 끈 만큼 옮긴 표시 자리(문서 좌표, 문서 안으로 맞춤) */
+                            fun movedBy(delta: Offset): Offset {
+                                val now = view().transform(area, document)
+                                val target = center + delta
+                                return Offset(
+                                    now.toDocumentX(target.x.toDouble()).toFloat().coerceIn(0f, document.width - 1f),
+                                    now.toDocumentY(target.y.toDouble()).toFloat().coerceIn(0f, document.height - 1f)
+                                )
+                            }
+                            followMarker(
+                                down,
+                                onHold = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    toggleLock()
+                                },
+                                onDrag = { delta -> movedMarker = movedBy(delta) },
+                                onDrop = { delta ->
+                                    val target = movedBy(delta)
+                                    movedMarker = target
+                                    currentActions.moveSource(target.x, target.y)
+                                },
+                                onCancel = { movedMarker = null }
+                            )
+                            return@awaitEachGesture
+                        }
+                    }
                     fingerPicks = picks
                     finger = down.position
-                    if (!picks) toDocument(down.position) { x, y -> currentActions.begin(x, y, currentMode) }
+                    if (!picks) {
+                        toDocument(down.position) { x, y ->
+                            // ViewModel과 같은 간격: 고정이면 획마다 표시 자리에서, 아니면 정한 간격(처음이면 이 획이 정함)
+                            strokeOffset = currentSource?.takeIf { currentMode != RetouchMode.SPOT_HEAL }?.let { s ->
+                                s.offset?.takeUnless { s.locked } ?: SourceOffset((x - s.x).roundToInt(), (y - s.y).roundToInt())
+                            }
+                            currentActions.begin(x, y, currentMode)
+                        }
+                    }
                     // 두 손가락이면 버리고(false), 손을 떼면 끝낸다(true). 그 전에 이 자리가 사라지면(도구를 바꿈, 접기·펼치기)
                     // 칠하던 획은 아래 finally에서 기록한다(브러시와 같다). 가져올 곳은 손을 뗄 때만 정한다.
                     var keep: Boolean? = null
@@ -217,6 +300,7 @@ fun RetouchOverlay(
                         }
                     } finally {
                         finger = null
+                        strokeOffset = null
                         if (picks) {
                             if (keep == true) {
                                 toDocument(last) { x, y -> currentActions.setSource(x, y) }
@@ -235,35 +319,153 @@ fun RetouchOverlay(
         val touching = finger
         if (touching != null && !fingerPicks) BrushCursor(touching, radius * 2f, view, document)
         if (mode != RetouchMode.SPOT_HEAL) {
+            val offset = strokeOffset
+            val moved = movedMarker
             Canvas(Modifier.matchParentSize()) {
                 val area = PixelSize(size.width.roundToInt(), size.height.roundToInt())
                 if (area.width <= 0 || area.height <= 0) return@Canvas
                 val transform = view().transform(area, document)
                 val marker: Offset? = when {
                     touching != null && fingerPicks -> touching
-                    touching != null -> source?.offset?.let { offset ->
-                        Offset(
-                            touching.x - (offset.x * transform.scaleX).toFloat(),
-                            touching.y - (offset.y * transform.scaleY).toFloat()
-                        )
-                    }
-                    source != null && source.offset == null ->
-                        Offset(transform.toScreenX(source.x.toDouble()).toFloat(), transform.toScreenY(source.y.toDouble()).toFloat())
+                    touching != null && offset != null -> Offset(
+                        touching.x - (offset.x * transform.scaleX).toFloat(),
+                        touching.y - (offset.y * transform.scaleY).toFloat()
+                    )
+                    moved != null -> Offset(transform.toScreenX(moved.x.toDouble()).toFloat(), transform.toScreenY(moved.y.toDouble()).toFloat())
+                    source != null -> Offset(transform.toScreenX(source.x.toDouble()).toFloat(), transform.toScreenY(source.y.toDouble()).toFloat())
                     else -> null
                 }
-                if (marker != null) drawSourceMarker(marker, (radius * transform.scaleX).toFloat())
+                if (marker != null) drawSourceMarker(marker, (radius * transform.scaleX).toFloat(), locked = source?.locked == true)
             }
+            if (source != null && !picking) SourceMarkerNode(source, view, document, onToggleLock = ::toggleLock)
         }
     }
 }
 
-/** 가져올 곳 표시: 브러시 크기의 원과 가운데 십자. 어떤 사진 위에서도 보이게 검은 테두리 위에 흰 선이다. */
-private fun DrawScope.drawSourceMarker(center: Offset, radius: Float) {
+/** 가져올 곳 표시를 잡는 자리의 반지름: 표시 원 안이되 작아도 지름 48dp, 커도 지름 80dp까지(큰 브러시로 표시 가까이에서 칠할 수 있게) */
+private val MarkerGrabMin = 24.dp
+private val MarkerGrabMax = 40.dp
+
+/**
+ * 가져올 곳 표시를 잡은 손가락([down])을 따른다(결정 기록 '리터칭').
+ * - 터치 허용 거리보다 움직이면 표시를 끈다: 끄는 동안 [onDrag], 손을 떼면 [onDrop](둘 다 누른 자리에서 움직인 만큼, 화면 픽셀).
+ * - 움직이지 않고 길게 누르기 시간(약 0.4초)이 지나면 [onHold]를 부르고 손을 뗄 때까지 터치를 가진다(고정 켜고 끄기).
+ * - 그 전에 손을 떼면(톡) 아무것도 하지 않는다. 두 손가락 조작이 시작되거나 이 자리가 사라지면 그만둔다([onCancel]).
+ */
+private suspend fun AwaitPointerEventScope.followMarker(
+    down: PointerInputChange,
+    onHold: () -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDrop: (Offset) -> Unit,
+    onCancel: () -> Unit
+) {
+    var last = down.position
+    // 길게 누르기 시간 안에 움직이면 true(끌기), 손을 떼거나 두 손가락이면 false, 시간이 다 가면 null(꾹 누름)
+    val dragging = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null || change.isConsumed || event.changes.count { it.pressed } > 1) return@withTimeoutOrNull false
+            change.consume()
+            if (!change.pressed) return@withTimeoutOrNull false
+            last = change.position
+            if ((last - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeoutOrNull true
+        }
+        @Suppress("UNREACHABLE_CODE")
+        false
+    }
+    when (dragging) {
+        null -> {
+            onHold()
+            // 손을 뗄 때까지 이 터치를 가진다(움직여도 옮기지 않는다)
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (change.isConsumed || event.changes.count { it.pressed } > 1) break
+                change.consume()
+                if (!change.pressed) break
+            }
+        }
+        true -> {
+            var dropped = false
+            try {
+                onDrag(last - down.position)
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    if (change == null || change.isConsumed || event.changes.count { it.pressed } > 1) break
+                    change.consume()
+                    last = change.position
+                    if (!change.pressed) {
+                        dropped = true
+                        onDrop(last - down.position)
+                        break
+                    }
+                    onDrag(last - down.position)
+                }
+            } finally {
+                if (!dropped) onCancel()
+            }
+        }
+        false -> Unit
+    }
+}
+
+/**
+ * 가져올 곳 표시 자리의 보이지 않는 칸(지름 48dp). 화면 읽기 기능에 표시와 고정 상태를 알리고 '고정'·'고정 풀기' 동작을 준다.
+ * 화면 테스트도 이것으로 표시 자리를 찾는다. 누르는 것은 받지 않는다(표시를 잡는 터치는 [RetouchOverlay]가 받는다).
+ */
+@Composable
+private fun SourceMarkerNode(source: CloneSource, view: () -> CanvasView, document: PixelSize, onToggleLock: () -> Unit) {
+    val label = stringResource(R.string.retouch_marker)
+    val lockedState = stringResource(R.string.retouch_marker_locked)
+    val actionLabel = stringResource(if (source.locked) R.string.retouch_unlock else R.string.retouch_lock)
+    Box(
+        Modifier
+            .layout { measurable, constraints ->
+                val side = (MarkerGrabMin * 2).roundToPx()
+                val placeable = measurable.measure(Constraints.fixed(side, side))
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    // 보기(확대·이동)를 배치할 때 읽어, 보기가 바뀌면 다시 놓는다
+                    val transform = view().transform(PixelSize(constraints.maxWidth, constraints.maxHeight), document)
+                    placeable.place(
+                        (transform.toScreenX(source.x.toDouble()) - side / 2.0).roundToInt(),
+                        (transform.toScreenY(source.y.toDouble()) - side / 2.0).roundToInt()
+                    )
+                }
+            }
+            .testTag(EditScreenTags.RETOUCH_SOURCE_MARKER)
+            .semantics {
+                contentDescription = label
+                if (source.locked) stateDescription = lockedState
+                customActions = listOf(
+                    CustomAccessibilityAction(actionLabel) {
+                        onToggleLock()
+                        true
+                    }
+                )
+            }
+    )
+}
+
+/**
+ * 가져올 곳 표시: 브러시 크기의 원과 가운데 십자. 어떤 사진 위에서도 보이게 검은 테두리 위에 흰 선이다.
+ * 고정되면([locked]) 원을 굵게 그리고 가운데에 채운 점을 더한다.
+ */
+private fun DrawScope.drawSourceMarker(center: Offset, radius: Float, locked: Boolean) {
     val arm = 8.dp.toPx()
     val ring = radius.coerceAtLeast(arm)
-    for ((color, width) in listOf(CanvasOverlayColors.Dark to 3.dp.toPx(), CanvasOverlayColors.Light to 1.5.dp.toPx())) {
-        drawCircle(color, ring, center, style = Stroke(width))
+    val ringWidths = if (locked) 5.dp.toPx() to 2.5.dp.toPx() else 3.dp.toPx() to 1.5.dp.toPx()
+    for ((color, ringWidth, width) in listOf(
+        Triple(CanvasOverlayColors.Dark, ringWidths.first, 3.dp.toPx()),
+        Triple(CanvasOverlayColors.Light, ringWidths.second, 1.5.dp.toPx())
+    )) {
+        drawCircle(color, ring, center, style = Stroke(ringWidth))
         drawLine(color, Offset(center.x - arm, center.y), Offset(center.x + arm, center.y), width)
         drawLine(color, Offset(center.x, center.y - arm), Offset(center.x, center.y + arm), width)
+    }
+    if (locked) {
+        drawCircle(CanvasOverlayColors.Dark, 4.5.dp.toPx(), center)
+        drawCircle(CanvasOverlayColors.Light, 3.dp.toPx(), center)
     }
 }

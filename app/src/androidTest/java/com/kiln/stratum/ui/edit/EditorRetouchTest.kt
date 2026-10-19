@@ -88,6 +88,81 @@ class EditorRetouchTest {
     }
 
     @Test
+    fun aligned_theMarkerStaysWhereTheStrokeLastTookFrom() {
+        val before = openWithDot()
+        onMain { viewModel.retouchActions.setSource(200f, 200f) }
+
+        stroke(RetouchMode.CLONE, StrokePoint(600f, 400f), StrokePoint(650f, 400f))
+        awaitReady { it.revision > before.revision }
+
+        // 표시는 획이 마지막으로 가져온 자리(650 - 400, 400 - 200)로 옮겨 가 계속 보이고, 간격은 그대로다(사용자 요청)
+        assertEquals(CloneSource(250f, 200f, SourceOffset(400, 200)), viewModel.cloneSource.value)
+    }
+
+    @Test
+    fun locked_everyStrokeTakesFromTheMarkerAgain() {
+        val before = openWithDot()
+        onMain {
+            viewModel.retouchActions.setSource(200f, 200f)
+            viewModel.retouchActions.toggleSourceLock()
+        }
+
+        stroke(RetouchMode.CLONE, StrokePoint(600f, 400f))
+        val first = awaitReady { it.revision > before.revision }
+        stroke(RetouchMode.CLONE, StrokePoint(700f, 300f))
+        val second = awaitReady { it.revision > first.revision }
+
+        // 두 획 모두 표시 자리(점)에서 가져왔다. 정렬(풀린 상태)이었다면 두 번째 획은 (300, 100)의 흰 곳을 가져온다.
+        assertTrue(dark(shown(second), 600, 400))
+        assertTrue(dark(shown(second), 700, 300))
+        // 표시는 고정된 자리에 남고, 간격은 남기지 않는다
+        assertEquals(CloneSource(200f, 200f, offset = null, locked = true), viewModel.cloneSource.value)
+
+        // 다시 꾹 누르면 풀린다
+        onMain { viewModel.retouchActions.toggleSourceLock() }
+        assertEquals(CloneSource(200f, 200f), viewModel.cloneSource.value)
+    }
+
+    @Test
+    fun movingTheMarker_takesFromThereNext_andStaysInTheDocument() {
+        val before = openWithDot()
+        onMain { viewModel.retouchActions.setSource(500f, 500f) }
+        stroke(RetouchMode.CLONE, StrokePoint(800f, 600f))
+        val cloned = awaitReady { it.revision > before.revision }
+
+        // 표시를 점으로 끌어 옮기면 다음 획이 간격을 새로 정한다
+        onMain { viewModel.retouchActions.moveSource(200f, 200f) }
+        assertEquals(CloneSource(200f, 200f), viewModel.cloneSource.value)
+        stroke(RetouchMode.CLONE, StrokePoint(600f, 400f))
+        assertTrue(dark(shown(awaitReady { it.revision > cloned.revision }), 600, 400))
+        assertEquals(SourceOffset(400, 200), viewModel.cloneSource.value?.offset)
+
+        // 문서 밖으로 끌면 가장자리에 멈춘다
+        onMain { viewModel.retouchActions.moveSource(-50f, 5000f) }
+        assertEquals(CloneSource(0f, 799f), viewModel.cloneSource.value)
+    }
+
+    @Test
+    fun aFirstStrokeOnTheSource_orADroppedOne_leavesNoSpacing() {
+        openWithDot()
+        onMain { viewModel.retouchActions.setSource(200f, 200f) }
+
+        // 가져올 곳에서 바로 칠하면 간격이 0이라 남기지 않는다(남기면 다음 획도 모두 제자리를 베껴 아무것도 바뀌지 않는다)
+        onMain {
+            viewModel.retouchActions.begin(200f, 200f, RetouchMode.CLONE)
+            viewModel.retouchActions.end()
+        }
+        assertNull(viewModel.cloneSource.value?.offset)
+
+        // 두 손가락으로 버린 첫 획도 간격을 남기지 않는다
+        onMain {
+            viewModel.retouchActions.begin(600f, 400f, RetouchMode.CLONE)
+            viewModel.retouchActions.cancel()
+        }
+        assertEquals(CloneSource(200f, 200f), viewModel.cloneSource.value)
+    }
+
+    @Test
     fun healWithoutASource_isIgnored() {
         val before = openWithDot()
 

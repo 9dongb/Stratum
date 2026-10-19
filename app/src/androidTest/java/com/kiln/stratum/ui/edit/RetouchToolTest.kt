@@ -11,15 +11,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -87,7 +93,19 @@ class RetouchToolTest {
         override fun cancel() {
             calls += "cancel"
         }
+
+        override fun moveSource(x: Float, y: Float) {
+            calls += "move"
+            points += x to y
+        }
+
+        override fun toggleSourceLock() {
+            calls += "lock"
+        }
     }
+
+    /** 표시를 꾹 눌러 알린 새 고정 상태 */
+    private val locks = mutableListOf<Boolean>()
 
     private val actions = FakeRetouch()
 
@@ -124,7 +142,8 @@ class RetouchToolTest {
                             radius = 30f,
                             actions = actions,
                             onPicked = onPicked,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onLockChanged = { locks += it }
                         )
                     }
                 }
@@ -133,6 +152,18 @@ class RetouchToolTest {
     }
 
     private fun exists(tag: String) = composeRule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
+
+    /** 화면에 맞춘 보기의 변환과 캔버스 자리(루트 기준 픽셀) */
+    private fun fit(): Pair<ViewTransform, Offset> {
+        val overlay = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).fetchSemanticsNode().boundsInRoot
+        return CanvasView.Fit.transform(PixelSize(overlay.width.roundToInt(), overlay.height.roundToInt()), document) to overlay.topLeft
+    }
+
+    /** 문서 좌표 ([x], [y])의 캔버스 안 자리(터치 자리, 픽셀) */
+    private fun localOf(x: Float, y: Float): Offset {
+        val (transform, _) = fit()
+        return Offset(transform.toScreenX(x.toDouble()).toFloat(), transform.toScreenY(y.toDouble()).toFloat())
+    }
 
     private fun hint(id: Int) = composeRule.activity.getString(id)
 
@@ -219,6 +250,103 @@ class RetouchToolTest {
             val (x, y) = actions.points.first()
             assertTrue("start $x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
         }
+    }
+
+    @Test
+    fun theSourceMarker_staysAfterAStroke_atTheSource() {
+        // 한 번 칠해 간격이 정해진 뒤에도 보인다(사용자 요청, 전에는 이때 표시가 사라졌다)
+        showOverlay(RetouchMode.CLONE, picking = false, source = CloneSource(250f, 750f, SourceOffset(400, 200)))
+
+        val marker = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE_MARKER).fetchSemanticsNode().boundsInRoot
+        val (_, origin) = fit()
+        val expected = origin + localOf(250f, 750f)
+        assertEquals(expected.x, marker.center.x, 2f)
+        assertEquals(expected.y, marker.center.y, 2f)
+    }
+
+    @Test
+    fun draggingTheMarker_movesTheSource_andDoesNotPaint() {
+        showOverlay(RetouchMode.CLONE, picking = false, source = CloneSource(300f, 300f, SourceOffset(400, 200)))
+        val start = localOf(300f, 300f)
+        val scale = fit().first.scaleX.toFloat()
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput {
+            down(start)
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("move"), actions.calls)
+            // 끈 만큼(화면 80픽셀) 옮긴 자리가 새 가져올 곳이다
+            val (x, y) = actions.points.single()
+            assertEquals(300f + 80f / scale, x, 1f)
+            assertEquals(300f, y, 1f)
+        }
+    }
+
+    @Test
+    fun holdingTheMarker_togglesTheLock_andATapDoesNothing() {
+        showOverlay(RetouchMode.HEAL, picking = false, source = CloneSource(300f, 300f))
+        val at = localOf(300f, 300f)
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput {
+            down(at)
+            // 길게 누르기 시간(약 0.4초)보다 오래 움직이지 않는다
+            advanceEventTime(800)
+            up()
+        }
+        composeRule.runOnIdle {
+            assertEquals(listOf("lock"), actions.calls)
+            assertEquals(listOf(true), locks)
+        }
+
+        // 표시를 톡 누르면 아무것도 하지 않는다(칠하지도 않는다)
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput { click(at) }
+        composeRule.runOnIdle { assertEquals(listOf("lock"), actions.calls) }
+    }
+
+    @Test
+    fun aSecondFinger_whileDraggingTheMarker_leavesTheSource() {
+        showOverlay(RetouchMode.CLONE, picking = false, source = CloneSource(300f, 300f))
+        val at = localOf(300f, 300f)
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput {
+            down(0, at)
+            moveBy(0, Offset(60f, 0f))
+            down(1, at + Offset(150f, 150f))
+            up(1)
+            up(0)
+        }
+
+        composeRule.runOnIdle { assertTrue(actions.calls.toString(), actions.calls.isEmpty()) }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun theMarker_tellsScreenReadersItIsLocked_andOffersUnlock() {
+        showOverlay(RetouchMode.CLONE, picking = false, source = CloneSource(300f, 300f, locked = true))
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE_MARKER)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, hint(R.string.retouch_marker_locked)))
+            .performCustomAccessibilityActionWithLabel(hint(R.string.retouch_unlock))
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("lock"), actions.calls)
+            assertEquals(listOf(false), locks)
+        }
+    }
+
+    @Test
+    fun whilePicking_touchingTheMarkerPicksAgain() {
+        showOverlay(RetouchMode.CLONE, picking = true, source = CloneSource(300f, 300f))
+
+        // 정하는 중에는 표시를 잡지 않는다(누른 자리가 새 가져올 곳)
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE_MARKER).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput { click(localOf(300f, 300f)) }
+
+        composeRule.runOnIdle { assertEquals(listOf("source"), actions.calls) }
     }
 
     @Test

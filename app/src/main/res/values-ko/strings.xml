@@ -293,8 +293,14 @@
     <string name="retouch_source">가져올 곳 정하기</string>
     <string name="retouch_hint_spot">고칠 곳을 칠하면 둘레의 비슷한 곳에서 가져와 메워요.</string>
     <string name="retouch_hint_pick">가져올 곳을 누른 뒤 고칠 곳을 칠하세요.</string>
-    <string name="retouch_hint_heal">칠하면 가져올 곳의 무늬를 가져오고, 손을 떼면 둘레의 밝기·색에 맞춰요.</string>
-    <string name="retouch_hint_clone">칠하면 가져올 곳을 그대로 베껴 와요.</string>
+    <string name="retouch_hint_heal">칠하면 가져올 곳의 무늬를 가져오고, 손을 떼면 둘레의 밝기·색에 맞춰요. 표시를 끌어 옮기고, 꾹 눌러 고정해요.</string>
+    <string name="retouch_hint_clone">칠하면 가져올 곳을 그대로 베껴 와요. 표시를 끌어 옮기고, 꾹 눌러 고정해요.</string>
+    <string name="retouch_marker">가져올 곳 표시</string>
+    <string name="retouch_marker_locked">고정됨</string>
+    <string name="retouch_lock">가져올 곳 고정</string>
+    <string name="retouch_unlock">가져올 곳 고정 풀기</string>
+    <string name="retouch_source_locked">가져올 곳을 고정했어요</string>
+    <string name="retouch_source_unlocked">가져올 곳 고정을 풀었어요</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">명암(닷지·번)</string>

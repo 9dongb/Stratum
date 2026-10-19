@@ -205,6 +205,8 @@ fun EditScreen(
     // 두 손가락·세 손가락 톡의 짧은 알림(결정 기록 '제스처 알림')
     val gestureToast = rememberGestureToastState()
     val undoneText = stringResource(R.string.action_undo)
+    val sourceLockedText = stringResource(R.string.retouch_source_locked)
+    val sourceUnlockedText = stringResource(R.string.retouch_source_unlocked)
     val nothingToUndoText = stringResource(R.string.gesture_nothing_to_undo)
     val redoneText = stringResource(R.string.action_redo)
     val nothingToRedoText = stringResource(R.string.gesture_nothing_to_redo)
@@ -534,7 +536,9 @@ fun EditScreen(
                     radius = retouch.radius,
                     actions = retouchActions,
                     onPicked = { retouchPicking = false },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    // 표시를 꾹 눌러 고정을 켜고 끄면 짧게 알린다
+                    onLockChanged = { locked -> gestureToast.show(if (locked) sourceLockedText else sourceUnlockedText) }
                 )
             }
             if (ready != null && activeTool == EditTool.Tone) {
