@@ -267,6 +267,53 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, onChoose: (SubTool
     }
 }
 
+/** 흐림의 띠: 하위 도구(흐림·선명), 강도, 크기, 경도 */
+@Composable
+internal fun blurStrip(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+    val options = controls.options
+    val brush = options.brush
+    return buildList {
+        add(subToolCell(EditTool.Blur, mode, onChoose, close))
+        add(
+            SliderCell(
+                key = "strength",
+                caption = stringResource(R.string.effect_strength),
+                value = stringResource(R.string.layer_percent, (options.strength * 100).roundToInt()),
+                slider = StripSlider(
+                    fraction = options.strength,
+                    onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
+                    tag = EditScreenTags.BLUR_STRENGTH
+                )
+            )
+        )
+        add(sizeCell(brush.size, EditScreenTags.BLUR_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
+        add(hardnessCell(brush.hardness, EditScreenTags.BLUR_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
+    }
+}
+
+/** 모자이크의 띠: 셀 크기(2~512px, 로그 눈금), 크기, 경도 */
+@Composable
+internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
+    val options = controls.options
+    val brush = options.brush
+    return buildList {
+        add(
+            SliderCell(
+                key = "cell",
+                caption = stringResource(R.string.mosaic_cell),
+                value = stringResource(R.string.brush_size_value, options.cell),
+                slider = StripSlider(
+                    fraction = cellToFraction(options.cell),
+                    onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
+                    tag = EditScreenTags.MOSAIC_CELL
+                )
+            )
+        )
+        add(sizeCell(brush.size, EditScreenTags.MOSAIC_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
+        add(hardnessCell(brush.hardness, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
+    }
+}
+
 /** 하위 도구 칸: 지금 하위 도구의 아이콘과 짧은 이름. 옵션 창에서 고르면(크기 변경은 창을 띄움) 닫는다. 이름표는 커버의 하위 도구 버튼과 같다. */
 @Composable
 private fun subToolCell(tool: EditTool, mode: SubTool, onChoose: (SubTool) -> Unit, close: () -> Unit): StripItem {
@@ -435,6 +482,8 @@ internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
             else -> R.string.retouch_hint_clone
         }
         EditTool.Tone -> if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge
+        EditTool.Blur -> blurHint(mode)
+        EditTool.Mosaic -> R.string.mosaic_hint
         else -> null
     }
     return hint?.let { stringResource(it) }

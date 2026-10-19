@@ -15,6 +15,7 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
@@ -110,7 +111,7 @@ class LayerPreviewCache {
                     ?: renderLayer(size, raster, level)?.also { entries[raster] = Entry(level, it) }
                     ?: return null
             }
-            val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace) ?: return null else checkNotNull(base)
+            val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace, size) ?: return null else checkNotNull(base)
             previews += layer to bitmap
         }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
@@ -194,6 +195,7 @@ class LayerPreviewCache {
         thumbnails.clear()
         lastRasters.clear()
         lastGainmap = null
+        lastEffect = null
     }
 
     /** [document]에 없는 래스터의 축소본·작은 그림과, [level]이 아닌 단계의 축소본을 놓아 준다. */
@@ -283,9 +285,17 @@ class LayerPreviewCache {
      * 획에 선택 영역이 있으면 그 영역 안으로 자른다(기록할 때와 같다).
      * 복제 획([LiveStroke.clone])은 [image]에서 옮긴 자리를 베껴 보인다. 그림 밖에서 가져올 곳은 비워 둔다.
      * 명암 획([LiveStroke.tone])은 [image]를 닷지·번으로 바꾼 색을 획 모양으로 보인다.
+     * 효과 획([LiveStroke.effect], 흐림·선명·모자이크)은 [image] 전체에 효과를 한 번 건 그림으로 획 자리를 바꿔 보인다(기록과 같은 바꾸기).
+     * 효과 그림은 같은 그림·영역·효과면 다시 계산하지 않는다(끄는 동안 자국마다 다시 그리므로). [document]는 문서 크기다(모자이크의 문서 끝 칸).
      * 칠하는 색은 [colorSpace](문서 색 공간) 값으로 바꿔 그린다(기록할 때와 같다).
      */
-    fun strokeOver(image: Bitmap?, region: PreviewRegion, strokes: List<LiveStroke>, colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB): Bitmap? {
+    fun strokeOver(
+        image: Bitmap?,
+        region: PreviewRegion,
+        strokes: List<LiveStroke>,
+        colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+        document: PixelSize = PixelSize(region.rect.right, region.rect.bottom)
+    ): Bitmap? {
         val width = region.previewWidth
         val height = region.previewHeight
         val scale = 1f / (1 shl region.level)
@@ -295,8 +305,23 @@ class LayerPreviewCache {
         for (stroke in strokes) {
             val clone = stroke.clone
             val tone = stroke.tone
+            val effect = stroke.effect
             // 읽을 그림이 없으면(빈 레이어) 복제하거나 바꿀 색이 없다
-            if ((clone != null || tone != null) && image == null) continue
+            if ((clone != null || tone != null || effect != null) && image == null) continue
+            if (effect != null && image != null) {
+                val effected = effectImage(image, region, effect, stroke.settings.size, document) ?: continue
+                BrushPainter.drawReplace(
+                    canvas, stroke.dabs, stroke.settings,
+                    scale = scale,
+                    left = region.rect.left.toFloat(),
+                    top = region.rect.top.toFloat(),
+                    width = width.toFloat(),
+                    height = height.toFloat(),
+                    fill = BitmapShader(effected, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP),
+                    clip = stroke.selection?.let { selectionMask(it, region) }
+                )
+                continue
+            }
             val fill = when {
                 // 캔버스 자리 q는 그림의 q - 옮긴 양을 읽는다
                 clone != null && image != null -> BitmapShader(image, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
@@ -319,6 +344,22 @@ class LayerPreviewCache {
         }
         picture.endRecording()
         return PreviewRenderer.drawOnGpu(picture, width, height)
+    }
+
+    /** 마지막으로 만든 효과 그림과 그 열쇠(그림·영역·효과·붓 크기). 끄는 동안 같은 그림에 같은 효과를 매번 다시 계산하지 않는다. */
+    private var lastEffect: Pair<List<Any>, Bitmap>? = null
+
+    /** [image](문서의 [region]을 그 단계로 그린 것) 전체에 [fill]을 건 그림(GPU). 같은 것이면 다시 쓴다. GPU가 그리지 못하면 null. */
+    private fun effectImage(image: Bitmap, region: PreviewRegion, fill: EffectFill, brushSize: Float, document: PixelSize): Bitmap? {
+        val key: List<Any> = listOf(IdentityKey(image), region, fill, brushSize, document)
+        lastEffect?.let { (lastKey, bitmap) -> if (lastKey == key) return bitmap }
+        val effected = EffectShader.renderOnGpu(
+            image, region.rect.left.toFloat(), region.rect.top.toFloat(), pixel = (1 shl region.level).toFloat(),
+            fromX = 0, fromY = 0, width = image.width, height = image.height,
+            fill = fill, brushSize = brushSize, document = document
+        ) ?: return null
+        lastEffect = key to effected
+        return effected
     }
 
     /** 마지막으로 줄여 그린 선택 영역 알파 그림. 끄는 동안 같은 선택 영역·자리를 매번 다시 그리지 않는다. */
@@ -353,6 +394,7 @@ class LayerPreviewCache {
  * [selection]은 획을 시작할 때의 선택 영역이다. 있으면 미리 보기도 그 안으로 자른다.
  * [clone]이 있으면 칠하는 대신 '획 자리 - 그 양'의 레이어 픽셀을 베껴 보인다(복제 도장·복구 브러시를 끄는 동안).
  * [tone]이 있으면 칠하는 대신 레이어 픽셀을 닷지·번으로 바꾼 색을 보인다(명암 도구를 끄는 동안).
+ * [effect]가 있으면 칠하는 대신 레이어 픽셀에 흐림·선명·모자이크를 건 색으로 바꿔 보인다(흐림·모자이크 도구를 끄는 동안).
  */
 class LiveStroke(
     val layerId: LayerId,
@@ -361,5 +403,6 @@ class LiveStroke(
     val erase: Boolean,
     val selection: Selection? = null,
     val clone: SourceOffset? = null,
-    val tone: ToneFill? = null
+    val tone: ToneFill? = null,
+    val effect: EffectFill? = null
 )

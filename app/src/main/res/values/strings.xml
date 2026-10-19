@@ -303,6 +303,16 @@
     <string name="retouch_unlock">Unlock source</string>
     <string name="retouch_source_locked">Source locked</string>
     <string name="retouch_source_unlocked">Source unlocked</string>
+    <string name="tool_blur">Blur and sharpen</string>
+    <string name="tool_blur_short">Blur</string>
+    <string name="subtool_blur">Blur</string>
+    <string name="subtool_sharpen">Sharpen</string>
+    <string name="effect_strength">Strength</string>
+    <string name="blur_hint_blur">Paint to soften. Paint again to blur more.</string>
+    <string name="blur_hint_sharpen">Paint to bring out fine detail. Paint again to sharpen more.</string>
+    <string name="tool_mosaic">Mosaic</string>
+    <string name="mosaic_cell">Cell size</string>
+    <string name="mosaic_hint">Paint to cover with square cells. Each cell takes the average color under it.</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">Dodge &amp; burn</string>

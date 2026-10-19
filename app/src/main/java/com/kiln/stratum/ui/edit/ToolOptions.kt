@@ -64,6 +64,8 @@ class CropControls(
  * @param select 선택 도구의 설정과 할 일
  * @param retouch 리터칭 도구의 설정과 가져올 곳
  * @param tone 명암 도구의 설정과 바꾸기
+ * @param blur 흐림 도구(흐림·선명)의 설정과 바꾸기
+ * @param mosaic 모자이크 도구의 설정과 바꾸기
  */
 @Composable
 fun ToolOptions(
@@ -81,7 +83,9 @@ fun ToolOptions(
     text: TextControls? = null,
     select: SelectionControls? = null,
     retouch: RetouchControls? = null,
-    tone: ToneControls? = null
+    tone: ToneControls? = null,
+    blur: BlurControls? = null,
+    mosaic: MosaicControls? = null
 ) {
     when (selection.active) {
         EditTool.Transform -> TransformOptions(selection.transformMode, busy, onEdit, onChoose, crop, modifier)
@@ -98,6 +102,10 @@ fun ToolOptions(
         EditTool.Tone -> if (tone != null) {
             ToneToolOptions(checkNotNull(selection.modeOf(EditTool.Tone)), tone, onChoose, modifier)
         }
+        EditTool.Blur -> if (blur != null) {
+            BlurToolOptions(checkNotNull(selection.modeOf(EditTool.Blur)), blur, onChoose, modifier)
+        }
+        EditTool.Mosaic -> if (mosaic != null) MosaicToolOptions(mosaic, modifier)
         else -> Unit
     }
 }

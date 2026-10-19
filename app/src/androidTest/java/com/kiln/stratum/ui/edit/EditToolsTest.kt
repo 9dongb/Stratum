@@ -82,32 +82,43 @@ class EditToolsTest {
 
     private val transformTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform))
     private val transformRail get() = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform))
+    private val brushTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush))
+    private val selectTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select))
 
     @Test
     fun compact_tapShowsOptions_tapAgainHides() {
         show(411, 800)
 
-        transformTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_OPTIONS).assertIsDisplayed()
-        // 처음에는 자르기부터 시작한다
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.CROP)).assertIsSelected()
+        brushTab.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
+
+        brushTab.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+    }
+
+    @Test
+    fun compact_transformStartsWithCrop_inItsOwnWindow() {
+        show(411, 800)
 
         transformTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_OPTIONS).assertDoesNotExist()
+
+        // 처음에는 자르기부터 시작하고, 닫힌 화면에서 자르기는 새 창이다(결정 기록 '닫힌 화면 새 창')
+        composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.CROP)).assertIsSelected()
     }
 
     @Test
     fun compact_longPressOpensMenu_withoutPuttingTheToolDown() {
         show(411, 800)
-        transformTab.performClick()
+        selectTab.performClick()
 
-        transformTab.performTouchInput { longClick() }
+        selectTab.performTouchInput { longClick() }
 
         // 길게 누른 뒤에 클릭이 일어났다면 도구가 내려놓여 옵션이 사라졌을 것이다
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_OPTIONS).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).assertIsSelected()
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_RECT)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
     }
 
     @Test

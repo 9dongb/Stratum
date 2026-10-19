@@ -179,6 +179,18 @@ object EditScreenTags {
     const val TONE_SIZE = "toneSize"
     const val TONE_HARDNESS = "toneHardness"
     const val TONE_HINT = "toneHint"
+    const val BLUR_OPTIONS = "blurOptions"
+    const val BLUR_OVERLAY = "blurOverlay"
+    const val BLUR_STRENGTH = "blurStrength"
+    const val BLUR_SIZE = "blurSize"
+    const val BLUR_HARDNESS = "blurHardness"
+    const val BLUR_HINT = "blurHint"
+    const val MOSAIC_OPTIONS = "mosaicOptions"
+    const val MOSAIC_OVERLAY = "mosaicOverlay"
+    const val MOSAIC_CELL = "mosaicCell"
+    const val MOSAIC_SIZE = "mosaicSize"
+    const val MOSAIC_HARDNESS = "mosaicHardness"
+    const val MOSAIC_HINT = "mosaicHint"
 
     /** 명암 옵션의 [range] 범위 버튼 */
     fun toneRange(range: com.kiln.stratum.engine.tone.ToneRange): String = "toneRange_${range.name}"

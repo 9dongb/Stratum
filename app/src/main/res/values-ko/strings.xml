@@ -301,6 +301,16 @@
     <string name="retouch_unlock">가져올 곳 고정 풀기</string>
     <string name="retouch_source_locked">가져올 곳을 고정했어요</string>
     <string name="retouch_source_unlocked">가져올 곳 고정을 풀었어요</string>
+    <string name="tool_blur">흐림·선명</string>
+    <string name="tool_blur_short">흐림</string>
+    <string name="subtool_blur">흐림</string>
+    <string name="subtool_sharpen">선명</string>
+    <string name="effect_strength">강도</string>
+    <string name="blur_hint_blur">칠한 곳을 흐리게 해요. 다시 칠하면 더 흐려져요.</string>
+    <string name="blur_hint_sharpen">칠한 곳의 가는 결을 또렷하게 해요. 다시 칠하면 더 선명해져요.</string>
+    <string name="tool_mosaic">모자이크</string>
+    <string name="mosaic_cell">셀 크기</string>
+    <string name="mosaic_hint">칠한 곳을 네모 칸으로 가려요. 칸마다 그 아래의 평균 색이에요.</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">명암(닷지·번)</string>

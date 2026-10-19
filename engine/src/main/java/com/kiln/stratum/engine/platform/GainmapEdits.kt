@@ -11,6 +11,9 @@ import com.kiln.stratum.engine.document.HdrInfo
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.effect.EffectFill
+import com.kiln.stratum.engine.effect.EffectKind
+import com.kiln.stratum.engine.effect.EffectMath
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
@@ -75,6 +78,33 @@ internal object GainmapEdits {
         val document = documentOf(gainmap).copy(selection = selection?.let { scaledSelection(it, size, gainmap) })
         val cloned = RetouchStroke(LayerId(0), scaled(dabs, scaleX, scaleY), brush, RetouchMode.CLONE, moved).applyTo(document, checkCanceled)
         return gainmap.copy(raster = rasterOf(cloned))
+    }
+
+    /**
+     * 흐림·모자이크 획 자리의 게인맵에 같은 효과를 건다(같은 크기·단단함·강도, 모자이크 칸은 게인맵 배율로 줄임).
+     * 모자이크는 Ultra HDR JPEG에 가린 곳의 밝기 정보(얼굴 윤곽 등)가 남지 않게 한다. 줄인 칸이 [EffectMath.MIN_CELL]보다 작으면
+     * 그 크기로 키운다(더 거칠게 가려 안전하다). [selection]이 있으면 그 안에만 건다(게인맵 크기로 줄인 것).
+     */
+    fun effect(
+        gainmap: HdrGainmap,
+        size: PixelSize,
+        dabs: List<StrokePoint>,
+        settings: BrushSettings,
+        fill: EffectFill,
+        selection: Selection?,
+        checkCanceled: () -> Unit
+    ): HdrGainmap {
+        val scaleX = gainmap.width.toFloat() / size.width
+        val scaleY = gainmap.height.toFloat() / size.height
+        val brush = settings.copy(size = scaledSize(settings.size, scaleX))
+        val scaledFill = if (fill.kind == EffectKind.MOSAIC) {
+            fill.copy(cell = (fill.cell * scaleX).roundToInt().coerceIn(EffectMath.MIN_CELL, EffectMath.MAX_CELL))
+        } else {
+            fill
+        }
+        val document = documentOf(gainmap).copy(selection = selection?.let { scaledSelection(it, size, gainmap) })
+        val done = EffectStroke(LayerId(0), scaled(dabs, scaleX, scaleY), brush, scaledFill).applyTo(document, checkCanceled)
+        return gainmap.copy(raster = rasterOf(done))
     }
 
     /**

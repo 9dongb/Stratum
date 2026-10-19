@@ -34,6 +34,9 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.effect.EffectFill
+import com.kiln.stratum.engine.effect.EffectKind
+import com.kiln.stratum.engine.effect.EffectMath
 import com.kiln.stratum.engine.history.EditHistory
 import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportPlan
@@ -65,6 +68,7 @@ import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
+import com.kiln.stratum.engine.platform.EffectStroke
 import com.kiln.stratum.engine.platform.ToneStroke
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
@@ -384,10 +388,23 @@ class EditorViewModel internal constructor(
     /** 명암 도구(닷지·번) 설정. 둘이 함께 쓰고, 앱을 끌 때까지 남는다(브러시와 같다). */
     val tone: StateFlow<ToneOptions> = _tone.asStateFlow()
 
+    private val _blur = MutableStateFlow(BlurOptions())
+
+    /** 흐림 도구(흐림·선명) 설정. 둘이 함께 쓰고, 앱을 끌 때까지 남는다(브러시와 같다). */
+    val blur: StateFlow<BlurOptions> = _blur.asStateFlow()
+
+    private val _mosaic = MutableStateFlow(MosaicOptions())
+
+    /** 모자이크 도구 설정. 앱을 끌 때까지 남는다. 셀 크기는 사용자가 바꾸기 전까지 연 문서 짧은 변의 2%로 맞춘다. */
+    val mosaic: StateFlow<MosaicOptions> = _mosaic.asStateFlow()
+
+    /** 사용자가 모자이크 셀 크기를 바꿨는지. 바꾼 뒤로는 문서를 열어도 그대로 둔다(글자 크기와 같다). */
+    private var mosaicCellChosen = false
+
     /**
      * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
      * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
-     * [tone]이 있으면 명암(닷지·번) 획이다.
+     * [tone]이 있으면 명암(닷지·번) 획이고, [effect]가 있으면 흐림·선명·모자이크 획이다.
      */
     private class Stroke(
         val layer: LayerId,
@@ -396,7 +413,8 @@ class EditorViewModel internal constructor(
         val selection: Selection?,
         val retouch: RetouchMode? = null,
         val offset: SourceOffset? = null,
-        val tone: ToneFill? = null
+        val tone: ToneFill? = null,
+        val effect: EffectFill? = null
     ) {
         val dabs = StrokeDabs(settings.spacing)
 
@@ -405,7 +423,7 @@ class EditorViewModel internal constructor(
          * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
         fun live(): LiveStroke = when (retouch) {
-            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone)
+            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect)
             RetouchMode.SPOT_HEAL -> LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
         }
@@ -413,13 +431,14 @@ class EditorViewModel internal constructor(
         /** 손을 뗀 뒤 기록할 명령 */
         fun command(): CancellableCommand = when {
             tone != null -> ToneStroke(layer, ArrayList(dabs.dabs), settings, tone)
+            effect != null -> EffectStroke(layer, ArrayList(dabs.dabs), settings, effect)
             retouch == null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
             else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset)
         }
 
-        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
+        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암·효과). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
         val readsLayer: Boolean
-            get() = erase || offset != null || tone != null
+            get() = erase || offset != null || tone != null || effect != null
     }
 
     /** 끄는 중인 획 */
@@ -469,6 +488,14 @@ class EditorViewModel internal constructor(
     /** 캔버스의 명암 손가락이 보내는 일 */
     val toneActions: ToneActions = object : ToneActions {
         override fun begin(x: Float, y: Float, dodge: Boolean) = beginTone(StrokePoint(x, y), dodge)
+        override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
+        override fun end() = endStroke()
+        override fun cancel() = cancelStroke()
+    }
+
+    /** 캔버스의 흐림·선명·모자이크 손가락이 보내는 일 */
+    val effectActions: EffectActions = object : EffectActions {
+        override fun begin(x: Float, y: Float, kind: EffectKind) = beginEffect(StrokePoint(x, y), kind)
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
@@ -1249,6 +1276,42 @@ class EditorViewModel internal constructor(
         val options = _tone.value
         val fill = ToneFill(dodge, options.range, options.exposure)
         startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, tone = fill), point)
+    }
+
+    /** 흐림 도구 설정을 바꾼다. 다음 획부터 쓴다. */
+    fun setBlur(options: BlurOptions) {
+        _blur.value = options
+    }
+
+    /** 모자이크 설정을 바꾼다. 다음 획부터 쓴다. */
+    fun setMosaic(options: MosaicOptions) {
+        if (options.cell != _mosaic.value.cell) mosaicCellChosen = true
+        _mosaic.value = options
+    }
+
+    /**
+     * 고른 레이어에 흐림·선명·모자이크 획([kind])을 시작한다. 손가락을 떼면 실행 취소 한 단계로 기록한다(브러시와 같은 차례).
+     * 세기는 강도(흐림·선명)·셀 크기(모자이크)가 정하므로 브러시 불투명도는 쓰지 않는다.
+     */
+    fun beginEffect(point: StrokePoint, kind: EffectKind) {
+        if (!canBeginStroke()) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        val (brush, fill) = if (kind == EffectKind.MOSAIC) {
+            val options = _mosaic.value
+            options.brush to EffectFill(kind, cell = options.cell)
+        } else {
+            val options = _blur.value
+            options.brush to EffectFill(kind, strength = options.strength)
+        }
+        startStroke(Stroke(layer.id, brush.copy(opacity = 1f), erase = false, history?.document?.selection, effect = fill), point)
+    }
+
+    /** 사용자가 셀 크기를 바꾸기 전이면 모자이크 셀 크기를 [document] 짧은 변의 2%로 맞춘다(글자 크기와 같은 방식) */
+    private fun fitMosaicCell(document: Document) {
+        if (mosaicCellChosen) return
+        val cell = kotlin.math.round(minOf(document.width, document.height) * 0.02f).toInt().coerceIn(EffectMath.MIN_CELL, EffectMath.MAX_CELL)
+        _mosaic.value = _mosaic.value.copy(cell = cell)
     }
 
     /** 리터칭 설정을 바꾼다. 다음 획부터 쓴다. */
@@ -2144,6 +2207,7 @@ class EditorViewModel internal constructor(
     private fun newHistory(document: Document): EditHistory {
         previewQuality = appSettings.values.value.previewQuality
         fitTextSize(document)
+        fitMosaicCell(document)
         _cloneSource.value = null
         return EditHistory(document, maxBytes = MemoryBudget.historyBudgetBytes(getApplication()))
     }

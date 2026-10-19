@@ -20,6 +20,7 @@ import kotlin.math.roundToInt
  * - 지우개는 같은 자국으로, 얹을 때 아래를 지운다(DST_OUT). 브러시는 그 위에 칠한다(SRC_OVER).
  * - 선택 영역이 있으면 얹기 전에 획을 선택 영역 알파로 자른다(DST_IN). 고르지 않은 곳에는 그려지지 않는다.
  * - 채울 그림(복제 도장·복구 브러시가 가져온 픽셀)이 있으면, 자국 모양만 남기고 색은 그 그림으로 바꾼다(SRC_IN).
+ * - 바꾸기([drawReplace], 흐림·선명·모자이크)는 얹지 않고 자국 몫만큼 아래를 채울 그림으로 바꾼다.
  * - 셰이더 프로그램(RuntimeShader)이나 하드웨어 비트맵을 쓰지 않아 소프트웨어 캔버스에서도 그려진다.
  */
 internal object BrushPainter {
@@ -59,10 +60,71 @@ internal object BrushPainter {
             blendMode = if (erase) BlendMode.DST_OUT else BlendMode.SRC_OVER
         }
         val saved = canvas.saveLayer(0f, 0f, width, height, stroke)
+        // 지우개와 채울 그림은 자국의 몫(알파)만 쓴다
+        drawDabs(canvas, dabs, settings, if (erase || fill != null) Color.WHITE else settings.opaqueColor, scale, left, top, width, height)
+        // 자국 모양 안을 채울 그림으로 바꾼다(그림이 투명한 곳은 획도 투명해진다)
+        if (fill != null) canvas.drawRect(0f, 0f, width, height, Paint().apply {
+            shader = fill
+            blendMode = BlendMode.SRC_IN
+        })
+        // 알파를 셰이더로 그려야 소프트웨어 그리기에서도 DST_IN이 곱해진다(MaskTiles.drawAlpha)
+        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        canvas.restoreToCount(saved)
+    }
+
+    /**
+     * [canvas]의 획 자리를 [fill](캔버스 좌표의 셰이더)로 바꾼다(흐림·선명·모자이크): 결과 = 아래 × (1 - 몫) + 채울 그림 × 몫.
+     * 몫은 자국 모양이고(겹치면 합쳐져 한 번만 걸린다), [clip](선택 영역 알파, 캔버스 (0, 0)에 맞춤)이 있으면 그것을 곱한다.
+     * 불투명도는 쓰지 않는다(세기는 효과가 정한다). 좌표는 [drawStroke]와 같다.
+     *
+     * [drawStroke]의 채울 그림은 아래 위에 얹으므로(SRC_OVER) 반투명한 효과 색(흐린 경계 등)이 아래의 불투명한 색에 묻힌다.
+     * 여기서는 몫만큼 아래를 덜어 내고(DST_OUT) 효과 색 × 몫을 더해(PLUS) 반투명한 색도 그대로 들어간다. 몫이 0인 픽셀은 값이 그대로다.
+     * 소프트웨어 캔버스(기록)와 GPU 캔버스(미리 보기)가 같이 쓴다.
+     */
+    fun drawReplace(
+        canvas: Canvas,
+        dabs: List<StrokePoint>,
+        settings: BrushSettings,
+        scale: Float,
+        left: Float,
+        top: Float,
+        width: Float,
+        height: Float,
+        fill: Shader,
+        clip: Bitmap? = null
+    ) {
+        if (dabs.isEmpty()) return
+        // 몫만큼 아래를 덜어 낸다
+        val cut = canvas.saveLayer(0f, 0f, width, height, Paint().apply { blendMode = BlendMode.DST_OUT })
+        drawDabs(canvas, dabs, settings, Color.WHITE, scale, left, top, width, height)
+        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        canvas.restoreToCount(cut)
+        // 채울 그림 × 몫을 더한다(두 몫의 합이 1을 넘지 않아 잘리지 않는다)
+        val add = canvas.saveLayer(0f, 0f, width, height, Paint().apply { blendMode = BlendMode.PLUS })
+        drawDabs(canvas, dabs, settings, Color.WHITE, scale, left, top, width, height)
+        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        canvas.drawRect(0f, 0f, width, height, Paint().apply {
+            shader = fill
+            blendMode = BlendMode.SRC_IN
+        })
+        canvas.restoreToCount(add)
+    }
+
+    /** 자국들을 [color]로 겹쳐 그린다(SRC_OVER). 그릴 자리([width]×[height]) 밖의 자국은 건너뛴다. */
+    private fun drawDabs(
+        canvas: Canvas,
+        dabs: List<StrokePoint>,
+        settings: BrushSettings,
+        color: Int,
+        scale: Float,
+        left: Float,
+        top: Float,
+        width: Float,
+        height: Float
+    ) {
         val radius = settings.radius * scale
         val dab = Paint().apply {
-            // 지우개와 채울 그림은 자국의 몫(알파)만 쓴다
-            color = if (erase || fill != null) Color.WHITE else settings.opaqueColor
+            this.color = color
             isAntiAlias = true
             isFilterBitmap = true
         }
@@ -79,14 +141,6 @@ internal object BrushPainter {
                 canvas.drawBitmap(mask, null, target, dab)
             }
         }
-        // 자국 모양 안을 채울 그림으로 바꾼다(그림이 투명한 곳은 획도 투명해진다)
-        if (fill != null) canvas.drawRect(0f, 0f, width, height, Paint().apply {
-            shader = fill
-            blendMode = BlendMode.SRC_IN
-        })
-        // 알파를 셰이더로 그려야 소프트웨어 그리기에서도 DST_IN이 곱해진다(MaskTiles.drawAlpha)
-        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
-        canvas.restoreToCount(saved)
     }
 
     /**

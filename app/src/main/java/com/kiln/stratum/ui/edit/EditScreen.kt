@@ -73,6 +73,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelRect
@@ -138,6 +139,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
  * @param toneOptions 명암 도구 설정(범위·노출·크기·단단함), [onToneOptions]로 바꾼다
  * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
+ * @param blurOptions 흐림 도구(흐림·선명) 설정(강도·크기·경도), [onBlurOptions]로 바꾼다
+ * @param mosaicOptions 모자이크 도구 설정(셀 크기·크기·경도), [onMosaicOptions]로 바꾼다
+ * @param effectActions 흐림·모자이크 도구를 고른 채 캔버스를 끌 때 보내는 일
  * @param recentColors 최근 색(브러시·글자의 색 줄, 맨 앞이 가장 최근)
  * @param onChooseColor 브러시·글자의 색을 골랐다(최근 색 누르기·팔레트 확인). 최근 색에도 더한다.
  * @param eyedropper 스포이드로 고르는 중인 자리와 색(없으면 null). 손가락 둘레 고리만 읽도록 함수로 받는다.
@@ -185,6 +189,11 @@ fun EditScreen(
     toneOptions: ToneOptions = ToneOptions(),
     onToneOptions: (ToneOptions) -> Unit = {},
     toneActions: ToneActions = ToneActions.None,
+    blurOptions: BlurOptions = BlurOptions(),
+    onBlurOptions: (BlurOptions) -> Unit = {},
+    mosaicOptions: MosaicOptions = MosaicOptions(),
+    onMosaicOptions: (MosaicOptions) -> Unit = {},
+    effectActions: EffectActions = EffectActions.None,
     recentColors: List<Int> = emptyList(),
     onChooseColor: (ColorTarget, Int) -> Unit = { _, _ -> },
     eyedropper: () -> EyedropperState? = { null },
@@ -396,12 +405,16 @@ fun EditScreen(
             sizePreview = sizePreview
         ).takeIf { activeTool == EditTool.Retouch }
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
+        val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
+        val mosaicControls = MosaicControls(mosaicOptions, sizePreview = sizePreview, onChange = onMosaicOptions).takeIf { activeTool == EditTool.Mosaic }
         // 크기를 미리 볼 도구의 크기·단단함
         val sizedBrush = when (activeTool) {
             EditTool.Brush -> brush
             EditTool.Eraser -> eraser
             EditTool.Retouch -> retouch
             EditTool.Tone -> toneOptions.brush
+            EditTool.Blur -> blurOptions.brush
+            EditTool.Mosaic -> mosaicOptions.brush
             else -> null
         }
         val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
@@ -420,7 +433,9 @@ fun EditScreen(
                     text = textControls,
                     select = selectionControls,
                     retouch = retouchControls,
-                    tone = toneControls
+                    tone = toneControls,
+                    blur = blurControls,
+                    mosaic = mosaicControls
                 )
             }
         }
@@ -447,6 +462,10 @@ fun EditScreen(
                 EditTool.Tone -> toneControls?.let {
                     toneStrip(checkNotNull(selection.modeOf(EditTool.Tone)), it, chooseSubTool, floating::closeFlyout)
                 }
+                EditTool.Blur -> blurControls?.let {
+                    blurStrip(checkNotNull(selection.modeOf(EditTool.Blur)), it, chooseSubTool, floating::closeFlyout)
+                }
+                EditTool.Mosaic -> mosaicControls?.let { mosaicStrip(it) }
                 else -> null
             }
         }
@@ -549,6 +568,28 @@ fun EditScreen(
                     actions = toneActions,
                     modifier = Modifier.fillMaxSize(),
                     cursorSize = toneOptions.brush.size
+                )
+            }
+            if (ready != null && activeTool == EditTool.Blur) {
+                EffectOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    kind = selection.modeOf(EditTool.Blur)?.effectKind ?: EffectKind.BLUR,
+                    actions = effectActions,
+                    tag = EditScreenTags.BLUR_OVERLAY,
+                    modifier = Modifier.fillMaxSize(),
+                    cursorSize = blurOptions.brush.size
+                )
+            }
+            if (ready != null && activeTool == EditTool.Mosaic) {
+                EffectOverlay(
+                    view = { viewState.view },
+                    document = ready.documentSize,
+                    kind = EffectKind.MOSAIC,
+                    actions = effectActions,
+                    tag = EditScreenTags.MOSAIC_OVERLAY,
+                    modifier = Modifier.fillMaxSize(),
+                    cursorSize = mosaicOptions.brush.size
                 )
             }
             if (ready != null && activeTool == EditTool.Select) {
@@ -671,6 +712,8 @@ fun EditScreen(
                             EditTool.Eraser -> onEraser(changed)
                             EditTool.Retouch -> onRetouch(changed)
                             EditTool.Tone -> onToneOptions(toneOptions.copy(brush = changed))
+                            EditTool.Blur -> onBlurOptions(blurOptions.copy(brush = changed))
+                            EditTool.Mosaic -> onMosaicOptions(mosaicOptions.copy(brush = changed))
                             else -> return
                         }
                         sizePreview.onChange()
