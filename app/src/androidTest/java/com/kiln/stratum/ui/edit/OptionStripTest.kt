@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertContentDescriptionContains
@@ -192,6 +195,39 @@ class OptionStripTest {
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
 
         composeRule.runOnIdle { assertEquals(BrushSettings.MAX_SIZE, brush.size, 0.5f) }
+    }
+
+    @Test
+    fun sliderCell_opensAThinVerticalSlider_withItsValue_andDraggingUpRaisesIt() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        cell("hardness").performClick()
+
+        val slider = composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).fetchSemanticsNode()
+        val bounds = slider.layoutBoundsInWindow()
+        val cellBounds = cell("hardness").fetchSemanticsNode().layoutBoundsInWindow()
+        val dp = with(slider.layoutInfo.density) { 1.dp.toPx() }
+        // 칸 오른쪽의 얇은 세로 슬라이더(폭 48dp)와 그 옆 값 표시
+        assertEquals(48 * dp, bounds.width, 2 * dp)
+        assertTrue("$bounds should be tall", bounds.height > bounds.width * 3)
+        assertTrue("$bounds should be right of $cellBounds", bounds.left > cellBounds.right)
+        composeRule.onNodeWithTag(EditScreenTags.STRIP_SLIDER_VALUE).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, composeRule.activity.getString(com.kiln.stratum.R.string.layer_percent, (brush.hardness * 100).roundToInt())))
+
+        // 아래 끝에서 위 끝으로 끌면 가장 커지고, 위에서 아래로 끌면 가장 작아진다
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performTouchInput {
+            down(bottomCenter - Offset(0f, 2f))
+            moveTo(topCenter + Offset(0f, 2f))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(1f, brush.hardness, 0.01f) }
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performTouchInput {
+            down(topCenter + Offset(0f, 2f))
+            moveTo(bottomCenter - Offset(0f, 2f))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(0f, brush.hardness, 0.01f) }
     }
 
     @Test

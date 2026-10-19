@@ -70,17 +70,16 @@ fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
     }
 }
 
-/** 글자 크기 슬라이더(8~2000px, 로그 눈금). [stacked]면 이름·값 줄 아래에 슬라이더를 놓는다(도구 옵션 띠의 옵션 창). */
+/** 글자 크기 슬라이더(8~2000px, 로그 눈금, 커버 옵션). 펼친 화면 띠는 세로 슬라이더(`textStrip`)다. */
 @Composable
-internal fun TextSizeSlider(controls: TextControls, stacked: Boolean = false) {
+internal fun TextSizeSlider(controls: TextControls) {
     val style = controls.style
     OptionSlider(
         label = stringResource(R.string.brush_size),
         shown = stringResource(R.string.brush_size_value, style.size.roundToInt()),
         fraction = textSizeToFraction(style.size),
         onFraction = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
-        tag = EditScreenTags.TEXT_SIZE,
-        stacked = stacked
+        tag = EditScreenTags.TEXT_SIZE
     )
 }
 

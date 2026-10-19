@@ -184,6 +184,8 @@
     <string name="color_choose">Choose color</string>
     <string name="color_eyedropper">Eyedropper</string>
     <string name="floating_panel_close">Close %1$s</string>
+    <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
+    <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_color">Color</string>
     <string name="strip_subtool">Sub-tool</string>
     <string name="strip_choice_description">%1$s: %2$s</string>

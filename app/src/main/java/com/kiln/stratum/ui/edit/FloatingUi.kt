@@ -26,8 +26,10 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
+import com.kiln.stratum.ui.layout.Span
 import com.kiln.stratum.ui.layout.flyoutOffset
 import com.kiln.stratum.ui.layout.flyoutRegion
+import com.kiln.stratum.ui.layout.stripTop
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -137,12 +139,20 @@ private val FlyoutGap = 4.dp
 @Composable
 fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier = Modifier) {
     val item = items.firstOrNull { it.key == state.flyout }
-    val content = item?.flyout
     val anchor = item?.let { state.anchors[it.key] }
+    // 슬라이더 칸은 얇은 세로 슬라이더 창(칸 가운데에 맞추고 칸을 가리키는 삼각형), 나머지는 칸 위 끝에 맞춘 카드 창이다
+    val slider = item as? SliderCell
+    val content: (@Composable () -> Unit)? = when {
+        slider != null -> ({ VerticalSliderFlyout(slider) })
+        else -> item?.flyout?.let { flyout -> { FlyoutSurface(item.title) { flyout() } } }
+    }
     val hinges = LocalHinges.current
     Layout(
         content = {
-            if (content != null && anchor != null) FlyoutSurface(item.title) { content() }
+            if (content != null && anchor != null) {
+                content()
+                if (slider != null) FlyoutArrow()
+            }
         },
         modifier = modifier
     ) { measurables, constraints ->
@@ -156,7 +166,8 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             val left = origin.x.roundToInt()
             val top = origin.y.roundToInt()
             val margin = FlyoutMargin.roundToPx()
-            val gap = FlyoutGap.roundToPx()
+            // 세로 슬라이더 창은 삼각형이 들어갈 만큼 칸에서 더 띄운다
+            val gap = (if (slider != null) FlyoutGap + FlyoutArrowWidth else FlyoutGap).roundToPx()
             val hingeMargin = HingeMargin.roundToPx()
             val region = flyoutRegion(
                 anchor = cell,
@@ -168,8 +179,18 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             val placeable = measurable.measure(
                 Constraints(maxWidth = region.width.coerceAtLeast(0), maxHeight = region.height.coerceAtLeast(0))
             )
-            val (x, y) = flyoutOffset(cell, placeable.width, placeable.height, region, gap)
+            val (x, y) = if (slider != null) {
+                // 칸 가운데에 슬라이더 가운데를 맞추고, 위아래가 모자라면 칸에서 시작하거나 끝나게 영역 안으로 민다(띠와 같은 규칙)
+                val x = (cell.right + gap).coerceAtMost(region.right - placeable.width).coerceAtLeast(region.left)
+                x to stripTop(Span(cell.top, cell.bottom), placeable.height, Span(region.top, region.bottom))
+            } else {
+                flyoutOffset(cell, placeable.width, placeable.height, region, gap)
+            }
             placeable.place(x - left, y - top)
+            // 칸을 가리키는 삼각형: 창 왼쪽 끝에 칸 가운데 높이로, 창 테두리를 덮게 조금 겹쳐 놓는다
+            val arrow = measurables.getOrNull(1)?.measure(Constraints()) ?: return@layout
+            val arrowY = ((cell.top + cell.bottom) / 2 - arrow.height / 2).coerceIn(y, (y + placeable.height - arrow.height).coerceAtLeast(y))
+            arrow.place(x - FlyoutArrowWidth.roundToPx() - left, arrowY - top)
         }
     }
 }

@@ -70,10 +70,10 @@ fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
 
 /**
  * 크기 슬라이더(1~1000px, 로그 눈금). 끄는 동안 [preview]가 캔버스에 그 크기를 보인다(손을 떼면 사라짐).
- * 브러시·지우개·리터칭·명암·유동화가 같이 쓴다. [stacked]면 이름·값 줄 아래에 슬라이더를 놓는다(도구 옵션 띠의 옵션 창).
+ * 브러시·지우개·리터칭·명암·유동화의 가로 슬라이더(커버 옵션·유동화)가 쓴다. 펼친 화면 띠는 세로 슬라이더(`sizeCell`)다.
  */
 @Composable
-internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, preview: SizePreviewState?, stacked: Boolean = false) {
+internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
     EndPreviewOnDispose(preview)
     OptionSlider(
         label = stringResource(R.string.brush_size),
@@ -84,17 +84,16 @@ internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, previ
             onSize(fractionToSize(it))
         },
         tag = tag,
-        onFinished = { preview?.onFinished() },
-        stacked = stacked
+        onFinished = { preview?.onFinished() }
     )
 }
 
 /**
- * 단단함 슬라이더(0~100%). 끄는 동안 [preview]가 캔버스에 브러시 크기와 단단함 자리를 보인다(손을 떼면 사라짐).
- * 브러시·지우개·리터칭·명암이 같이 쓴다. [stacked]는 [SizeSlider]와 같다.
+ * 경도(단단함) 슬라이더(0~100%). 끄는 동안 [preview]가 캔버스에 브러시 크기와 경도 자리를 보인다(손을 떼면 사라짐).
+ * 브러시·지우개·리터칭·명암의 가로 슬라이더가 쓴다. 펼친 화면 띠는 세로 슬라이더(`hardnessCell`)다.
  */
 @Composable
-internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: String, preview: SizePreviewState?, stacked: Boolean = false) {
+internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
     EndPreviewOnDispose(preview)
     OptionSlider(
         label = stringResource(R.string.brush_hardness),
@@ -105,8 +104,7 @@ internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: S
             onHardness((it * 100).roundToInt() / 100f)
         },
         tag = tag,
-        onFinished = { preview?.onFinished() },
-        stacked = stacked
+        onFinished = { preview?.onFinished() }
     )
 }
 
@@ -115,15 +113,15 @@ internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: S
  * 그때도 캔버스의 크기 원이 남지 않게, 사라질 때 끝낸 것으로 본다.
  */
 @Composable
-private fun EndPreviewOnDispose(preview: SizePreviewState?) {
+internal fun EndPreviewOnDispose(preview: SizePreviewState?) {
     DisposableEffect(preview) {
         onDispose { preview?.onFinished() }
     }
 }
 
 /**
- * 이름·가는 슬라이더(0..1)·숫자 한 줄. 끄는 대로 바로 바꾼다(그리기 전 설정이라 기록이 따로 없다).
- * [onFinished]는 손을 뗄 때 부른다. [stacked]면 이름·숫자 줄 아래에 슬라이더를 꽉 차게 놓는다(도구 옵션 띠의 좁은 옵션 창).
+ * 이름·가는 슬라이더(0..1)·숫자 한 줄(커버 옵션·유동화 옵션). 끄는 대로 바로 바꾼다(그리기 전 설정이라 기록이 따로 없다).
+ * [onFinished]는 손을 뗄 때 부른다. 펼친 화면 띠의 슬라이더는 세로 슬라이더 창이다(`SliderCell`).
  */
 @Composable
 internal fun OptionSlider(
@@ -132,10 +130,17 @@ internal fun OptionSlider(
     fraction: Float,
     onFraction: (Float) -> Unit,
     tag: String,
-    onFinished: () -> Unit = {},
-    stacked: Boolean = false
+    onFinished: () -> Unit = {}
 ) {
-    val slider: @Composable (Modifier) -> Unit = { modifier ->
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            modifier = Modifier.width(88.dp),
+            color = StratumTheme.colors.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium
+        )
         StratumSlider(
             value = fraction,
             onValueChange = onFraction,
@@ -143,49 +148,22 @@ internal fun OptionSlider(
             valueRange = 0f..1f,
             enabled = true,
             centered = false,
-            modifier = modifier
+            modifier = Modifier
+                .weight(1f)
                 .testTag(tag)
                 .semantics {
                     contentDescription = label
                     stateDescription = shown
                 }
         )
-    }
-    if (stacked) {
-        Column(Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = label,
-                    modifier = Modifier.weight(1f),
-                    color = StratumTheme.colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(text = shown, color = StratumTheme.colors.textPrimary, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-            }
-            slider(Modifier.fillMaxWidth().heightIn(min = 48.dp))
-        }
-    } else {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                modifier = Modifier.width(88.dp),
-                color = StratumTheme.colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            slider(Modifier.weight(1f))
-            Text(
-                text = shown,
-                modifier = Modifier.width(64.dp),
-                color = StratumTheme.colors.textPrimary,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
+        Text(
+            text = shown,
+            modifier = Modifier.width(64.dp),
+            color = StratumTheme.colors.textPrimary,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            style = MaterialTheme.typography.labelLarge
+        )
     }
 }
 

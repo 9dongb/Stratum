@@ -12,6 +12,8 @@ object EditScreenTags {
 
     /** 메인 화면의 도구 옵션 띠, 칸을 누르면 뜨는 옵션 창, 떠 있는 동안 캔버스를 덮어 누르면 닫는 바탕 */
     const val OPTION_STRIP = "optionStrip"
+    /** 세로 슬라이더 창의 값 표시('경도 82%') */
+    const val STRIP_SLIDER_VALUE = "stripSliderValue"
     const val OPTION_FLYOUT = "optionFlyout"
     const val FLOATING_DISMISS = "floatingDismiss"
 

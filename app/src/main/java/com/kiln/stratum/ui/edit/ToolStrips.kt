@@ -57,10 +57,18 @@ internal fun brushStrip(controls: BrushControls): List<StripItem> {
 internal fun textStrip(controls: TextControls): List<StripItem> =
     buildList {
         controls.colors?.let { addAll(colorCells(it)) }
+        val style = controls.style
         add(
-            ValueCell("textSize", stringResource(R.string.brush_size), stringResource(R.string.brush_size_value, controls.style.size.roundToInt())) {
-                FlyoutSlider { TextSizeSlider(controls, stacked = true) }
-            }
+            SliderCell(
+                key = "textSize",
+                caption = stringResource(R.string.brush_size),
+                value = stringResource(R.string.brush_size_value, style.size.roundToInt()),
+                slider = StripSlider(
+                    fraction = textSizeToFraction(style.size),
+                    onFraction = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
+                    tag = EditScreenTags.TEXT_SIZE
+                )
+            )
         )
     }
 
@@ -143,38 +151,33 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, onChoose
         if (mode == SubTool.SELECT_WAND) {
             val label = stringResource(R.string.selection_tolerance)
             add(
-                ValueCell("tolerance", label, options.tolerance.toString()) {
-                    FlyoutSlider {
-                        Column {
-                            OptionSlider(
-                                label = label,
-                                shown = options.tolerance.toString(),
-                                fraction = options.tolerance / ColorRegion.MAX_TOLERANCE.toFloat(),
-                                onFraction = { controls.onOptions(options.copy(tolerance = (it * ColorRegion.MAX_TOLERANCE).roundToInt())) },
-                                tag = EditScreenTags.SELECTION_TOLERANCE,
-                                stacked = true
-                            )
-                            ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) }
-                        }
-                    }
-                }
+                SliderCell(
+                    key = "tolerance",
+                    caption = label,
+                    value = options.tolerance.toString(),
+                    slider = StripSlider(
+                        fraction = options.tolerance / ColorRegion.MAX_TOLERANCE.toFloat(),
+                        onFraction = { controls.onOptions(options.copy(tolerance = (it * ColorRegion.MAX_TOLERANCE).roundToInt())) },
+                        tag = EditScreenTags.SELECTION_TOLERANCE
+                    ),
+                    // '이어진 곳만'은 값 표시 아래에 둔다
+                    extra = { ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) } }
+                )
             )
         } else {
             val label = stringResource(R.string.selection_feather)
             val shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt())
             add(
-                ValueCell("feather", label, shown) {
-                    FlyoutSlider {
-                        OptionSlider(
-                            label = label,
-                            shown = shown,
-                            fraction = featherToFraction(options.feather),
-                            onFraction = { controls.onOptions(options.copy(feather = fractionToFeather(it))) },
-                            tag = EditScreenTags.SELECTION_FEATHER,
-                            stacked = true
-                        )
-                    }
-                }
+                SliderCell(
+                    key = "feather",
+                    caption = label,
+                    value = shown,
+                    slider = StripSlider(
+                        fraction = featherToFraction(options.feather),
+                        onFraction = { controls.onOptions(options.copy(feather = fractionToFeather(it))) },
+                        tag = EditScreenTags.SELECTION_FEATHER
+                    )
+                )
             )
         }
         add(StripDivider("selectionActions"))
@@ -247,19 +250,17 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, onChoose: (SubTool
         val exposureLabel = stringResource(R.string.tone_exposure)
         val exposureShown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt())
         add(
-            ValueCell("exposure", exposureLabel, exposureShown) {
-                FlyoutSlider {
-                    OptionSlider(
-                        label = exposureLabel,
-                        shown = exposureShown,
-                        fraction = options.exposure,
-                        // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(커버 옵션과 같다)
-                        onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
-                        tag = EditScreenTags.TONE_EXPOSURE,
-                        stacked = true
-                    )
-                }
-            }
+            SliderCell(
+                key = "exposure",
+                caption = exposureLabel,
+                value = exposureShown,
+                slider = StripSlider(
+                    fraction = options.exposure,
+                    // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(커버 옵션과 같다)
+                    onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
+                    tag = EditScreenTags.TONE_EXPOSURE
+                )
+            )
         )
         add(sizeCell(brush.size, EditScreenTags.TONE_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
         add(hardnessCell(brush.hardness, EditScreenTags.TONE_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
@@ -290,19 +291,43 @@ private fun subToolCell(tool: EditTool, mode: SubTool, onChoose: (SubTool) -> Un
     }
 }
 
-/** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]) */
+/** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]), 손을 떼거나 슬라이더 창이 닫히면 사라진다 */
 @Composable
 private fun sizeCell(size: Float, sliderTag: String, preview: SizePreviewState?, onSize: (Float) -> Unit): StripItem =
-    ValueCell("size", stringResource(R.string.brush_size), stringResource(R.string.brush_size_value, size.roundToInt())) {
-        FlyoutSlider { SizeSlider(size, onSize, sliderTag, preview, stacked = true) }
-    }
+    SliderCell(
+        key = "size",
+        caption = stringResource(R.string.brush_size),
+        value = stringResource(R.string.brush_size_value, size.roundToInt()),
+        slider = StripSlider(
+            fraction = sizeToFraction(size),
+            onFraction = {
+                preview?.onChange()
+                onSize(fractionToSize(it))
+            },
+            tag = sliderTag,
+            onFinished = { preview?.onFinished() },
+            preview = preview
+        )
+    )
 
-/** 단단함 칸(0~100%). 끄는 동안 캔버스 가운데에 크기 원과 단단함 자리([preview]) */
+/** 경도 칸(0~100%). 끄는 동안 캔버스 가운데에 크기 원과 경도 자리([preview]) */
 @Composable
 private fun hardnessCell(hardness: Float, sliderTag: String, preview: SizePreviewState?, onHardness: (Float) -> Unit): StripItem =
-    ValueCell("hardness", stringResource(R.string.brush_hardness), stringResource(R.string.layer_percent, (hardness * 100).roundToInt())) {
-        FlyoutSlider { HardnessSlider(hardness, onHardness, sliderTag, preview, stacked = true) }
-    }
+    SliderCell(
+        key = "hardness",
+        caption = stringResource(R.string.brush_hardness),
+        value = stringResource(R.string.layer_percent, (hardness * 100).roundToInt()),
+        slider = StripSlider(
+            fraction = hardness,
+            onFraction = {
+                preview?.onChange()
+                onHardness((it * 100).roundToInt() / 100f)
+            },
+            tag = sliderTag,
+            onFinished = { preview?.onFinished() },
+            preview = preview
+        )
+    )
 
 /** 색 칸(누르면 지금 색·최근 색 옵션 창)과 스포이드 버튼(켜고 끔, 커버 색 줄의 스포이드와 같은 이름표) */
 @Composable
@@ -335,22 +360,17 @@ private fun colorCells(colors: ColorControls): List<StripItem> =
 
 /** 불투명도 칸(1~100%, 0%면 아무것도 칠해지지 않아 1%에서 멈춘다). 브러시·리터칭(복제)이 쓴다. */
 @Composable
-private fun opacityCell(opacity: Float, sliderTag: String, onOpacity: (Float) -> Unit): StripItem {
-    val label = stringResource(R.string.layer_opacity)
-    val shown = stringResource(R.string.layer_percent, (opacity * 100).roundToInt())
-    return ValueCell("opacity", label, shown) {
-        FlyoutSlider {
-            OptionSlider(
-                label = label,
-                shown = shown,
-                fraction = opacity,
-                onFraction = { onOpacity(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
-                tag = sliderTag,
-                stacked = true
-            )
-        }
-    }
-}
+private fun opacityCell(opacity: Float, sliderTag: String, onOpacity: (Float) -> Unit): StripItem =
+    SliderCell(
+        key = "opacity",
+        caption = stringResource(R.string.layer_opacity),
+        value = stringResource(R.string.layer_percent, (opacity * 100).roundToInt()),
+        slider = StripSlider(
+            fraction = opacity,
+            onFraction = { onOpacity(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
+            tag = sliderTag
+        )
+    )
 
 /** 고르기 옵션 창의 목록 폭 */
 private val ChoiceListWidth = 200.dp

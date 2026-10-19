@@ -2,13 +2,16 @@ package com.kiln.stratum.ui.edit
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -29,28 +32,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.AccentIconButton
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
+import com.kiln.stratum.ui.components.StratumVerticalSlider
 import com.kiln.stratum.ui.components.scrollFadeEdges
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -80,7 +91,7 @@ private val OptionStripMargin = 8.dp
 /** 값·고르기·색 칸의 높이(누르는 영역 48dp 이상) */
 private val CellHeight = 56.dp
 
-/** 슬라이더 옵션 창 안의 폭. 옵션 창(여백 포함 240dp)이 메인 가로에서 접히는 선 왼쪽에 들어간다. */
+/** 옵션 창 안 내용의 폭(자르기 비율 칸 등). 옵션 창(여백 포함 240dp)이 메인 가로에서 접히는 선 왼쪽에 들어간다. */
 internal val FlyoutSliderWidth = 216.dp
 
 /**
@@ -152,6 +163,34 @@ class IconCell(
     val iconRotation: Float = 0f,
     val tag: String? = null
 ) : StripItem
+
+/**
+ * 슬라이더 칸: 값 칸처럼 위에 작은 이름([caption]), 아래에 값([value])을 보이고, 누르면 칸 옆에 얇은 세로 슬라이더 창이 뜬다
+ * (사용자 요청 '세로 슬라이더', 결정 기록 '도구 옵션 띠'). [extra]는 값 표시 아래에 함께 둘 것(허용치의 '이어진 곳만')이다.
+ */
+class SliderCell(
+    override val key: String,
+    val caption: String,
+    val value: String,
+    val slider: StripSlider,
+    val enabled: Boolean = true,
+    val extra: (@Composable () -> Unit)? = null
+) : StripItem {
+    override val title: String
+        get() = caption
+}
+
+/**
+ * 슬라이더 칸의 값과 할 일. [fraction]은 0(아래 끝)~1(위 끝), [onFraction]은 끄는 대로 부르고 [onFinished]는 손을 뗄 때 부른다.
+ * [tag]는 슬라이더 이름표(커버 옵션의 슬라이더와 같다). [preview]가 있으면 슬라이더 창이 사라질 때 크기 원을 끈다.
+ */
+class StripSlider(
+    val fraction: Float,
+    val onFraction: (Float) -> Unit,
+    val tag: String,
+    val onFinished: () -> Unit = {},
+    val preview: SizePreviewState? = null
+)
 
 /** 칸 묶음 사이의 가는 구분선 */
 class StripDivider(override val key: String) : StripItem
@@ -231,7 +270,8 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
         contentAlignment = Alignment.Center
     ) {
         when (item) {
-            is ValueCell -> ValueCellView(item, open) { state.toggleFlyout(item.key) }
+            is ValueCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
+            is SliderCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
             is ChoiceCell -> ChoiceCellView(item, open) { state.toggleFlyout(item.key) }
             is ColorCell -> ColorCellView(item, open) { state.toggleFlyout(item.key) }
             is IconCell -> IconCellView(item) {
@@ -286,15 +326,16 @@ private fun CellBox(
     }
 }
 
+/** 값 칸·슬라이더 칸의 모양: 위에 작은 이름, 아래에 값 */
 @Composable
-private fun ValueCellView(cell: ValueCell, open: Boolean, onClick: () -> Unit) {
+private fun ValueCellView(key: String, caption: String, value: String, enabled: Boolean, open: Boolean, onClick: () -> Unit) {
     val colors = StratumTheme.colors
-    CellBox(EditScreenTags.strip(cell.key), cell.caption, cell.value, open, cell.enabled, onClick) {
-        CompactLabel(cell.caption, if (cell.enabled) colors.textDescription else colors.textDisabled)
+    CellBox(EditScreenTags.strip(key), caption, value, open, enabled, onClick) {
+        CompactLabel(caption, if (enabled) colors.textDescription else colors.textDisabled)
         Text(
-            text = cell.value,
+            text = value,
             color = when {
-                !cell.enabled -> colors.textDisabled
+                !enabled -> colors.textDisabled
                 open -> colors.selectedContent
                 else -> colors.textPrimary
             },
@@ -377,11 +418,102 @@ private fun IconCellView(cell: IconCell, onClick: () -> Unit) {
     }
 }
 
-/** 슬라이더 옵션 창의 내용 자리(폭 [FlyoutSliderWidth]) */
+/** 세로 슬라이더 창의 슬라이더 카드 크기: 폭은 누르는 영역(48dp), 높이는 받은 영역보다 길면 줄인다 */
+private val VerticalSliderWidth = 48.dp
+private val VerticalSliderHeight = 240.dp
+
+/**
+ * 슬라이더 칸의 옵션 창(사진: 태블릿 포토샵): 얇은 세로 슬라이더 카드와 그 오른쪽 위의 값 표시('경도 82%'),
+ * 값 표시 아래에는 [SliderCell.extra]. 카드를 가리키는 삼각형은 [FlyoutHost]가 칸 쪽에 그린다.
+ * 값 표시는 슬라이더와 같은 내용이라 화면 읽기 기능에서는 빼고, 슬라이더가 이름·값을 읽는다.
+ */
 @Composable
-internal fun FlyoutSlider(content: @Composable () -> Unit) {
-    Box(Modifier.width(FlyoutSliderWidth)) { content() }
+internal fun VerticalSliderFlyout(cell: SliderCell) {
+    val slider = cell.slider
+    EndPreviewOnDispose(slider.preview)
+    val colors = StratumTheme.colors
+    Row(Modifier.testTag(EditScreenTags.OPTION_FLYOUT).semantics { paneTitle = cell.caption }, verticalAlignment = Alignment.Top) {
+        Surface(
+            shape = StratumShapes.Card,
+            color = colors.panel,
+            border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+            shadowElevation = 6.dp
+        ) {
+            StratumVerticalSlider(
+                value = slider.fraction,
+                onValueChange = slider.onFraction,
+                onValueChangeFinished = slider.onFinished,
+                enabled = cell.enabled,
+                modifier = Modifier
+                    .width(VerticalSliderWidth)
+                    .height(VerticalSliderHeight)
+                    .testTag(slider.tag)
+                    .semantics {
+                        contentDescription = cell.caption
+                        stateDescription = cell.value
+                    }
+            )
+        }
+        Column(Modifier.padding(start = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Surface(
+                modifier = Modifier.testTag(EditScreenTags.STRIP_SLIDER_VALUE).clearAndSetSemantics {},
+                shape = StratumShapes.Card,
+                color = colors.panel,
+                border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+                shadowElevation = 6.dp
+            ) {
+                Text(
+                    text = stringResource(R.string.strip_slider_value, cell.caption, cell.value),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = colors.textPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+            }
+            cell.extra?.let { extra ->
+                Surface(
+                    shape = StratumShapes.Card,
+                    color = colors.panel,
+                    contentColor = colors.textPrimary,
+                    border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+                    shadowElevation = 6.dp
+                ) {
+                    Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { extra() }
+                }
+            }
+        }
+    }
 }
+
+/** 세로 슬라이더 창이 칸을 가리키는 작은 삼각형의 크기 */
+internal val FlyoutArrowWidth = 8.dp
+private val FlyoutArrowHeight = 16.dp
+
+/** 세로 슬라이더 창 왼쪽에서 칸을 가리키는 삼각형(패널 색, 바깥 두 변만 테두리). 창 카드의 테두리를 덮도록 조금 겹쳐 놓는다. */
+@Composable
+internal fun FlyoutArrow() {
+    val colors = StratumTheme.colors
+    Canvas(Modifier.size(width = FlyoutArrowWidth + 2.dp, height = FlyoutArrowHeight)) {
+        val tip = Offset(0f, size.height / 2)
+        val baseX = FlyoutArrowWidth.toPx()
+        val fill = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(baseX, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width, size.height)
+            lineTo(baseX, size.height)
+            close()
+        }
+        drawPath(fill, colors.panel)
+        val edge = Path().apply {
+            moveTo(baseX, 0f)
+            lineTo(tip.x, tip.y)
+            lineTo(baseX, size.height)
+        }
+        drawPath(edge, colors.fieldBorder, style = Stroke(StratumDimens.Divider.toPx()))
+    }
+}
+
 
 /** 불투명한 색의 알파 */
 private const val OPAQUE_ALPHA = 0xFF000000.toInt()
