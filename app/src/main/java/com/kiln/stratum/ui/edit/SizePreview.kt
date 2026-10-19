@@ -52,7 +52,8 @@ fun rememberSizePreviewState(): SizePreviewState = remember { SizePreviewState()
  */
 @Composable
 fun SizePreviewOverlay(view: () -> CanvasView, document: PixelSize, size: Float, hardness: Float?, modifier: Modifier = Modifier, bottomInset: Dp = 0.dp) {
-    Canvas(modifier.clipToBounds().testTag(EditScreenTags.SIZE_PREVIEW)) {
+    // 문서 자리가 아니라 캔버스 가운데(옵션 칸 위)에 두는 표시라, 화면 반전을 되돌려 늘 같은 자리에 둔다
+    Canvas(modifier.undoViewFlip(LocalViewFlip.current).clipToBounds().testTag(EditScreenTags.SIZE_PREVIEW)) {
         val area = PixelSize(this.size.width.roundToInt(), this.size.height.roundToInt())
         if (area.width <= 0 || area.height <= 0) return@Canvas
         val scale = view().transform(area, document).scaleX.toFloat()

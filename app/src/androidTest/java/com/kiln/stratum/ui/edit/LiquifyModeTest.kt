@@ -126,11 +126,11 @@ class LiquifyModeTest {
         LiquifyState(preview, document, LiquifyTool.PUSH, size = 150f, strength = 0.5f, canUndo = false, changed = false)
     )
 
-    private fun show(widthDp: Int, heightDp: Int, twoFingerTapUndo: Boolean = false, threeFingerGestures: Boolean = false) {
+    private fun show(widthDp: Int, heightDp: Int, twoFingerTapUndo: Boolean = false, threeFingerGestures: Boolean = false, flip: ViewFlip = ViewFlip.None) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { LiquifyMode(state, actions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures) }
+                    StratumTheme { LiquifyMode(state, actions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures, flip = flip) }
                 }
             }
         }
@@ -363,6 +363,26 @@ class LiquifyModeTest {
             val (x, y) = actions.points.first()
             assertTrue("start $x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
             assertTrue(actions.points.last().first > x)
+        }
+    }
+
+    @Test
+    fun mirroredView_draggingRightOnTheScreen_bendsTowardTheLeftOfTheDocument() {
+        // 편집 화면의 화면 반전을 따른다(결정 기록 '화면 반전')
+        show(411, 800, flip = ViewFlip(horizontal = true))
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            val (x, y) = actions.points.first()
+            // 가운데는 뒤집어도 가운데다
+            assertTrue("start $x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
+            assertTrue("${actions.points}", actions.points.last().first < x)
         }
     }
 

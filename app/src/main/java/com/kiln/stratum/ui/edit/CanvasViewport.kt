@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
@@ -57,6 +59,11 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  * 그 터치는 도구 화면이 한 손가락 톡으로 받지 않는다.
  *
  * [threeFinger]가 있으면 세 손가락 톡·밀기를 알린다(설정의 '세 손가락 제스처', [detectCanvasGestures]). 그동안 도구 화면은 터치를 받지 않는다.
+ *
+ * [flip]은 화면 반전(결정 기록 '화면 반전')이다. 이 영역 전체(문서·도구 화면)를 그림 층으로 뒤집는 변환 하나만 더하고, 픽셀은 그대로다.
+ * Compose는 그림 층의 변환을 터치 자리에도 거꾸로 걸어 주므로, 도구 화면과 두 손가락 확대·이동은 뒤집기 전의 자리를 받는다
+ * (반전된 화면의 오른쪽을 누르면 문서의 왼쪽). 세 손가락 밀기만 화면의 손가락 방향 그대로 알린다(위로 밀면 크기를 키움).
+ * 안쪽에는 [LocalViewFlip]으로 알린다(방향이 있는 표시가 반전을 되돌리는 데 쓴다).
  */
 @Composable
 fun CanvasViewport(
@@ -66,6 +73,7 @@ fun CanvasViewport(
     onViewport: (Viewport) -> Unit = {},
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
+    flip: ViewFlip = ViewFlip.None,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
     // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
@@ -73,6 +81,7 @@ fun CanvasViewport(
     val report by rememberUpdatedState(onViewport)
     val twoFingerTap by rememberUpdatedState(onTwoFingerTap)
     val threeFingerActions by rememberUpdatedState(threeFinger)
+    val currentFlip by rememberUpdatedState(flip)
     // 두 손가락 톡·세 손가락 제스처를 켜고 끌 때만 터치 처리를 다시 시작한다(켜져 있을 때만 그 터치를 소비한다)
     val tapEnabled = onTwoFingerTap != null
     val threeEnabled = threeFinger != null
@@ -85,46 +94,60 @@ fun CanvasViewport(
         }
     }
     Box(
-        modifier.onSizeChanged { area = it }.pointerInput(viewState, tapEnabled, threeEnabled) {
-            detectCanvasGestures(
-                onTransform = { centroid, pan, zoom ->
-                    if (size.width > 0 && size.height > 0) {
-                        viewState.view = viewState.view.transformedBy(
-                            panX = pan.x.toDouble(),
-                            panY = pan.y.toDouble(),
-                            zoom = zoom.toDouble(),
-                            centroidX = centroid.x.toDouble(),
-                            centroidY = centroid.y.toDouble(),
-                            area = PixelSize(size.width, size.height),
-                            document = documentSize
-                        )
-                    }
-                },
-                onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null,
-                // 화면이 다시 그려지며 넘긴 것이 바뀌어도 지금 것에 보낸다
-                threeFinger = if (threeEnabled) {
-                    object : ThreeFingerActions {
-                        override fun tap() {
-                            threeFingerActions?.tap()
+        modifier
+            // 화면 반전: 그릴 때 거는 변환 하나(가운데를 기준으로 뒤집음). 터치는 Compose가 거꾸로 바꿔 넘긴다.
+            .graphicsLayer {
+                scaleX = flip.scaleX
+                scaleY = flip.scaleY
+            }
+            .onSizeChanged { area = it }
+            .pointerInput(viewState, tapEnabled, threeEnabled) {
+                detectCanvasGestures(
+                    onTransform = { centroid, pan, zoom ->
+                        if (size.width > 0 && size.height > 0) {
+                            viewState.view = viewState.view.transformedBy(
+                                panX = pan.x.toDouble(),
+                                panY = pan.y.toDouble(),
+                                zoom = zoom.toDouble(),
+                                centroidX = centroid.x.toDouble(),
+                                centroidY = centroid.y.toDouble(),
+                                area = PixelSize(size.width, size.height),
+                                document = documentSize
+                            )
                         }
+                    },
+                    onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null,
+                    // 화면이 다시 그려지며 넘긴 것이 바뀌어도 지금 것에 보낸다
+                    threeFinger = if (threeEnabled) {
+                        object : ThreeFingerActions {
+                            override fun tap() {
+                                threeFingerActions?.tap()
+                            }
 
-                        override fun swipe(axis: SwipeAxis, distance: Dp) {
-                            threeFingerActions?.swipe(axis, distance)
-                        }
+                            override fun swipe(axis: SwipeAxis, distance: Dp) {
+                                // 뒤집힌 축은 거리 부호를 되돌려 화면의 손가락 방향 그대로 알린다
+                                val mirrored = when (axis) {
+                                    SwipeAxis.HORIZONTAL -> currentFlip.horizontal
+                                    SwipeAxis.VERTICAL -> currentFlip.vertical
+                                }
+                                threeFingerActions?.swipe(axis, if (mirrored) -distance else distance)
+                            }
 
-                        override fun swipeEnd() {
-                            threeFingerActions?.swipeEnd()
+                            override fun swipeEnd() {
+                                threeFingerActions?.swipeEnd()
+                            }
                         }
+                    } else {
+                        null
                     }
-                } else {
-                    null
-                }
-            )
-        }
+                )
+            }
     ) {
-        CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize())
-        // 선택 영역 윤곽선은 어떤 도구를 골라도 보인다(도구 화면 아래)
-        SelectionAnts(state.selection, state.selectionDetail, view = { viewState.view }, document = state.documentSize, modifier = Modifier.fillMaxSize())
-        overlay()
+        CompositionLocalProvider(LocalViewFlip provides flip) {
+            CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize())
+            // 선택 영역 윤곽선은 어떤 도구를 골라도 보인다(도구 화면 아래)
+            SelectionAnts(state.selection, state.selectionDetail, view = { viewState.view }, document = state.documentSize, modifier = Modifier.fillMaxSize())
+            overlay()
+        }
     }
 }

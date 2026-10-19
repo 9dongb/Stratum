@@ -108,8 +108,9 @@ object EditScreenTags {
     const val LAYER_LIST = "layerList"
     const val LAYER_ADD = "layerAdd"
     const val LAYER_DELETE = "layerDelete"
-    const val LAYER_UP = "layerUp"
-    const val LAYER_DOWN = "layerDown"
+    /** 레이어 탭 버튼 줄의 화면 반전(보기만 뒤집음) */
+    const val VIEW_FLIP_HORIZONTAL = "viewFlipHorizontal"
+    const val VIEW_FLIP_VERTICAL = "viewFlipVertical"
     const val LAYER_OPACITY = "layerOpacity"
     const val LAYER_BLEND = "layerBlend"
 

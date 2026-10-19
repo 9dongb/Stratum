@@ -155,6 +155,8 @@
     <string name="layer_delete">레이어 삭제</string>
     <string name="layer_move_up">레이어를 위로</string>
     <string name="layer_move_down">레이어를 아래로</string>
+    <string name="view_flip_horizontal">화면 좌우 반전</string>
+    <string name="view_flip_vertical">화면 상하 반전</string>
     <string name="layer_opacity">불투명도</string>
     <string name="layer_blend_mode">혼합 모드</string>
     <string name="layer_percent">%1$d%%</string>

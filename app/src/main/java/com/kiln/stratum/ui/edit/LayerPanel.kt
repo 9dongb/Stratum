@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -150,7 +151,10 @@ class LayerControls(
     val enabled: Boolean,
     val busy: Boolean,
     val actions: LayerActions,
-    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+    /** 화면 반전(보기). 레이어 탭 버튼 줄에 그 버튼이 있어 함께 넘긴다(사용자 피드백 7차, 결정 기록 '화면 반전'). */
+    val viewFlip: ViewFlip = ViewFlip.None,
+    val onViewFlip: (ViewFlip) -> Unit = {}
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -180,7 +184,7 @@ private val ThumbnailChecker = 5.dp
 private val CompactListHeight = 168.dp
 
 /**
- * 커버 화면(Compact)의 레이어 옵션: 버튼 줄(더하기·지우기·위로·아래로), 레이어 목록(줄 세 개까지 보이고 밀어 봄),
+ * 커버 화면(Compact)의 레이어 옵션: 버튼 줄(더하기·지우기·화면 좌우·상하 반전), 레이어 목록(줄 세 개까지 보이고 밀어 봄),
  * 고른 레이어의 불투명도와 혼합 모드. 기획서대로 레이어 패널은 아래에서 올라오는 옵션 자리에 연다.
  */
 @Composable
@@ -209,25 +213,35 @@ fun LayerColumn(controls: LayerControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 레이어 버튼 줄: 더하기, 지우기, 위로, 아래로. 고른 레이어에 한다.
+ * 레이어 버튼 줄: 더하기, 지우기(고른 레이어에 한다), 화면 좌우 반전, 화면 상하 반전(켜고 끔).
  * 지우기는 레이어가 둘 이상일 때만 누를 수 있고, 실행 취소로 되돌릴 수 있어 따로 묻지 않는다.
+ * 반전은 레이어가 아니라 캔버스 보기를 뒤집는다(픽셀·기록은 그대로, 결정 기록 '화면 반전'). 처리 중에도 누를 수 있다.
+ * 전에 있던 위로·아래로 버튼은 사용자 요청으로 뺐다(2026-10-20). 순서는 손잡이 끌기와 화면 읽기 기능의 '위로'·'아래로' 동작으로 바꾼다.
  */
 @Composable
 fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
     val actions = controls.actions
-    val index = controls.activeIndex
-    val active = controls.activeLayer
+    val flip = controls.viewFlip
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         ToolbarButton(R.drawable.ic_add, R.string.layer_add, controls.canEdit, EditScreenTags.LAYER_ADD) { actions.add() }
         ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.layers.size > 1, EditScreenTags.LAYER_DELETE) {
             actions.delete()
         }
-        ToolbarButton(R.drawable.ic_arrow_upward, R.string.layer_move_up, controls.canEdit && active != null && index < controls.layers.lastIndex, EditScreenTags.LAYER_UP) {
-            if (active != null) actions.move(active.id, index + 1)
+        FlipToggle(R.string.view_flip_horizontal, flip.horizontal, controls.enabled, EditScreenTags.VIEW_FLIP_HORIZONTAL, iconRotation = 0f) {
+            controls.onViewFlip(flip.copy(horizontal = it))
         }
-        ToolbarButton(R.drawable.ic_arrow_downward, R.string.layer_move_down, controls.canEdit && active != null && index > 0, EditScreenTags.LAYER_DOWN) {
-            if (active != null) actions.move(active.id, index - 1)
+        // 상하는 같은 아이콘을 90° 돌린다(자르기·변형의 상하 뒤집기와 같다)
+        FlipToggle(R.string.view_flip_vertical, flip.vertical, controls.enabled, EditScreenTags.VIEW_FLIP_VERTICAL, iconRotation = 90f) {
+            controls.onViewFlip(flip.copy(vertical = it))
         }
+    }
+}
+
+/** 화면 반전 켜고 끄는 버튼. 켜진 동안 선택 배경·선택 색 아이콘이다. */
+@Composable
+private fun FlipToggle(@StringRes label: Int, checked: Boolean, enabled: Boolean, tag: String, iconRotation: Float, onCheckedChange: (Boolean) -> Unit) {
+    StratumIconToggleButton(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled, modifier = Modifier.testTag(tag)) {
+        Icon(painterResource(R.drawable.ic_flip), contentDescription = stringResource(label), modifier = Modifier.rotate(iconRotation))
     }
 }
 

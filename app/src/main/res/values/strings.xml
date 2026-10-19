@@ -157,6 +157,8 @@
     <string name="layer_delete">Delete layer</string>
     <string name="layer_move_up">Move layer up</string>
     <string name="layer_move_down">Move layer down</string>
+    <string name="view_flip_horizontal">Flip view horizontally</string>
+    <string name="view_flip_vertical">Flip view vertically</string>
     <string name="layer_opacity">Opacity</string>
     <string name="layer_blend_mode">Blend</string>
     <string name="layer_percent">%1$d%%</string>

@@ -151,6 +151,7 @@ interface LiquifyActions {
  *   (유동화에는 단단함이 없어 압력으로 대신한다, 결정 기록 '세 손가락 제스처').
  * - 옵션: 도구(뒤틀기·오목·볼록·재구성), 크기, 압력. 커버·메인 세로는 아래, 메인 가로는 오른쪽에 둔다(접히는 선을 피함).
  * - 시스템 뒤로는 취소와 같다.
+ * - [flip]: 편집 화면의 화면 반전(보기만 뒤집음)을 캔버스에 그대로 건다.
  */
 @Composable
 fun LiquifyMode(
@@ -158,7 +159,8 @@ fun LiquifyMode(
     actions: LiquifyActions,
     modifier: Modifier = Modifier,
     twoFingerTapUndo: Boolean = false,
-    threeFingerGestures: Boolean = false
+    threeFingerGestures: Boolean = false,
+    flip: ViewFlip = ViewFlip.None
 ) {
     BackHandler(enabled = !state.busy, onBack = actions::cancel)
     val viewState = rememberCanvasViewState(state.documentSize)
@@ -226,7 +228,7 @@ fun LiquifyMode(
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
                 val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
-                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, threeFinger, canvasModifier)
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, threeFinger, flip, canvasModifier)
                 }
                 if (widthClass == WidthClass.Expanded) {
                     Row(Modifier.fillMaxSize()) {
@@ -343,6 +345,7 @@ private fun LiquifyCanvas(
     gestureToast: GestureToastState,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
+    flip: ViewFlip,
     modifier: Modifier
 ) {
     val ready = remember(state.preview, state.documentSize, state.colorSpace) {
@@ -353,7 +356,8 @@ private fun LiquifyCanvas(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .testTag(EditScreenTags.LIQUIFY_CANVAS)
     ) {
-        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger) {
+        // 편집 화면의 화면 반전을 그대로 따른다(결정 기록 '화면 반전')
+        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger, flip = flip) {
             LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
             if (showSize) {
                 SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())

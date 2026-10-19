@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -110,6 +111,8 @@ fun EyedropperOverlay(
  */
 @Composable
 fun EyedropperLoupe(state: EyedropperState, currentColor: Int, view: () -> CanvasView, document: PixelSize, modifier: Modifier = Modifier) {
+    // 화면 반전 중에도 고리는 손가락 자리에 있고, 위쪽 반이 고를 색이다(고리 가운데를 기준으로 반전을 되돌린다)
+    val flip = LocalViewFlip.current
     Canvas(modifier.testTag(EditScreenTags.EYEDROPPER_LOUPE)) {
         val area = PixelSize(size.width.toInt(), size.height.toInt())
         if (area.width <= 0 || area.height <= 0) return@Canvas
@@ -120,19 +123,21 @@ fun EyedropperLoupe(state: EyedropperState, currentColor: Int, view: () -> Canva
         val radius = outer - width / 2
         val box = Size(radius * 2, radius * 2)
         val topLeft = Offset(center.x - radius, center.y - radius)
-        val picked = state.color?.let { Color(it) } ?: CanvasOverlayColors.Unknown
-        // 위쪽 반(9시 → 12시 → 3시): 고를 색, 아래쪽 반: 지금 색
-        drawArc(picked, startAngle = 180f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
-        drawArc(Color(currentColor), startAngle = 0f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
-        val edge = CanvasOverlayColors.DarkHalo
-        drawCircle(edge, outer, center, style = Stroke(1.5.dp.toPx()))
-        drawCircle(edge, outer - width, center, style = Stroke(1.5.dp.toPx()))
-        // 가운데 작은 십자: 고르는 자리
-        val cross = 6.dp.toPx()
-        drawLine(CanvasOverlayColors.Light, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 3.dp.toPx())
-        drawLine(CanvasOverlayColors.Light, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 3.dp.toPx())
-        drawLine(CanvasOverlayColors.Dark, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 1.dp.toPx())
-        drawLine(CanvasOverlayColors.Dark, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 1.dp.toPx())
+        withTransform({ scale(flip.scaleX, flip.scaleY, pivot = center) }) {
+            val picked = state.color?.let { Color(it) } ?: CanvasOverlayColors.Unknown
+            // 위쪽 반(9시 → 12시 → 3시): 고를 색, 아래쪽 반: 지금 색
+            drawArc(picked, startAngle = 180f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
+            drawArc(Color(currentColor), startAngle = 0f, sweepAngle = 180f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(width))
+            val edge = CanvasOverlayColors.DarkHalo
+            drawCircle(edge, outer, center, style = Stroke(1.5.dp.toPx()))
+            drawCircle(edge, outer - width, center, style = Stroke(1.5.dp.toPx()))
+            // 가운데 작은 십자: 고르는 자리
+            val cross = 6.dp.toPx()
+            drawLine(CanvasOverlayColors.Light, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 3.dp.toPx())
+            drawLine(CanvasOverlayColors.Light, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 3.dp.toPx())
+            drawLine(CanvasOverlayColors.Dark, Offset(center.x - cross, center.y), Offset(center.x + cross, center.y), 1.dp.toPx())
+            drawLine(CanvasOverlayColors.Dark, Offset(center.x, center.y - cross), Offset(center.x, center.y + cross), 1.dp.toPx())
+        }
     }
 }
 

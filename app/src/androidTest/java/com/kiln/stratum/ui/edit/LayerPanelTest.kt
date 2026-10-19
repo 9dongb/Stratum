@@ -184,21 +184,20 @@ class LayerPanelTest {
     }
 
     @Test
-    fun toolbar_followsTheSelection() {
+    fun toolbar_followsTheSelection_andHasTheViewFlipsInsteadOfUpDown() {
         val fake = FakeLayers(1)
         openCompactLayers(fake)
-        // 한 장뿐이면 지우거나 옮길 수 없다
+        // 한 장뿐이면 지울 수 없다
         composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_UP).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DOWN).assertIsNotEnabled()
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
-        // 더한 레이어(맨 위)가 골라져 있어 아래로만 옮길 수 있다
         composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_UP).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DOWN).assertIsEnabled().performClick()
+        // 사용자 요청: 위로·아래로 버튼 자리에 화면 좌우·상하 반전(보기만 뒤집어 레이어 일을 보내지 않음)
+        composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).assertIsOff().performClick().assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_VERTICAL).assertIsOff().performClick().assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).performClick().assertIsOff()
 
-        composeRule.runOnIdle { assertEquals(listOf("add", "move 1 to 0"), fake.calls) }
+        composeRule.runOnIdle { assertEquals(listOf("add"), fake.calls) }
     }
 
     @Test

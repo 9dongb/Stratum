@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +23,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -63,8 +64,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -207,6 +208,10 @@ fun EditScreen(
     val floating = rememberFloatingState()
     // 도구 막대·커버 탭 줄의 하위 도구 메뉴(편집 화면 맨 위에 하나, 결정 기록 '하위 도구 메뉴')
     val subToolMenu = remember { SubToolMenuState() }
+    // 캔버스 보기 반전(좌우·상하, 결정 기록 '화면 반전'). 문서가 아니라 보기라 자르기·크기 변경 뒤에도, 접기·펼치기에도 남고,
+    // 편집 화면을 나가면 풀린다. 레이어 탭의 버튼으로 켜고 끈다.
+    var viewFlipBits by rememberSaveable { mutableIntStateOf(0) }
+    val viewFlip = ViewFlip.fromBits(viewFlipBits)
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
@@ -380,7 +385,10 @@ fun EditScreen(
         }
         // 레이어 목록과 고른 레이어. 자르기 중에는 막는다(보정과 같은 까닭).
         val layerControls = ready?.let {
-            LayerControls(it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace)
+            LayerControls(
+                it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
+                viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits }
+            )
         }
         // 고른 브러시·지우개의 설정
         val brushControls = when (activeTool) {
@@ -738,7 +746,11 @@ fun EditScreen(
                     if (coverCropWindow) {
                         // 자르기 새 창: 크기 유지 규칙에서 빠진다. 캔버스(사진 전체를 맞춤), 하위 도구·비율, 맨 아래 X(취소)·✓(적용).
                         // 뒤로 가기는 X와 같다(도구를 닫는 뒤로 가기). 탭 줄은 숨긴다.
-                        EditCanvas(state, viewState, messages, reportCanvasSize, onViewport, overlay, false, WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
+                        EditCanvas(
+                            state, viewState, messages, reportCanvasSize, onViewport, overlay, false,
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                            flip = viewFlip
+                        )
                         if (crop != null) {
                             Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
                                 CoverCropOptions(
@@ -764,6 +776,7 @@ fun EditScreen(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay, true,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger,
                             overlayBottom = coverSheetInset,
+                            flip = viewFlip,
                             floating = {
                                 if (toolOptions != null) {
                                     ToolOptionsSheet(
@@ -791,7 +804,7 @@ fun EditScreen(
                     EditCanvas(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
-                        gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, floating = floatingUi
+                        gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, flip = viewFlip, floating = floatingUi
                     )
                 }
             }
@@ -866,7 +879,7 @@ fun EditScreen(
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
         if (liquify != null) {
-            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures)
+            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures, flip = viewFlip)
         }
     }
 }
@@ -982,6 +995,7 @@ private fun EditTopBar(
  * 배율 표시는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 제스처 알림과 알림 막대는 양쪽을 [overlayStart]만큼 비워
  * 띠를 덮지 않으면서 캔버스 정중앙에 둔다(2026-10-20 사용자 요청). 제스처 알림과 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
  * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
+ * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 배율 표시·알림·띠·패널은 뒤집지 않는다.
  */
 @Composable
 private fun EditCanvas(
@@ -999,6 +1013,7 @@ private fun EditCanvas(
     threeFinger: ThreeFingerActions? = null,
     overlayStart: Dp = 0.dp,
     overlayBottom: Dp = 0.dp,
+    flip: ViewFlip = ViewFlip.None,
     floating: @Composable BoxScope.(WindowInsets) -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -1053,7 +1068,7 @@ private fun EditCanvas(
                 .testTag(EditScreenTags.CANVAS),
             contentAlignment = Alignment.Center
         ) {
-            CanvasContent(state, viewState, onViewport, overlay, showZoomChip, showBusy, onTwoFingerTap, threeFinger, overlayStart)
+            CanvasContent(state, viewState, onViewport, overlay, showZoomChip, showBusy, onTwoFingerTap, threeFinger, overlayStart, flip)
         }
         floating(insets)
         // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(가로로 접히는 선은 피함). 떠 있는 패널은 직접 끌 때까지 남아 알림과 겹칠 수 있어,
@@ -1078,7 +1093,8 @@ private fun CanvasContent(
     showBusy: Boolean,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
-    overlayStart: Dp
+    overlayStart: Dp,
+    flip: ViewFlip
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (state) {
@@ -1087,7 +1103,7 @@ private fun CanvasContent(
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, overlay)
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, flip = flip, overlay = overlay)
                 // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다. 왼쪽 띠가 있으면 그 오른쪽에 둔다.
                 if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize().padding(start = overlayStart))
                 if (showBusy) {
