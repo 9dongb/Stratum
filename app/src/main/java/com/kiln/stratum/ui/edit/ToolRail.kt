@@ -18,6 +18,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -30,7 +32,9 @@ import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
+import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumTheme
+import kotlin.math.roundToInt
 
 /**
  * 메인 화면(Medium·Expanded) 왼쪽 도구 막대. 기능이 있는 도구만 누를 수 있다.
@@ -40,13 +44,15 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 가로로 지나가는 힌지가 막대를 지나면, 그 자리의 버튼을 힌지 띠 아래로 비켜 놓는다(CLAUDE.md 6장).
  *
  * @param enabled 문서가 열려 있어 도구를 쓸 수 있는지
+ * @param onToolBounds 버튼 자리(창 좌표)가 바뀌면 알린다. 도구 옵션 띠를 고른 도구 옆에 띄우는 데 쓴다.
  */
 @Composable
 fun ToolRail(
     selection: ToolSelection,
     enabled: Boolean,
     onChoose: (SubTool) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onToolBounds: (EditTool, Region) -> Unit = { _, _ -> }
 ) {
     Surface(
         modifier = modifier
@@ -65,7 +71,19 @@ fun ToolRail(
         ) {
             for (tool in EditTool.railTools) {
                 Box(Modifier.width(ToolRailWidth), contentAlignment = Alignment.Center) {
-                    RailToolButton(tool, selection, enabled && tool.available, onChoose)
+                    RailToolButton(
+                        tool,
+                        selection,
+                        enabled && tool.available,
+                        onChoose,
+                        // 스크롤로 반쯤 가려져도 버튼 가운데가 바뀌지 않게 잘리지 않은 자리를 쓴다
+                        Modifier.onGloballyPositioned { coordinates ->
+                            val position = coordinates.positionInWindow()
+                            val left = position.x.roundToInt()
+                            val top = position.y.roundToInt()
+                            onToolBounds(tool, Region(left, top, left + coordinates.size.width, top + coordinates.size.height))
+                        }
+                    )
                 }
             }
         }
@@ -77,7 +95,7 @@ internal val ToolRailWidth = 56.dp
 
 /** 도구 막대의 버튼 하나. 고른 도구는 모서리 8dp 사각형 배경(선택 배경)과 선택 색 아이콘으로 보인다(결정 기록 '디자인(시안)'). */
 @Composable
-private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Boolean, onChoose: (SubTool) -> Unit) {
+private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Boolean, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     var menuOpen by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val selected = selection.active == tool
@@ -86,7 +104,7 @@ private fun RailToolButton(tool: EditTool, selection: ToolSelection, enabled: Bo
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         menuOpen = true
     }
-    Box {
+    Box(modifier) {
         StratumIconButton(
             onClick = { selection.tap(tool) },
             enabled = enabled,

@@ -222,6 +222,34 @@ class HingePlacementTest {
     }
 
     @Test
+    fun stripTop_centersOnTheTool() {
+        // 위아래 자리가 넉넉하면 도구 버튼 가운데(300)에 띠 가운데를 맞춘다
+        assertEquals(200, stripTop(Span(276, 324), height = 200, piece = Span(56, 700)))
+    }
+
+    @Test
+    fun stripTop_startsAtTheTool_whenTheTopIsShort() {
+        // 가운데에 맞추면 위로 넘치므로 버튼 위 끝(80)에서 시작한다(영역 위 끝 56이 아니라)
+        assertEquals(80, stripTop(Span(80, 128), height = 300, piece = Span(56, 700)))
+        // 버튼에서 시작하면 아래로 넘칠 때는 넘치지 않게 올린다(80 + 630 > 700)
+        assertEquals(70, stripTop(Span(80, 128), height = 630, piece = Span(56, 700)))
+    }
+
+    @Test
+    fun stripTop_endsAtTheTool_whenTheBottomIsShort() {
+        // 가운데에 맞추면 아래로 넘치므로 버튼 아래 끝(660)에서 끝난다
+        assertEquals(360, stripTop(Span(612, 660), height = 300, piece = Span(56, 700)))
+    }
+
+    @Test
+    fun stripTop_staysInsideThePiece_whenTaller() {
+        // 띠가 조각보다 크면(안에서 밀어 봄) 조각 위 끝이다
+        assertEquals(56, stripTop(Span(300, 348), height = 800, piece = Span(56, 700)))
+        // 가로 힌지 아래 조각(440~800)에 있는 도구: 조각 위로 나가지 않는다
+        assertEquals(452, stripTop(Span(452, 500), height = 300, piece = Span(440, 800)))
+    }
+
+    @Test
     fun panelRegion_isTheTopRightPiece() {
         val area = Region(100, 50, 900, 700)
         // 힌지가 없으면 영역 전체

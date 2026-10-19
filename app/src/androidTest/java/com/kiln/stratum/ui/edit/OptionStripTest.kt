@@ -38,6 +38,7 @@ import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
+import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
@@ -47,8 +48,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 메인 화면의 도구 옵션 띠와 옵션 창(결정 기록 '편집 화면 도구 배치'): 도구마다 칸, 칸을 누르면 옵션 창, 열고 닫기,
- * 떠 있는 동안 캔버스를 누르면 닫기만(그리지 않음), 뒤로 가기 순서, 접히는 선 피하기.
+ * 메인 화면의 도구 옵션 띠와 옵션 창(결정 기록 '도구 옵션 띠'): 띠는 도구 막대 폭에 칸만큼의 높이로 고른 도구 옆에 뜸,
+ * 도구마다 칸, 칸을 누르면 옵션 창, 열고 닫기, 떠 있는 동안 캔버스를 누르면 닫기만(그리지 않음), 뒤로 가기 순서, 접히는 선 피하기.
  */
 @RunWith(AndroidJUnit4::class)
 class OptionStripTest {
@@ -343,22 +344,59 @@ class OptionStripTest {
     }
 
     @Test
-    fun mainPortrait_stripCellsAndTheFlyoutAvoidAHorizontalHinge() {
+    fun strip_isAsWideAsTheRail_hugsItsCells_andSitsBesideItsTool() {
+        show(MAIN_LANDSCAPE)
+        val rail = composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).fetchSemanticsNode().layoutBoundsInWindow()
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode()
+        val dp = with(canvas.layoutInfo.density) { 1.dp.toPx() }
+
+        // 위아래 자리가 넉넉한 도구(명암): 띠 가운데가 도구 버튼 가운데다. 폭은 도구 막대와 같고, 높이는 칸만큼이다.
+        pick(EditTool.Tone)
+        val tone = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Tone)).fetchSemanticsNode().layoutBoundsInWindow()
+        var strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(rail.width, strip.width, 2 * dp)
+        // 칸만큼의 높이: 첫 칸(하위 도구) 위와 마지막 칸(경도) 아래에 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
+        val first = cell("subTool").fetchSemanticsNode().layoutBoundsInWindow()
+        val last = cell("hardness").fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$strip should hug $first..$last", first.top - strip.top <= 8 * dp && strip.bottom - last.bottom <= 8 * dp)
+        assertTrue("$strip should be shorter than ${canvas.layoutBoundsInWindow()}", strip.height < canvas.layoutBoundsInWindow().height)
+        assertEquals(tone.center.y, strip.center.y, 2 * dp)
+        assertTrue("$strip should float right of the rail $rail", strip.left > rail.right)
+
+        // 위쪽 자리가 모자란 도구(자르기·변형, 맨 위): 띠가 도구 버튼(누르는 영역 48dp) 위 끝에서 시작한다
+        pick(EditTool.Transform)
+        val crop = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
+        strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(crop.center.y - 24 * dp, strip.top, 2 * dp)
+    }
+
+    @Test
+    fun mainPortrait_stripStaysOnItsToolsSideOfAHorizontalHinge() {
         show(MAIN_PORTRAIT)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        pick(EditTool.Brush)
-        // 크기 칸 한가운데를 지나는 가로 힌지
-        val sizeCenter = cell("size").fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = sizeCenter, right = screen.right.roundToInt(), bottom = sizeCenter, isVertical = false)
+        // 리터칭 버튼 바로 아래를 지나는 가로 힌지: 리터칭은 힌지 위에 남고, 바로 아래 명암은 도구 막대가 힌지 아래로 비켜 놓는다.
+        // (도구 막대 자리는 화면마다 다르다. 접은 에뮬레이터에서는 카메라 구멍 때문에 상단 바가 높아진다)
+        val retouch = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Retouch)).fetchSemanticsNode()
+        val margin = with(retouch.layoutInfo.density) { HingeMargin.roundToPx() }
+        val y = retouch.touchBoundsInWindow().bottom.roundToInt() + margin + 2
+        val hinge = Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.waitForIdle()
 
-        composeRule.assertClickablesAvoid(hinge)
-        // 띠 아래쪽 칸의 옵션 창은 띠 아래 조각에 뜬다
-        cell("opacity").performClick()
-        val node = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode()
+        pick(EditTool.Retouch)
+        var node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
         val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} should be below $band", node.layoutBoundsInWindow().top >= band.end - 1f)
+        assertTrue("${node.layoutBoundsInWindow()} should end above $band", node.layoutBoundsInWindow().bottom <= band.start + 1f)
+        composeRule.assertClickablesAvoid(hinge)
+
+        pick(EditTool.Tone)
+        node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
+        assertTrue("${node.layoutBoundsInWindow()} should start below $band", node.layoutBoundsInWindow().top >= band.end - 1f)
+        composeRule.assertClickablesAvoid(hinge)
+        // 힌지 아래 띠의 옵션 창도 힌지 아래 조각에 뜬다
+        cell("range").performClick()
+        val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode()
+        assertTrue("${flyout.layoutBoundsInWindow()} should be below $band", flyout.layoutBoundsInWindow().top >= band.end - 1f)
     }
 
     @Test

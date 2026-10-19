@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.theme
 
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -24,3 +25,13 @@ val StratumTypography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+/** 좁은 칸(도구 옵션 띠)에서 한 줄에 다 들어가지 않는 글자를 줄일 수 있는 가장 작은 크기 */
+private val CompactTextMinSize = 8.sp
+
+/**
+ * 좁은 칸(도구 옵션 띠, 폭 56dp)에 한 줄로 넣는 글자의 크기: [style] 크기에서 시작해, 넘치면 한 줄에 들어갈 때까지 줄인다.
+ * 'Intersect'·'1000 px'처럼 긴 영어 이름·값도 자르지 않고 다 보이게 한다.
+ */
+fun compactTextAutoSize(style: TextStyle): TextAutoSize =
+    TextAutoSize.StepBased(minFontSize = CompactTextMinSize, maxFontSize = style.fontSize, stepSize = 0.5.sp)

@@ -56,6 +56,9 @@ class FloatingState(panel: MainPanel? = null) {
     /** 띠 칸의 자리(창 좌표). 옵션 창을 그 칸 옆에 띄운다. */
     internal val anchors = mutableStateMapOf<String, Region>()
 
+    /** 도구 막대 버튼의 자리(창 좌표). 도구 옵션 띠를 고른 도구 옆에 띄운다([OptionStripHost]). */
+    internal val toolAnchors = mutableStateMapOf<EditTool, Region>()
+
     /** [key] 칸의 옵션 창을 열고, 이미 열려 있으면 닫는다. 열린 패널은 그대로 둔다. */
     fun toggleFlyout(key: String) {
         flyout = if (flyout == key) null else key

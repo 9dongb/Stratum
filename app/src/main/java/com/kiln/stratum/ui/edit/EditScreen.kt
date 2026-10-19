@@ -318,7 +318,7 @@ fun EditScreen(
                         fitInside(
                             area = PixelSize(canvasArea.width, canvasArea.height),
                             document = ready.documentSize,
-                            insetStart = with(density) { OptionStripWidth.roundToPx() } + margin,
+                            insetStart = with(density) { (OptionStripWidth + OptionStripGap).roundToPx() } + margin,
                             insetEnd = margin,
                             insetTop = margin,
                             insetBottom = margin
@@ -477,13 +477,14 @@ fun EditScreen(
             }
         }
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
-        val stripInset = if (stripItems != null) OptionStripWidth else 0.dp
+        val stripInset = if (stripItems != null) OptionStripWidth + OptionStripGap else 0.dp
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
             // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다.
             if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
-            if (stripItems != null) {
-                OptionStrip(stripItems, floating, Modifier.align(Alignment.CenterStart))
+            if (stripItems != null && railTool != null) {
+                // 띠는 고른 도구 옆에 칸만큼의 높이로 뜬다(사용자 요청)
+                OptionStripHost(stripItems, floating, railTool, Modifier.fillMaxSize().windowInsetsPadding(insets))
                 FlyoutHost(floating, stripItems, Modifier.fillMaxSize().windowInsetsPadding(insets))
             }
         }
@@ -676,7 +677,12 @@ fun EditScreen(
                 // 메인 세로·가로: 도구 막대와 캔버스. 도구 옵션 띠·떠 있는 패널은 캔버스 위에 겹친다(floatingUi).
                 // 캔버스는 키보드 높이를 빼지 않는다(시스템 바·카메라 구멍만 피함). 글자·크기 변경 창에서 키보드가 열려도 다시 그리지 않는다.
                 else -> Row(body) {
-                    ToolRail(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
+                    ToolRail(
+                        selection,
+                        enabled = toolsEnabled,
+                        onChoose = chooseSubTool,
+                        onToolBounds = { tool, bounds -> if (floating.toolAnchors[tool] != bounds) floating.toolAnchors[tool] = bounds }
+                    )
                     EditCanvas(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
@@ -858,7 +864,7 @@ private fun EditTopBar(
  * [gestureToast]는 두 손가락·세 손가락 톡의 짧은 알림으로, 위쪽 가운데에 뜬다.
  * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
  * [floating]은 캔버스 위에 겹치는 메인 화면의 띠·옵션 창·패널이다. 캔버스 영역 전체(시스템 바 쪽 포함)를 받고, 내용이 피할 여백을 함께 받는다.
- * 배율 표시와 알림 막대는 [overlayStart](왼쪽 띠의 폭)만큼 오른쪽으로 비킨다. 알림 막대('보기' 버튼)는 떠 있는 것보다 위에, 제스처 알림은 그 아래에 그린다.
+ * 배율 표시와 알림 막대는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 제스처 알림과 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
  */
 @Composable
 private fun EditCanvas(
@@ -934,7 +940,8 @@ private fun EditCanvas(
         floating(insets)
         // 제스처 알림은 캔버스 위쪽 가운데에 잠깐 띄운다(가로로 접히는 선은 피함). 떠 있는 패널은 직접 끌 때까지 남아 알림과 겹칠 수 있어,
         // 알림이 가려지지 않게 그 위에 그린다. 알림은 터치를 받지 않아 그 밑의 패널·옵션 창을 그대로 누를 수 있다.
-        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets))
+        // 왼쪽 도구 옵션 띠는 가리지 않게 띠 오른쪽 자리의 가운데에 둔다(도구를 고를 때 뜨는 안내가 띠의 칸을 덮지 않게).
+        GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart))
         // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠를 피한다
         HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart), margin = 8.dp) {
             SnackbarHost(snackbarHostState)

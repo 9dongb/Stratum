@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -103,5 +105,22 @@ fun Modifier.edgeDivider(edge: DividerEdge, color: Color, thickness: Dp = Stratu
         DividerEdge.Bottom -> drawRect(color, Offset(0f, size.height - line), Size(size.width, line))
         DividerEdge.Start -> drawRect(color, Offset(if (rtl) size.width - line else 0f, 0f), Size(line, size.height))
         DividerEdge.End -> drawRect(color, Offset(if (rtl) 0f else size.width - line, 0f), Size(line, size.height))
+    }
+}
+
+/**
+ * 세로로 밀어 보는 내용의 위·아래 끝을 바탕색 [color] 쪽으로 흐리게 그린다. 더 밀어 볼 내용이 있는 쪽만 흐려,
+ * 칸이 더 있다는 것을 알린다(안드로이드의 가장자리 흐림과 같다). [state]는 그 내용의 스크롤 상태다. 크기는 바꾸지 않는다.
+ */
+fun Modifier.scrollFadeEdges(state: ScrollState, color: Color, length: Dp = 24.dp): Modifier = drawWithContent {
+    drawContent()
+    val fade = length.toPx().coerceAtMost(size.height / 2)
+    val clear = color.copy(alpha = 0f)
+    if (state.canScrollBackward) {
+        drawRect(Brush.verticalGradient(listOf(color, clear), startY = 0f, endY = fade), Offset.Zero, Size(size.width, fade))
+    }
+    if (state.canScrollForward) {
+        val top = size.height - fade
+        drawRect(Brush.verticalGradient(listOf(clear, color), startY = top, endY = size.height), Offset(0f, top), Size(size.width, fade))
     }
 }

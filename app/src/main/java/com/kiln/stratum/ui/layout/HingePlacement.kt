@@ -148,6 +148,21 @@ fun flyoutOffset(anchor: Region, width: Int, height: Int, region: Region, gap: I
 }
 
 /**
+ * 높이 [height]인 도구 옵션 띠의 위 끝(창 좌표). 고른 도구 버튼([anchor]의 위아래)의 가운데에 띠의 가운데를 맞춘다.
+ * 위쪽 자리가 모자라면 버튼 위 끝에서 시작하고(사용자 요청), 아래쪽 자리가 모자라면 버튼 아래 끝에서 끝낸다.
+ * 그래도 [piece](도구가 든 조각의 위아래 구간) 밖으로 나가면 안으로 민다. 띠가 조각보다 크면 조각 위 끝이다.
+ */
+fun stripTop(anchor: Span, height: Int, piece: Span): Int {
+    val centered = (anchor.start + anchor.end) / 2 - height / 2
+    val top = when {
+        centered < piece.start -> anchor.start
+        centered + height > piece.end -> anchor.end - height
+        else -> centered
+    }
+    return top.coerceAtMost(piece.end - height).coerceAtLeast(piece.start)
+}
+
+/**
  * 메인 화면 오른쪽 위에 띄우는 레이어·조정 패널이 들어갈 수 있는 영역(모두 창 좌표).
  * [area](패널을 띄울 영역)에서 힌지 띠를 뺀 조각 가운데, 가로로는 가장 오른쪽 조각, 세로로는 가장 위 조각이다.
  * 그래서 펼친 폴드의 메인 가로는 힌지 오른쪽, 메인 세로는 힌지 위에 뜬다.

@@ -8,20 +8,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -37,8 +31,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -50,21 +46,36 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.components.AccentIconButton
-import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
-import com.kiln.stratum.ui.components.edgeDivider
-import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
+import com.kiln.stratum.ui.components.scrollFadeEdges
+import com.kiln.stratum.ui.layout.HingeMargin
+import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
+import com.kiln.stratum.ui.layout.Span
+import com.kiln.stratum.ui.layout.pieceAt
+import com.kiln.stratum.ui.layout.stripTop
 import com.kiln.stratum.ui.theme.ColorPickerColors
+import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
+import com.kiln.stratum.ui.theme.compactTextAutoSize
 import kotlin.math.roundToInt
 
-/** 도구 옵션 띠의 폭(결정 기록 '편집 화면 도구 배치'). 값 칸의 이름('Tolerance')과 값('1000 px')이 한 줄에 들어간다. */
-internal val OptionStripWidth = 72.dp
+/**
+ * 도구 옵션 띠의 폭: 도구 막대와 같다(사용자 요청, 결정 기록 '도구 옵션 띠').
+ * 값 칸의 이름('Tolerance')·값('1000 px')이 넘치면 한 줄에 들어갈 때까지 글자를 줄인다([compactTextAutoSize]).
+ */
+internal val OptionStripWidth = ToolRailWidth
+
+/** 도구 옵션 띠와 도구 막대 사이 간격(떠 있는 카드로 보이게) */
+internal val OptionStripGap = 4.dp
+
+/** 도구 옵션 띠와 캔버스 위아래 끝 사이 여백 */
+private val OptionStripMargin = 8.dp
 
 /** 값·고르기·색 칸의 높이(누르는 영역 48dp 이상) */
 private val CellHeight = 56.dp
@@ -146,26 +157,57 @@ class IconCell(
 class StripDivider(override val key: String) : StripItem
 
 /**
- * 도구 옵션 띠: 메인 화면에서 도구 막대 오른쪽, 캔버스 위에 겹쳐 위아래 끝까지 놓는 좁은 띠(사진 4, 태블릿 포토샵).
- * 칸이 많으면 위아래로 밀어 보고, 가로로 지나가는 힌지의 띠에 걸리는 칸은 띠 아래로 비켜 놓는다.
- * 배경은 아래 끝까지 칠하고, 칸만 아래 시스템 바를 피한다(도구 막대와 같다).
- * 옵션 창은 [FlyoutHost]가 칸 오른쪽에 띄운다. 칸 자리는 [FloatingState.anchors]에 적는다.
+ * 도구 옵션 띠를 고른 도구([tool]) 옆에 띄우는 자리(사진 4, 태블릿 포토샵). 받은 영역(캔버스)을 다 차지하지만 터치는 띠만 받는다.
+ * 띠는 도구 막대에서 [OptionStripGap]만큼 띄우고, 세로로는 도구 버튼을 가운데로 두되 위쪽 자리가 모자라면 버튼에서 시작하고
+ * 아래쪽이 모자라면 버튼에서 끝낸다([stripTop]). 가로 힌지가 있으면 도구가 있는 쪽 조각 안에 두고, 조각보다 길면 띠 안에서 밀어 본다.
+ * 자리는 배치하는 순간 도구 버튼 자리([FloatingState.toolAnchors], 창 좌표)와 자기 위치, 힌지를 읽어 정한다(한 프레임 늦지 않음).
  */
 @Composable
-fun OptionStrip(items: List<StripItem>, state: FloatingState, modifier: Modifier = Modifier) {
+fun OptionStripHost(items: List<StripItem>, state: FloatingState, tool: EditTool, modifier: Modifier = Modifier) {
+    val hinges = LocalHinges.current
+    Layout(content = { OptionStrip(items, state) }, modifier = modifier) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        layout(width, height) {
+            val measurable = measurables.firstOrNull() ?: return@layout
+            // 정렬선을 재는 단계에서는 위치를 몰라(null) 놓지 않는다. 곧 이어지는 배치에서 놓는다.
+            val origin = coordinates?.positionInWindow() ?: return@layout
+            val top = origin.y.roundToInt()
+            val margin = OptionStripMargin.roundToPx()
+            val area = Span(top + margin, top + height - margin)
+            // 고른 도구 버튼의 위아래(창 좌표). 아직 재지 않았으면 영역 위 끝에 붙인다.
+            val anchor = state.toolAnchors[tool]?.let { Span(it.top, it.bottom) } ?: Span(area.start, area.start)
+            val bands = hinges.filter { !it.isVertical }.map { it.band(HingeMargin.roundToPx()) }
+            val piece = pieceAt(area, bands, (anchor.start + anchor.end) / 2)
+            val placeable = measurable.measure(Constraints(maxWidth = width, maxHeight = (piece.end - piece.start).coerceAtLeast(0)))
+            placeable.place(OptionStripGap.roundToPx(), stripTop(anchor, placeable.height, piece) - top)
+        }
+    }
+}
+
+/**
+ * 도구 옵션 띠: 칸만큼의 높이로 떠 있는 좁은 카드(도구 막대와 같은 폭, 패널 색, 모서리 8dp, 테두리·그림자). 자리는 [OptionStripHost]가 정한다.
+ * 받은 높이보다 칸이 많으면 위아래로 밀어 본다. 옵션 창은 [FlyoutHost]가 칸 오른쪽에 띄운다. 칸 자리는 [FloatingState.anchors]에 적는다.
+ */
+@Composable
+private fun OptionStrip(items: List<StripItem>, state: FloatingState) {
     Surface(
-        modifier = modifier
-            .fillMaxHeight()
+        modifier = Modifier
             .width(OptionStripWidth)
-            .edgeDivider(DividerEdge.End, StratumTheme.colors.divider)
             .testTag(EditScreenTags.OPTION_STRIP),
-        color = StratumTheme.colors.panel
+        shape = StratumShapes.Card,
+        color = StratumTheme.colors.panel,
+        border = BorderStroke(StratumDimens.Divider, StratumTheme.colors.fieldBorder),
+        shadowElevation = 6.dp
     ) {
-        HingeAvoidingScrollColumn(
+        // 받은 높이보다 칸이 많으면(메인 세로에서 접히는 선 위에 다 들어가지 않는 선택 도구 등) 밀어 보고, 더 있는 쪽 끝을 흐리게 알린다
+        val scroll = rememberScrollState()
+        Column(
             modifier = Modifier
-                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Bottom))
-                .padding(vertical = 8.dp),
-            gap = 4.dp
+                .scrollFadeEdges(scroll, StratumTheme.colors.panel)
+                .verticalScroll(scroll)
+                .padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             for (item in items) {
                 key(item.key) { StripCellView(item, state) }
@@ -180,7 +222,7 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
     val open = state.flyout == item.key
     Box(
         modifier = Modifier
-            .width(OptionStripWidth)
+            .fillMaxWidth()
             .onGloballyPositioned { coordinates ->
                 val bounds = coordinates.boundsInWindow()
                 val region = Region(bounds.left.roundToInt(), bounds.top.roundToInt(), bounds.right.roundToInt(), bounds.bottom.roundToInt())
@@ -197,13 +239,13 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
                 state.closeFlyout()
                 item.onClick()
             }
-            is StripDivider -> HorizontalDivider(Modifier.width(40.dp).padding(vertical = 4.dp), color = StratumTheme.colors.divider)
+            is StripDivider -> HorizontalDivider(Modifier.width(32.dp).padding(vertical = 4.dp), color = StratumTheme.colors.divider)
         }
     }
 }
 
 /**
- * 누를 수 있는 칸의 바탕: 띠 폭에서 양쪽 4dp를 뺀 모서리 8dp 칸. 옵션 창이 열려 있으면 선택 배경이다.
+ * 누를 수 있는 칸의 바탕: 띠 폭에서 양쪽 4dp를 뺀 모서리 8dp 칸(폭 48dp, 누르는 영역 그대로). 옵션 창이 열려 있으면 선택 배경이다.
  * 화면 읽기 기능에는 [description]과 [state](값)를 읽히고, 안쪽 글자는 따로 읽지 않는다.
  */
 @Composable
@@ -248,13 +290,7 @@ private fun CellBox(
 private fun ValueCellView(cell: ValueCell, open: Boolean, onClick: () -> Unit) {
     val colors = StratumTheme.colors
     CellBox(EditScreenTags.strip(cell.key), cell.caption, cell.value, open, cell.enabled, onClick) {
-        Text(
-            text = cell.caption,
-            color = if (cell.enabled) colors.textDescription else colors.textDisabled,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        CompactLabel(cell.caption, if (cell.enabled) colors.textDescription else colors.textDisabled)
         Text(
             text = cell.value,
             color = when {
@@ -263,8 +299,9 @@ private fun ValueCellView(cell: ValueCell, open: Boolean, onClick: () -> Unit) {
                 else -> colors.textPrimary
             },
             style = MaterialTheme.typography.labelLarge,
+            autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Clip
         )
     }
 }
@@ -285,13 +322,7 @@ private fun ChoiceCellView(cell: ChoiceCell, open: Boolean, onClick: () -> Unit)
                 SubToolMark(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 2.dp))
             }
         }
-        Text(
-            text = cell.caption,
-            color = if (cell.enabled) colors.textDescription else colors.textDisabled,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        CompactLabel(cell.caption, if (cell.enabled) colors.textDescription else colors.textDisabled)
     }
 }
 
@@ -306,14 +337,21 @@ private fun ColorCellView(cell: ColorCell, open: Boolean, onClick: () -> Unit) {
                 .padding(4.dp)
                 .background(Color(cell.color or OPAQUE_ALPHA), StratumShapes.Dot)
         )
-        Text(
-            text = cell.caption,
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        CompactLabel(cell.caption, StratumTheme.colors.textDescription)
     }
+}
+
+/** 칸의 작은 이름. 칸 폭(48dp)에 한 줄로 다 들어가지 않으면 글자를 줄인다('Hardness'·'Spot heal' 등). */
+@Composable
+private fun CompactLabel(text: String, color: Color) {
+    Text(
+        text = text,
+        color = color,
+        style = MaterialTheme.typography.labelSmall,
+        autoSize = compactTextAutoSize(MaterialTheme.typography.labelSmall),
+        maxLines = 1,
+        overflow = TextOverflow.Clip
+    )
 }
 
 @Composable
