@@ -25,7 +25,8 @@ object EditScreenTags {
     const val BRUSH_CURSOR = "brushCursor"
 
     /** 색 줄의 지금 색(누르면 팔레트) */
-    const val COLOR_CURRENT = "colorCurrent"
+    /** 색 줄의 바꾸기 버튼(전경색·배경색 맞바꿈). 띠의 바꾸기 칸도 같은 이름표다. */
+    const val COLOR_SWAP = "colorSwap"
 
     /** 색 줄의 스포이드 버튼, 켜면 캔버스에 겹치는 스포이드 터치 자리, 손가락 둘레 고리 */
     const val COLOR_EYEDROPPER = "colorEyedropper"
@@ -219,8 +220,8 @@ object EditScreenTags {
     /** 레이어 줄의 눈(보이기·숨기기) */
     fun layerVisibility(id: com.kiln.stratum.engine.document.LayerId): String = "layerVisibility_${id.value}"
 
-    /** 색 줄의 [index]번째 최근 색 */
-    fun recentColor(index: Int): String = "recentColor_$index"
+    /** 색 줄의 전경색·배경색 칸 */
+    fun colorSlot(slot: com.kiln.stratum.settings.ColorSlot): String = "colorSlot_${slot.name}"
 
     /** 혼합 모드 메뉴의 [mode] 항목 */
     fun blendMode(mode: com.kiln.stratum.engine.document.BlendMode): String = "blendMode_${mode.name}"

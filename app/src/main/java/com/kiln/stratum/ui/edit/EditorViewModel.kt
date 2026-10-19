@@ -88,7 +88,7 @@ import com.kiln.stratum.project.ProjectLibrary
 import com.kiln.stratum.project.ProjectNames
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.settings.PreviewQuality
-import com.kiln.stratum.settings.RecentColors
+import com.kiln.stratum.settings.ColorSlot
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -352,9 +352,10 @@ class EditorViewModel internal constructor(
         override fun record(change: (Adjustments) -> Adjustments) = recordAdjustments(change)
     }
 
-    private val _brush = MutableStateFlow(BrushSettings())
+    // 브러시·글자 색은 전경색이다(결정 기록 '전경색·배경색'). 앱을 켤 때 저장된 전경색으로 시작한다.
+    private val _brush = MutableStateFlow(BrushSettings(color = appSettings.values.value.paintColors.foreground))
 
-    /** 브러시 설정(크기·단단함·불투명도·색). 앱을 끌 때까지 남는다(다른 문서를 열어도). */
+    /** 브러시 설정(크기·단단함·불투명도·색). 앱을 끌 때까지 남는다(다른 문서를 열어도). 색은 늘 전경색이다. */
     val brush: StateFlow<BrushSettings> = _brush.asStateFlow()
 
     private val _eraser = MutableStateFlow(BrushSettings(size = 60f, hardness = 0.7f))
@@ -362,10 +363,11 @@ class EditorViewModel internal constructor(
     /** 지우개 설정(색은 쓰지 않는다). 브러시와 따로 기억한다. */
     val eraser: StateFlow<BrushSettings> = _eraser.asStateFlow()
 
-    private val _textStyle = MutableStateFlow(TextStyle())
+    private val _textStyle = MutableStateFlow(TextStyle(color = appSettings.values.value.paintColors.foreground))
 
     /**
      * 글자 모양(크기·색). 앱을 끌 때까지 남는다. 크기를 직접 고르기 전에는 문서를 열 때마다 문서에 알맞은 크기(짧은 변의 6%)로 맞춘다.
+     * 색은 늘 전경색이다(브러시와 같다).
      */
     val textStyle: StateFlow<TextStyle> = _textStyle.asStateFlow()
 
@@ -1155,20 +1157,31 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * [target](브러시·글자)의 색을 [color]로 바꾸고 최근 색 맨 앞에 둔다(최근 색 누르기·팔레트 확인).
-     * 최근 색은 설정 저장소에 남아 앱을 다시 켜도 있다(결정 기록 '색 팔레트·최근 색').
+     * 전경색·배경색 중 [slot]을 [color]로 바꾼다(팔레트 확인·스포이드). 브러시·글자는 전경색으로 칠한다.
+     * 두 색은 설정 저장소에 남아 앱을 다시 켜도 그대로다(결정 기록 '전경색·배경색').
      */
-    fun chooseColor(target: ColorTarget, color: Int) {
-        val opaque = color or 0xFF000000.toInt()
-        when (target) {
-            ColorTarget.BRUSH -> setBrush(_brush.value.copy(color = opaque))
-            ColorTarget.TEXT -> setTextStyle(_textStyle.value.copy(color = opaque))
-        }
-        appSettings.update { it.copy(recentColors = RecentColors.add(it.recentColors, opaque)) }
+    fun chooseColor(slot: ColorSlot, color: Int) {
+        val colors = appSettings.values.value.paintColors.with(slot, color)
+        appSettings.update { it.copy(paintColors = colors) }
+        useForeground(colors.foreground)
+    }
+
+    /** 전경색과 배경색을 맞바꾼다(바꾸기 버튼). 브러시·글자는 새 전경색으로 칠한다. */
+    fun swapColors() {
+        val colors = appSettings.values.value.paintColors.swapped()
+        appSettings.update { it.copy(paintColors = colors) }
+        useForeground(colors.foreground)
+    }
+
+    /** 브러시·글자 색을 전경색 [color]로 맞춘다 */
+    private fun useForeground(color: Int) {
+        if (_brush.value.color != color) setBrush(_brush.value.copy(color = color))
+        if (_textStyle.value.color != color) setTextStyle(_textStyle.value.copy(color = color))
     }
 
     /**
-     * 스포이드를 시작한다: [target](브러시·글자)의 색을 문서 좌표 ([x], [y])에서 고르기 시작한다(결정 기록 '스포이드').
+     * 스포이드를 시작한다: [target](스포이드를 쓰는 도구: 브러시·글자)에서 문서 좌표 ([x], [y])의 색을 고르기 시작한다(결정 기록 '스포이드').
+     * 고른 색은 전경색이 된다.
      * 그 자리에 보이는 색(보이는 레이어를 모두 합친 색)을 백그라운드에서 읽어 [eyedropper]로 알린다.
      */
     fun beginEyedropper(target: ColorTarget, x: Float, y: Float) {
@@ -1187,7 +1200,7 @@ class EditorViewModel internal constructor(
         sampleEyedropper()
     }
 
-    /** 스포이드 손을 뗐다: 마지막 자리의 색을 쓰고 최근 색에 더한다(투명한 곳이면 그대로). 읽는 중이면 다 읽은 뒤 쓴다. */
+    /** 스포이드 손을 뗐다: 마지막 자리의 색을 전경색으로 쓴다(투명한 곳이면 그대로). 읽는 중이면 다 읽은 뒤 쓴다. */
     fun endEyedropper() {
         if (_eyedropper.value == null) return
         eyedropperEnding = true
@@ -1226,7 +1239,8 @@ class EditorViewModel internal constructor(
         val picked = _eyedropper.value
         eyedropperJob = null
         eyedropperEnding = false
-        picked?.color?.let { chooseColor(picked.target, it) }
+        // 고른 색은 전경색이 된다(브러시·글자 어디서 골랐든, 결정 기록 '전경색·배경색')
+        picked?.color?.let { chooseColor(ColorSlot.FOREGROUND, it) }
         _eyedropper.value = null
     }
 

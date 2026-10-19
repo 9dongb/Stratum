@@ -116,7 +116,6 @@ class EyedropperTest {
                             brush = brush,
                             onBrush = { brush = it },
                             strokeActions = strokes,
-                            recentColors = listOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()),
                             eyedropper = { eyedropper },
                             eyedropperActions = eyedropperActions
                         )

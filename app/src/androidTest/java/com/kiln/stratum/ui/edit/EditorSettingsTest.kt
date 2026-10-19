@@ -11,6 +11,8 @@ import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.AppSettings
+import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.settings.PreviewQuality
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -114,21 +116,37 @@ class EditorSettingsTest {
     }
 
     @Test
-    fun choosingAColor_setsTheBrushOrTextColor_andPutsItFirstInTheRecentColors() {
+    fun foregroundColor_isWhatTheBrushAndTheTextPaint_andTheBackgroundIsKept() {
         val blue = 0xFF1E88E5.toInt()
-        val black = 0xFF000000.toInt()
-        val white = 0xFFFFFFFF.toInt()
-        assertEquals(listOf(black, white), settings.values.value.recentColors)
+        assertEquals(PaintColors.DEFAULT, settings.values.value.paintColors)
+        assertEquals(PaintColors.BLACK, viewModel.brush.value.color)
 
-        onMain { viewModel.chooseColor(ColorTarget.BRUSH, blue) }
+        // 전경색을 고르면 브러시·글자 모두 그 색으로 칠한다
+        onMain { viewModel.chooseColor(ColorSlot.FOREGROUND, blue) }
+        assertEquals(PaintColors(blue, PaintColors.WHITE), settings.values.value.paintColors)
         assertEquals(blue, viewModel.brush.value.color)
-        assertEquals(listOf(blue, black, white), settings.values.value.recentColors)
+        assertEquals(blue, viewModel.textStyle.value.color)
 
-        // 글자 색도 같은 최근 색에 들어가고, 이미 있는 색은 앞으로 옮긴다
-        onMain { viewModel.chooseColor(ColorTarget.TEXT, white) }
-        assertEquals(white, viewModel.textStyle.value.color)
+        // 배경색은 칠하는 색을 바꾸지 않는다
+        onMain { viewModel.chooseColor(ColorSlot.BACKGROUND, PaintColors.BLACK) }
+        assertEquals(PaintColors(blue, PaintColors.BLACK), settings.values.value.paintColors)
         assertEquals(blue, viewModel.brush.value.color)
-        assertEquals(listOf(white, blue, black), settings.values.value.recentColors)
+
+        // 바꾸기: 배경색이 전경색이 되어 칠하는 색이 된다
+        onMain { viewModel.swapColors() }
+        assertEquals(PaintColors(PaintColors.BLACK, blue), settings.values.value.paintColors)
+        assertEquals(PaintColors.BLACK, viewModel.brush.value.color)
+        assertEquals(PaintColors.BLACK, viewModel.textStyle.value.color)
+    }
+
+    @Test
+    fun theBrushStartsWithTheSavedForegroundColor() {
+        val saved = AppSettings.inMemory().apply { update { it.copy(paintColors = PaintColors(0xFF1E88E5.toInt(), PaintColors.WHITE)) } }
+
+        val reopened = EditorViewModel(context, SavedStateHandle(), saved)
+
+        assertEquals(0xFF1E88E5.toInt(), reopened.brush.value.color)
+        assertEquals(0xFF1E88E5.toInt(), reopened.textStyle.value.color)
     }
 
     private companion object {

@@ -181,18 +181,24 @@
     <string name="brush_size_value">%1$d px</string>
     <string name="brush_hardness">경도</string>
     <string name="action_ok">확인</string>
-    <string name="color_current">지금 색, %1$s</string>
     <string name="color_choose">색 고르기</string>
     <string name="color_eyedropper">스포이드</string>
+    <string name="color_foreground">전경색</string>
+    <string name="color_background">배경색</string>
+    <string name="color_foreground_value">전경색, %1$s</string>
+    <string name="color_background_value">배경색, %1$s</string>
+    <string name="color_swap">전경색과 배경색 바꾸기</string>
+    <string name="color_choose_foreground">전경색 고르기</string>
+    <string name="color_choose_background">배경색 고르기</string>
+    <string name="strip_foreground">전경색</string>
+    <string name="strip_background">배경색</string>
     <string name="floating_panel_close">%1$s 닫기</string>
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
-    <string name="strip_color">색</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_selection_mode">방식</string>
     <string name="strip_tone_range">범위</string>
     <string name="strip_crop_ratio">비율</string>
-    <string name="color_recent">최근 색 %1$d, %2$s</string>
     <string name="color_saturation_value">채도·밝기</string>
     <string name="color_saturation_value_state">채도 %1$d%%, 밝기 %2$d%%</string>
     <string name="color_brighter">더 밝게</string>

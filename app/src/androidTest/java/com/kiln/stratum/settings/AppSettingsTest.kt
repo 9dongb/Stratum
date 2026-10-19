@@ -47,7 +47,7 @@ class AppSettingsTest {
             twoFingerTapUndo = false,
             threeFingerGestures = false,
             themeMode = ThemeMode.LIGHT,
-            recentColors = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
+            paintColors = PaintColors(foreground = 0xFF1E88E5.toInt(), background = 0xFF000000.toInt())
         )
 
         AppSettings(preferences()).update { changed }
@@ -74,7 +74,9 @@ class AppSettingsTest {
             .putString("exportSize", "big")
             .putString("previewQuality", "ULTRA")
             .putString("themeMode", "SEPIA")
-            .putString("recentColors", "FF1E88E5,red,,FF1E88E5,123456789")
+            // 전에 쓰던 최근 색은 읽지 않고, 알파가 빠진 색은 불투명하게 읽는다
+            .putString("recentColors", "FF1E88E5,FFFFFFFF")
+            .putInt("foregroundColor", 0x001E88E5)
             .commit()
 
         val values = AppSettings(preferences()).values.value
@@ -86,8 +88,16 @@ class AppSettingsTest {
         assertTrue(values.twoFingerTapUndo)
         assertTrue(values.threeFingerGestures)
         assertEquals(ThemeMode.DARK, values.themeMode)
-        // 망가진 최근 색은 건너뛰고 같은 색은 한 번만 읽는다
-        assertEquals(listOf(0xFF1E88E5.toInt()), values.recentColors)
+        assertEquals(PaintColors(foreground = 0xFF1E88E5.toInt(), background = PaintColors.WHITE), values.paintColors)
+    }
+
+    @Test
+    fun oldRecentColors_areDroppedOnTheNextSave() {
+        preferences().edit().putString("recentColors", "FF1E88E5").commit()
+
+        AppSettings(preferences()).update { it.copy(twoFingerTapUndo = false) }
+
+        assertFalse(preferences().contains("recentColors"))
     }
 
     @Test

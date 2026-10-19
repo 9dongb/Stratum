@@ -17,8 +17,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -32,6 +32,7 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -80,9 +81,8 @@ class BrushToolsTest {
     private var textStyle by mutableStateOf(TextStyle(size = 60f))
     private val added = mutableListOf<Triple<String, Float, Float>>()
 
-    /** 최근 색과 고른 색(대상, 색) */
-    private val recent = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
-    private val chosen = mutableListOf<Pair<ColorTarget, Int>>()
+    /** 바꾸기 버튼을 누른 수 */
+    private var swaps = 0
 
     /** 1000×1000 문서. 정사각형이라 화면에 맞추면 캔버스 가운데가 문서 가운데다. */
     private val document = PixelSize(1000, 1000)
@@ -110,8 +110,7 @@ class BrushToolsTest {
                             textStyle = textStyle,
                             onTextStyle = { textStyle = it },
                             onAddText = { text, x, y -> added += Triple(text, x, y) },
-                            recentColors = recent,
-                            onChooseColor = { target, color -> chosen += target to color }
+                            onSwapColors = { swaps++ }
                         )
                     }
                 }
@@ -125,12 +124,14 @@ class BrushToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
 
-        // 최근 색을 누르면 그 색을 고른다(최근 색 맨 앞으로 옮기는 것은 ViewModel이 한다)
-        composeRule.onNodeWithTag(EditScreenTags.recentColor(0)).performClick()
+        // 색 줄에는 전경색·배경색과 바꾸기 버튼이 있다(맞바꾸는 것은 ViewModel이 한다)
+        composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.FOREGROUND)).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.BACKGROUND)).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.COLOR_SWAP).performClick()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(100f)) }
 
         composeRule.runOnIdle {
-            assertEquals(listOf(ColorTarget.BRUSH to 0xFF1E88E5.toInt()), chosen)
+            assertEquals(1, swaps)
             assertEquals(100f, brush.size, 0f)
         }
     }

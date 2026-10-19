@@ -29,6 +29,7 @@ import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -347,20 +348,33 @@ private fun hardnessCell(hardness: Float, sliderTag: String, preview: SizePrevie
         )
     )
 
-/** 색 칸(누르면 지금 색·최근 색 옵션 창)과 스포이드 버튼(켜고 끔, 커버 색 줄의 스포이드와 같은 이름표) */
+/**
+ * 전경색·배경색 칸(누르면 옵션 창 없이 바로 그 색의 팔레트), 바꾸기 버튼(두 색을 맞바꿈), 스포이드 버튼(켜고 끔).
+ * 바꾸기·스포이드는 커버 색 줄과 같은 이름표다. 띠에서는 두 색이 위아래라 바꾸기 화살표를 세로로 돌린다.
+ */
 @Composable
 private fun colorCells(colors: ColorControls): List<StripItem> =
     buildList {
+        for (slot in ColorSlot.entries) {
+            val color = colors.colors[slot]
+            add(
+                ColorCell(
+                    key = colorCellKey(slot),
+                    color = color,
+                    caption = stringResource(if (slot == ColorSlot.FOREGROUND) R.string.strip_foreground else R.string.strip_background),
+                    description = stringResource(colorSlotDescription(slot), colorHex(color))
+                ) { colors.onOpenPalette(slot) }
+            )
+        }
         add(
-            ColorCell(
-                key = "color",
-                color = colors.color,
-                caption = stringResource(R.string.strip_color),
-                description = stringResource(R.string.color_current, colorHex(colors.color))
-            ) {
-                // 스포이드는 띠에 따로 있어 옵션 창에는 두지 않는다
-                ColorGrid(colors)
-            }
+            IconCell(
+                key = "swapColors",
+                icon = R.drawable.ic_swap_horiz,
+                description = stringResource(R.string.color_swap),
+                onClick = colors.onSwap,
+                iconRotation = 90f,
+                tag = EditScreenTags.COLOR_SWAP
+            )
         )
         colors.onEyedropper?.let { toggle ->
             add(
@@ -375,6 +389,12 @@ private fun colorCells(colors: ColorControls): List<StripItem> =
             )
         }
     }
+
+/** 띠의 전경색·배경색 칸 이름(화면 테스트 이름표 `strip_foreground`·`strip_background`) */
+internal fun colorCellKey(slot: ColorSlot): String = when (slot) {
+    ColorSlot.FOREGROUND -> "foreground"
+    ColorSlot.BACKGROUND -> "background"
+}
 
 /** 불투명도 칸(1~100%, 0%면 아무것도 칠해지지 않아 1%에서 멈춘다). 브러시·리터칭(복제)이 쓴다. */
 @Composable

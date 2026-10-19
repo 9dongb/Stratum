@@ -150,8 +150,9 @@ fun StratumApp(editor: EditorViewModel) {
                 mosaicOptions = mosaicOptions,
                 onMosaicOptions = editor::setMosaic,
                 effectActions = editor.effectActions,
-                recentColors = settingsValues.recentColors,
+                paintColors = settingsValues.paintColors,
                 onChooseColor = editor::chooseColor,
+                onSwapColors = editor::swapColors,
                 eyedropper = { eyedropper.value },
                 eyedropperActions = editor.eyedropperActions
             )

@@ -9,7 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.AppSettings
-import com.kiln.stratum.settings.RecentColors
+import com.kiln.stratum.settings.PaintColors
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -42,7 +42,7 @@ class EditorEyedropperTest {
     private fun awaitEyedropperDone() = runBlocking { withTimeout(10_000) { viewModel.eyedropper.first { it == null } } }
 
     @Test
-    fun picking_showsTheColor_thenUsesItForTheBrush_andTheRecentColors() {
+    fun picking_showsTheColor_thenMakesItTheForegroundColor() {
         openCanvas(CanvasFill.Solid(ORANGE))
 
         onMain { viewModel.beginEyedropper(ColorTarget.BRUSH, 100f, 100f) }
@@ -53,8 +53,10 @@ class EditorEyedropperTest {
         onMain { viewModel.endEyedropper() }
         awaitEyedropperDone()
 
+        // 고른 색은 전경색이 되어 브러시·글자가 그 색으로 칠한다(배경색은 그대로)
+        assertEquals(PaintColors(ORANGE, PaintColors.WHITE), settings.values.value.paintColors)
         assertEquals(ORANGE, viewModel.brush.value.color)
-        assertEquals(ORANGE, settings.values.value.recentColors.first())
+        assertEquals(ORANGE, viewModel.textStyle.value.color)
     }
 
     @Test
@@ -69,7 +71,7 @@ class EditorEyedropperTest {
         awaitEyedropperDone()
 
         assertEquals(ORANGE, viewModel.textStyle.value.color)
-        assertEquals(ORANGE, settings.values.value.recentColors.first())
+        assertEquals(ORANGE, settings.values.value.paintColors.foreground)
     }
 
     @Test
@@ -82,7 +84,7 @@ class EditorEyedropperTest {
         awaitEyedropperDone()
 
         assertEquals(brush, viewModel.brush.value.color)
-        assertEquals(RecentColors.DEFAULT, settings.values.value.recentColors)
+        assertEquals(PaintColors.DEFAULT, settings.values.value.paintColors)
 
         onMain {
             viewModel.beginEyedropper(ColorTarget.BRUSH, 100f, 100f)

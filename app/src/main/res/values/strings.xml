@@ -183,18 +183,24 @@
     <string name="brush_size_value">%1$d px</string>
     <string name="brush_hardness">Hardness</string>
     <string name="action_ok">OK</string>
-    <string name="color_current">Current color, %1$s</string>
     <string name="color_choose">Choose color</string>
     <string name="color_eyedropper">Eyedropper</string>
+    <string name="color_foreground">Foreground</string>
+    <string name="color_background">Background</string>
+    <string name="color_foreground_value">Foreground color, %1$s</string>
+    <string name="color_background_value">Background color, %1$s</string>
+    <string name="color_swap">Swap foreground and background colors</string>
+    <string name="color_choose_foreground">Choose foreground color</string>
+    <string name="color_choose_background">Choose background color</string>
+    <string name="strip_foreground">Fore</string>
+    <string name="strip_background">Back</string>
     <string name="floating_panel_close">Close %1$s</string>
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
-    <string name="strip_color">Color</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_selection_mode">Mode</string>
     <string name="strip_tone_range">Range</string>
     <string name="strip_crop_ratio">Ratio</string>
-    <string name="color_recent">Recent color %1$d, %2$s</string>
     <string name="color_saturation_value">Saturation and brightness</string>
     <string name="color_saturation_value_state">Saturation %1$d%%, brightness %2$d%%</string>
     <string name="color_brighter">Brighter</string>

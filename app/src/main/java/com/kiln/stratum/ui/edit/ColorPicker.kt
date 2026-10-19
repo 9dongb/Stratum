@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,23 +14,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -52,17 +51,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.QuietButton
+import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAwareDialog
@@ -77,25 +82,23 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
-/** 색을 고르는 곳(브러시·글자) */
+/** 스포이드를 쓰는 도구(브러시·글자). 버튼을 켠 도구에서 고르고, 고른 색은 전경색이 된다. */
 enum class ColorTarget { BRUSH, TEXT }
 
 /**
- * 색 줄이 쓰는 값과 할 일(브러시·글자 옵션, 결정 기록 '색 팔레트·최근 색'·'스포이드').
+ * 색 줄이 쓰는 값과 할 일(브러시·글자 옵션, 결정 기록 '전경색·배경색'·'스포이드').
  *
- * @property color 지금 색(불투명한 0xAARRGGBB)
- * @property recent 최근 색(맨 앞이 가장 최근)
- * @property onChoose 최근 색을 눌렀다. 그 색을 쓰고 최근 색 맨 앞으로 옮긴다.
- * @property onOpenPalette 지금 색을 눌렀다(팔레트를 연다)
+ * @property colors 전경색·배경색(브러시·글자가 함께 쓰고, 칠할 때는 전경색)
+ * @property onOpenPalette 전경색·배경색 칸을 눌렀다(그 색의 팔레트를 연다)
+ * @property onSwap 바꾸기 버튼을 눌렀다(전경색과 배경색을 맞바꾼다)
  * @property eyedropperOn 스포이드 버튼이 켜져 있는지(다음에 캔버스를 누르면 그 자리 색을 고른다)
  * @property onEyedropper 스포이드 버튼을 눌렀다(켜고 끈다). 없으면 버튼을 보이지 않는다.
  */
 @Stable
 class ColorControls(
-    val color: Int,
-    val recent: List<Int>,
-    val onChoose: (Int) -> Unit,
-    val onOpenPalette: () -> Unit,
+    val colors: PaintColors,
+    val onOpenPalette: (ColorSlot) -> Unit,
+    val onSwap: () -> Unit,
     val eyedropperOn: Boolean = false,
     val onEyedropper: (() -> Unit)? = null
 )
@@ -105,8 +108,8 @@ private const val OPAQUE = 0xFF000000.toInt()
 /** 색상 띠의 색(빨강에서 시작해 한 바퀴) */
 
 /**
- * 색 줄: 지금 색(무지개 테두리, 누르면 팔레트), 스포이드 버튼, 최근 색(6개까지, 누르면 그 색). 폭이 모자라면 옆으로 밀어 본다.
- * 지금 색과 같은 최근 색은 테두리로 보인다. 누르는 영역은 모두 48dp다.
+ * 색 줄: 전경색·배경색(누르면 그 색의 팔레트), 바꾸기 버튼(두 색을 맞바꿈), 스포이드 버튼. 폭이 모자라면 옆으로 밀어 본다.
+ * 두 색만 정한다(사용자 피드백 7차, 전에 있던 최근 색은 없앴다). 누르는 영역은 모두 48dp다.
  */
 @Composable
 fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
@@ -114,7 +117,12 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(EditScreenTags.BRUSH_COLORS),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CurrentColorButton(controls)
+        ColorSlotButton(controls, ColorSlot.FOREGROUND)
+        ColorSlotButton(controls, ColorSlot.BACKGROUND)
+        // 바꾸기: 전경색과 배경색을 맞바꾼다
+        StratumIconButton(onClick = controls.onSwap, modifier = Modifier.testTag(EditScreenTags.COLOR_SWAP)) {
+            Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.color_swap))
+        }
         controls.onEyedropper?.let { toggle ->
             // 스포이드: 켜면 다음에 캔버스를 누르거나 끈 자리의 색을 고른다(고른 도구가 칠하던 손가락 대신)
             // 켜지면 도구 막대의 고른 도구처럼 모서리 8dp 사각형(선택 배경)으로 보인다
@@ -126,94 +134,64 @@ fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
                 Icon(painterResource(R.drawable.ic_colorize), contentDescription = stringResource(R.string.color_eyedropper))
             }
         }
-        VerticalDivider(Modifier.padding(horizontal = 8.dp).height(28.dp), color = StratumTheme.colors.divider)
-        RecentColorButtons(controls)
     }
 }
 
-/**
- * 도구 옵션 띠의 색 옵션 창 내용: 지금 색(누르면 팔레트)과 최근 색을 한 줄에 [COLOR_GRID_COLUMNS]개씩 쌓는다(좁은 창에 들어가게).
- * 스포이드는 띠에 따로 있어 여기에는 두지 않는다. 이름표는 색 줄과 같다.
- */
-@Composable
-fun ColorGrid(controls: ColorControls, modifier: Modifier = Modifier) {
-    FlowRow(modifier.testTag(EditScreenTags.BRUSH_COLORS), maxItemsInEachRow = COLOR_GRID_COLUMNS) {
-        CurrentColorButton(controls)
-        RecentColorButtons(controls)
-    }
+/** 전경색·배경색의 이름(색 줄의 이름, 화면 읽기 기능의 '전경색, #000000') */
+@StringRes
+internal fun colorSlotLabel(slot: ColorSlot): Int = when (slot) {
+    ColorSlot.FOREGROUND -> R.string.color_foreground
+    ColorSlot.BACKGROUND -> R.string.color_background
 }
 
-/** 색 옵션 창의 한 줄에 놓는 색 수(지금 색 포함) */
-private const val COLOR_GRID_COLUMNS = 4
+@StringRes
+internal fun colorSlotDescription(slot: ColorSlot): Int = when (slot) {
+    ColorSlot.FOREGROUND -> R.string.color_foreground_value
+    ColorSlot.BACKGROUND -> R.string.color_background_value
+}
 
-/** 지금 색: 무지개 테두리가 '색 고르기'를 알린다. 누르면 팔레트를 연다. */
+/** 색 줄의 전경색·배경색 칸: 무지개 테두리 동그라미('색 고르기'를 알림)와 이름. 누르면 그 색의 팔레트를 연다. */
 @Composable
-private fun CurrentColorButton(controls: ColorControls) {
-    val current = controls.color or OPAQUE
-    val currentLabel = stringResource(R.string.color_current, colorHex(current))
+private fun ColorSlotButton(controls: ColorControls, slot: ColorSlot) {
+    val color = controls.colors[slot]
+    val description = stringResource(colorSlotDescription(slot), colorHex(color))
     val chooseLabel = stringResource(R.string.color_choose)
-    Box(
+    Row(
         modifier = Modifier
-            .size(48.dp)
-            .clickable(onClickLabel = chooseLabel, role = Role.Button, onClick = controls.onOpenPalette)
-            .semantics { contentDescription = currentLabel }
-            .testTag(EditScreenTags.COLOR_CURRENT),
-        contentAlignment = Alignment.Center
+            .heightIn(min = 48.dp)
+            .testTag(EditScreenTags.colorSlot(slot))
+            // 화면 읽기 기능은 이름과 색('전경색, #000000')을 한 번에 읽는다
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(chooseLabel) {
+                    controls.onOpenPalette(slot)
+                    true
+                }
+            }
+            .clickable(onClickLabel = chooseLabel, role = Role.Button) { controls.onOpenPalette(slot) }
+            .padding(start = 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(38.dp)
+                .size(32.dp)
                 .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), StratumShapes.Dot)
-                .padding(5.dp)
-                .background(Color(current), StratumShapes.Dot)
+                .padding(4.dp)
+                .background(Color(color), StratumShapes.Dot)
         )
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(colorSlotLabel(slot)), style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
     }
-}
-
-/** 최근 색 동그라미들(누르면 그 색). 지금 색과 같은 것은 고른 것으로 보인다. */
-@Composable
-private fun RecentColorButtons(controls: ColorControls) {
-    val current = controls.color or OPAQUE
-    val selectedLabel = stringResource(R.string.layer_selected)
-    controls.recent.forEachIndexed { index, color ->
-        val isSelected = color or OPAQUE == current
-        val name = stringResource(R.string.color_recent, index + 1, colorHex(color))
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .selectable(selected = isSelected, role = Role.RadioButton, onClick = { controls.onChoose(color) })
-                .semantics {
-                    contentDescription = name
-                    if (isSelected) stateDescription = selectedLabel
-                }
-                .testTag(EditScreenTags.recentColor(index)),
-            contentAlignment = Alignment.Center
-        ) {
-            ColorDot(color, isSelected)
-        }
-    }
-}
-
-/** 색 동그라미(보이는 32dp). 고른 색은 굵은 테두리다. */
-@Composable
-private fun ColorDot(color: Int, selected: Boolean) {
-    val ring = if (selected) StratumTheme.colors.selectedContent else StratumTheme.colors.fieldBorder
-    Box(
-        Modifier
-            .size(32.dp)
-            .border(BorderStroke(if (selected) 3.dp else 1.dp, ring), StratumShapes.Dot)
-            .padding(if (selected) 4.dp else 1.dp)
-            .background(Color(color or OPAQUE), StratumShapes.Dot)
-    )
 }
 
 /**
  * 팔레트에서 고르는 중인 색. 색상(0~360)·채도(0~1)·밝기(0~1)로 든다(회색에서 채도를 올려도 색상이 남게).
  *
- * @property target 고른 색을 쓸 곳
+ * @property slot 고른 색을 쓸 곳(전경색·배경색)
  * @property original 팔레트를 열 때의 색(비교해 보이고, 누르면 되돌린다)
  */
-data class PaletteDraft(val target: ColorTarget, val original: Int, val hue: Float, val saturation: Float, val value: Float) {
+data class PaletteDraft(val slot: ColorSlot, val original: Int, val hue: Float, val saturation: Float, val value: Float) {
 
     /** 고르는 색(불투명) */
     val color: Int
@@ -221,16 +199,16 @@ data class PaletteDraft(val target: ColorTarget, val original: Int, val hue: Flo
 
     companion object {
         /** [color]에서 시작하는 팔레트 */
-        fun start(target: ColorTarget, color: Int): PaletteDraft {
+        fun start(slot: ColorSlot, color: Int): PaletteDraft {
             val hsv = FloatArray(3)
             AndroidColor.colorToHSV(color or OPAQUE, hsv)
-            return PaletteDraft(target, color or OPAQUE, hsv[0], hsv[1], hsv[2])
+            return PaletteDraft(slot, color or OPAQUE, hsv[0], hsv[1], hsv[2])
         }
 
         /** 접기·펼치기에도 팔레트가 남게 저장한다(닫혀 있으면 저장하지 않는다) */
         val Saver: Saver<PaletteDraft?, List<Any>> = Saver(
-            save = { draft -> draft?.let { listOf(it.target.name, it.original, it.hue, it.saturation, it.value) } },
-            restore = { PaletteDraft(ColorTarget.valueOf(it[0] as String), it[1] as Int, it[2] as Float, it[3] as Float, it[4] as Float) }
+            save = { draft -> draft?.let { listOf(it.slot.name, it.original, it.hue, it.saturation, it.value) } },
+            restore = { PaletteDraft(ColorSlot.valueOf(it[0] as String), it[1] as Int, it[2] as Float, it[3] as Float, it[4] as Float) }
         )
     }
 }
@@ -263,7 +241,8 @@ fun ColorPalettePrompt(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    val title = stringResource(R.string.color_choose)
+    // 어느 색을 고르는지 제목으로 알린다(전경색 고르기·배경색 고르기)
+    val title = stringResource(if (draft.slot == ColorSlot.FOREGROUND) R.string.color_choose_foreground else R.string.color_choose_background)
     // 가로 힌지가 있으면(메인 세로) 창이 그 위쪽 절반에 들어가므로, 네모를 남는 높이에 맞춰 낮춘다
     val region = if (LocalHinges.current.any { !it.isVertical }) windowHeight / 2 else windowHeight
     val maxHeight = (region - PaletteChrome).coerceIn(MinSquare, MaxSquare)
@@ -453,7 +432,7 @@ private fun ColorCompare(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, 
                     .fillMaxWidth()
                     .height(48.dp)
                     .background(Color(draft.original))
-                    .clickable(onClickLabel = revertLabel, role = Role.Button) { onChange(PaletteDraft.start(draft.target, draft.original)) }
+                    .clickable(onClickLabel = revertLabel, role = Role.Button) { onChange(PaletteDraft.start(draft.slot, draft.original)) }
                     .semantics { contentDescription = revertLabel }
                     .testTag(EditScreenTags.PALETTE_ORIGINAL)
             )

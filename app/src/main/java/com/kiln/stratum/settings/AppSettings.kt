@@ -49,7 +49,7 @@ enum class ThemeMode {
  * @property twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소
  * @property threeFingerGestures 세 손가락 제스처: 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)
  * @property themeMode 앱 테마(다크·라이트·휴대폰 설정 따름)
- * @property recentColors 최근 색(브러시·글자, 맨 앞이 가장 최근, [RecentColors]). 설정 화면에는 보이지 않고, 앱을 다시 켜도 남는다.
+ * @property paintColors 전경색·배경색(브러시·글자가 함께 씀, [PaintColors]). 설정 화면에는 보이지 않고, 앱을 다시 켜도 남는다.
  */
 data class SettingsValues(
     val export: ExportChoice = ExportChoice(),
@@ -57,7 +57,7 @@ data class SettingsValues(
     val twoFingerTapUndo: Boolean = true,
     val threeFingerGestures: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.DARK,
-    val recentColors: List<Int> = RecentColors.DEFAULT
+    val paintColors: PaintColors = PaintColors.DEFAULT
 )
 
 /**
@@ -91,6 +91,10 @@ class AppSettings internal constructor(private val preferences: SharedPreference
         private const val KEY_TWO_FINGER_UNDO = "twoFingerTapUndo"
         private const val KEY_THREE_FINGER = "threeFingerGestures"
         private const val KEY_THEME_MODE = "themeMode"
+        private const val KEY_FOREGROUND = "foregroundColor"
+        private const val KEY_BACKGROUND = "backgroundColor"
+
+        /** 전에 쓰던 최근 색(사용자 피드백 7차에서 전경색·배경색으로 바꿈). 저장할 때 지운다. */
         private const val KEY_RECENT_COLORS = "recentColors"
 
         /** 크기 저장 값: 원본은 이 글자, 긴 변은 픽셀 숫자 */
@@ -127,7 +131,10 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 twoFingerTapUndo = preferences.getBoolean(KEY_TWO_FINGER_UNDO, defaults.twoFingerTapUndo),
                 threeFingerGestures = preferences.getBoolean(KEY_THREE_FINGER, defaults.threeFingerGestures),
                 themeMode = theme,
-                recentColors = RecentColors.decode(preferences.getString(KEY_RECENT_COLORS, null))
+                paintColors = PaintColors(
+                    foreground = PaintColors.opaque(preferences.getInt(KEY_FOREGROUND, defaults.paintColors.foreground)),
+                    background = PaintColors.opaque(preferences.getInt(KEY_BACKGROUND, defaults.paintColors.background))
+                )
             )
         }
 
@@ -146,7 +153,9 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 .putBoolean(KEY_TWO_FINGER_UNDO, values.twoFingerTapUndo)
                 .putBoolean(KEY_THREE_FINGER, values.threeFingerGestures)
                 .putString(KEY_THEME_MODE, values.themeMode.name)
-                .putString(KEY_RECENT_COLORS, RecentColors.encode(values.recentColors))
+                .putInt(KEY_FOREGROUND, values.paintColors.foreground)
+                .putInt(KEY_BACKGROUND, values.paintColors.background)
+                .remove(KEY_RECENT_COLORS)
                 .apply()
         }
     }

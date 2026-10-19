@@ -136,17 +136,14 @@ class ChoiceCell(
     override val flyout: @Composable () -> Unit
 ) : StripItem
 
-/** 색 칸: 지금 색([color], 무지개 테두리). 누르면 옵션 창에 지금 색(누르면 팔레트)과 최근 색 */
+/** 색 칸: 색([color], 무지개 테두리)과 작은 이름([caption]). 누르면 옵션 창 없이 바로 [onClick](전경색·배경색의 팔레트를 연다) */
 class ColorCell(
     override val key: String,
     val color: Int,
     val caption: String,
     val description: String,
-    override val flyout: @Composable () -> Unit
-) : StripItem {
-    override val title: String
-        get() = caption
-}
+    val onClick: () -> Unit
+) : StripItem
 
 /**
  * 아이콘 버튼 칸. 누르면 바로 [onClick]을 한다. [checked]가 있으면 켜고 끄는 버튼이다(켜지면 선택 배경).
@@ -273,7 +270,11 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
             is ValueCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
             is SliderCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
             is ChoiceCell -> ChoiceCellView(item, open) { state.toggleFlyout(item.key) }
-            is ColorCell -> ColorCellView(item, open) { state.toggleFlyout(item.key) }
+            is ColorCell -> ColorCellView(item) {
+                // 다른 칸의 옵션 창은 닫고 바로 팔레트를 연다
+                state.closeFlyout()
+                item.onClick()
+            }
             is IconCell -> IconCellView(item) {
                 // 다른 칸의 옵션 창은 닫고 바로 한다
                 state.closeFlyout()
@@ -368,9 +369,9 @@ private fun ChoiceCellView(cell: ChoiceCell, open: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun ColorCellView(cell: ColorCell, open: Boolean, onClick: () -> Unit) {
-    CellBox(EditScreenTags.strip(cell.key), cell.description, null, open, enabled = true, onClick = onClick) {
-        // 지금 색: 색 줄의 지금 색처럼 무지개 테두리가 '색 고르기'를 알린다
+private fun ColorCellView(cell: ColorCell, onClick: () -> Unit) {
+    CellBox(EditScreenTags.strip(cell.key), cell.description, null, open = false, enabled = true, onClick = onClick) {
+        // 색 줄의 전경색·배경색처럼 무지개 테두리가 '색 고르기'를 알린다
         Box(
             Modifier
                 .size(28.dp)

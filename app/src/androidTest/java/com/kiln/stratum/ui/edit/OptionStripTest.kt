@@ -14,10 +14,13 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -38,6 +41,8 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -93,8 +98,8 @@ class OptionStripTest {
     private var retouch by mutableStateOf(BrushSettings(size = 60f, hardness = 0.5f))
     private var cloneSource by mutableStateOf<CloneSource?>(null)
     private var toneOptions by mutableStateOf(ToneOptions())
-    private val recent = listOf(0xFF1E88E5.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
-    private val chosen = mutableListOf<Pair<ColorTarget, Int>>()
+    private var paintColors by mutableStateOf(PaintColors.DEFAULT)
+    private val chosen = mutableListOf<Pair<ColorSlot, Int>>()
     private var homeBacks = 0
     private var undos = 0
     private val eyedropper = mutableListOf<String>()
@@ -140,8 +145,9 @@ class OptionStripTest {
                             cloneSource = cloneSource,
                             toneOptions = toneOptions,
                             onToneOptions = { toneOptions = it },
-                            recentColors = recent,
-                            onChooseColor = { target, color -> chosen += target to color },
+                            paintColors = paintColors,
+                            onChooseColor = { slot, color -> chosen += slot to color },
+                            onSwapColors = { paintColors = paintColors.swapped() },
                             eyedropperActions = object : EyedropperActions {
                                 override fun begin(target: ColorTarget, x: Float, y: Float) {
                                     eyedropper += "begin"
@@ -199,7 +205,9 @@ class OptionStripTest {
         pick(EditTool.Brush)
 
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
-        for (key in listOf("color", "size", "hardness", "opacity")) cell(key).assertIsDisplayed()
+        // 전경색·배경색·바꾸기·스포이드, 크기·경도·불투명도
+        for (key in listOf("foreground", "background", "size", "hardness", "opacity")) cell(key).assertIsDisplayed()
+        composeRule.onNode(hasTestTag(EditScreenTags.COLOR_SWAP) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).assertIsDisplayed()
         // 커버의 옵션(색 줄·슬라이더 목록)은 없다
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
@@ -211,7 +219,7 @@ class OptionStripTest {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Eraser)
         cell("size").assertIsDisplayed()
-        cell("color").assertDoesNotExist()
+        cell("foreground").assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).assertDoesNotExist()
 
         pick(EditTool.Eraser)
@@ -340,28 +348,34 @@ class OptionStripTest {
     }
 
     @Test
-    fun colorCell_choosesARecentColor_andCloses() {
+    fun colorCells_openThatColorsPalette_rightAway() {
         show()
         pick(EditTool.Brush)
-        cell("color").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_COLORS).assertIsDisplayed()
-
-        composeRule.onNodeWithTag(EditScreenTags.recentColor(0)).performClick()
-
-        composeRule.runOnIdle { assertEquals(listOf(ColorTarget.BRUSH to recent[0]), chosen) }
+        // 사용자 요청: 도구를 고르면 전경색·배경색이 바로 보이고, 색을 누르면 옵션 창 없이 바로 색 고르기 창이 뜬다
+        cell("size").performClick()
+        cell("foreground").performClick()
+        composeRule.onNodeWithTag(EditScreenTags.PALETTE).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.color_choose_foreground)).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.PALETTE_OK).performClick()
+
+        cell("background").performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.color_choose_background)).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.PALETTE_OK).performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf(ColorSlot.FOREGROUND to PaintColors.BLACK, ColorSlot.BACKGROUND to PaintColors.WHITE), chosen) }
     }
 
     @Test
-    fun colorCell_currentColorOpensThePalette_andClosesTheFlyout() {
+    fun swapCell_tradesTheTwoColors() {
         show()
         pick(EditTool.Brush)
-        cell("color").performClick()
+        cell("foreground").assertContentDescriptionContains("#000000", substring = true)
 
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.COLOR_SWAP) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).performClick()
 
-        composeRule.onNodeWithTag(EditScreenTags.PALETTE).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        cell("foreground").assertContentDescriptionContains("#FFFFFF", substring = true)
+        cell("background").assertContentDescriptionContains("#000000", substring = true)
     }
 
     @Test
@@ -388,7 +402,9 @@ class OptionStripTest {
         composeRule.mainClock.autoAdvance = false
         pick(EditTool.Text)
         composeRule.mainClock.advanceTimeBy(300)
-        cell("color").assertExists()
+        // 글자도 브러시와 같은 두 색(전경색·배경색) 칸이 있다
+        cell("foreground").assertExists()
+        cell("background").assertExists()
         cell("textSize").assertExists()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertExists()
 

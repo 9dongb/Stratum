@@ -82,6 +82,8 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
+import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
@@ -143,8 +145,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param blurOptions 흐림 도구(흐림·선명) 설정(강도·크기·경도), [onBlurOptions]로 바꾼다
  * @param mosaicOptions 모자이크 도구 설정(셀 크기·크기·경도), [onMosaicOptions]로 바꾼다
  * @param effectActions 흐림·모자이크 도구를 고른 채 캔버스를 끌 때 보내는 일
- * @param recentColors 최근 색(브러시·글자의 색 줄, 맨 앞이 가장 최근)
- * @param onChooseColor 브러시·글자의 색을 골랐다(최근 색 누르기·팔레트 확인). 최근 색에도 더한다.
+ * @param paintColors 전경색·배경색(브러시·글자가 함께 쓰고, 칠할 때는 전경색, 결정 기록 '전경색·배경색')
+ * @param onChooseColor 전경색이나 배경색을 골랐다(팔레트 확인)
+ * @param onSwapColors 전경색과 배경색을 맞바꾼다(색 줄의 바꾸기 버튼)
  * @param eyedropper 스포이드로 고르는 중인 자리와 색(없으면 null). 손가락 둘레 고리만 읽도록 함수로 받는다.
  * @param eyedropperActions 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일
  */
@@ -195,8 +198,9 @@ fun EditScreen(
     mosaicOptions: MosaicOptions = MosaicOptions(),
     onMosaicOptions: (MosaicOptions) -> Unit = {},
     effectActions: EffectActions = EffectActions.None,
-    recentColors: List<Int> = emptyList(),
-    onChooseColor: (ColorTarget, Int) -> Unit = { _, _ -> },
+    paintColors: PaintColors = PaintColors.DEFAULT,
+    onChooseColor: (ColorSlot, Int) -> Unit = { _, _ -> },
+    onSwapColors: () -> Unit = {},
     eyedropper: () -> EyedropperState? = { null },
     eyedropperActions: EyedropperActions = EyedropperActions.None
 ) {
@@ -267,18 +271,17 @@ fun EditScreen(
     // 스포이드 버튼을 켠 곳(브러시·글자). 켜면 다음에 캔버스를 누른 자리의 색을 고르고 꺼진다. 도구를 바꾸면 꺼진다.
     var eyedropperTarget by rememberSaveable { mutableStateOf<ColorTarget?>(null) }
     LaunchedEffect(selection.active) { eyedropperTarget = null }
-    // 브러시·글자의 색 줄: 최근 색을 누르면 그 색, 지금 색을 누르면 팔레트, 스포이드 버튼은 켜고 끈다
-    // 메인 화면의 색 옵션 창은 색을 고르거나 팔레트를 열면 닫는다(바로 칠할 수 있게)
-    fun colorControls(target: ColorTarget, color: Int) = ColorControls(
-        color = color,
-        recent = recentColors,
-        onChoose = {
-            onChooseColor(target, it)
+    // 브러시·글자의 색 줄: 전경색·배경색을 누르면 그 색의 팔레트, 바꾸기 버튼은 두 색을 맞바꾸고, 스포이드 버튼은 켜고 끈다
+    // (결정 기록 '전경색·배경색'). 두 색은 브러시·글자가 함께 쓴다. 메인 화면의 띠에서 열린 옵션 창은 닫는다.
+    fun colorControls(target: ColorTarget) = ColorControls(
+        colors = paintColors,
+        onOpenPalette = { slot ->
             floating.closeFlyout()
+            palette = PaletteDraft.start(slot, paintColors[slot])
         },
-        onOpenPalette = {
+        onSwap = {
             floating.closeFlyout()
-            palette = PaletteDraft.start(target, color)
+            onSwapColors()
         },
         eyedropperOn = eyedropperTarget == target,
         onEyedropper = { eyedropperTarget = if (eyedropperTarget == target) null else target }
@@ -392,11 +395,11 @@ fun EditScreen(
         }
         // 고른 브러시·지우개의 설정
         val brushControls = when (activeTool) {
-            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush, sizePreview = sizePreview, colors = colorControls(ColorTarget.BRUSH, brush.color))
+            EditTool.Brush -> BrushControls(brush, erase = false, onChange = onBrush, sizePreview = sizePreview, colors = colorControls(ColorTarget.BRUSH))
             EditTool.Eraser -> BrushControls(eraser, erase = true, onChange = onEraser, sizePreview = sizePreview)
             else -> null
         }
-        val textControls = TextControls(textStyle, onTextStyle, colorControls(ColorTarget.TEXT, textStyle.color)).takeIf { activeTool == EditTool.Text }
+        val textControls = TextControls(textStyle, onTextStyle, colorControls(ColorTarget.TEXT)).takeIf { activeTool == EditTool.Text }
         val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
             SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
         }
@@ -647,7 +650,8 @@ fun EditScreen(
             if (ready != null && picked != null) {
                 EyedropperLoupe(
                     state = picked,
-                    currentColor = if (picked.target == ColorTarget.BRUSH) brush.color else textStyle.color,
+                    // 아래쪽 반은 지금 칠하는 색(전경색)이다
+                    currentColor = paintColors.foreground,
                     view = { viewState.view },
                     document = ready.documentSize,
                     modifier = Modifier.fillMaxSize()
@@ -872,7 +876,7 @@ fun EditScreen(
                 onChange = { palette = it },
                 onDismiss = { palette = null },
                 onConfirm = {
-                    onChooseColor(draft.target, draft.color)
+                    onChooseColor(draft.slot, draft.color)
                     palette = null
                 }
             )

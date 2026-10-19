@@ -14,11 +14,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.document.BlendMode
@@ -34,6 +36,8 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.ui.layout.HINGE_AWARE_DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -62,8 +66,10 @@ class ColorPaletteTest {
     private var brush by mutableStateOf(BrushSettings(size = 40f, color = BLACK))
     private var textStyle by mutableStateOf(TextStyle(size = 60f, color = BLACK))
 
-    /** 고른 색(대상, 색) */
-    private val chosen = mutableListOf<Pair<ColorTarget, Int>>()
+    private var paintColors by mutableStateOf(PaintColors.DEFAULT)
+
+    /** 고른 색(전경색·배경색, 색) */
+    private val chosen = mutableListOf<Pair<ColorSlot, Int>>()
 
     private val document = PixelSize(1000, 1000)
     private val preview = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
@@ -88,8 +94,9 @@ class ColorPaletteTest {
                             onBrush = { brush = it },
                             textStyle = textStyle,
                             onTextStyle = { textStyle = it },
-                            recentColors = RECENT,
-                            onChooseColor = { target, color -> chosen += target to color }
+                            paintColors = paintColors,
+                            onChooseColor = { slot, color -> chosen += slot to color },
+                            onSwapColors = { paintColors = paintColors.swapped() }
                         )
                     }
                 }
@@ -112,23 +119,31 @@ class ColorPaletteTest {
         assertEquals("visible height", coordinates.size.height.toFloat(), coordinates.boundsInWindow().height, 1f)
     }
 
+    private val foreground get() = composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.FOREGROUND))
+    private val background get() = composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.BACKGROUND))
+
     @Test
-    fun colorRow_showsTheCurrentColorAndRecentColors_andARecentColorIsChosen() {
+    fun colorRow_showsTheForegroundAndBackground_andSwapTradesThem() {
         openCoverBrush()
 
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).assertIsDisplayed()
-        // 지금 색(검정)과 같은 최근 색은 골라진 것으로 보인다
-        composeRule.onNodeWithTag(EditScreenTags.recentColor(1)).assertIsSelected()
-        composeRule.onNodeWithTag(EditScreenTags.recentColor(2)).performScrollTo().performClick()
+        // 사용자 요청: 탭을 누르면 전경색·배경색 두 색이 바로 보인다(최근 색은 없다)
+        foreground.assertIsDisplayed().assertContentDescriptionContains(hexOf(BLACK), substring = true)
+        background.assertIsDisplayed().assertContentDescriptionContains(hexOf(WHITE), substring = true)
 
-        composeRule.runOnIdle { assertEquals(listOf(ColorTarget.BRUSH to WHITE), chosen) }
+        composeRule.onNodeWithTag(EditScreenTags.COLOR_SWAP).performClick()
+
+        foreground.assertContentDescriptionContains(hexOf(WHITE), substring = true)
+        background.assertContentDescriptionContains(hexOf(BLACK), substring = true)
+        composeRule.runOnIdle { assertTrue(chosen.isEmpty()) }
     }
 
     @Test
     fun palette_picksFromTheSquareAndTheHue_andOkChoosesThatColor() {
         openCoverBrush()
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
+        foreground.performClick()
         composeRule.onNodeWithTag(EditScreenTags.PALETTE).assertIsDisplayed()
+        // 어느 색을 고르는지 제목이 알린다
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.color_choose_foreground)).assertIsDisplayed()
         assertEquals(hexOf(BLACK), shownHex())
 
         // 오른쪽 위(채도·밝기 가장 높음)를 누르고 색상을 파랑(240°)으로
@@ -139,8 +154,8 @@ class ColorPaletteTest {
 
         composeRule.onNodeWithTag(EditScreenTags.PALETTE).assertDoesNotExist()
         composeRule.runOnIdle {
-            val (target, color) = chosen.single()
-            assertEquals(ColorTarget.BRUSH, target)
+            val (slot, color) = chosen.single()
+            assertEquals(ColorSlot.FOREGROUND, slot)
             assertEquals(hex, hexOf(color))
             assertTrue(hex, Color.blue(color) > 240 && Color.red(color) < 10 && Color.green(color) < 10)
         }
@@ -149,7 +164,7 @@ class ColorPaletteTest {
     @Test
     fun cancel_keepsTheColor_andOriginalUndoesThePick() {
         openCoverBrush()
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
+        foreground.performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.PALETTE_SQUARE).performTouchInput { click(center) }
         assertNotEquals(hexOf(BLACK), shownHex())
@@ -164,15 +179,16 @@ class ColorPaletteTest {
     }
 
     @Test
-    fun text_usesTheSameColorRow() {
+    fun text_usesTheSameTwoColors() {
         show(411, 800)
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performScrollTo().performClick()
 
-        composeRule.onNodeWithTag(EditScreenTags.recentColor(0)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
+        background.performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.color_choose_background)).assertIsDisplayed()
+        assertEquals(hexOf(WHITE), shownHex())
         composeRule.onNodeWithTag(EditScreenTags.PALETTE_OK).performClick()
 
-        composeRule.runOnIdle { assertEquals(listOf(ColorTarget.TEXT to BLUE, ColorTarget.TEXT to BLACK), chosen) }
+        composeRule.runOnIdle { assertEquals(listOf(ColorSlot.BACKGROUND to WHITE), chosen) }
     }
 
     @Test
@@ -184,10 +200,8 @@ class ColorPaletteTest {
         val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        // 메인 화면은 띠의 색 칸을 눌러 연 옵션 창에 지금 색이 있다
-        composeRule.onNodeWithTag(EditScreenTags.strip("color")).performClick()
-
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_CURRENT).performClick()
+        // 메인 화면은 띠의 전경색 칸을 누르면 바로 팔레트가 뜬다
+        composeRule.onNodeWithTag(EditScreenTags.strip("foreground")).performClick()
 
         composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).assertExists()
         // 스크롤하지 않아도 네모·색상 띠·새 색·원래 색·16진 코드가 다 보이고, 누르는 것은 모두 힌지를 피한다
@@ -203,7 +217,5 @@ class ColorPaletteTest {
     private companion object {
         const val BLACK = 0xFF000000.toInt()
         const val WHITE = 0xFFFFFFFF.toInt()
-        const val BLUE = 0xFF1E88E5.toInt()
-        val RECENT = listOf(BLUE, BLACK, WHITE)
     }
 }
