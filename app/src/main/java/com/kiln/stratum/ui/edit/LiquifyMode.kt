@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -38,6 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -164,6 +168,9 @@ fun LiquifyMode(
 ) {
     BackHandler(enabled = !state.busy, onBack = actions::cancel)
     val viewState = rememberCanvasViewState(state.documentSize)
+    // 작업 모드와 캔버스의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다).
+    var screenTop by remember { mutableFloatStateOf(0f) }
+    var canvasTop by remember { mutableFloatStateOf(0f) }
     // 크기 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스 가운데에 브러시 크기를 보인다
     val sizePreview = rememberSizePreviewState()
     // 두 손가락 톡: 처리 중이면 아무것도 하지 않고, 한 획 되돌리거나 되돌릴 것이 없다고 알린다
@@ -220,7 +227,7 @@ fun LiquifyMode(
     }
     // 바탕은 편집 화면처럼 작업 공간 색이다(캔버스 주변). 위 막대와 옵션은 제 색을 칠한다.
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = StratumTheme.colors.workspace) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { screenTop = it.positionInRoot().y }) {
             val widthClass = widthClassOf(maxWidth.value)
             val maxOptionsHeight = maxHeight * 0.4f
             // 닫힌 화면(커버)은 새 창 공통 규칙대로 취소·적용을 맨 아래 X·✓ 줄에 둔다(결정 기록 '닫힌 화면 새 창')
@@ -228,7 +235,7 @@ fun LiquifyMode(
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
                 val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
-                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, threeFinger, flip, canvasModifier)
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, canvasModifier)
                 }
                 if (widthClass == WidthClass.Expanded) {
                     Row(Modifier.fillMaxSize()) {
@@ -275,6 +282,8 @@ fun LiquifyMode(
                     }
                 }
             }
+            // 제스처 알림은 옵션 칸과 상관없이 화면 가로 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다, 2026-10-20 사용자 요청)
+            GestureToast(gestureToast, Modifier.fillMaxSize().padding(top = with(LocalDensity.current) { (canvasTop - screenTop).coerceAtLeast(0f).toDp() }))
         }
     }
 }
@@ -334,7 +343,8 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions, cancelAn
 
 /**
  * 비튼 미리 보기와 브러시 손가락 자리. 적용하는 동안 위쪽에 처리 중 막대를 보인다.
- * [showSize]면(크기 슬라이더를 끄거나 세 손가락으로 미는 중) 가운데에 브러시 크기 원을 보인다. 제스처 알림([gestureToast])은 위쪽 가운데에 뜬다.
+ * [showSize]면(크기 슬라이더를 끄거나 세 손가락으로 미는 중) 가운데에 브러시 크기 원을 보인다. [onCanvasTop]으로 캔버스의 위쪽 끝을 알린다
+ * (제스처 알림은 작업 모드 전체 자리에서 그 아래 화면 정중앙에 뜬다).
  */
 @Composable
 private fun LiquifyCanvas(
@@ -342,7 +352,7 @@ private fun LiquifyCanvas(
     viewState: CanvasViewState,
     actions: LiquifyActions,
     showSize: Boolean,
-    gestureToast: GestureToastState,
+    onCanvasTop: (Float) -> Unit,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
     flip: ViewFlip,
@@ -353,6 +363,7 @@ private fun LiquifyCanvas(
     }
     Box(
         modifier
+            .onGloballyPositioned { onCanvasTop(it.positionInRoot().y) }
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .testTag(EditScreenTags.LIQUIFY_CANVAS)
     ) {
@@ -366,7 +377,6 @@ private fun LiquifyCanvas(
         if (state.busy) {
             LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
-        GestureToast(gestureToast, Modifier.fillMaxSize())
     }
 }
 

@@ -237,6 +237,19 @@ class LiquifyModeTest {
     }
 
     @Test
+    fun mainLandscape_theToastIsCenteredOnTheScreen_notOnTheCanvas() {
+        // 메인 가로는 오른쪽에 옵션 칸이 있어 캔버스 가운데가 화면 가운데보다 왼쪽이다. 알림은 화면 정중앙이다(사용자 요청).
+        show(930, 700, twoFingerTapUndo = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).performTouchInput { twoFingerTap() }
+
+        val screen = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_TOP_BAR).fetchSemanticsNode().layoutBoundsInWindow()
+        val toast = composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(screen.center.x, toast.center.x, 2f)
+        assertTrue("toast $toast should be below the top bar $screen", toast.top >= screen.bottom)
+    }
+
+    @Test
     fun twoFingerTap_turnedOff_doesNothing() {
         state = state.copy(canUndo = true, changed = true)
         show(411, 800, twoFingerTapUndo = false)

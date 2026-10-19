@@ -180,22 +180,24 @@ class OptionStripTest {
     }
 
     @Test
-    fun withTheStrip_theHintToastAndTheMessageBarAreCenteredOnTheCanvas() {
+    fun withTheStrip_theHintToastIsCenteredOnTheScreen_andTheMessageBarOnTheCanvas() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Text)
         composeRule.runOnIdle { messages.trySend(EditorMessage.HiddenLayer) }
         composeRule.waitForIdle()
 
-        // 사용자 요청: 띠가 떠 있어도 살짝 오른쪽이 아니라 캔버스 정중앙
+        // 사용자 요청: 알림은 도구 막대·띠와 상관없이 화면 정중앙("도구바나 띠 생각하지 말고 화면 정중앙에 띄우세요")
+        val screen = composeRule.onNodeWithTag(EditScreenTags.TOP_BAR).fetchSemanticsNode().layoutBoundsInWindow()
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
         val toast = composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(screen.center.x, toast.center.x, 2f)
+        // 세로는 캔버스 위쪽(배율 표시 아래)이다
+        assertTrue("toast $toast canvas $canvas", toast.top > canvas.top && toast.bottom < canvas.center.y)
+        // 알림 막대('보기' 버튼)는 띠를 덮지 않게 캔버스 정중앙이다
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_hidden_layer)).assertExists()
         val bar = composeRule.onNodeWithTag(EditScreenTags.MESSAGE_BAR).fetchSemanticsNode().layoutBoundsInWindow()
-        assertEquals(canvas.center.x, toast.center.x, 2f)
         assertEquals(canvas.center.x, bar.center.x, 2f)
-        // 띠는 덮지 않는다
         val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("toast $toast strip $strip", toast.left >= strip.right)
         assertTrue("bar $bar strip $strip", bar.left >= strip.right)
     }
 
