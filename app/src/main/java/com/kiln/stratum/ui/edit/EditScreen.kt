@@ -571,10 +571,12 @@ fun EditScreen(
                 )
             }
             if (ready != null && activeTool == EditTool.Blur) {
+                // 흐림·선명·스머지
                 EffectOverlay(
                     view = { viewState.view },
                     document = ready.documentSize,
-                    kind = selection.modeOf(EditTool.Blur)?.effectKind ?: EffectKind.BLUR,
+                    // 스머지는 효과가 아니라(null) 따로 끄는 획이다
+                    kind = selection.modeOf(EditTool.Blur)?.effectKind,
                     actions = effectActions,
                     tag = EditScreenTags.BLUR_OVERLAY,
                     modifier = Modifier.fillMaxSize(),

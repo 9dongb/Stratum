@@ -74,7 +74,8 @@ internal object BrushPainter {
 
     /**
      * [canvas]의 획 자리를 [fill](캔버스 좌표의 셰이더)로 바꾼다(흐림·선명·모자이크): 결과 = 아래 × (1 - 몫) + 채울 그림 × 몫.
-     * 몫은 자국 모양이고(겹치면 합쳐져 한 번만 걸린다), [clip](선택 영역 알파, 캔버스 (0, 0)에 맞춤)이 있으면 그것을 곱한다.
+     * 몫은 자국 모양이고(겹치면 합쳐져 한 번만 걸린다), [clip](선택 영역 알파)이 있으면 그것을 곱한다. [clip]의 (0, 0)은 캔버스 ([clipLeft], [clipTop])이고
+     * 캔버스 전체를 덮어야 한다(스머지처럼 타일의 일부만 그릴 때 옮겨 놓는다).
      * 불투명도는 쓰지 않는다(세기는 효과가 정한다). 좌표는 [drawStroke]와 같다.
      *
      * [drawStroke]의 채울 그림은 아래 위에 얹으므로(SRC_OVER) 반투명한 효과 색(흐린 경계 등)이 아래의 불투명한 색에 묻힌다.
@@ -91,23 +92,33 @@ internal object BrushPainter {
         width: Float,
         height: Float,
         fill: Shader,
-        clip: Bitmap? = null
+        clip: Bitmap? = null,
+        clipLeft: Float = 0f,
+        clipTop: Float = 0f
     ) {
         if (dabs.isEmpty()) return
         // 몫만큼 아래를 덜어 낸다
         val cut = canvas.saveLayer(0f, 0f, width, height, Paint().apply { blendMode = BlendMode.DST_OUT })
         drawDabs(canvas, dabs, settings, Color.WHITE, scale, left, top, width, height)
-        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        if (clip != null) drawClip(canvas, clip, clipLeft, clipTop)
         canvas.restoreToCount(cut)
         // 채울 그림 × 몫을 더한다(두 몫의 합이 1을 넘지 않아 잘리지 않는다)
         val add = canvas.saveLayer(0f, 0f, width, height, Paint().apply { blendMode = BlendMode.PLUS })
         drawDabs(canvas, dabs, settings, Color.WHITE, scale, left, top, width, height)
-        if (clip != null) MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        if (clip != null) drawClip(canvas, clip, clipLeft, clipTop)
         canvas.drawRect(0f, 0f, width, height, Paint().apply {
             shader = fill
             blendMode = BlendMode.SRC_IN
         })
         canvas.restoreToCount(add)
+    }
+
+    /** 그린 것을 선택 영역 알파 [clip](캔버스 ([x], [y])에 놓음)으로 자른다(DST_IN) */
+    private fun drawClip(canvas: Canvas, clip: Bitmap, x: Float, y: Float) {
+        canvas.save()
+        canvas.translate(x, y)
+        MaskTiles.drawAlpha(canvas, clip, BlendMode.DST_IN)
+        canvas.restore()
     }
 
     /** 자국들을 [color]로 겹쳐 그린다(SRC_OVER). 그릴 자리([width]×[height]) 밖의 자국은 건너뛴다. */

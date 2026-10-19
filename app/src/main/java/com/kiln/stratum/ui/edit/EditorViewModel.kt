@@ -69,6 +69,8 @@ import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.EffectStroke
+import com.kiln.stratum.engine.platform.SmudgePreview
+import com.kiln.stratum.engine.platform.SmudgeStroke
 import com.kiln.stratum.engine.platform.ToneStroke
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
@@ -404,7 +406,7 @@ class EditorViewModel internal constructor(
     /**
      * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
      * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
-     * [tone]이 있으면 명암(닷지·번) 획이고, [effect]가 있으면 흐림·선명·모자이크 획이다.
+     * [tone]이 있으면 명암(닷지·번) 획이고, [effect]가 있으면 흐림·선명·모자이크 획, [smudge](강도)가 있으면 스머지 획이다.
      */
     private class Stroke(
         val layer: LayerId,
@@ -414,16 +416,20 @@ class EditorViewModel internal constructor(
         val retouch: RetouchMode? = null,
         val offset: SourceOffset? = null,
         val tone: ToneFill? = null,
-        val effect: EffectFill? = null
+        val effect: EffectFill? = null,
+        val smudge: Float? = null
     ) {
         val dabs = StrokeDabs(settings.spacing)
+
+        /** 스머지를 끄는 동안의 미리 보기(새 자국만 이어서 그린다). 스머지가 아니면 null. */
+        private val smudgePreview: SmudgePreview? = smudge?.let { SmudgePreview(settings, it) }
 
         /**
          * 그리는 동안 바뀌지 않는 미리 보기용 사본. 복제 도장·복구 브러시는 가져올 곳을 베껴 보이고(복구는 손을 뗀 뒤 둘레에 맞춘다),
          * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
         fun live(): LiveStroke = when (retouch) {
-            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect)
+            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
             RetouchMode.SPOT_HEAL -> LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
         }
@@ -432,13 +438,14 @@ class EditorViewModel internal constructor(
         fun command(): CancellableCommand = when {
             tone != null -> ToneStroke(layer, ArrayList(dabs.dabs), settings, tone)
             effect != null -> EffectStroke(layer, ArrayList(dabs.dabs), settings, effect)
+            smudge != null -> SmudgeStroke(layer, ArrayList(dabs.dabs), settings, smudge)
             retouch == null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
             else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset)
         }
 
-        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암·효과). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
+        /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암·효과·스머지). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
         val readsLayer: Boolean
-            get() = erase || offset != null || tone != null || effect != null
+            get() = erase || offset != null || tone != null || effect != null || smudge != null
     }
 
     /** 끄는 중인 획 */
@@ -496,6 +503,7 @@ class EditorViewModel internal constructor(
     /** 캔버스의 흐림·선명·모자이크 손가락이 보내는 일 */
     val effectActions: EffectActions = object : EffectActions {
         override fun begin(x: Float, y: Float, kind: EffectKind) = beginEffect(StrokePoint(x, y), kind)
+        override fun beginSmudge(x: Float, y: Float) = beginSmudge(StrokePoint(x, y))
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
@@ -1307,6 +1315,18 @@ class EditorViewModel internal constructor(
         startStroke(Stroke(layer.id, brush.copy(opacity = 1f), erase = false, history?.document?.selection, effect = fill), point)
     }
 
+    /**
+     * 고른 레이어에 스머지 획을 시작한다(흐림 도구 설정의 크기·경도·강도). 손가락을 떼면 실행 취소 한 단계로 기록한다(브러시와 같은 차례).
+     * 브러시 불투명도는 쓰지 않는다(끄는 거리는 강도가 정한다).
+     */
+    fun beginSmudge(point: StrokePoint) {
+        if (!canBeginStroke()) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        val options = _blur.value
+        startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, smudge = options.strength), point)
+    }
+
     /** 사용자가 셀 크기를 바꾸기 전이면 모자이크 셀 크기를 [document] 짧은 변의 2%로 맞춘다(글자 크기와 같은 방식) */
     private fun fitMosaicCell(document: Document) {
         if (mosaicCellChosen) return
@@ -1679,7 +1699,8 @@ class EditorViewModel internal constructor(
         val visible = document.layers.filter { it.isShown }
         val top = visible.lastOrNull() ?: return false
         if (top.blendMode != BlendMode.NORMAL || top.opacity < 1f || !top.adjustments.isIdentity) return false
-        return detailStrokes.all { it.layer == top.id && (!it.readsLayer || visible.size == 1) }
+        // 스머지는 앞 자국의 결과에 기대어 축소본 사본에 이어서 그리므로 확대 그림에는 얹지 않는다(손을 떼면 다시 선명해진다)
+        return detailStrokes.all { it.smudge == null && it.layer == top.id && (!it.readsLayer || visible.size == 1) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */

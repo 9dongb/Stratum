@@ -287,6 +287,7 @@ class LayerPreviewCache {
      * 명암 획([LiveStroke.tone])은 [image]를 닷지·번으로 바꾼 색을 획 모양으로 보인다.
      * 효과 획([LiveStroke.effect], 흐림·선명·모자이크)은 [image] 전체에 효과를 한 번 건 그림으로 획 자리를 바꿔 보인다(기록과 같은 바꾸기).
      * 효과 그림은 같은 그림·영역·효과면 다시 계산하지 않는다(끄는 동안 자국마다 다시 그리므로). [document]는 문서 크기다(모자이크의 문서 끝 칸).
+     * 스머지 획([LiveStroke.smudge])은 [image]의 사본에 새 자국만 이어서 집고 내려놓은 그림을 보인다(그 획의 [SmudgePreview]가 든다).
      * 칠하는 색은 [colorSpace](문서 색 공간) 값으로 바꿔 그린다(기록할 때와 같다).
      */
     fun strokeOver(
@@ -306,8 +307,15 @@ class LayerPreviewCache {
             val clone = stroke.clone
             val tone = stroke.tone
             val effect = stroke.effect
+            val smudge = stroke.smudge
             // 읽을 그림이 없으면(빈 레이어) 복제하거나 바꿀 색이 없다
-            if ((clone != null || tone != null || effect != null) && image == null) continue
+            if ((clone != null || tone != null || effect != null || smudge != null) && image == null) continue
+            if (smudge != null && image != null) {
+                // 스머지는 앞 자국의 결과에 기대므로 미리 보기가 사본에 이어서 그려 둔 것을 그대로 보인다
+                val smudged = smudge.render(image, region, stroke.dabs, stroke.selection?.let { selectionMask(it, region) }) ?: continue
+                canvas.drawBitmap(smudged, 0f, 0f, Paint().apply { blendMode = BlendMode.SRC })
+                continue
+            }
             if (effect != null && image != null) {
                 val effected = effectImage(image, region, effect, stroke.settings.size, document) ?: continue
                 BrushPainter.drawReplace(
@@ -395,6 +403,7 @@ class LayerPreviewCache {
  * [clone]이 있으면 칠하는 대신 '획 자리 - 그 양'의 레이어 픽셀을 베껴 보인다(복제 도장·복구 브러시를 끄는 동안).
  * [tone]이 있으면 칠하는 대신 레이어 픽셀을 닷지·번으로 바꾼 색을 보인다(명암 도구를 끄는 동안).
  * [effect]가 있으면 칠하는 대신 레이어 픽셀에 흐림·선명·모자이크를 건 색으로 바꿔 보인다(흐림·모자이크 도구를 끄는 동안).
+ * [smudge]가 있으면 칠하는 대신 레이어 픽셀을 문질러 끈 모습을 보인다(스머지를 끄는 동안, 획마다 하나).
  */
 class LiveStroke(
     val layerId: LayerId,
@@ -404,5 +413,6 @@ class LiveStroke(
     val selection: Selection? = null,
     val clone: SourceOffset? = null,
     val tone: ToneFill? = null,
-    val effect: EffectFill? = null
+    val effect: EffectFill? = null,
+    val smudge: SmudgePreview? = null
 )

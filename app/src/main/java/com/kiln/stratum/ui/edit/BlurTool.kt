@@ -19,8 +19,8 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
- * 흐림 도구(흐림·선명) 설정. 브러시 모양(크기·경도)과 강도(0..1). 흐림·선명이 같이 쓴다(포토샵의 강도와 같다).
- * 브러시 불투명도는 쓰지 않는다(세기는 강도가 정한다).
+ * 흐림 도구(흐림·선명·스머지) 설정. 브러시 모양(크기·경도)과 강도(0..1). 세 하위 도구가 같이 쓴다(포토샵의 강도와 같다).
+ * 스머지의 강도는 집은 색을 끌고 가는 거리다(SmudgeMath). 브러시 불투명도는 쓰지 않는다(세기는 강도가 정한다).
  */
 data class BlurOptions(
     val brush: BrushSettings = BrushSettings(size = 100f, hardness = 0.3f),
@@ -32,6 +32,9 @@ interface EffectActions {
 
     /** 한 손가락이 닿아 [kind] 획을 시작한다 */
     fun begin(x: Float, y: Float, kind: EffectKind)
+
+    /** 한 손가락이 닿아 스머지 획을 시작한다 */
+    fun beginSmudge(x: Float, y: Float)
 
     /** 손가락이 움직였다 */
     fun extend(x: Float, y: Float)
@@ -45,13 +48,14 @@ interface EffectActions {
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : EffectActions {
         override fun begin(x: Float, y: Float, kind: EffectKind) = Unit
+        override fun beginSmudge(x: Float, y: Float) = Unit
         override fun extend(x: Float, y: Float) = Unit
         override fun end() = Unit
         override fun cancel() = Unit
     }
 }
 
-/** 흐림 도구 하위 도구의 효과. 흐림 도구의 것이 아니면 null. */
+/** 흐림 도구 하위 도구의 효과. 스머지(효과가 아니라 따로 끄는 획)와 흐림 도구의 것이 아닌 하위 도구는 null. */
 val SubTool.effectKind: EffectKind?
     get() = when (this) {
         SubTool.EFFECT_BLUR -> EffectKind.BLUR
@@ -67,7 +71,7 @@ val SubTool.effectKind: EffectKind?
 class BlurControls(val options: BlurOptions, val sizePreview: SizePreviewState? = null, val onChange: (BlurOptions) -> Unit)
 
 /**
- * 흐림 옵션(커버): 하위 도구(흐림·선명), 강도, 크기, 경도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 흐림 옵션(커버): 하위 도구(흐림·선명·스머지), 강도, 크기, 경도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
  */
 @Composable
 fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -98,17 +102,22 @@ fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -
 internal fun strengthOf(fraction: Float): Float = ((fraction * 100).roundToInt() / 100f).coerceIn(0.01f, 1f)
 
 /** 흐림 하위 도구의 안내 */
-internal fun blurHint(mode: SubTool?): Int = if (mode == SubTool.EFFECT_SHARPEN) R.string.blur_hint_sharpen else R.string.blur_hint_blur
+internal fun blurHint(mode: SubTool?): Int =
+    when (mode) {
+        SubTool.EFFECT_SHARPEN -> R.string.blur_hint_sharpen
+        SubTool.EFFECT_SMUDGE -> R.string.blur_hint_smudge
+        else -> R.string.blur_hint_blur
+    }
 
 /**
  * 흐림·모자이크 도구를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 끌어 [kind] 획을 그린다(브러시와 같은 손가락 처리).
- * [cursorSize](문서 픽셀 지름)가 있으면 칠하는 손가락 자리에 브러시 커서를 보인다. [tag]는 화면 테스트 이름표다.
+ * [kind]가 null이면 스머지 획이다. [cursorSize](문서 픽셀 지름)가 있으면 칠하는 손가락 자리에 브러시 커서를 보인다. [tag]는 화면 테스트 이름표다.
  */
 @Composable
 fun EffectOverlay(
     view: () -> CanvasView,
     document: PixelSize,
-    kind: EffectKind,
+    kind: EffectKind?,
     actions: EffectActions,
     tag: String,
     modifier: Modifier = Modifier,
@@ -118,7 +127,7 @@ fun EffectOverlay(
         view = view,
         document = document,
         tag = tag,
-        onBegin = { x, y -> actions.begin(x, y, kind) },
+        onBegin = { x, y -> if (kind == null) actions.beginSmudge(x, y) else actions.begin(x, y, kind) },
         onExtend = actions::extend,
         onEnd = actions::end,
         onCancel = actions::cancel,

@@ -45,7 +45,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 흐림 도구(흐림·선명)·모자이크 도구의 옵션·캔버스 끌기와 편집 화면에서 여는 것을 확인한다(엔진 대신 받은 일만 적는 가짜). */
+/** 흐림 도구(흐림·선명·스머지)·모자이크 도구의 옵션·캔버스 끌기와 편집 화면에서 여는 것을 확인한다(엔진 대신 받은 일만 적는 가짜). */
 @RunWith(AndroidJUnit4::class)
 class EffectToolsTest {
 
@@ -64,6 +64,12 @@ class EffectToolsTest {
             calls += "begin"
             points += x to y
             this.kind = kind
+        }
+
+        override fun beginSmudge(x: Float, y: Float) {
+            calls += "smudge"
+            points += x to y
+            kind = null
         }
 
         override fun extend(x: Float, y: Float) {
@@ -138,6 +144,15 @@ class EffectToolsTest {
     }
 
     @Test
+    fun blurOptions_offerSmudge_withItsOwnHint() {
+        showBlurOptions(SubTool.EFFECT_SMUDGE)
+
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SMUDGE)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_HINT).assertTextEquals(composeRule.activity.getString(R.string.blur_hint_smudge))
+    }
+
+    @Test
     fun mosaicOptions_changeTheCellOnALogScale() {
         showMosaicOptions()
 
@@ -182,6 +197,27 @@ class EffectToolsTest {
             up()
         }
         composeRule.runOnIdle { assertEquals(EffectKind.MOSAIC, actions.kind) }
+    }
+
+    @Test
+    fun dragging_withoutAnEffect_sendsASmudgeStroke() {
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(400.dp, 400.dp))) {
+                StratumTheme {
+                    Box(Modifier.fillMaxSize()) {
+                        EffectOverlay(view = { CanvasView.Fit }, document = document, kind = null, actions = actions, tag = EditScreenTags.BLUR_OVERLAY, modifier = Modifier.fillMaxSize())
+                    }
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_OVERLAY).performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(listOf("smudge", "extend", "end"), actions.calls) }
     }
 
     @Test

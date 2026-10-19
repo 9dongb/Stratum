@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 흐림·선명·모자이크 도구의 편집 흐름(기록·실행 취소·설정·모자이크 첫 셀 크기·숨긴 레이어)을 에뮬레이터에서 확인한다. */
+/** 흐림·선명·스머지·모자이크 도구의 편집 흐름(기록·실행 취소·설정·모자이크 첫 셀 크기·숨긴 레이어)을 에뮬레이터에서 확인한다. */
 @RunWith(AndroidJUnit4::class)
 class EditorEffectTest {
 
@@ -103,6 +103,25 @@ class EditorEffectTest {
         // 흰 바탕과 검은 점 사이는 이미 끝값이라 선명해도 그대로 끝값이다(넘치지 않는다)
         assertEquals(Color.WHITE, shown(sharpened).getPixel(640, 400))
         assertTrue(sharpened.canUndo)
+    }
+
+    @Test
+    fun smudge_dragsTheDotOut_andIsOneUndoStep() {
+        val before = openWithDot()
+        onMain { viewModel.setBlur(BlurOptions(BrushSettings(size = 80f, hardness = 1f), strength = 0.9f)) }
+
+        // 점 안(520)에서 오른쪽 흰 곳으로 끈다
+        onMain {
+            viewModel.effectActions.beginSmudge(520f, 400f)
+            for (x in 530..760 step 10) viewModel.effectActions.extend(x.toFloat(), 400f)
+            viewModel.effectActions.end()
+        }
+        val smudged = awaitReady { it.revision > before.revision }
+
+        assertTrue("${Color.red(shown(smudged).getPixel(650, 400))}", Color.red(shown(smudged).getPixel(650, 400)) < 200)
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > smudged.revision }
+        assertEquals(Color.WHITE, shown(undone).getPixel(650, 400))
     }
 
     @Test

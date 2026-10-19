@@ -63,7 +63,10 @@ enum class SubTool(
     EFFECT_BLUR(R.string.subtool_blur, R.drawable.ic_water_drop),
 
     /** 선명: 칠한 곳의 가는 결을 또렷하게 한다 */
-    EFFECT_SHARPEN(R.string.subtool_sharpen, R.drawable.ic_deblur)
+    EFFECT_SHARPEN(R.string.subtool_sharpen, R.drawable.ic_deblur),
+
+    /** 스머지(손가락): 칠한 곳을 문지르듯 끌어 섞는다 */
+    EFFECT_SMUDGE(R.string.subtool_smudge, R.drawable.ic_pan_tool_alt)
 }
 
 /**
@@ -122,12 +125,12 @@ enum class EditTool(
         available = true
     ),
 
-    /** 흐림(흐림·선명). 칠한 곳을 흐리게 하거나 또렷하게 한다(포토샵의 흐림·선명 도구). 고른 레이어에 한 손가락으로 칠한다. */
+    /** 흐림(흐림·선명·스머지). 칠한 곳을 흐리게·또렷하게 하거나 문질러 끈다(포토샵의 흐림·선명·손가락 도구). 고른 레이어에 한 손가락으로 칠한다. */
     Blur(
         R.drawable.ic_water_drop,
         R.string.tool_blur,
         R.string.tool_blur_short,
-        subTools = listOf(SubTool.EFFECT_BLUR, SubTool.EFFECT_SHARPEN),
+        subTools = listOf(SubTool.EFFECT_BLUR, SubTool.EFFECT_SHARPEN, SubTool.EFFECT_SMUDGE),
         available = true
     ),
 
