@@ -221,8 +221,10 @@ fun LiquifyMode(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthClass = widthClassOf(maxWidth.value)
             val maxOptionsHeight = maxHeight * 0.4f
+            // 닫힌 화면(커버)은 새 창 공통 규칙대로 취소·적용을 맨 아래 X·✓ 줄에 둔다(결정 기록 '닫힌 화면 새 창')
+            val coverWindow = widthClass == WidthClass.Compact
             Column(Modifier.fillMaxSize()) {
-                LiquifyTopBar(state, actions)
+                LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
                 val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
                     LiquifyCanvas(state, viewState, actions, sizePreview.visible, gestureToast, twoFingerUndo, threeFinger, canvasModifier)
                 }
@@ -248,13 +250,25 @@ fun LiquifyMode(
                 } else {
                     canvas(Modifier.weight(1f).fillMaxWidth())
                     Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
+                        // 커버는 아래 시스템 바를 맨 아래 X·✓ 줄이 피한다
+                        val sides = if (coverWindow) WindowInsetsSides.Horizontal else WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
                         LiquifyOptions(
                             state, actions, sizePreview,
                             Modifier
                                 .heightIn(max = maxOptionsHeight)
-                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                    if (coverWindow) {
+                        CoverWorkBar(
+                            onCancel = actions::cancel,
+                            onDone = actions::apply,
+                            doneEnabled = state.changed && !state.busy,
+                            cancelEnabled = !state.busy,
+                            cancelTag = EditScreenTags.LIQUIFY_CANCEL,
+                            doneTag = EditScreenTags.LIQUIFY_APPLY
                         )
                     }
                 }
@@ -266,22 +280,25 @@ fun LiquifyMode(
 /**
  * 위쪽 막대: 취소, 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(48dp)다.
  * 모두 되돌리기는 자리를 아끼려고 아이콘 버튼이다(커버 폭에서도 이름이 잘리지 않게).
+ * [cancelAndApplyOnTop]이 거짓이면(닫힌 화면) 취소·적용은 맨 아래 X·✓ 줄([CoverWorkBar])에 있어 여기에는 두지 않는다.
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
+private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions, cancelAndApplyOnTop: Boolean = true) {
     val barInsets = rememberTopBarInsets(WorkTopBarHeight)
     TopAppBar(
         title = { Text(stringResource(R.string.tool_liquify), Modifier.topBarItem(barInsets, "title")) },
         modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.LIQUIFY_TOP_BAR),
         navigationIcon = {
-            StratumIconButton(
-                onClick = actions::cancel,
-                enabled = !state.busy,
-                modifier = Modifier.topBarItem(barInsets, "cancel").testTag(EditScreenTags.LIQUIFY_CANCEL)
-            ) {
-                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
+            if (cancelAndApplyOnTop) {
+                StratumIconButton(
+                    onClick = actions::cancel,
+                    enabled = !state.busy,
+                    modifier = Modifier.topBarItem(barInsets, "cancel").testTag(EditScreenTags.LIQUIFY_CANCEL)
+                ) {
+                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
+                }
             }
         },
         actions = {
@@ -295,13 +312,15 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions) {
                 StratumIconButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
                     Icon(painterResource(R.drawable.ic_restart_alt), contentDescription = stringResource(R.string.liquify_reset))
                 }
-                // 적용은 편집 화면의 내보내기처럼 파란 글자 버튼이다(사용자 결정)
-                AccentButton(
-                    onClick = actions::apply,
-                    enabled = state.changed && !state.busy,
-                    modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.LIQUIFY_APPLY)
-                ) {
-                    Text(stringResource(R.string.action_apply))
+                // 적용은 편집 화면의 내보내기처럼 파란 글자 버튼이다(사용자 결정). 닫힌 화면은 맨 아래 ✓다.
+                if (cancelAndApplyOnTop) {
+                    AccentButton(
+                        onClick = actions::apply,
+                        enabled = state.changed && !state.busy,
+                        modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.LIQUIFY_APPLY)
+                    ) {
+                        Text(stringResource(R.string.action_apply))
+                    }
                 }
             }
         },

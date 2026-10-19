@@ -1,0 +1,89 @@
+package com.kiln.stratum.ui.edit
+
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.kiln.stratum.R
+import com.kiln.stratum.ui.components.AccentIconButton
+import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.components.stratumTopAppBarColors
+import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
+import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.theme.StratumTheme
+
+/**
+ * 닫힌 화면(커버) 새 창의 맨 아래 줄(닫힌 화면 공통 규칙, 결정 기록 '닫힌 화면 새 창'): 왼쪽 X(취소·나가기), 오른쪽 ✓(완료·적용, 파란 채움).
+ * 한 손으로 쥐었을 때 엄지가 닿는 아래 양 끝에 둔다. 자르기·픽셀 유동화가 같이 쓰고, 앞으로의 전용 작업 창도 이것을 쓴다.
+ * 시스템 뒤로 가기는 X와 같게 부르는 쪽이 처리한다. 아래 시스템 바와 옆쪽 카메라 구멍은 피한다.
+ * [cancelTag]·[doneTag]는 화면 테스트 이름표(창마다 지금 쓰는 취소·적용 이름표를 그대로 쓴다).
+ */
+@Composable
+fun CoverWorkBar(
+    onCancel: () -> Unit,
+    onDone: () -> Unit,
+    doneEnabled: Boolean,
+    cancelTag: String,
+    doneTag: String,
+    modifier: Modifier = Modifier,
+    cancelEnabled: Boolean = true
+) {
+    val colors = StratumTheme.colors
+    Surface(modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, colors.divider), color = colors.panel) {
+        Row(
+            Modifier
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StratumIconButton(onClick = onCancel, enabled = cancelEnabled, modifier = Modifier.testTag(cancelTag)) {
+                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
+            }
+            Spacer(Modifier.weight(1f))
+            AccentIconButton(onClick = onDone, enabled = doneEnabled, modifier = Modifier.testTag(doneTag)) {
+                Icon(painterResource(R.drawable.ic_check), contentDescription = stringResource(R.string.action_done))
+            }
+        }
+    }
+}
+
+/**
+ * 닫힌 화면 새 창의 위 줄: 창 이름만 보인다(취소·완료는 맨 아래 [CoverWorkBar]). 편집 화면 상단 바와 같은 높이(48dp)이고,
+ * 카메라 구멍이 이름에 걸리면 구멍 아래로 내린다(편집 화면 상단 바와 같다).
+ */
+// TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라 opt-in이 필요하다
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CoverWindowTopBar(title: String, modifier: Modifier = Modifier) {
+    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
+    TopAppBar(
+        title = { Text(title, Modifier.topBarItem(barInsets, "title")) },
+        modifier = modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_WINDOW_TOP_BAR),
+        expandedHeight = WorkTopBarHeight,
+        windowInsets = barInsets.windowInsets(),
+        colors = stratumTopAppBarColors()
+    )
+}

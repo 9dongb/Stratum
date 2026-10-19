@@ -4,6 +4,8 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
@@ -121,6 +123,23 @@ private fun TransformOptions(
             }
             // 크기 변경은 창을 띄우는 일이고, 선택 하위 도구는 이 옵션에 오지 않는다
             else -> Unit
+        }
+    }
+}
+
+/**
+ * 닫힌 화면 자르기 창(결정 기록 '닫힌 화면 새 창')의 옵션: 하위 도구 줄(자르기·회전, 크기 변경)과 비율 칩 줄(옆으로 밀어 봄)·가로세로 바꾸기.
+ * 취소·적용은 창 맨 아래 줄의 X·✓([CoverWorkBar])다. 회전으로 바꾸면 자르기 창을 나와 옵션 칸(회전·뒤집기)으로 간다.
+ */
+@Composable
+internal fun CoverCropOptions(mode: SubTool, onChoose: (SubTool) -> Unit, crop: CropControls, modifier: Modifier = Modifier) {
+    Column(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SubToolRow(mode, onChoose)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { CropRatioRow(crop) }
+            StratumIconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
+                Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
+            }
         }
     }
 }

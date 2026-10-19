@@ -294,6 +294,8 @@ fun EditScreen(
     }
     // 자르기를 시작할 때 바꾼 보기. 그대로인 채 자르기가 끝나면 맞춤으로 돌린다(배율 표시가 남지 않게).
     var cropStartView by remember { mutableStateOf<CanvasView?>(null) }
+    // 닫힌 화면에서 캔버스 위에 겹쳐 뜬 옵션 칸의 높이(픽셀). 알림 막대·크기 원을 그 위 보이는 자리에 놓는다.
+    var coverSheetPx by remember { mutableStateOf(0) }
 
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -420,6 +422,10 @@ fun EditScreen(
                 )
             }
         }
+        // 닫힌 화면 공통 규칙(결정 기록 '닫힌 화면 도구 옵션'): 옵션 칸은 캔버스를 줄이지 않고 아래쪽 위에 겹쳐 뜬다.
+        // 그래서 탭을 고르거나 바꾸거나 닫아도 보던 이미지의 크기·자리가 그대로다. 자르기(새 창)는 따로다.
+        val coverSheetOverlays = widthClass == WidthClass.Compact && toolOptions != null && !cropMode
+        val coverSheetInset = if (coverSheetOverlays) with(density) { coverSheetPx.toDp() } else 0.dp
         // 메인 화면: 도구 막대에서 고른 도구의 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '편집 화면 도구 배치').
         // 띠가 없는 도구는 패널 위쪽에 옵션을 보인다. 조정·레이어는 패널에 늘 있다.
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
@@ -574,7 +580,8 @@ fun EditScreen(
                     document = ready.documentSize,
                     size = sizedBrush.size,
                     hardness = sizedBrush.hardness,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    bottomInset = coverSheetInset
                 )
             }
             // 스포이드로 고르는 동안 손가락 둘레에 고를 색(위)과 지금 색(아래) 고리를 보인다
@@ -591,25 +598,31 @@ fun EditScreen(
             // 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(맨 위라 도구가 받지 않는다). 패널만 열려 있으면 캔버스를 바로 쓴다.
             FloatingDismissLayer(floating, Modifier.fillMaxSize())
         }
+        // 닫힌 화면 자르기는 새 창이다(결정 기록 '닫힌 화면 새 창'): 위는 이름 줄, 아래는 X·✓ 줄이고 탭 줄을 숨긴다
+        val coverCropWindow = widthClass == WidthClass.Compact && cropMode
         Scaffold(
             topBar = {
-                EditTopBar(
-                    onBack = onBack,
-                    // 편집을 처리하는 동안에는 막는다
-                    canUndo = ready?.canUndo == true && !ready.busy,
-                    canRedo = ready?.canRedo == true && !ready.busy,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
-                    canExport = ready != null && !ready.busy && !cropMode,
-                    onExport = { exportDraft = exportChoice },
-                    // 메인 화면만: 조정·레이어 패널 버튼. 자르기 중에는 막는다(조정·레이어를 막으므로)
-                    panels = if (widthClass == WidthClass.Compact) {
-                        null
-                    } else {
-                        PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
-                    }
-                )
+                if (coverCropWindow) {
+                    CoverWindowTopBar(stringResource(R.string.subtool_crop))
+                } else {
+                    EditTopBar(
+                        onBack = onBack,
+                        // 편집을 처리하는 동안에는 막는다
+                        canUndo = ready?.canUndo == true && !ready.busy,
+                        canRedo = ready?.canRedo == true && !ready.busy,
+                        onUndo = onUndo,
+                        onRedo = onRedo,
+                        // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
+                        canExport = ready != null && !ready.busy && !cropMode,
+                        onExport = { exportDraft = exportChoice },
+                        // 메인 화면만: 조정·레이어 패널 버튼. 자르기 중에는 막는다(조정·레이어를 막으므로)
+                        panels = if (widthClass == WidthClass.Compact) {
+                            null
+                        } else {
+                            PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
+                        }
+                    )
+                }
             },
             // 시스템 바·카메라 구멍은 영역마다 바깥쪽만 비켜 두므로, Scaffold는 상단 바 높이만 비운다
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -669,9 +682,48 @@ fun EditScreen(
             }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    EditCanvas(state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode, WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
-                    if (toolOptions != null) ToolOptionsSheet(toolOptions, maxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION)
-                    ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
+                    val sheetMaxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION
+                    if (coverCropWindow) {
+                        // 자르기 새 창: 크기 유지 규칙에서 빠진다. 캔버스(사진 전체를 맞춤), 하위 도구·비율, 맨 아래 X(취소)·✓(적용).
+                        // 뒤로 가기는 X와 같다(도구를 닫는 뒤로 가기). 탭 줄은 숨긴다.
+                        EditCanvas(state, viewState, messages, reportCanvasSize, onViewport, overlay, false, WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger)
+                        if (crop != null) {
+                            Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
+                                CoverCropOptions(
+                                    selection.transformMode,
+                                    chooseSubTool,
+                                    crop,
+                                    Modifier
+                                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
+                            }
+                            CoverWorkBar(
+                                onCancel = crop.onCancel,
+                                onDone = crop.onApply,
+                                doneEnabled = crop.canApply && ready?.busy != true,
+                                cancelTag = EditScreenTags.CROP_CANCEL,
+                                doneTag = EditScreenTags.CROP_APPLY
+                            )
+                        }
+                    } else {
+                        // 캔버스는 상단 바와 탭 줄 사이 전체를 늘 차지하고, 옵션 칸은 그 아래쪽 위에 겹쳐 뜬다(이미지 크기·자리 그대로)
+                        EditCanvas(
+                            state, viewState, messages, reportCanvasSize, onViewport, overlay, true,
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), gestureToast, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                            overlayBottom = coverSheetInset,
+                            floating = {
+                                if (toolOptions != null) {
+                                    ToolOptionsSheet(
+                                        toolOptions,
+                                        maxHeight = sheetMaxHeight,
+                                        modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { coverSheetPx = it.height }
+                                    )
+                                }
+                            }
+                        )
+                        ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
+                    }
                 }
 
                 // 메인 세로·가로: 도구 막대와 캔버스. 도구 옵션 띠·떠 있는 패널은 캔버스 위에 겹친다(floatingUi).
@@ -758,13 +810,14 @@ fun EditScreen(
 }
 
 /**
- * 커버 화면(Compact)에서 캔버스와 탭 줄 사이에 놓는 도구 옵션 자리. 캔버스를 가리지 않고 그 아래를 차지한다.
+ * 커버 화면(Compact)의 도구 옵션 자리. 탭 줄 바로 위에서 캔버스 아래쪽 위에 겹쳐 뜬다(캔버스를 줄이지 않아 이미지 크기·자리가 그대로,
+ * 결정 기록 '닫힌 화면 도구 옵션'). 자르기는 새 창이라 캔버스 아래에 따로 놓는다.
  * 커버 화면에는 접히는 부분이 없고, 옆쪽 시스템 바·카메라 구멍만 피한다.
- * 옵션이 길면(선택 도구 등) [maxHeight]까지만 차지하고 그 안에서 위아래로 밀어 본다. 작은 폰에서도 캔버스가 남는다.
+ * 옵션이 길면(선택 도구 등) [maxHeight]까지만 차지하고 그 안에서 위아래로 밀어 본다. 작은 폰에서도 캔버스가 보인다.
  */
 @Composable
-private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp) {
-    Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
+private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, modifier: Modifier = Modifier) {
+    Surface(modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_OPTIONS), color = StratumTheme.colors.panel) {
         Box(
             Modifier
                 .heightIn(max = maxHeight)
@@ -865,6 +918,7 @@ private fun EditTopBar(
  * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
  * [floating]은 캔버스 위에 겹치는 메인 화면의 띠·옵션 창·패널이다. 캔버스 영역 전체(시스템 바 쪽 포함)를 받고, 내용이 피할 여백을 함께 받는다.
  * 배율 표시와 알림 막대는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 제스처 알림과 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
+ * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
  */
 @Composable
 private fun EditCanvas(
@@ -881,6 +935,7 @@ private fun EditCanvas(
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
     overlayStart: Dp = 0.dp,
+    overlayBottom: Dp = 0.dp,
     floating: @Composable BoxScope.(WindowInsets) -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -942,8 +997,8 @@ private fun EditCanvas(
         // 알림이 가려지지 않게 그 위에 그린다. 알림은 터치를 받지 않아 그 밑의 패널·옵션 창을 그대로 누를 수 있다.
         // 왼쪽 도구 옵션 띠는 가리지 않게 띠 오른쪽 자리의 가운데에 둔다(도구를 고를 때 뜨는 안내가 띠의 칸을 덮지 않게).
         GestureToast(gestureToast, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart))
-        // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠를 피한다
-        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart), margin = 8.dp) {
+        // 알림 막대는 캔버스 아래쪽에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠, 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
+        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart, bottom = overlayBottom), margin = 8.dp) {
             SnackbarHost(snackbarHostState)
         }
     }

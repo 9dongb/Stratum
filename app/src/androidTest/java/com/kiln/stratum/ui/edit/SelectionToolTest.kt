@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -182,18 +183,33 @@ class SelectionToolTest {
         composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "none"), actions.calls) }
     }
 
+    /**
+     * 닫힌 화면은 옵션 칸이 캔버스 아래쪽 위에 겹쳐 뜨므로(결정 기록 '닫힌 화면 도구 옵션') 보이는 위쪽 자리를 누른다.
+     * 화면에 맞춘 1000×1000 문서에서 그 자리의 문서 좌표도 함께 돌려준다.
+     */
+    private fun TouchInjectionScope.visiblePoint(): Pair<Offset, Offset> {
+        val point = Offset(centerX, height * 0.25f)
+        val scale = minOf(width, height) / 1000f
+        val left = (width - 1000f * scale) / 2f
+        val top = (height - 1000f * scale) / 2f
+        return point to Offset((point.x - left) / scale, (point.y - top) / scale)
+    }
+
     @Test
     fun dragWithRectangle_sendsAPixelAlignedRectangle() {
         openCoverTool()
 
+        var start = Offset.Zero
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
-            swipe(start = center, end = center + Offset(width * 0.25f, height * 0.15f), durationMillis = 300)
+            val (point, document) = visiblePoint()
+            start = document
+            swipe(start = point, end = point + Offset(width * 0.25f, height * 0.15f), durationMillis = 300)
         }
 
         composeRule.runOnIdle {
             val shape = actions.shapes.single() as SelectionShape.Rectangle
-            // 화면에 맞춘 정사각형 문서라 캔버스 가운데는 문서 (500, 500) 근처다
-            assertTrue("$shape", abs(shape.left - 500f) < 30f && abs(shape.top - 500f) < 30f)
+            // 누른 자리의 문서 좌표에서 시작한다
+            assertTrue("$shape from $start", abs(shape.left - start.x) < 30f && abs(shape.top - start.y) < 30f)
             assertTrue("$shape", shape.right > shape.left + 50f && shape.bottom > shape.top + 20f)
             assertEquals(shape.left, shape.left.roundToInt().toFloat(), 0f)
         }
@@ -205,7 +221,7 @@ class SelectionToolTest {
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
-            down(center)
+            down(visiblePoint().first)
             moveBy(Offset(100f, 0f))
             moveBy(Offset(0f, 100f))
             moveBy(Offset(-100f, 0f))
@@ -222,15 +238,20 @@ class SelectionToolTest {
     fun tapWithoutDragging_deselectsInNewMode_andTheWandSamplesTheTappedPoint() {
         openCoverTool()
 
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput { click(center) }
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput { click(visiblePoint().first) }
         composeRule.runOnIdle { assertEquals(listOf("none"), actions.calls) }
 
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_WAND)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput { click(center) }
+        var tapped = Offset.Zero
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
+            val (point, document) = visiblePoint()
+            tapped = document
+            click(point)
+        }
         composeRule.runOnIdle {
             assertEquals(listOf("none", "similar"), actions.calls)
             val (x, y) = actions.points.single()
-            assertTrue("$x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
+            assertTrue("$x, $y vs $tapped", abs(x - tapped.x) < 30f && abs(y - tapped.y) < 30f)
         }
     }
 

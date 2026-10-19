@@ -59,7 +59,8 @@ class BrushCursorTest {
         val overlay = composeRule.onNodeWithTag(overlayTag)
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_CURSOR).assertDoesNotExist()
 
-        overlay.performTouchInput { down(center) }
+        // 닫힌 화면은 옵션 칸이 캔버스 아래쪽 위에 겹쳐 뜨므로 보이는 위쪽을 누른다
+        overlay.performTouchInput { down(Offset(centerX, height * 0.25f)) }
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_CURSOR).assertExists()
         overlay.performTouchInput { moveBy(Offset(60f, 0f)) }
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_CURSOR).assertExists()

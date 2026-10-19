@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
@@ -47,14 +48,16 @@ fun rememberSizePreviewState(): SizePreviewState = remember { SizePreviewState()
  * [hardness]가 있으면(0과 1 사이) 안쪽에 단단함 자리(이 안은 다 칠해지고 바깥으로 옅어짐)를 옅은 원으로 함께 그린다.
  * 단단함 슬라이더를 끄는 동안에도 같은 원을 보여, 단단함 자리가 어떻게 바뀌는지 보인다.
  * 캔버스 밖은 자른다. 터치를 받지 않아 아래 도구 터치 자리에 그대로 간다.
+ * [bottomInset]은 캔버스 아래쪽을 덮은 것(닫힌 화면의 옵션 칸)의 높이로, 원은 그 위 보이는 자리의 가운데에 둔다(크기 배율은 캔버스 전체로 잰다).
  */
 @Composable
-fun SizePreviewOverlay(view: () -> CanvasView, document: PixelSize, size: Float, hardness: Float?, modifier: Modifier = Modifier) {
+fun SizePreviewOverlay(view: () -> CanvasView, document: PixelSize, size: Float, hardness: Float?, modifier: Modifier = Modifier, bottomInset: Dp = 0.dp) {
     Canvas(modifier.clipToBounds().testTag(EditScreenTags.SIZE_PREVIEW)) {
         val area = PixelSize(this.size.width.roundToInt(), this.size.height.roundToInt())
         if (area.width <= 0 || area.height <= 0) return@Canvas
         val scale = view().transform(area, document).scaleX.toFloat()
-        drawBrushSize(center, size / 2f * scale, hardness)
+        val visibleHeight = (this.size.height - bottomInset.toPx()).coerceAtLeast(0f)
+        drawBrushSize(Offset(this.size.width / 2f, visibleHeight / 2f), size / 2f * scale, hardness)
     }
 }
 

@@ -48,6 +48,12 @@ object EditScreenTags {
     const val UNDO = "undo"
     const val REDO = "redo"
     const val TOOL_OPTIONS = "toolOptions"
+    /** 닫힌 화면(커버)의 도구 옵션 칸(캔버스 아래쪽 위에 겹쳐 뜸) */
+    const val COVER_OPTIONS = "coverOptions"
+    /** 닫힌 화면 새 창(자르기 등)의 위 줄 */
+    const val COVER_WINDOW_TOP_BAR = "coverWindowTopBar"
+    /** 닫힌 화면 자르기 창의 옵션(하위 도구·비율) */
+    const val COVER_CROP_OPTIONS = "coverCropOptions"
     const val ROTATE_LEFT = "rotateLeft"
     const val ROTATE_RIGHT = "rotateRight"
     const val FLIP_HORIZONTAL = "flipHorizontal"

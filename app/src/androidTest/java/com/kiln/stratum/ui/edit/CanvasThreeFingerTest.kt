@@ -398,18 +398,19 @@ class CanvasThreeFingerTest {
     fun editScreen_swipes_changeTheChosenToolsOwnSettings() {
         showEditScreen(tool = EditTool.Eraser)
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS)
-        canvas.performTouchInput { threeFingerSwipe(Offset(0f, -200f)) }
+        // 닫힌 화면은 옵션 칸이 캔버스 아래쪽 위에 겹쳐 뜨므로(결정 기록 '닫힌 화면 도구 옵션') 보이는 위쪽에서 민다
+        canvas.performTouchInput { threeFingerSwipe(Offset(0f, -200f), at = Offset(centerX, height * 0.3f)) }
         composeRule.runOnIdle {
             assertTrue("${eraser.size}", eraser.size > 80f)
             assertEquals(40f, brush.size, 0f)
         }
 
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Tone)).performScrollTo().performClick()
-        canvas.performTouchInput { threeFingerSwipe(Offset(-200f, 0f)) }
+        canvas.performTouchInput { threeFingerSwipe(Offset(-200f, 0f), at = Offset(centerX, height * 0.2f)) }
         composeRule.runOnIdle { assertTrue("${tone.brush.hardness}", tone.brush.hardness < 0.3f) }
 
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
-        canvas.performTouchInput { threeFingerSwipe(Offset(0f, 200f)) }
+        canvas.performTouchInput { threeFingerSwipe(Offset(0f, 200f), at = Offset(centerX, height * 0.2f)) }
         composeRule.runOnIdle { assertTrue("${retouch.size}", retouch.size < 60f) }
     }
 
@@ -444,10 +445,10 @@ internal fun TouchInjectionScope.threeFingerTap(holdMillis: Long = 80) {
 }
 
 /** 세 손가락을 대고 함께 [by]만큼 민다. [lift]면 끝에 모두 뗀다. */
-internal fun TouchInjectionScope.threeFingerSwipe(by: Offset, lift: Boolean = true) {
-    down(0, center - Offset(80f, 0f))
-    down(1, center)
-    down(2, center + Offset(80f, 0f))
+internal fun TouchInjectionScope.threeFingerSwipe(by: Offset, lift: Boolean = true, at: Offset = center) {
+    down(0, at - Offset(80f, 0f))
+    down(1, at)
+    down(2, at + Offset(80f, 0f))
     moveThreeFingers(by)
     if (lift) {
         up(0)

@@ -16,6 +16,8 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -161,6 +163,26 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("undo", "redo", "reset", "apply", "cancel"), actions.calls) }
+    }
+
+    @Test
+    fun cover_cancelAndApplyAreAtTheBottomLeftAndRight_notInTheTopBar() {
+        // 닫힌 화면 새 창 공통 규칙(결정 기록 '닫힌 화면 새 창'): 왼쪽 아래 X, 오른쪽 아래 ✓
+        show(411, 800)
+        val mode = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).fetchSemanticsNode().layoutBoundsInWindow()
+        val cancel = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).fetchSemanticsNode().layoutBoundsInWindow()
+        val apply = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$cancel should be bottom-left of $mode", cancel.center.y > mode.center.y + mode.height / 3 && cancel.center.x < mode.center.x)
+        assertTrue("$apply should be bottom-right of $mode", apply.center.y > mode.center.y + mode.height / 3 && apply.center.x > mode.center.x)
+        composeRule.onNode(hasTestTag(EditScreenTags.LIQUIFY_APPLY) and hasAnyAncestor(hasTestTag(EditScreenTags.LIQUIFY_TOP_BAR))).assertDoesNotExist()
+        composeRule.onNode(hasTestTag(EditScreenTags.LIQUIFY_CANCEL) and hasAnyAncestor(hasTestTag(EditScreenTags.LIQUIFY_TOP_BAR))).assertDoesNotExist()
+    }
+
+    @Test
+    fun mainScreens_keepCancelAndApplyInTheTopBar() {
+        show(930, 700)
+        composeRule.onNode(hasTestTag(EditScreenTags.LIQUIFY_APPLY) and hasAnyAncestor(hasTestTag(EditScreenTags.LIQUIFY_TOP_BAR))).assertExists()
+        composeRule.onNode(hasTestTag(EditScreenTags.LIQUIFY_CANCEL) and hasAnyAncestor(hasTestTag(EditScreenTags.LIQUIFY_TOP_BAR))).assertExists()
     }
 
     @Test

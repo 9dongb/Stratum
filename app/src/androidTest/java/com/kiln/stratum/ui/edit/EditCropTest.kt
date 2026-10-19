@@ -123,6 +123,39 @@ class EditCropTest {
     }
 
     @Test
+    fun cover_cropIsANewWindow_xBottomLeft_checkBottomRight_andBackIsX() {
+        // 닫힌 화면 새 창 공통 규칙(결정 기록 '닫힌 화면 새 창'): 위는 이름 줄, 탭 줄은 숨기고, 맨 아래 왼쪽 X·오른쪽 ✓
+        show()
+        startCropOnCover()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).assertDoesNotExist()
+
+        val options = composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
+        val cancel = composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).fetchSemanticsNode().layoutBoundsInWindow()
+        val apply = composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$cancel / $apply should be below $options", cancel.top >= options.bottom && apply.top >= options.bottom)
+        assertTrue("$cancel should be at the left", cancel.center.x < options.left + options.width / 4)
+        assertTrue("$apply should be at the right", apply.center.x > options.right - options.width / 4)
+
+        // 뒤로 가기는 X와 같다: 자르기를 닫고 탭 줄이 돌아온다
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).assertExists()
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
+    }
+
+    @Test
+    fun cover_choosingRotate_leavesTheCropWindow() {
+        show()
+        startCropOnCover()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).assertExists()
+    }
+
+    @Test
     fun cancel_endsCroppingWithoutEditing() {
         show()
         startCropOnCover()
