@@ -176,7 +176,7 @@
     <!-- 브러시·지우개 -->
     <string name="brush_size">크기</string>
     <string name="brush_size_value">%1$d px</string>
-    <string name="brush_hardness">단단함</string>
+    <string name="brush_hardness">경도</string>
     <string name="action_ok">확인</string>
     <string name="color_current">지금 색, %1$s</string>
     <string name="color_choose">색 고르기</string>
@@ -223,7 +223,7 @@
     <string name="settings_two_finger_undo">두 손가락으로 톡: 실행 취소</string>
     <string name="settings_two_finger_undo_description">캔버스를 두 손가락으로 톡 누르면 마지막 편집을 되돌려요.</string>
     <string name="settings_three_finger">세 손가락 제스처</string>
-    <string name="settings_three_finger_description">캔버스를 세 손가락으로 톡 누르면 다시 실행해요. 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)이 바뀌어요.</string>
+    <string name="settings_three_finger_description">캔버스를 세 손가락으로 톡 누르면 다시 실행해요. 위아래로 밀면 브러시 크기, 좌우로 밀면 경도(유동화는 압력)가 바뀌어요.</string>
     <string name="settings_theme">테마</string>
     <string name="settings_theme_dark">다크</string>
     <string name="settings_theme_dark_description">어두운 패널로 사진에 집중할 수 있어요.</string>
