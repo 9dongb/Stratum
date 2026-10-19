@@ -13,11 +13,19 @@ import com.kiln.stratum.engine.raster.TileKey
  */
 data class TilePart(val source: TileKey, val sourceRect: PixelRect, val targetRect: PixelRect)
 
-/** 대상 타일 한 장. [width]×[height]는 캔버스 안쪽 크기이고, [parts]가 그 안을 빈틈없이 한 번씩 덮는다. */
-data class TargetTile(val key: TileKey, val width: Int, val height: Int, val parts: List<TilePart>)
+/**
+ * 대상 타일 한 장. [width]×[height]는 캔버스 안쪽 크기이고, [parts]가 그 안을 한 번씩 덮는다.
+ * 돌리기·뒤집기·자르기는 빈틈없이 덮고, 옮기기([TransformPlan.translate])는 옮겨서 빈 자리를 덮지 않는다(투명).
+ */
+data class TargetTile(val key: TileKey, val width: Int, val height: Int, val parts: List<TilePart>) {
+
+    /** 조각들이 캔버스 안쪽을 빈틈없이 덮는지(조각은 겹치지 않는다) */
+    val isCovered: Boolean
+        get() = parts.sumOf { it.targetRect.width.toLong() * it.targetRect.height } == width.toLong() * height
+}
 
 /**
- * 문서를 돌리거나 뒤집거나 자를 때, 대상 타일마다 어느 원본 타일의 어느 부분을 가져올지 정한 계획.
+ * 문서를 돌리거나 뒤집거나 자르거나 레이어를 옮길 때, 대상 타일마다 어느 원본 타일의 어느 부분을 가져올지 정한 계획.
  *
  * 픽셀 값은 그대로 두고 자리만 옮긴다. 실제 복사는 플랫폼 코드가 이 계획대로 한다.
  * 크기는 캔버스 안쪽 크기([TileGrid.bounds])로 계산하고, 끝 타일의 캔버스 밖 부분은 가져오지 않는다.
@@ -42,6 +50,45 @@ class TransformPlan private constructor(
             require(rect.width > 0 && rect.height > 0) { "Crop rect must not be empty: $rect" }
             require(rect in PixelRect.of(source)) { "Crop rect outside image: $rect in $source" }
             return build(source, rect, Orientation.IDENTITY)
+        }
+
+        /**
+         * [source] 크기 이미지를 ([dx], [dy]) 픽셀만큼 옮기는 계획(이동 도구, 결정 기록 '이동 도구'). 크기는 그대로이고,
+         * 캔버스 밖으로 나간 부분은 버리며(놓을 때 잘림, 사용자 결정) 옮겨서 빈 자리는 어느 조각도 덮지 않는다(투명).
+         * 타일 크기(256)의 배수만큼 옮기면 대상 타일마다 원본 타일 하나를 꼭 맞게 가져온다(그대로 쓸 수 있다).
+         */
+        fun translate(source: PixelSize, dx: Int, dy: Int): TransformPlan {
+            val grid = TileGrid(source.width, source.height)
+            val image = PixelRect.of(source)
+            val targets = grid.keys().map { key ->
+                val bounds = grid.bounds(key)
+                val targetTile = PixelRect(bounds.left, bounds.top, bounds.left + bounds.width, bounds.top + bounds.height)
+                val parts = ArrayList<TilePart>(4)
+                // 이 대상 타일로 오는 원본 사각형(이미지 밖은 없다)
+                val from = targetTile.offset(-dx, -dy).intersect(image)
+                if (from != null) {
+                    for (row in from.top / TILE_SIZE..(from.bottom - 1) / TILE_SIZE) {
+                        for (column in from.left / TILE_SIZE..(from.right - 1) / TILE_SIZE) {
+                            val sourceKey = TileKey(column, row)
+                            val sourceBounds = grid.bounds(sourceKey)
+                            val sourceTile = PixelRect(
+                                sourceBounds.left,
+                                sourceBounds.top,
+                                sourceBounds.left + sourceBounds.width,
+                                sourceBounds.top + sourceBounds.height
+                            )
+                            val piece = from.intersect(sourceTile) ?: continue
+                            parts += TilePart(
+                                source = sourceKey,
+                                sourceRect = piece.offset(-sourceTile.left, -sourceTile.top),
+                                targetRect = piece.offset(dx - targetTile.left, dy - targetTile.top)
+                            )
+                        }
+                    }
+                }
+                TargetTile(key, bounds.width, bounds.height, parts)
+            }
+            return TransformPlan(source, source, image, Orientation.IDENTITY, targets)
         }
 
         /** [source]에서 [crop]을 잘라 [orientation] 방향으로 바꾸는 계획. */

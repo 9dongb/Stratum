@@ -85,11 +85,32 @@ object RasterTransform {
         return HdrGainmap(gainmapPlan.targetSize.width, gainmapPlan.targetSize.height, transform(gainmap.raster, gainmapPlan, composer, checkCanceled))
     }
 
+    /**
+     * 게인맵을 레이어 픽셀과 함께 ([dx], [dy]) 문서 픽셀만큼 옮긴다(이동 도구). 게인맵은 레이어 전체를 늘여 덮으므로 같은 비율만큼 옮기고,
+     * 옮기는 양은 가장 가까운 게인맵 픽셀로 맞춘다(보통 원본의 1/4이라 원본 약 2픽셀까지 어긋날 수 있지만 밝기 지도는 부드럽다).
+     * 비율로 줄여 0이 되면 그대로 둔다. 옮겨서 빈 자리의 레이어 픽셀은 투명이라 그 자리 게인맵은 쓰이지 않는다.
+     */
+    fun translateGainmap(
+        gainmap: HdrGainmap,
+        documentSize: PixelSize,
+        dx: Int,
+        dy: Int,
+        composer: TileComposer,
+        checkCanceled: () -> Unit = {}
+    ): HdrGainmap {
+        val gx = (dx.toDouble() * gainmap.width / documentSize.width).roundToInt()
+        val gy = (dy.toDouble() * gainmap.height / documentSize.height).roundToInt()
+        if (gx == 0 && gy == 0) return gainmap
+        val plan = TransformPlan.translate(PixelSize(gainmap.width, gainmap.height), gx, gy)
+        return HdrGainmap(gainmap.width, gainmap.height, transform(gainmap.raster, plan, composer, checkCanceled))
+    }
+
     /** 새로 만들지 않고 그대로 쓸 수 있는 원본 타일. 없으면 null. */
     private fun reusable(target: TargetTile, pieces: List<TilePiece>, plan: TransformPlan, sourceGrid: TileGrid): Tile? {
         val first = pieces.first().tile
         // 한 가지 색 타일 하나가 빈틈없이 덮으면, 어느 방향으로 옮겨도 같은 색이고 캔버스 밖 부분도 같은 색이다
-        if (first.solidColor != null && pieces.size == target.parts.size && pieces.all { it.tile === first }) return first
+        // (옮기기는 빈 자리가 생길 수 있어 조각이 다 덮는지도 본다)
+        if (first.solidColor != null && target.isCovered && pieces.size == target.parts.size && pieces.all { it.tile === first }) return first
         if (plan.orientation != Orientation.IDENTITY) return null
         val part = pieces.singleOrNull()?.part ?: return null
         val whole = PixelRect(0, 0, target.width, target.height)

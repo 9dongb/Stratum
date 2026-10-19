@@ -200,6 +200,60 @@ class RasterTransformTest {
     }
 
     @Test
+    fun translate_movesThePixels_andTheRestIsTransparent() {
+        val size = PixelSize(600, 300)
+        val source = photo(size)
+
+        val moved = source.copy(layers = listOf(source.layers[0].copy(content = RasterContent(RasterTransform.transform(source.raster(), TransformPlan.translate(size, 100, -30), composer)))))
+
+        assertPixels(moved) { x, y -> if (x - 100 in 0 until 600 && y + 30 in 0 until 300) colorAt(x - 100, y + 30) else 0 }
+    }
+
+    @Test
+    fun translate_byWholeTiles_reusesTheTiles() {
+        val size = PixelSize(1024, 512)
+        val source = photo(size)
+
+        val raster = RasterTransform.transform(source.raster(), TransformPlan.translate(size, 256, 256), composer)
+
+        // 옮긴 자리마다 원본 타일 객체를 그대로 쓰고, 밖으로 나간 타일은 버리며, 빈 자리에는 타일이 없다
+        assertEquals(0, composer.composedCount)
+        assertEquals(setOf(TileKey(1, 1), TileKey(2, 1), TileKey(3, 1)), raster.tiles.keys)
+        for (column in 1..3) assertSame(source.raster().tiles[TileKey(column - 1, 0)], raster.tiles[TileKey(column, 1)])
+    }
+
+    @Test
+    fun translate_ofASolidCanvas_doesNotReuseAPartlyCoveredTile() {
+        val white = Tile.solid(0xFFFFFFFF.toInt())
+        val size = PixelSize(600, 300)
+        val raster = RasterTransform.transform(Raster.filled(TileGrid(size.width, size.height), white), TransformPlan.translate(size, 10, 0), composer)
+
+        // 왼쪽 끝 줄 타일은 일부만 덮여 새로 만들고(빈 10px은 투명), 다 덮인 타일은 한 가지 색 타일 그대로다
+        val left = raster.tiles.getValue(TileKey(0, 0))
+        assertNotSame(white, left)
+        assertEquals(0, left.pixelAt(9, 0))
+        assertEquals(0xFFFFFFFF.toInt(), left.pixelAt(10, 0))
+        assertSame(white, raster.tiles[TileKey(1, 0)])
+    }
+
+    @Test
+    fun translateGainmap_movesItByTheSameProportion() {
+        val size = PixelSize(1000, 600)
+        val gainmap = HdrGainmap(250, 150, photo(PixelSize(250, 150)).raster())
+
+        // 문서에서 (100, -40)이면 1/4 크기 게인맵에서는 (25, -10)이다
+        val moved = RasterTransform.translateGainmap(gainmap, size, 100, -40, composer)
+
+        assertEquals(250, moved.width)
+        assertEquals(150, moved.height)
+        assertEquals(gainmap.pixelAt(0, 10), moved.pixelAt(25, 0))
+        assertEquals(gainmap.pixelAt(100, 100), moved.pixelAt(125, 90))
+        assertEquals(0, moved.pixelAt(10, 50))
+        // 비율로 줄여 0이면 그대로다
+        assertSame(gainmap, RasterTransform.translateGainmap(gainmap, size, 1, 1, composer))
+    }
+
+    @Test
     fun emptyLayer_staysEmpty() {
         val source = Document.create(600, 300, "Background")
 

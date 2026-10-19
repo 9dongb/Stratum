@@ -164,7 +164,8 @@ class OptionStripTest {
         }
     }
 
-    private fun pick(tool: EditTool) = composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performClick()
+    /** 도구 막대에서 [tool]을 누른다. 낮은 화면에서는 도구 막대를 밀어 그 버튼이 보이게 한 뒤 누른다(도구가 11개라 넘칠 수 있다). */
+    private fun pick(tool: EditTool) = composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performScrollTo().performClick()
 
     private fun cell(key: String) = composeRule.onNodeWithTag(EditScreenTags.strip(key))
 

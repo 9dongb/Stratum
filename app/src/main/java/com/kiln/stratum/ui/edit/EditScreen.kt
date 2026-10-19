@@ -205,7 +205,8 @@ fun EditScreen(
     onChooseColor: (ColorSlot, Int) -> Unit = { _, _ -> },
     onSwapColors: () -> Unit = {},
     eyedropper: () -> EyedropperState? = { null },
-    eyedropperActions: EyedropperActions = EyedropperActions.None
+    eyedropperActions: EyedropperActions = EyedropperActions.None,
+    moveActions: MoveActions = MoveActions.None
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -516,7 +517,8 @@ fun EditScreen(
             }
         }
         // 메인 화면은 띠에 안내 글이 들어갈 자리가 없어, 도구를 고를 때 캔버스 위쪽 가운데에 알림으로 한 번 보인다
-        val toolHint = if (stripItems != null) toolHintText(railTool, activeMode, retouchPicks) else null
+        // 이동 도구는 고를 옵션이 없어 띠 없이 안내만 띄운다
+        val toolHint = if (stripItems != null || (widthClass != WidthClass.Compact && railTool == EditTool.Move)) toolHintText(railTool, activeMode, retouchPicks) else null
         var shownHints by rememberSaveable { mutableStateOf(listOf<String>()) }
         LaunchedEffect(toolHint) {
             if (toolHint != null && toolHint !in shownHints) {
@@ -553,6 +555,10 @@ fun EditScreen(
                     onPicked = { eyedropperTarget = null },
                     modifier = Modifier.fillMaxSize()
                 )
+            }
+            if (ready != null && activeTool == EditTool.Move) {
+                // 이동 도구: 한 손가락으로 끌어 고른 레이어를 옮긴다(결정 기록 '이동 도구')
+                MoveOverlay(view = { viewState.view }, document = ready.documentSize, actions = moveActions, modifier = Modifier.fillMaxSize())
             }
             if (ready != null && picking == null && (activeTool == EditTool.Brush || activeTool == EditTool.Eraser)) {
                 StrokeOverlay(

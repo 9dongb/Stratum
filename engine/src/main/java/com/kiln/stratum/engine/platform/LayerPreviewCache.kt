@@ -72,11 +72,13 @@ class LayerPreviewCache {
      *
      * [strokes]가 있으면 끄는 동안의(또는 기록을 기다리는) 브러시 획을 그 레이어 축소본 위에 차례로 그려 합친다(기록 전 미리 보기).
      * 레이어의 픽셀이 조금만 바뀌었으면(브러시 획을 기록한 뒤) 앞 축소본에서 바뀐 타일 자리만 다시 그린다.
+     * [shift]가 있으면 이동 도구로 끄는 중인 그 레이어의 축소본을 옮겨 합친다(타일을 다시 그리지 않음, 캔버스 밖은 보이지 않음).
      */
     fun render(
         document: Document,
         level: Int,
         strokes: List<LiveStroke> = emptyList(),
+        shift: LayerShift? = null,
         checkCanceled: () -> Unit = {}
     ): Bitmap? {
         val size = PixelSize(document.width, document.height)
@@ -114,14 +116,23 @@ class LayerPreviewCache {
             val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace, size) ?: return null else checkNotNull(base)
             previews += layer to bitmap
         }
+        val moving = shift?.takeIf { it.dx != 0 || it.dy != 0 }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
         previews.singleOrNull()?.let { (layer, bitmap) ->
-            if (layer.opacity == 1f && layer.adjustments.isIdentity) return bitmap
+            if (layer.opacity == 1f && layer.adjustments.isIdentity && layer.id != moving?.layerId) return bitmap
         }
         val picture = Picture()
         val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
         for ((layer, bitmap) in previews) {
-            val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            val shader = if (layer.id == moving?.layerId) {
+                // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL)
+                val scale = 1f / (1 shl level)
+                BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+                    setLocalMatrix(Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) })
+                }
+            } else {
+                BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            }
             // 보정을 건 레이어를 불투명도·혼합 모드로 아래에 얹는다
             val paint = layerPaint(layer).apply {
                 this.shader = AdjustShader.of(layer.adjustments)?.wrap(shader) ?: shader
@@ -405,6 +416,12 @@ class LayerPreviewCache {
  * [effect]가 있으면 칠하는 대신 레이어 픽셀에 흐림·선명·모자이크를 건 색으로 바꿔 보인다(흐림·모자이크 도구를 끄는 동안).
  * [smudge]가 있으면 칠하는 대신 레이어 픽셀을 문질러 끈 모습을 보인다(스머지를 끄는 동안, 획마다 하나).
  */
+/**
+ * 이동 도구로 끄는 중인 레이어 옮기기(문서 픽셀, 결정 기록 '이동 도구'). [LayerPreviewCache.render]가 그 레이어 축소본을 옮겨 합친다.
+ * 손을 떼면 [TranslateLayer]로 기록한다.
+ */
+data class LayerShift(val layerId: LayerId, val dx: Int, val dy: Int)
+
 class LiveStroke(
     val layerId: LayerId,
     val dabs: List<StrokePoint>,

@@ -153,6 +153,7 @@ fun StratumApp(editor: EditorViewModel) {
                 paintColors = settingsValues.paintColors,
                 onChooseColor = editor::chooseColor,
                 onSwapColors = editor::swapColors,
+                moveActions = editor.moveActions,
                 eyedropper = { eyedropper.value },
                 eyedropperActions = editor.eyedropperActions
             )

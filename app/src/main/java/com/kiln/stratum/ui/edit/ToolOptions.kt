@@ -106,6 +106,7 @@ fun ToolOptions(
             BlurToolOptions(checkNotNull(selection.modeOf(EditTool.Blur)), blur, onChoose, modifier)
         }
         EditTool.Mosaic -> if (mosaic != null) MosaicToolOptions(mosaic, modifier)
+        EditTool.Move -> MoveToolOptions(modifier)
         else -> Unit
     }
 }

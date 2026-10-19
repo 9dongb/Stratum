@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.platform
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
@@ -54,6 +55,40 @@ data class CropImage(val rect: PixelRect, val documentSize: PixelSize) : Cancell
 
     override fun estimateNewBytes(document: Document): Long =
         if (document.size == documentSize) newTileBytes(document, rect) else 0L
+}
+
+/**
+ * [layer] 레이어의 픽셀을 ([dx], [dy]) 문서 픽셀만큼 옮긴다(이동 도구, 결정 기록 '이동 도구'). 문서 크기는 그대로이고,
+ * 캔버스 밖으로 나간 부분은 버리며(놓을 때 잘림, 사용자 결정) 옮겨서 빈 자리는 투명이다.
+ * 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사, 결정 기록 '회전·뒤집기·자르기는 안드로이드 내부 복사'와 같다). 타일 크기의 배수만큼 옮기면 타일을 그대로 쓴다.
+ * 게인맵(HDR)도 같은 비율만큼 옮긴다. 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없으면 그대로 둔다.
+ */
+data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : CancellableCommand {
+
+    override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
+        if (dx == 0 && dy == 0) return document
+        val index = document.indexOfLayer(layer)
+        if (index < 0) return document
+        val target = document.layers[index]
+        val raster = (target.content as? RasterContent)?.raster ?: return document
+        return try {
+            val moved = RasterTransform.transform(raster, TransformPlan.translate(document.size, dx, dy), CanvasTileComposer, checkCanceled)
+            val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
+            val layers = document.layers.toMutableList()
+            layers[index] = target.copy(content = RasterContent(moved), gainmap = gainmap)
+            document.copy(layers = layers)
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+    }
+
+    /** 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵 타일만큼이 새로 생길 수 있다 */
+    override fun estimateNewBytes(document: Document): Long {
+        val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
+        val raster = (target.content as? RasterContent)?.raster ?: return 0L
+        val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
+        return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
+    }
 }
 
 private val Document.size: PixelSize

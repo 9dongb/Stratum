@@ -475,6 +475,7 @@ internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
         EditTool.Tone -> if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge
         EditTool.Blur -> blurHint(mode)
         EditTool.Mosaic -> R.string.mosaic_hint
+        EditTool.Move -> R.string.move_hint
         else -> null
     }
     return hint?.let { stringResource(it) }

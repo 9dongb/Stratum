@@ -70,7 +70,7 @@ enum class SubTool(
 }
 
 /**
- * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(선택·리터칭·명암·흐림·모자이크·픽셀 유동화)가 켜져 있다.
+ * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(이동·선택·리터칭·명암·흐림·모자이크·픽셀 유동화)가 켜져 있다.
  * 아직 만들지 않은 도구(제거 등)는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
@@ -85,6 +85,9 @@ enum class EditTool(
     val subTools: List<SubTool> = emptyList(),
     val available: Boolean = false
 ) {
+    /** 이동(포토샵의 이동 도구). 고른 레이어를 한 손가락으로 끌어 옮긴다(사용자 피드백 7차). 고를 옵션이 없다. */
+    Move(R.drawable.ic_open_with, R.string.tool_move, R.string.tool_move_short, available = true),
+
     /** 자르기·변형. 하위 도구는 자르기 / 회전·뒤집기 / 크기 변경이다. */
     Transform(
         R.drawable.ic_crop,
@@ -148,11 +151,11 @@ enum class EditTool(
         get() = subTools.isNotEmpty()
 
     companion object {
-        /** 메인 화면 왼쪽 도구 막대의 도구. 조정·레이어는 패널에 있다. */
-        val railTools: List<EditTool> = listOf(Transform, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify)
+        /** 메인 화면 왼쪽 도구 막대의 도구(이동이 맨 위, 사용자 요청). 조정·레이어는 패널에 있다. */
+        val railTools: List<EditTool> = listOf(Move, Transform, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify)
 
-        /** 커버 화면 아래 탭 줄의 도구. 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. 폭이 모자라면 옆으로 밀어 본다. */
-        val tabTools: List<EditTool> = listOf(Transform, Adjust, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify, Layers)
+        /** 커버 화면 아래 탭 줄의 도구(이동이 맨 앞). 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. 폭이 모자라면 옆으로 밀어 본다. */
+        val tabTools: List<EditTool> = listOf(Move, Transform, Adjust, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify, Layers)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

@@ -320,6 +320,9 @@
     <string name="blur_hint_sharpen">Paint to bring out fine detail. Paint again to sharpen more.</string>
     <string name="blur_hint_smudge">Drag to push color like a fingertip. Higher strength drags it farther.</string>
     <string name="tool_mosaic">Mosaic</string>
+    <string name="tool_move">Move tool</string>
+    <string name="tool_move_short">Move</string>
+    <string name="move_hint">Drag to move the selected layer. Parts moved off the canvas are cut off when you let go.</string>
     <string name="mosaic_cell">Cell size</string>
     <string name="mosaic_hint">Paint to cover with square cells. Each cell takes the average color under it.</string>
 

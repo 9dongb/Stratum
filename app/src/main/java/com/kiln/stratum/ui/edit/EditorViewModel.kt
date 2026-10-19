@@ -4,19 +4,19 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.os.Build
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.kiln.stratum.R
-import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokeDabs
 import com.kiln.stratum.engine.brush.StrokePoint
+import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.AddLayer
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.DeleteLayer
@@ -44,34 +44,36 @@ import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
+import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.ColorSampler
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.Deselect
-import com.kiln.stratum.engine.platform.InvertSelection
-import com.kiln.stratum.engine.platform.MergeDown
-import com.kiln.stratum.engine.platform.MergeVisible
-import com.kiln.stratum.engine.platform.ScreenGainmap
-import com.kiln.stratum.engine.platform.SelectAll
-import com.kiln.stratum.engine.platform.SelectShape
-import com.kiln.stratum.engine.platform.SelectSimilarColor
-import com.kiln.stratum.engine.platform.SelectionPreview
+import com.kiln.stratum.engine.platform.EffectStroke
 import com.kiln.stratum.engine.platform.ImageExporter
-import com.kiln.stratum.engine.platform.AddTextLayer
+import com.kiln.stratum.engine.platform.InvertSelection
 import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.LiquifyRenderer
 import com.kiln.stratum.engine.platform.LiveStroke
+import com.kiln.stratum.engine.platform.MergeDown
+import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
-import com.kiln.stratum.engine.platform.EffectStroke
+import com.kiln.stratum.engine.platform.ScreenGainmap
+import com.kiln.stratum.engine.platform.SelectAll
+import com.kiln.stratum.engine.platform.SelectShape
+import com.kiln.stratum.engine.platform.SelectSimilarColor
+import com.kiln.stratum.engine.platform.SelectionPreview
 import com.kiln.stratum.engine.platform.SmudgePreview
 import com.kiln.stratum.engine.platform.SmudgeStroke
 import com.kiln.stratum.engine.platform.ToneStroke
+import com.kiln.stratum.engine.platform.TranslateLayer
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
@@ -87,10 +89,11 @@ import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectLibrary
 import com.kiln.stratum.project.ProjectNames
 import com.kiln.stratum.settings.AppSettings
-import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.ColorSlot
+import com.kiln.stratum.settings.PreviewQuality
 import java.io.IOException
 import java.time.LocalDateTime
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -109,7 +112,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 /** 보기가 이만큼(밀리초) 멈춰 있으면 보이는 곳을 선명하게 다시 그린다. 움직이는 동안 그려 화면이 멈칫하지 않게 한다. */
 internal const val SHARPEN_DELAY_MILLIS = 150L
@@ -469,12 +471,36 @@ class EditorViewModel internal constructor(
     private var strokeJob: Job? = null
     private var strokeDirty = false
 
+    /** 이동 도구로 끄는 중인 옮기기. [startX]·[startY]는 처음 닿은 문서 자리, [shift]는 지금까지 옮긴 양(문서 픽셀 정수)이다. */
+    private class Move(val startX: Float, val startY: Float, var shift: LayerShift)
+
+    /** 끄는 중인 옮기기 */
+    private var moving: Move? = null
+
+    /** 손을 뗀 옮기기를 기록하는 동안 미리 보기에 남기는 옮기기. 기록하는 순간 지운다(새 축소본에 두 번 옮겨지지 않게). */
+    private var committingShift: LayerShift? = null
+
+    /** 옮기기 미리 보기를 그리는 작업과, 그사이 손가락이 더 움직였는지 */
+    private var moveJob: Job? = null
+    private var moveDirty = false
+
+    /** 지금 미리 보기에서 옮겨 보일 레이어(끄는 중이거나 기록을 기다리는 옮기기). 없으면 null. */
+    private fun liveShift(): LayerShift? = moving?.shift ?: committingShift
+
     /** 캔버스의 브러시·지우개 손가락이 보내는 일 */
     val strokeActions: StrokeActions = object : StrokeActions {
         override fun begin(x: Float, y: Float, erase: Boolean) = beginStroke(StrokePoint(x, y), erase)
         override fun extend(x: Float, y: Float) = extendStroke(StrokePoint(x, y))
         override fun end() = endStroke()
         override fun cancel() = cancelStroke()
+    }
+
+    /** 이동 도구가 보내는 일(결정 기록 '이동 도구') */
+    val moveActions: MoveActions = object : MoveActions {
+        override fun begin(x: Float, y: Float) = beginMove(x, y)
+        override fun move(x: Float, y: Float) = extendMove(x, y)
+        override fun end() = endMove()
+        override fun cancel() = cancelMove()
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -1496,6 +1522,85 @@ class EditorViewModel internal constructor(
         )
     }
 
+    /**
+     * 이동 도구: 고른 레이어를 옮기기 시작한다(손가락이 문서 좌표 ([x], [y])에 닿음, 결정 기록 '이동 도구').
+     * 끄는 동안은 그 레이어 축소본만 옮겨 보이고(타일을 다시 그리지 않음), 손을 떼면([endMove]) 실행 취소 한 단계로 기록한다.
+     * 다른 편집을 처리하는 중이거나 끄는 획·기록을 기다리는 획·끄는 슬라이더가 있으면 무시한다.
+     * 숨긴 레이어는 옮기지 않고 알린다(그리는 도구와 같다). 선택 영역과 상관없이 레이어 전체를 옮긴다.
+     */
+    fun beginMove(x: Float, y: Float) {
+        if (_state.value !is EditorState.Ready || editing || moving != null || drawing != null || queuedStrokes.isNotEmpty() || hasLiveValues) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        moving = Move(x, y, LayerShift(layer.id, 0, 0))
+    }
+
+    /** 끄는 손가락이 ([x], [y])까지 왔다. 옮기는 양(문서 픽셀 정수)이 바뀌면 미리 보기를 다시 그린다. */
+    fun extendMove(x: Float, y: Float) {
+        val move = moving ?: return
+        val shift = move.shift.copy(dx = (x - move.startX).roundToInt(), dy = (y - move.startY).roundToInt())
+        if (shift == move.shift) return
+        move.shift = shift
+        showMove()
+    }
+
+    /**
+     * 손가락을 뗐다. 옮긴 만큼 실행 취소 한 단계로 기록한다(캔버스 밖으로 나간 부분은 이때 잘린다, 사용자 결정).
+     * 옮기지 않았거나 제자리로 돌아왔으면 기록하지 않는다. 기록하는 동안에도 옮긴 미리 보기를 그대로 보인다.
+     */
+    fun endMove() {
+        val move = moving ?: return
+        moving = null
+        val shift = move.shift
+        // 옮기지 않았거나, 그사이 다른 편집이 시작돼 기록할 수 없으면 옮겨 보이던 미리 보기만 되돌린다
+        if ((shift.dx == 0 && shift.dy == 0) || editing) return restoreAfterMove()
+        committingShift = shift
+        runEdit(TranslateLayer(shift.layerId, shift.dx, shift.dy), onCommitted = { committingShift = null }) { committingShift = null }
+    }
+
+    /** 두 손가락 조작이 시작돼 끄던 옮기기를 버린다(기록하지 않음) */
+    fun cancelMove() {
+        if (moving == null) return
+        moving = null
+        restoreAfterMove()
+    }
+
+    /** 옮겨 보이던 미리 보기를 기록된 문서로 되돌린다. 처리 중인 편집이 있으면 그 편집이 새로 그린다. */
+    private fun restoreAfterMove() {
+        if (!liveShown || editing) return
+        val document = history?.document ?: return
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch { showPreview(document) }
+    }
+
+    /**
+     * 끄는 옮기기를 얹은 축소본을 그린다(그 레이어 축소본만 옮겨 합침). 그리는 동안 또 움직이면 끝난 뒤 한 번 더 그린다.
+     * 확대 그림은 숨기고, 놓아서 기록하면 다시 선명해진다(획과 같다).
+     */
+    private fun showMove() {
+        moveDirty = true
+        detailJob?.cancel()
+        if (moveJob?.isActive == true) return
+        moveJob = viewModelScope.launch {
+            while (moveDirty) {
+                moveDirty = false
+                val document = history?.document ?: break
+                val shift = liveShift() ?: break
+                val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+                val base = renderMutex.withLock {
+                    withContext(Dispatchers.Default) { layerPreviews.render(document, level, shift = shift) { ensureActive() } }
+                }
+                // 그사이 기록했거나(새 문서가 보임) 그만두었으면(되돌려 그림) 그쪽을 따른다
+                if (history?.document !== document || liveShift() == null) break
+                val ready = _state.value as? EditorState.Ready ?: break
+                if (base == null) continue
+                val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
+                _state.value = ready.copy(base = PreviewImage(base, region), detail = null)
+                liveShown = true
+            }
+        }
+    }
+
     /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. 리터칭 첫 획이 정한 간격도 되돌린다. */
     fun cancelStroke() {
         val stroke = drawing ?: return
@@ -2048,16 +2153,17 @@ class EditorViewModel internal constructor(
     private suspend fun showPreview(document: Document, finishEdit: Boolean = false, beforeShow: () -> Unit = {}): Boolean {
         val level = levelFor(document)
         renderMutex.withLock {
-            // 기록을 기다리거나 끄는 획은 그대로 보이게 얹는다
+            // 기록을 기다리거나 끄는 획과 옮기기는 그대로 보이게 얹는다
             val strokes = liveStrokes()
+            val shift = liveShift()
             val shownBefore = _state.value as? EditorState.Ready
             // 선택 영역만 바뀌었으면(픽셀은 같음) 보이던 축소본을 그대로 쓴다.
             // 끄는 동안의 미리 보기(보정·불투명도·획)를 보이고 있었으면 그 그림은 기록된 문서가 아니라 다시 그린다.
             val reusable = shownBefore?.base?.takeIf {
-                !liveShown && strokes.isEmpty() && it.region.level == level && samePixels(shownDocument, document)
+                !liveShown && strokes.isEmpty() && shift == null && it.region.level == level && samePixels(shownDocument, document)
             }
             val preview = reusable?.bitmap ?: withContext(Dispatchers.Default) {
-                layerPreviews.render(document, level, strokes) { ensureActive() }
+                layerPreviews.render(document, level, strokes, shift) { ensureActive() }
             }
             // 선택 영역 윤곽선. 선택 영역이 바뀐 때만 새로 찾는다.
             val outline = withContext(Dispatchers.Default) { outlineOf(document) }
@@ -2138,7 +2244,7 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         // 편집 중이거나 새 문서의 축소본을 아직 그리는 중이면, 그 축소본을 그린 뒤 다시 계획한다.
         // 슬라이더로 미리 보는 동안도 그리지 않는다(기록한 문서의 그림이라 미리 보기와 다르다).
-        if (editing || document !== shownDocument || liveDocument != null || detailStrokes.isNotEmpty()) return
+        if (editing || document !== shownDocument || liveDocument != null || detailStrokes.isNotEmpty() || liveShift() != null) return
         val viewport = viewport ?: return
         val size = PixelSize(document.width, document.height)
         // 다른 문서를 보던 때의 보기는 쓰지 않는다
@@ -2265,6 +2371,9 @@ class EditorViewModel internal constructor(
         lastStrokePoint = null
         queuedStrokes.clear()
         strokeCommitting = false
+        moving = null
+        committingShift = null
+        moveJob?.cancel()
         detailBeforeStroke = null
         detailStrokes.clear()
         strokeJob?.cancel()

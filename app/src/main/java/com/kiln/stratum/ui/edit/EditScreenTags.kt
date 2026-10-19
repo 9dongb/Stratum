@@ -193,6 +193,9 @@ object EditScreenTags {
     const val BLUR_HARDNESS = "blurHardness"
     const val BLUR_HINT = "blurHint"
     const val MOSAIC_OPTIONS = "mosaicOptions"
+    /** 이동 도구의 캔버스 손가락과 커버 옵션(안내 한 줄) */
+    const val MOVE_OVERLAY = "moveOverlay"
+    const val MOVE_OPTIONS = "moveOptions"
     const val MOSAIC_OVERLAY = "mosaicOverlay"
     const val MOSAIC_CELL = "mosaicCell"
     const val MOSAIC_SIZE = "mosaicSize"

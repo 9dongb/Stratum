@@ -96,6 +96,66 @@ class TransformPlanTest {
     }
 
     @Test
+    fun translate_movesEachPixel_andDropsWhatLeavesTheCanvas() {
+        val shifts = listOf(0 to 0, 100 to 50, -300 to 7, 256 to -512, 1001 to 0, -2000 to -2000, 3 to 520)
+        for (size in listOf(PixelSize(1001, 521), PixelSize(256, 256), PixelSize(3, 700))) {
+            for ((dx, dy) in shifts) {
+                val plan = TransformPlan.translate(size, dx, dy)
+                assertEquals(size, plan.targetSize)
+                assertEquals(Orientation.IDENTITY, plan.orientation)
+                val grid = TileGrid(size.width, size.height)
+                assertEquals(grid.keys(), plan.targets.map { it.key })
+                // 대상 픽셀마다 (x - dx, y - dy)의 원본 픽셀이 오고, 그 자리가 이미지 밖이면 아무것도 오지 않는다(투명)
+                val covered = IntArray(size.width * size.height)
+                for (tile in plan.targets) {
+                    for (part in tile.parts) {
+                        val sourceBounds = grid.bounds(part.source)
+                        assertTrue("$part", part.sourceRect in PixelRect(0, 0, sourceBounds.width, sourceBounds.height))
+                        assertTrue("$part", part.targetRect in PixelRect(0, 0, tile.width, tile.height))
+                        for (y in part.targetRect.top until part.targetRect.bottom) {
+                            for (x in part.targetRect.left until part.targetRect.right) {
+                                val local = part.sourcePixel(x, y, plan.orientation)
+                                val targetX = tile.key.column * TILE_SIZE + x
+                                val targetY = tile.key.row * TILE_SIZE + y
+                                assertEquals(PixelPoint(targetX - dx, targetY - dy), PixelPoint(sourceBounds.left + local.x, sourceBounds.top + local.y))
+                                covered[targetY * size.width + targetX]++
+                            }
+                        }
+                    }
+                }
+                for (y in 0 until size.height) {
+                    for (x in 0 until size.width) {
+                        val inside = x - dx in 0 until size.width && y - dy in 0 until size.height
+                        val count = covered[y * size.width + x]
+                        if (count != if (inside) 1 else 0) fail("$size by ($dx, $dy): ($x, $y) covered $count times")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun translate_byWholeTiles_takesWholeTiles_andTellsWhatIsCovered() {
+        val plan = TransformPlan.translate(PixelSize(1024, 512), 256, 0)
+
+        for (tile in plan.targets) {
+            if (tile.key.column == 0) {
+                // 왼쪽 끝 줄은 옮겨서 빈 자리다
+                assertTrue(tile.parts.isEmpty())
+                assertTrue(!tile.isCovered)
+            } else {
+                val part = tile.parts.single()
+                assertEquals(tile.key.copy(column = tile.key.column - 1), part.source)
+                assertEquals(PixelRect(0, 0, TILE_SIZE, TILE_SIZE), part.sourceRect)
+                assertEquals(part.sourceRect, part.targetRect)
+                assertTrue(tile.isCovered)
+            }
+        }
+        // 조금 옮기면 왼쪽 끝 타일은 일부만 덮인다
+        assertTrue(!TransformPlan.translate(PixelSize(1024, 512), 10, 0).targets.first().isCovered)
+    }
+
+    @Test
     fun crop_rejectsEmptyOrOutsideRect() {
         val source = PixelSize(100, 50)
 
