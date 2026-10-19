@@ -18,6 +18,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -181,7 +182,8 @@ class BrushToolsTest {
     @Test
     fun text_tapThenType_addsAtTheTappedPoint() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performClick()
+        // 탭이 커버 폭보다 많아(12개) 글자 탭은 옆으로 밀어야 보인다
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OPTIONS).assertIsDisplayed()
 
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(center) }

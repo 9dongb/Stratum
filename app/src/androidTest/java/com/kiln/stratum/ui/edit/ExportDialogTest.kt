@@ -183,13 +183,24 @@ class ExportDialogTest {
 
     @Test
     fun exportButton_isBlockedWhileCropping() {
-        show()
+        show(widthDp = 930, heightDp = 700)
         composeRule.onNodeWithTag(EditScreenTags.EXPORT).assertIsEnabled()
 
         // 자르기·변형 도구를 고르면 자르기부터 시작한다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.EXPORT).assertIsNotEnabled()
+    }
+
+    @Test
+    fun cover_cropWindowHasNoExportButton() {
+        show()
+
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performClick()
+
+        // 닫힌 화면 자르기는 새 창이라 편집 상단 바(내보내기)가 없다(결정 기록 '닫힌 화면 새 창')
+        composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.EXPORT).assertDoesNotExist()
     }
 
     @Test
