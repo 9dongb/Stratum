@@ -205,6 +205,8 @@ fun EditScreen(
     val selection = rememberToolSelection()
     // 메인 화면 캔버스 위에 떠 있는 옵션 창·패널(한 번에 하나)
     val floating = rememberFloatingState()
+    // 도구 막대·커버 탭 줄의 하위 도구 메뉴(편집 화면 맨 위에 하나, 결정 기록 '하위 도구 메뉴')
+    val subToolMenu = remember { SubToolMenuState() }
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
@@ -449,18 +451,18 @@ fun EditScreen(
             when (railTool) {
                 EditTool.Brush, EditTool.Eraser -> brushControls?.let { brushStrip(it) }
                 EditTool.Text -> textControls?.let { textStrip(it) }
-                EditTool.Transform -> transformStrip(selection.transformMode, ready?.busy == true, onEdit, chooseSubTool, crop, floating::closeFlyout)
+                EditTool.Transform -> transformStrip(selection.transformMode, ready?.busy == true, onEdit, crop, floating::closeFlyout)
                 EditTool.Select -> selectionControls?.let {
-                    selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it, chooseSubTool, floating::closeFlyout)
+                    selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it, floating::closeFlyout)
                 }
                 EditTool.Retouch -> retouchControls?.let {
-                    retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it, chooseSubTool, floating::closeFlyout)
+                    retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it)
                 }
                 EditTool.Tone -> toneControls?.let {
-                    toneStrip(checkNotNull(selection.modeOf(EditTool.Tone)), it, chooseSubTool, floating::closeFlyout)
+                    toneStrip(it, floating::closeFlyout)
                 }
                 EditTool.Blur -> blurControls?.let {
-                    blurStrip(checkNotNull(selection.modeOf(EditTool.Blur)), it, chooseSubTool, floating::closeFlyout)
+                    blurStrip(it)
                 }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicStrip(it) }
                 else -> null
@@ -469,6 +471,10 @@ fun EditScreen(
         // 접기·펼치기 잇기(결정 기록 '떠 있는 레이어·조정 패널'): 커버에서 고른 조정·레이어 탭은 펼치면 그 패널로 열고,
         // 고른 도구 없이 패널을 연 채 접으면 커버에서 그 탭을 연다.
         // 도구를 고른 채 접으면 커버에는 그 도구가 보이고, 패널은 끄지 않고 남겨 두어 다시 펼치면 그대로 보인다(직접 끄기 전까지 유지).
+        // 배치가 바뀌면(접기·펼치기) 메뉴를 연 버튼 자리가 사라지므로 닫는다
+        LaunchedEffect(widthClass) { subToolMenu.close() }
+        // 메뉴가 뜨면 띠의 옵션 창은 닫는다(다른 곳을 눌렀으므로)
+        LaunchedEffect(subToolMenu.isOpen) { if (subToolMenu.isOpen) floating.closeFlyout() }
         LaunchedEffect(widthClass) {
             if (widthClass == WidthClass.Compact) {
                 floating.panel?.let { panel ->
@@ -768,7 +774,7 @@ fun EditScreen(
                                 }
                             }
                         )
-                        ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool)
+                        ToolTabBar(selection, enabled = toolsEnabled, onChoose = chooseSubTool, menu = subToolMenu)
                     }
                 }
 
@@ -779,6 +785,7 @@ fun EditScreen(
                         selection,
                         enabled = toolsEnabled,
                         onChoose = chooseSubTool,
+                        menu = subToolMenu,
                         onToolBounds = { tool, bounds -> if (floating.toolAnchors[tool] != bounds) floating.toolAnchors[tool] = bounds }
                     )
                     EditCanvas(
@@ -790,6 +797,15 @@ fun EditScreen(
             }
         }
 
+        // 하위 도구 메뉴는 캔버스·띠 위에 뜬다(창보다는 아래). 고르면 닫고 하위 도구를 고른다(크기 변경은 창을 띄움).
+        SubToolMenuHost(
+            state = subToolMenu,
+            current = { selection.modeOf(it) },
+            onChoose = {
+                subToolMenu.close()
+                chooseSubTool(it)
+            }
+        )
         // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
         if (state is EditorState.AskSize) {
             LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)

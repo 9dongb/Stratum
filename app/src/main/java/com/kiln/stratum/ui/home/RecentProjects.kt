@@ -75,6 +75,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.project.ProjectNames
 import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
@@ -211,32 +212,35 @@ private fun ProjectCard(
     val colors = StratumTheme.colors
     Box(modifier) {
         Column(Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(StratumShapes.Card)
-                    .combinedClickable(
-                        onClick = if (selecting) onToggle else onOpen,
-                        onLongClick = if (selecting) onToggle else ({ menuOpen = true }),
-                        onLongClickLabel = if (selecting) null else menuLabel
-                    )
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = description
-                        if (selecting) {
-                            selected = isSelected
-                        } else {
-                            customActions = listOf(
-                                CustomAccessibilityAction(renameLabel) { onRename(); true },
-                                CustomAccessibilityAction(deleteLabel) { onDelete(); true }
-                            )
+            // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
+            MenuLongPress {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(StratumShapes.Card)
+                        .combinedClickable(
+                            onClick = if (selecting) onToggle else onOpen,
+                            onLongClick = if (selecting) onToggle else ({ menuOpen = true }),
+                            onLongClickLabel = if (selecting) null else menuLabel
+                        )
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = description
+                            if (selecting) {
+                                selected = isSelected
+                            } else {
+                                customActions = listOf(
+                                    CustomAccessibilityAction(renameLabel) { onRename(); true },
+                                    CustomAccessibilityAction(deleteLabel) { onDelete(); true }
+                                )
+                            }
                         }
-                    }
-                    .testTag(HomeTags.project(info.id)),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                ProjectThumbnail(info, isSelected)
-                if (selecting) SelectionMark(isSelected, Modifier.align(Alignment.TopEnd).padding(8.dp))
+                        .testTag(HomeTags.project(info.id)),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    ProjectThumbnail(info, isSelected)
+                    if (selecting) SelectionMark(isSelected, Modifier.align(Alignment.TopEnd).padding(8.dp))
+                }
             }
             // 이름과 크기: 누르면 이름 바꾸기(프로크리에이트와 같다). 누르는 영역은 48dp 이상이다.
             Column(

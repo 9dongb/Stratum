@@ -27,12 +27,14 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.LongPressTimes
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -160,6 +162,21 @@ class EyedropperTest {
         composeRule.runOnIdle {
             assertEquals(listOf("stroke", "stroke cancel", "pick BRUSH", "pick move", "pick end"), calls)
         }
+    }
+
+    @Test
+    fun holdingForTheMenuTime_isNotYetTheEyedropper() {
+        show(EditTool.Brush)
+
+        composeRule.onNodeWithTag(EditScreenTags.STROKE_OVERLAY).performTouchInput {
+            // 편집 묶음(캔버스 안 꾹 누르기)은 휴대폰 설정(기본 0.4초)이라, 메뉴 묶음(0.3초)만큼 눌러서는 아직 칠하기다
+            assumeTrue(viewConfiguration.longPressTimeoutMillis > LongPressTimes.MENU_MILLIS + 40)
+            down(center)
+            advanceEventTime(LongPressTimes.MENU_MILLIS + 20)
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(listOf("stroke", "stroke end"), calls) }
     }
 
     @Test

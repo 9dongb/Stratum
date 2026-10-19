@@ -7,24 +7,25 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.R
 import com.kiln.stratum.project.ProjectInfo
+import com.kiln.stratum.ui.components.LongPressTimes
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -113,6 +114,21 @@ class HomeProjectsTest {
         composeRule.onNodeWithTag(HomeTags.project("p1")).performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("p1"), opened) }
+    }
+
+    @Test
+    fun cardLongPress_isInTheMenuGroup_andOpensAfterThreeTenthsOfASecond() {
+        show(projects(2))
+
+        // 사용자 요청: 메뉴 꾹 누르기 묶음은 0.3초
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performTouchInput {
+            down(center)
+            advanceEventTime(LongPressTimes.MENU_MILLIS + 20)
+            up()
+        }
+
+        composeRule.onNodeWithText(text(R.string.action_delete)).assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue(opened.isEmpty()) }
     }
 
     @Test

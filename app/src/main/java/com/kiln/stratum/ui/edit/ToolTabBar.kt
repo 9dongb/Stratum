@@ -16,17 +16,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -43,7 +42,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.edgeDivider
+import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumRadius
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -63,7 +64,8 @@ fun ToolTabBar(
     selection: ToolSelection,
     enabled: Boolean,
     onChoose: (SubTool) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    menu: SubToolMenuState = remember { SubToolMenuState() }
 ) {
     val tools = EditTool.tabTools
     val scroll = rememberScrollState()
@@ -92,7 +94,7 @@ fun ToolTabBar(
                 for (tool in tools) {
                     key(tool) {
                         // 칸 하나를 정한 폭의 줄로 감싸, 칸이 나누는 폭(weight)을 그 안에서 쓰게 한다
-                        Row(Modifier.width(itemWidth)) { TabToolItem(tool, selection, enabled, onChoose) }
+                        Row(Modifier.width(itemWidth)) { TabToolItem(tool, selection, enabled, menu, onChoose) }
                     }
                 }
             }
@@ -105,67 +107,85 @@ fun ToolTabBar(
  * 탭 칸 하나. 칸에는 짧은 이름을 보이고, 화면 읽기 기능은 긴 이름(예: 자르기·변형)을 읽는다.
  * 고른 칸은 도구 막대처럼 아이콘 뒤 모서리 8dp 사각형(선택 배경)과 선택 색 아이콘·이름으로 보인다(사용자 결정).
  * M3의 고른 표시는 알약 모양만 되어 끄고(투명), 사각형은 아이콘 뒤에 그린다(칸 크기는 그대로).
+ * 하위 도구가 있으면 길게 누르거나(메뉴 묶음 0.3초) 고른 뒤 다시 눌러 [menu]를 탭 위에 연다. 길게 누른 채 끌어 항목 위에서 떼면 고른다(도구 막대와 같다).
  */
 @Composable
-private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabled: Boolean, onChoose: (SubTool) -> Unit) {
+private fun RowScope.TabToolItem(tool: EditTool, selection: ToolSelection, enabled: Boolean, menu: SubToolMenuState, onChoose: (SubTool) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val menuLabel = stringResource(R.string.subtool_menu)
     val label = stringResource(tool.label)
     val itemEnabled = enabled && tool.available
     val selected = selection.active == tool
-    var menuOpen by remember { mutableStateOf(false) }
+    // 칸 자리(창 좌표). 메뉴를 그 위에 띄운다.
+    val bounds = remember { arrayOfNulls<Region>(1) }
     val openMenu = {
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        menuOpen = true
+        bounds[0]?.let { menu.open(tool, it, MenuSide.ABOVE) }
+        Unit
     }
-    NavigationBarItem(
-        selected = selected,
-        onClick = { selection.tap(tool) },
-        enabled = itemEnabled,
-        icon = {
-            // 메뉴는 아이콘 옆에 붙인다. 칸 자체를 감싸면 칸의 폭 나누기(weight)가 깨진다.
-            Box(if (selected) Modifier.selectedToolSquare(StratumTheme.colors.selectedBackground) else Modifier) {
-                ToolIcon(tool, contentDescription = null)
-                if (tool.hasSubTools) {
-                    SubToolMenu(
-                        tool = tool,
-                        expanded = menuOpen,
-                        current = selection.modeOf(tool),
-                        onDismiss = { menuOpen = false },
-                        onChoose = {
-                            menuOpen = false
-                            onChoose(it)
-                        }
-                    )
+    // 고른 도구를 다시 누르면 하위 도구 메뉴를 연다(하위 도구가 없는 도구는 내려놓는다)
+    val tap = { if (selected && tool.hasSubTools) openMenu() else selection.tap(tool) }
+    // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
+    MenuLongPress {
+        NavigationBarItem(
+            selected = selected,
+            onClick = tap,
+            enabled = itemEnabled,
+            icon = {
+                Box(if (selected) Modifier.selectedToolSquare(StratumTheme.colors.selectedBackground) else Modifier) {
+                    ToolIcon(tool, contentDescription = null)
                 }
-            }
-        },
-        label = { Text(stringResource(tool.shortLabel), maxLines = 1, overflow = TextOverflow.Clip) },
-        colors = tabItemColors(),
-        modifier = Modifier
-            .testTag(EditScreenTags.tabTool(tool))
-            .then(if (itemEnabled && tool.hasSubTools) Modifier.longPressFirst(openMenu) else Modifier)
-            // 안쪽 의미를 지우므로 역할·선택·누르기를 여기서 다시 알린다
-            .clearAndSetSemantics {
-                contentDescription = label
-                role = Role.Tab
-                this.selected = selected
-                if (itemEnabled) {
-                    onClick(label) {
-                        selection.tap(tool)
-                        true
+            },
+            label = { Text(stringResource(tool.shortLabel), maxLines = 1, overflow = TextOverflow.Clip) },
+            colors = tabItemColors(),
+            modifier = Modifier
+                .testTag(EditScreenTags.tabTool(tool))
+                .onGloballyPositioned { coordinates ->
+                    val position = coordinates.positionInWindow()
+                    val left = position.x.roundToInt()
+                    val top = position.y.roundToInt()
+                    bounds[0] = Region(left, top, left + coordinates.size.width, top + coordinates.size.height)
+                }
+                .then(
+                    if (itemEnabled && tool.hasSubTools) {
+                        Modifier.longPressFirst(
+                            onLongPress = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                openMenu()
+                            },
+                            onDrag = { if (menu.hover(it)) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                            onRelease = { position ->
+                                menu.release(position)?.let {
+                                    menu.close()
+                                    onChoose(it)
+                                }
+                            }
+                        )
+                    } else {
+                        Modifier
                     }
-                    if (tool.hasSubTools) {
-                        onLongClick(menuLabel) {
-                            openMenu()
+                )
+                // 안쪽 의미를 지우므로 역할·선택·누르기를 여기서 다시 알린다
+                .clearAndSetSemantics {
+                    contentDescription = label
+                    role = Role.Tab
+                    this.selected = selected
+                    if (itemEnabled) {
+                        onClick(label) {
+                            tap()
                             true
                         }
+                        if (tool.hasSubTools) {
+                            onLongClick(menuLabel) {
+                                openMenu()
+                                true
+                            }
+                        }
+                    } else {
+                        disabled()
                     }
-                } else {
-                    disabled()
                 }
-            }
-    )
+        )
+    }
 }
 
 /** 탭 칸 색: M3 고른 표시(알약)는 투명, 고른 칸은 선택 색, 나머지 아이콘은 보조 색·이름은 설명색 */

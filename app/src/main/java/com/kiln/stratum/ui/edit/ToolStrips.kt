@@ -37,6 +37,7 @@ import kotlin.math.roundToInt
  * 메인 화면 도구 옵션 띠의 칸들(결정 기록 '편집 화면 도구 배치'). 커버 화면 옵션과 같은 값·할 일(…Controls)을 쓰고,
  * 옵션 창의 슬라이더·고르기는 커버 옵션과 같은 부품·이름표다. 그래서 바꾸는 값과 기록은 커버와 똑같다.
  * 고르기 칸의 옵션 창은 고르면 닫는다([close]).
+ * 하위 도구는 띠에 두지 않고 도구 막대의 하위 도구 메뉴(꾹 누르기·다시 누르기)에서 고른다(사용자 피드백 7차).
  */
 
 /** 브러시·지우개의 띠: (브러시만) 색·스포이드, 크기, 단단함, 불투명도 */
@@ -73,8 +74,8 @@ internal fun textStrip(controls: TextControls): List<StripItem> =
     }
 
 /**
- * 자르기·변형의 띠: 하위 도구(자르기 / 회전·뒤집기 / 크기 변경…), 그리고
- * 자르기면 비율·가로세로 바꾸기·취소·적용(파란 버튼), 회전·뒤집기면 왼쪽·오른쪽 회전과 좌우·상하 뒤집기.
+ * 자르기·변형의 띠: 자르기면 비율·가로세로 바꾸기·취소·적용(파란 버튼), 회전·뒤집기면 왼쪽·오른쪽 회전과 좌우·상하 뒤집기.
+ * 하위 도구(자르기 / 회전·뒤집기 / 크기 변경…)는 띠에 두지 않고 도구 막대의 하위 도구 메뉴에서 고른다(사용자 피드백 7차).
  * 자르기 테두리가 아직 없으면(첫 화면) 자르기 칸은 다음 화면에 보인다.
  */
 @Composable
@@ -82,12 +83,10 @@ internal fun transformStrip(
     mode: SubTool,
     busy: Boolean,
     onEdit: (EditCommand) -> Unit,
-    onChoose: (SubTool) -> Unit,
     crop: CropControls?,
     close: () -> Unit
 ): List<StripItem> =
     buildList {
-        add(subToolCell(EditTool.Transform, mode, onChoose, close))
         when (mode) {
             SubTool.CROP -> if (crop != null) {
                 add(
@@ -123,17 +122,16 @@ internal fun transformStrip(
     }
 
 /**
- * 선택의 띠: 하위 도구, 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
+ * 선택의 띠: 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
  * 그리고 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기(모두 선택만 늘, 나머지는 고른 곳이 있을 때).
  */
 @Composable
-internal fun selectionStrip(mode: SubTool, controls: SelectionControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
     val ready = !controls.busy
     val selected = ready && controls.hasSelection
     val actions = controls.actions
     return buildList {
-        add(subToolCell(EditTool.Select, mode, onChoose, close))
         add(
             ValueCell("mode", stringResource(R.string.strip_selection_mode), stringResource(selectionModeLabel(options.mode))) {
                 ChoiceList(
@@ -191,14 +189,13 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, onChoose
 }
 
 /**
- * 리터칭의 띠: 하위 도구, (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, 단단함, (복제만) 불투명도.
+ * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, 경도, (복제만) 불투명도.
  * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
  */
 @Composable
-internal fun retouchStrip(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripItem> {
     val settings = controls.settings
     return buildList {
-        add(subToolCell(EditTool.Retouch, mode, onChoose, close))
         if (mode != SubTool.RETOUCH_SPOT) {
             add(
                 IconCell(
@@ -220,14 +217,13 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls, onChoose: (S
     }
 }
 
-/** 명암의 띠: 하위 도구(닷지·번), 범위(어두운·중간·밝은 영역, 아이콘), 노출, 크기, 단단함 */
+/** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 노출, 크기, 경도 */
 @Composable
-internal fun toneStrip(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+internal fun toneStrip(controls: ToneControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
     val brush = options.brush
     val rangeCaption = stringResource(R.string.strip_tone_range)
     return buildList {
-        add(subToolCell(EditTool.Tone, mode, onChoose, close))
         add(
             ChoiceCell(
                 key = "range",
@@ -267,13 +263,12 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, onChoose: (SubTool
     }
 }
 
-/** 흐림의 띠: 하위 도구(흐림·선명), 강도, 크기, 경도 */
+/** 흐림의 띠: 강도, 크기, 경도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
 @Composable
-internal fun blurStrip(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, close: () -> Unit): List<StripItem> {
+internal fun blurStrip(controls: BlurControls): List<StripItem> {
     val options = controls.options
     val brush = options.brush
     return buildList {
-        add(subToolCell(EditTool.Blur, mode, onChoose, close))
         add(
             SliderCell(
                 key = "strength",
@@ -311,30 +306,6 @@ internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
         )
         add(sizeCell(brush.size, EditScreenTags.MOSAIC_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
         add(hardnessCell(brush.hardness, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
-    }
-}
-
-/** 하위 도구 칸: 지금 하위 도구의 아이콘과 짧은 이름. 옵션 창에서 고르면(크기 변경은 창을 띄움) 닫는다. 이름표는 커버의 하위 도구 버튼과 같다. */
-@Composable
-private fun subToolCell(tool: EditTool, mode: SubTool, onChoose: (SubTool) -> Unit, close: () -> Unit): StripItem {
-    val title = stringResource(R.string.strip_subtool)
-    return ChoiceCell(
-        key = "subTool",
-        icon = mode.icon,
-        caption = stringResource(mode.shortLabel),
-        description = stringResource(R.string.strip_choice_description, title, stringResource(mode.label)),
-        title = title
-    ) {
-        ChoiceList(
-            choices = tool.subTools,
-            selected = mode,
-            label = { stringResource(it.label) },
-            icon = { it.icon },
-            tag = { EditScreenTags.subToolOption(it) }
-        ) {
-            close()
-            onChoose(it)
-        }
     }
 }
 

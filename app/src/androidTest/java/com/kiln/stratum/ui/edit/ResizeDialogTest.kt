@@ -79,10 +79,15 @@ class ResizeDialogTest {
     private fun openFromOptions() {
         val tab = EditScreenTags.tabTool(EditTool.Transform)
         val onCover = composeRule.onAllNodes(hasTestTag(tab)).fetchSemanticsNodes().isNotEmpty()
-        composeRule.onNodeWithTag(if (onCover) tab else EditScreenTags.railTool(EditTool.Transform)).performClick()
-        // 메인 화면은 도구 옵션 띠의 하위 도구 칸을 눌러 연 목록에서 고른다
-        if (!onCover) composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).performClick()
+        val button = composeRule.onNodeWithTag(if (onCover) tab else EditScreenTags.railTool(EditTool.Transform))
+        button.performClick()
+        if (onCover) {
+            composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).performClick()
+        } else {
+            // 메인 화면은 고른 도구를 다시 눌러 연 하위 도구 메뉴에서 고른다(띠에는 하위 도구 칸이 없다)
+            button.performClick()
+            composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RESIZE)).performClick()
+        }
     }
 
     private val widthField get() = composeRule.onNodeWithTag(EditScreenTags.RESIZE_WIDTH)

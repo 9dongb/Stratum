@@ -68,6 +68,7 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.DocumentColors
+import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.SelectBox
 import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.components.StratumIconButton
@@ -399,27 +400,30 @@ private fun LayerRow(
             }
             // 작은 그림·이름: 길게 누르면 메뉴. 줄의 누르기(고르기)보다 먼저 알아채고, 길게 누른 뒤에는 누르기가 일어나지 않는다.
             // 숨긴 레이어는 흐리게 보인다
-            Row(
-                Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenContentAlpha).longPressFirst(openMenu),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = layer.name,
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = stringResource(R.string.layer_row_detail, mode, percent),
-                        color = colors.textDescription,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelSmall
-                    )
+            // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
+            MenuLongPress {
+                Row(
+                    Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenContentAlpha).longPressFirst(openMenu),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = layer.name,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = stringResource(R.string.layer_row_detail, mode, percent),
+                            color = colors.textDescription,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
             // 순서 손잡이: 위아래로 끌면 옮긴다(누르는 영역 48dp)

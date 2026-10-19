@@ -128,6 +128,10 @@ object EditScreenTags {
     /** 길게 눌러 뜬 메뉴의 [subTool] 항목 */
     fun subTool(subTool: SubTool): String = "subToolMenu_${subTool.name}"
 
+    /** 하위 도구 메뉴 카드와, 메뉴 밖을 누르면 닫는 바탕 */
+    const val SUB_TOOL_MENU = "subToolMenu"
+    const val SUB_TOOL_MENU_DISMISS = "subToolMenuDismiss"
+
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
 

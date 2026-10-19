@@ -66,7 +66,7 @@ class CoverOptionsTest {
         val before = canvasBounds()
         composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
 
-        for (tool in listOf(EditTool.Brush, EditTool.Adjust, EditTool.Layers, EditTool.Select)) {
+        for (tool in listOf(EditTool.Select, EditTool.Adjust, EditTool.Layers, EditTool.Brush)) {
             tab(tool)
             composeRule.waitForIdle()
             assertEquals("$tool canvas", before, canvasBounds())
@@ -74,8 +74,8 @@ class CoverOptionsTest {
             val sheet = composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
             assertTrue("$tool sheet $sheet should overlap $before", sheet.top < before.bottom && sheet.bottom <= before.bottom + 1f)
         }
-        // 탭을 닫아도 그대로다
-        tab(EditTool.Select)
+        // 탭을 닫아도 그대로다(하위 도구가 있는 선택은 다시 누르면 메뉴라, 하위 도구가 없는 브러시로 닫는다)
+        tab(EditTool.Brush)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
         assertEquals(before, canvasBounds())

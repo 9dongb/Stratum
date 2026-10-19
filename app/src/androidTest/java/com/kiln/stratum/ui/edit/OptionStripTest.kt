@@ -14,10 +14,10 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -161,6 +161,12 @@ class OptionStripTest {
     private fun pick(tool: EditTool) = composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performClick()
 
     private fun cell(key: String) = composeRule.onNodeWithTag(EditScreenTags.strip(key))
+
+    /** 고른 [tool]을 다시 눌러 연 하위 도구 메뉴에서 [subTool]을 고른다(띠에는 하위 도구 칸이 없다, 사용자 피드백 7차) */
+    private fun chooseSubTool(tool: EditTool, subTool: SubTool) {
+        pick(tool)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(subTool)).performClick()
+    }
 
     private fun back() {
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
@@ -419,8 +425,8 @@ class OptionStripTest {
         val tone = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Tone)).fetchSemanticsNode().layoutBoundsInWindow()
         var strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(rail.width, strip.width, 2 * dp)
-        // 칸만큼의 높이: 첫 칸(하위 도구) 위와 마지막 칸(경도) 아래에 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
-        val first = cell("subTool").fetchSemanticsNode().layoutBoundsInWindow()
+        // 칸만큼의 높이: 첫 칸(범위) 위와 마지막 칸(경도) 아래에 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
+        val first = cell("range").fetchSemanticsNode().layoutBoundsInWindow()
         val last = cell("hardness").fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$strip should hug $first..$last", first.top - strip.top <= 8 * dp && strip.bottom - last.bottom <= 8 * dp)
         assertTrue("$strip should be shorter than ${canvas.layoutBoundsInWindow()}", strip.height < canvas.layoutBoundsInWindow().height)
@@ -493,8 +499,7 @@ class OptionStripTest {
     fun retouch_healWithoutASource_isPicking_andHasNoOpacity_cloneHasOpacity() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Retouch)
-        cell("subTool").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_HEAL)).performClick()
+        chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_HEAL)
 
         // 가져올 곳이 없으면 정하는 중(켜진 모양)이다
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsOn()
@@ -504,8 +509,7 @@ class OptionStripTest {
         composeRule.runOnIdle { assertEquals(BrushSettings.MIN_SIZE, retouch.size, 0.5f) }
 
         composeRule.runOnIdle { cloneSource = CloneSource(10f, 10f) }
-        cell("subTool").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_CLONE)).performClick()
+        chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_CLONE)
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsOff()
         cell("opacity").assertIsDisplayed()
     }
@@ -525,9 +529,11 @@ class OptionStripTest {
             // 0%면 아무것도 바뀌지 않아 1%에서 멈춘다
             assertEquals(0.01f, toneOptions.exposure, 0.001f)
         }
-        cell("subTool").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).performClick()
-        cell("subTool").assertContentDescriptionContains(composeRule.activity.getString(com.kiln.stratum.R.string.subtool_burn), substring = true)
+        chooseSubTool(EditTool.Tone, SubTool.TONE_BURN)
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        // 메뉴를 다시 열면 번이 지금 하위 도구다
+        pick(EditTool.Tone)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.TONE_BURN)).assertIsSelected()
     }
 
     private companion object {

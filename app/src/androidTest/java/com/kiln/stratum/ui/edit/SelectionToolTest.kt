@@ -313,8 +313,9 @@ class SelectionToolTest {
         }
 
         // 자동 선택은 허용치 칸이고, 그 창에 '이어진 곳만'이 있다
-        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_WAND)).performClick()
+        // 하위 도구는 고른 도구를 다시 눌러 연 메뉴에서 고른다(띠에는 하위 도구 칸이 없다)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_WAND)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }

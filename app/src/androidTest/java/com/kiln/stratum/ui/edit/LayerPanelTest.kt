@@ -39,6 +39,7 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.LongPressTimes
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -274,6 +275,28 @@ class LayerPanelTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(listOf("select 0", "duplicate 0"), fake.calls) }
+    }
+
+    @Test
+    fun rowLongPress_isInTheMenuGroup_andOpensAfterThreeTenthsOfASecond() {
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        // 0.3초보다 짧게 누르면 그냥 누르기(레이어 고르기)다
+        row(0).performTouchInput {
+            down(center)
+            advanceEventTime(LongPressTimes.MENU_MILLIS - 50)
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertDoesNotExist()
+        // 사용자 요청: 메뉴·레이어 꾹 누르기 묶음은 0.3초(휴대폰 설정 0.4초보다 빠름)
+        row(0).performTouchInput {
+            down(center)
+            advanceEventTime(LongPressTimes.MENU_MILLIS + 20)
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(listOf("select 0", "select 0"), fake.calls) }
     }
 
     @Test

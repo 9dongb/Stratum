@@ -23,6 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
@@ -165,9 +166,10 @@ fun PaintGestureOverlay(
                 try {
                     val holdActions = currentHold
                     if (holdActions != null) {
-                        // 길게 누르기 시간 안에 움직이거나 손을 떼면 획이고, 시간이 다 가면 꾹 누른 것이다(null)
+                        // 길게 누르기 시간 안에 움직이거나 손을 떼면 획이고, 시간이 다 가면 꾹 누른 것이다(null).
+                        // 캔버스 안 편집이라 편집 묶음 시간(휴대폰 설정)이다(결정 기록 '꾹 누르기 시간')
                         var last = down.position
-                        val decided = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        val decided = withTimeoutOrNull(viewConfiguration.editLongPressMillis()) {
                             while (true) {
                                 val change = follow(awaitPointerEvent()) ?: return@withTimeoutOrNull true
                                 last = change.position

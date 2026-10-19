@@ -43,6 +43,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.components.StratumFilterChip
+import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -360,8 +361,9 @@ private suspend fun AwaitPointerEventScope.followMarker(
     onCancel: () -> Unit
 ) {
     var last = down.position
-    // 길게 누르기 시간 안에 움직이면 true(끌기), 손을 떼거나 두 손가락이면 false, 시간이 다 가면 null(꾹 누름)
-    val dragging = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+    // 길게 누르기 시간 안에 움직이면 true(끌기), 손을 떼거나 두 손가락이면 false, 시간이 다 가면 null(꾹 누름).
+    // 캔버스 안 편집이라 편집 묶음 시간(휴대폰 설정)이다(결정 기록 '꾹 누르기 시간')
+    val dragging = withTimeoutOrNull(viewConfiguration.editLongPressMillis()) {
         while (true) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == down.id }

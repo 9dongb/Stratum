@@ -4,12 +4,14 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -35,6 +37,7 @@ import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -182,23 +185,106 @@ class EditToolsTest {
     }
 
     @Test
-    fun main_subToolCell_choosesTheSubTool_andResizeOpensTheWindow() {
+    fun main_tappingTheToolAgain_opensTheSubToolMenu_andResizeOpensTheWindow() {
         show(930, 700)
         transformRail.performClick()
 
-        chooseSubTool(SubTool.ROTATE)
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        // 사용자 요청: 고른 도구를 한 번 더 누르면 하위 도구 메뉴가 뜬다
+        transformRail.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).performClick()
         composeRule.runOnIdle { assertEquals(listOf<EditCommand>(RotateImage(clockwise = false)), commands) }
 
         chooseSubTool(SubTool.RESIZE)
         composeRule.onNodeWithTag(EditScreenTags.RESIZE_WIDTH).assertExists()
+        // 메뉴에서 고르는 하위 도구는 띠에 두지 않는다(사용자 요청)
+        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).assertDoesNotExist()
     }
 
-    /** 메인 화면: 띠의 하위 도구 칸을 눌러 연 목록에서 [subTool]을 고른다 */
+    /** 메인 화면: 고른 자르기·변형 도구를 다시 눌러 연 하위 도구 메뉴에서 [subTool]을 고른다 */
     private fun chooseSubTool(subTool: SubTool) {
-        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(subTool)).performClick()
+        transformRail.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(subTool)).performClick()
+    }
+
+    @Test
+    fun main_holdThenDragOntoAnItem_choosesItWhenTheFingerLifts() {
+        show(930, 700)
+        val rail = transformRail.fetchSemanticsNode().layoutBoundsInWindow()
+        transformRail.performTouchInput {
+            down(center)
+            // 메뉴 묶음 시간(0.3초)보다 오래 누른다
+            advanceEventTime(400)
+            moveBy(Offset(0f, 1f))
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
+        val item = composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).fetchSemanticsNode().layoutBoundsInWindow()
+
+        // 사용자 요청: 손가락을 떼지 않고 항목 위로 끌고 가서 떼면 그 항목을 고른다
+        transformRail.performTouchInput {
+            moveTo(item.center - rail.topLeft)
+            up()
+        }
+
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun main_releasingOffTheItems_keepsTheMenuOpen_andTappingOutsideClosesIt() {
+        show(930, 700)
+        transformRail.performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 2f))
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).assertIsSelected()
+
+        // 메뉴 밖을 누르면 닫히기만 한다(그 터치는 캔버스로 가지 않는다)
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU_DISMISS).performTouchInput { click(Offset(width * 0.8f, height * 0.8f)) }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(emptyList<EditCommand>(), commands) }
+    }
+
+    @Test
+    fun menuLongPress_opensAfterThreeTenthsOfASecond() {
+        show(930, 700)
+        val selectRail = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select))
+        val retouchRail = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Retouch))
+
+        // 0.3초보다 짧게 누르면 그냥 누르기(도구를 고름)
+        selectRail.performTouchInput {
+            down(center)
+            advanceEventTime(250)
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        // 사용자 요청: 메뉴 묶음은 0.3초(휴대폰 설정 0.4초보다 빠름). 고르지 않은 도구라 다시 누르기로 열린 것이 아니다.
+        retouchRail.performTouchInput {
+            down(center)
+            advanceEventTime(320)
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RETOUCH_SPOT)).assertIsDisplayed()
+    }
+
+    @Test
+    fun compact_tappingTheToolAgain_opensTheMenuAboveTheTab() {
+        show(411, 800)
+        selectTab.performClick()
+        selectTab.performClick()
+
+        val menu = composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).fetchSemanticsNode().layoutBoundsInWindow()
+        val tab = selectTab.fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("menu $menu should be above $tab", menu.bottom <= tab.top + 1f)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
     }
 
     @Test
@@ -226,9 +312,9 @@ class EditToolsTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         transformRail.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
+        transformRail.performClick()
         composeRule.assertClickablesAvoid(hinge)
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
 
         composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
@@ -247,9 +333,13 @@ class EditToolsTest {
         // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)을 눌러 회전·뒤집기를 고른다
         val tab = composeRule.onAllNodesWithTagOrNull(EditScreenTags.tabTool(EditTool.Transform))
         (tab ?: transformRail).performClick()
-        // 메인 화면은 띠의 하위 도구 칸을 눌러 연 목록에서 고른다
-        if (tab == null) composeRule.onNodeWithTag(EditScreenTags.strip("subTool")).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        if (tab == null) {
+            // 메인 화면은 고른 도구를 다시 눌러 연 하위 도구 메뉴에서 고른다
+            transformRail.performClick()
+            composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
+        } else {
+            composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        }
 
         // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다
         tester.emulateSavedInstanceStateRestore()
