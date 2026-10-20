@@ -74,6 +74,27 @@ class InpaintPlanTest {
     }
 
     @Test
+    fun aLongObjectInABigPhoto_keepsATenthOfTheWindowAsRoom() {
+        // 50MP 사진의 자동차(긴 변 3000px): 여백 128px만 두르면 창(3256px)의 4%라 긴 쪽 둘레를 거의 못 본다
+        val photo = PixelSize(8160, 6120)
+        val hole = PixelRect(2580, 2600, 5580, 3500)
+
+        val window = InpaintPlan.windows(hole, 2_000_000, photo).single()
+
+        val room = InpaintPlan.margin(window.size)
+        assertTrue("room $room of ${window.size}", room >= window.size / 10 && room > MIN_MARGIN)
+        assertRoomAround(window.bounds, hole, room)
+        assertTrue(window.levelSize in 512..1024)
+    }
+
+    @Test
+    fun inASmallPhoto_theRoomIsStillAtLeastTheFixedMargin() {
+        assertEquals(MIN_MARGIN, InpaintPlan.margin(512))
+        assertEquals(MIN_MARGIN, InpaintPlan.margin(1280))
+        assertEquals(375, InpaintPlan.margin(3750))
+    }
+
+    @Test
     fun aTinyDocument_usesItsShortSide_andIsEnlargedForTheModel() {
         val small = PixelSize(300, 200)
 

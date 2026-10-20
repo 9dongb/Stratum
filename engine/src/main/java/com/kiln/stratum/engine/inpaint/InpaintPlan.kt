@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 /**
  * 지울 곳 덩어리마다 모델에 넣을 정사각형 창을 정한다(문서 좌표, 결정 기록 'AI 제거·AI 선택').
  *
- * 창은 구멍을 다 담고 둘레를 [MIN_MARGIN] 이상 두르며, 구멍이 창 넓이의 약 [TARGET_HOLE_FRACTION]가 되는 크기다.
+ * 창은 구멍을 다 담고 둘레를 [MIN_MARGIN] 이상, 창 한 변의 [MARGIN_FRACTION] 이상 두르며, 구멍이 창 넓이의 약 [TARGET_HOLE_FRACTION]가 되는 크기다.
  * 모델은 둘레를 보고 구멍을 채우므로 둘레가 넉넉해야 한다. 길쭉한 구멍(전선 등)은 긴 쪽으로 겹치는 창 여러 개로 나눈다.
  * 상수는 폴드8에서 써 보고 고칠 수 있게 여기에 모은다.
  */
@@ -25,6 +25,12 @@ object InpaintPlan {
 
     /** 구멍 둘레에 두를 최소 여백(문서 px) */
     const val MIN_MARGIN = 128
+
+    /**
+     * 구멍 둘레 여백의 창 한 변에 대한 최소 몫(한쪽). 문서 px로만 정한 [MIN_MARGIN]은 큰 사진에서 창에 비해 작아져, 큰 사진의 긴 물체는
+     * 긴 쪽 둘레를 거의 보지 못했다. 몫으로도 정해 큰 사진도 작은 사진(약 3MP)과 같은 비율의 둘레를 본다(10단계, 50MP 흉내 시험으로 고름).
+     */
+    const val MARGIN_FRACTION = 0.1
 
     /** 창 넓이에서 구멍이 차지하면 좋은 몫. 어도비 연구의 자동 자르기(약 25%)와 IOPaint(구멍 + 128px)의 사이다. */
     const val TARGET_HOLE_FRACTION = 0.35
@@ -73,14 +79,14 @@ object InpaintPlan {
         val short = if (horizontal) hole.height else hole.width
         val fromArea = sqrt(area / TARGET_HOLE_FRACTION)
         // 짧은 쪽을 다 담는 창, 긴 쪽까지 다 담는 창
-        val sideways = maxOf(modelSize.toDouble(), fromArea, (short + 2 * MIN_MARGIN).toDouble())
-        val whole = maxOf(modelSize.toDouble(), fromArea, (long + 2 * MIN_MARGIN).toDouble())
+        val sideways = maxOf(modelSize.toDouble(), fromArea, fitting(short.toDouble()))
+        val whole = maxOf(modelSize.toDouble(), fromArea, fitting(long.toDouble()))
         if (whole <= 2 * sideways && whole <= shortSide) {
             return listOf(place(hole, ceil(whole).toInt(), document, modelSize))
         }
         // 길쭉하다: 긴 쪽을 같은 길이로 나눠 조각마다 창 하나
-        val size = min(shortSide.toDouble(), maxOf(sideways, ceil(long.toDouble() / MAX_WINDOWS) + 2 * MIN_MARGIN)).toInt()
-        val step = size - 2 * MIN_MARGIN
+        val size = min(shortSide.toDouble(), maxOf(sideways, fitting(ceil(long.toDouble() / MAX_WINDOWS)))).toInt()
+        val step = size - 2 * margin(size)
         if (step <= 0) return listOf(place(hole, size, document, modelSize))
         val count = (long + step - 1) / step
         return List(count) { index ->
@@ -94,6 +100,12 @@ object InpaintPlan {
             place(piece, size, document, modelSize)
         }
     }
+
+    /** 한 변 [size]인 창에서 구멍 둘레에 두는 여백(문서 px): [MIN_MARGIN]과 창의 [MARGIN_FRACTION] 가운데 큰 것 */
+    fun margin(size: Int): Int = max(MIN_MARGIN, (size * MARGIN_FRACTION).toInt())
+
+    /** 길이 [extent](문서 px)인 구멍을 양쪽 여백([margin])까지 담는 창의 한 변 */
+    private fun fitting(extent: Double): Double = max(extent + 2 * MIN_MARGIN, extent / (1 - 2 * MARGIN_FRACTION))
 
     /**
      * [target] 가운데에 한 변 [wanted]인 창을 놓고 문서 안으로 민다. 한 변은 문서 짧은 변을 넘지 않게 정한다.
