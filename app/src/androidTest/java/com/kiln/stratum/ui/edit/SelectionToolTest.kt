@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,9 +18,11 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -28,6 +31,7 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
@@ -43,6 +47,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -95,6 +100,18 @@ class SelectionToolTest {
 
         override fun aiFill() {
             calls += "aiFill"
+        }
+
+        override fun objectAt(x: Float, y: Float) {
+            calls += "object"
+            points += x to y
+        }
+
+        /** AI 선택을 고를 때 미리 읽기를 부른 횟수 */
+        var prepares = 0
+
+        override fun prepareObjects() {
+            prepares++
         }
     }
 
@@ -260,6 +277,52 @@ class SelectionToolTest {
     }
 
     @Test
+    fun aiSelect_hasNoSliders_readsAhead_andATapSendsTheObjectPoint() {
+        openCoverTool()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_AI)).performClick()
+
+        // 페더·허용치가 없고, 안내 글이 보이며, 고르자마자 그림을 미리 읽는다
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).assertDoesNotExist()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.selection_hint_ai)).assertExists()
+        composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }
+
+        // 끌면 무시하고, 누르면 그 자리의 물체를 고른다
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
+            val (point, _) = visiblePoint()
+            swipe(start = point, end = point + Offset(width * 0.2f, 0f), durationMillis = 300)
+        }
+        var tapped = Offset.Zero
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
+            val (point, document) = visiblePoint()
+            tapped = document
+            click(point)
+        }
+        composeRule.runOnIdle {
+            assertEquals(listOf("object"), actions.calls)
+            assertTrue(actions.shapes.isEmpty())
+            val (x, y) = actions.points.single()
+            assertTrue("$x, $y vs $tapped", abs(x - tapped.x) < 30f && abs(y - tapped.y) < 30f)
+        }
+    }
+
+    @Test
+    fun cover_theFiveSubToolNames_fitOnOneRow() {
+        openCoverTool()
+
+        // 칸이 좁으면 글자는 칸 폭으로 놓이고 넘친 부분이 잘려 보인다('Rectangl'). 글자 배치가 넘쳤는지 본다.
+        for (subTool in EditTool.Select.subTools) {
+            val label = composeRule.onNode(
+                hasText(composeRule.activity.getString(subTool.shortLabel)) and hasAnyAncestor(hasTestTag(EditScreenTags.subToolOption(subTool))),
+                useUnmergedTree = true
+            ).fetchSemanticsNode()
+            val layouts = mutableListOf<TextLayoutResult>()
+            label.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            assertFalse("$subTool label is cut", layouts.single().hasVisualOverflow)
+        }
+    }
+
+    @Test
     fun tapInAddMode_doesNotDeselect() {
         options = SelectionOptions(mode = SelectionMode.ADD)
         openCoverTool()
@@ -335,6 +398,20 @@ class SelectionToolTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         composeRule.assertClickablesAvoid(hinge)
+    }
+
+    @Test
+    fun expanded_aiSelectStrip_hasTheModeAndActions_butNoSlider() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_AI)).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.strip("mode")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).assertDoesNotExist()
+        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsEnabled()
+        composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }
     }
 
     @Test

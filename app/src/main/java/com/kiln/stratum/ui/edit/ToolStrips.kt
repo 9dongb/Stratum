@@ -163,7 +163,8 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
                     extra = { ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) } }
                 )
             )
-        } else {
+        } else if (mode != SubTool.SELECT_AI) {
+            // AI 선택은 경계가 이미 부드러워 페더가 없다
             val label = stringResource(R.string.selection_feather)
             val shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt())
             add(
@@ -467,6 +468,7 @@ internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
         EditTool.Text -> R.string.text_hint
         EditTool.Select -> when (mode) {
             SubTool.SELECT_WAND -> R.string.selection_hint_wand
+            SubTool.SELECT_AI -> R.string.selection_hint_ai
             SubTool.SELECT_LASSO -> R.string.selection_hint_lasso
             else -> R.string.selection_hint_drag
         }

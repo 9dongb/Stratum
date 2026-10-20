@@ -33,7 +33,7 @@ enum class SubTool(
     RESIZE(R.string.subtool_resize, R.drawable.ic_photo_size_select_large, R.string.subtool_resize_short, oneShot = true),
 
     /** 사각형 선택: 끌어서 사각형으로 고른다 */
-    SELECT_RECT(R.string.subtool_select_rect, R.drawable.ic_crop_square),
+    SELECT_RECT(R.string.subtool_select_rect, R.drawable.ic_crop_square, R.string.subtool_select_rect_short),
 
     /** 원형 선택: 끌어서 타원으로 고른다 */
     SELECT_ELLIPSE(R.string.subtool_select_ellipse, R.drawable.ic_panorama_fish_eye),
@@ -43,6 +43,9 @@ enum class SubTool(
 
     /** 자동 선택(마술봉): 누른 곳과 비슷한 색을 고른다 */
     SELECT_WAND(R.string.subtool_select_wand, R.drawable.ic_auto_fix_high, R.string.subtool_select_wand_short),
+
+    /** AI 선택: 누른 물체를 AI(분할 모델)가 모양대로 고른다(결정 기록 'AI 제거·AI 선택') */
+    SELECT_AI(R.string.subtool_select_ai, R.drawable.ic_ads_click, R.string.subtool_select_ai_short),
 
     /** 스팟 복구 브러시: 칠한 곳을 둘레의 비슷한 곳에서 가져와 메운다 */
     RETOUCH_SPOT(R.string.subtool_spot_heal, R.drawable.ic_blur_circular, R.string.subtool_spot_heal_short),
@@ -102,11 +105,11 @@ enum class EditTool(
     ),
     /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
     Adjust(R.drawable.ic_tune, R.string.tool_adjust, available = true),
-    /** 선택. 하위 도구는 사각형 / 원형 / 올가미 / 자동 선택이다. 고른 곳에만 브러시·지우개가 그려진다. */
+    /** 선택. 하위 도구는 사각형 / 원형 / 올가미 / 자동 선택 / AI 선택이다. 고른 곳에만 브러시·지우개가 그려진다. */
     Select(
         R.drawable.ic_highlight_alt,
         R.string.tool_select,
-        subTools = listOf(SubTool.SELECT_RECT, SubTool.SELECT_ELLIPSE, SubTool.SELECT_LASSO, SubTool.SELECT_WAND),
+        subTools = listOf(SubTool.SELECT_RECT, SubTool.SELECT_ELLIPSE, SubTool.SELECT_LASSO, SubTool.SELECT_WAND, SubTool.SELECT_AI),
         available = true
     ),
     /** 브러시. 고르면 캔버스를 한 손가락으로 끌어 고른 레이어에 그린다. */

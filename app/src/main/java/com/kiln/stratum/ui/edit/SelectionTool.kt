@@ -78,8 +78,9 @@ class SelectionControls(
 )
 
 /**
- * 선택 도구 옵션: 하위 도구(사각형·원형·올가미·자동 선택), 합치는 방법(새로·더하기·빼기·교차),
+ * 선택 도구 옵션: 하위 도구(사각형·원형·올가미·자동 선택·AI 선택), 합치는 방법(새로·더하기·빼기·교차),
  * 페더(모양) 또는 허용치·이어진 곳만(자동 선택), 동작 버튼(모두·해제·반전·지우기·복사·잘라내기·AI 채우기), 안내 한 줄.
+ * AI 선택은 경계가 이미 부드러워 페더가 없다.
  * 설정은 바꾸면 다음 선택부터 쓴다(기록하지 않는다). 동작은 누르면 바로 하고 실행 취소 한 단계로 남는다.
  */
 @Composable
@@ -98,7 +99,7 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
                 tag = EditScreenTags.SELECTION_TOLERANCE
             )
             ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) }
-        } else {
+        } else if (mode != SubTool.SELECT_AI) {
             OptionSlider(
                 label = stringResource(R.string.selection_feather),
                 shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt()),
@@ -112,6 +113,7 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
             text = stringResource(
                 when (mode) {
                     SubTool.SELECT_WAND -> R.string.selection_hint_wand
+                    SubTool.SELECT_AI -> R.string.selection_hint_ai
                     SubTool.SELECT_LASSO -> R.string.selection_hint_lasso
                     else -> R.string.selection_hint_drag
                 }
@@ -244,6 +246,7 @@ internal fun fractionToFeather(fraction: Float): Float = (fraction.coerceIn(0f, 
  * - 사각형·원형: 한 손가락으로 끌면 누른 곳과 지금 곳을 꼭짓점으로 하는 사각형(에 맞는 타원)을 고른다. 꼭짓점은 픽셀 경계에 맞춘다.
  * - 올가미: 끄는 손가락 길을 이어 닫은 모양을 고른다.
  * - 자동 선택: 누른 곳의 색과 비슷한 곳을 고른다(끌면 무시한다).
+ * - AI 선택: 누른 물체를 AI가 모양대로 고른다(끌면 무시한다).
  * - 끌지 않고 누르기만 하면(사각형·원형·올가미), 새로 고르기일 때 선택을 푼다(포토샵과 같다).
  *
  * 끄는 동안 모양을 점선으로 보인다. 두 손가락 조작(확대·이동)은 부모가 먼저 읽고 소비하므로, 그러면 끄던 모양을 버린다.
@@ -283,7 +286,7 @@ fun SelectionOverlay(
                         // 두 손가락 조작이 가져갔거나 두 번째 손가락이 닿으면 버린다
                         if (change == null || change.isConsumed || event.changes.count { it.pressed } > 1) break
                         if (!dragged && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) dragged = true
-                        if (dragged && mode != SubTool.SELECT_WAND) {
+                        if (dragged && mode != SubTool.SELECT_WAND && mode != SubTool.SELECT_AI) {
                             for (point in change.historical) addPoint(path, point.position)
                             addPoint(path, change.position)
                             drag = path.toList()
@@ -300,6 +303,7 @@ fun SelectionOverlay(
                     val end = toDocument(path.last())
                     when {
                         mode == SubTool.SELECT_WAND -> if (!dragged) currentActions.similar(start.x, start.y)
+                        mode == SubTool.SELECT_AI -> if (!dragged) currentActions.objectAt(start.x, start.y)
                         !dragged -> if (currentOptions.mode == SelectionMode.REPLACE) currentActions.none()
                         mode == SubTool.SELECT_LASSO -> currentActions.shape(SelectionShape.Lasso(path.map(::toDocument)))
                         else -> {

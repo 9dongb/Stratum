@@ -45,6 +45,7 @@ import com.kiln.stratum.engine.importing.ImportSizing
 import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.inpaint.InpaintModel
 import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
+import com.kiln.stratum.engine.segment.SegmentUnavailableException
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.AddTextLayer
@@ -62,9 +63,11 @@ import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.LiquifyRenderer
 import com.kiln.stratum.engine.platform.LiteRtInpaintModel
+import com.kiln.stratum.engine.platform.LiteRtSegmentModel
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
+import com.kiln.stratum.engine.platform.ObjectSegmenter
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
@@ -72,6 +75,7 @@ import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.ScreenGainmap
 import com.kiln.stratum.engine.platform.SelectAll
+import com.kiln.stratum.engine.platform.SelectObject
 import com.kiln.stratum.engine.platform.SelectShape
 import com.kiln.stratum.engine.platform.SelectSimilarColor
 import com.kiln.stratum.engine.platform.SelectionPreview
@@ -99,6 +103,7 @@ import com.kiln.stratum.settings.PreviewQuality
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -165,6 +170,9 @@ sealed interface EditorMessage {
 
     /** 이 기기에서는 AI 제거(채우기 모델)를 돌릴 수 없다. 문서는 그대로다. 화면은 스팟 복구 브러시로 바꾸는 버튼을 둔다. */
     data object RemoveUnavailable : EditorMessage
+
+    /** 이 기기에서는 AI 선택(분할 모델)을 돌릴 수 없다. 문서는 그대로다. 화면은 자동 선택으로 바꾸는 버튼을 둔다. */
+    data object SelectUnavailable : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -311,6 +319,12 @@ class EditorViewModel internal constructor(
      * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 내려놓는다. 테스트는 가짜 모델로 바꾼다.
      */
     internal var inpaintModel: InpaintModel = LiteRtInpaintModel(application.assets, application.cacheDir)
+
+    /**
+     * AI 선택이 쓰는 물체 찾기 서비스(SAM 2.1 Tiny, 결정 기록 'AI 제거·AI 선택'). AI 선택을 고르면 보이는 그림을 미리 읽고,
+     * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 읽은 것과 모델을 놓는다. 테스트는 가짜 모델로 바꾼다.
+     */
+    internal var objectSegmenter: ObjectSegmenter = ObjectSegmenter(LiteRtSegmentModel(application.assets, application.cacheDir))
 
     /** 앱 내부 저장소의 프로젝트들. 자동 저장은 여기서 끝까지 한다(편집 화면이 사라져도). */
     private val library = ProjectLibrary.get(application)
@@ -583,6 +597,8 @@ class EditorViewModel internal constructor(
         override fun delete() = deleteSelected()
         override fun copyToLayer(cut: Boolean) = copySelectionToLayer(cut)
         override fun aiFill() = fillSelection()
+        override fun objectAt(x: Float, y: Float) = selectObject(x, y)
+        override fun prepareObjects() = prepareObjectSelection()
     }
 
     /** 마지막으로 윤곽선을 찾은 선택 영역과 그 윤곽선(문서 전체). 선택 영역이 그대로면 다시 찾지 않는다. */
@@ -673,6 +689,9 @@ class EditorViewModel internal constructor(
 
     /** 보이는 곳을 선명하게 다시 그리는 작업. 보기가 바뀔 때마다 앞 작업을 취소하고 새로 시작한다. */
     private var detailJob: Job? = null
+
+    /** AI 선택이 그림을 미리 읽는 작업([prepareObjectSelection]). 새로 시작하면 앞 작업을 취소한다. */
+    private var objectPrepareJob: Job? = null
 
     /**
      * 축소본(전체·부분)은 한 번에 하나만 그린다. 취소된 작업도 그리던 묶음은 마치므로,
@@ -1090,6 +1109,39 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         val options = _selectionOptions.value
         edit(SelectSimilarColor(activeLayerIn(document), x, y, options.tolerance, options.contiguous, options.mode))
+    }
+
+    /**
+     * 문서 좌표 ([x], [y])를 누른 물체를 AI(분할 모델)가 모양대로 고른다(선택 도구 설정의 합치는 방법, 실행 취소 한 단계, AI 선택).
+     * 보이는 레이어를 합친 그림에서 찾는다. 다른 편집을 처리하는 중이면 무시한다.
+     * 이 기기에서 모델을 돌리지 못하면 [EditorMessage.SelectUnavailable]로 알린다.
+     */
+    fun selectObject(x: Float, y: Float) {
+        if (history == null) return
+        edit(SelectObject(x, y, _selectionOptions.value.mode, objectSegmenter))
+    }
+
+    /**
+     * AI 선택을 고르거나 그림이 바뀌면 보이는 그림을 미리 읽어 둔다(처음 누를 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택').
+     * 이미 읽은 그림이면 아무것도 하지 않는다. 편집을 처리하는 중이거나 모델·읽기에 쓸 메모리가 모자라면 하지 않는다(누를 때 다시 해 보고 알린다).
+     * 앞의 미리 읽기는 취소한다. 축소본 그리기와는 따로 돈다(모델 계산은 AI 스레드에서 한다).
+     */
+    fun prepareObjectSelection() {
+        val document = history?.document ?: return
+        if (editing || objectSegmenter.workBytes(document) > availableMemory()) return
+        objectPrepareJob?.cancel()
+        objectPrepareJob = viewModelScope.launch(Dispatchers.Default) {
+            try {
+                objectSegmenter.prepare(document) { ensureActive() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 쓸 수 없는 모델·메모리 부족은 누를 때 다시 해 보고 알린다
+                Log.w(TAG, "Could not read the picture ahead for AI select", e)
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to read the picture ahead for AI select", e)
+            }
+        }
     }
 
     /** 고른 레이어에서 고른 곳의 픽셀을 지운다(투명하게, 실행 취소 한 단계). 선택 영역이 없으면 무시한다. */
@@ -2009,6 +2061,12 @@ class EditorViewModel internal constructor(
                 if (liveShown) showPreview(before, finishEdit = true)
                 finishEditing(EditorMessage.RemoveUnavailable)
                 return@launch
+            } catch (e: SegmentUnavailableException) {
+                // 이 기기에서 분할 모델을 돌리지 못했다(AI 선택). 문서는 그대로다.
+                Log.w(TAG, "AI select is unavailable for $command", e)
+                onFinished()
+                finishEditing(EditorMessage.SelectUnavailable)
+                return@launch
             }
             if (!history.commit(command, before, after)) {
                 // 바뀐 것이 없다. 슬라이더를 처음 값으로 되돌려 놓았으면 축소본이 아직 미리 보기라 다시 그린다.
@@ -2178,6 +2236,7 @@ class EditorViewModel internal constructor(
         previewJob?.cancel()
         detailJob?.cancel()
         editJob?.cancel()
+        objectPrepareJob?.cancel()
         pendingPhoto = null
         // 아직 화면이 받지 않은 공유 요청은 버린다. 다음에 편집 화면이 열릴 때 뜬금없이 공유 창이 뜨지 않게 한다.
         while (_shareRequests.tryReceive().isSuccess) Unit
@@ -2187,11 +2246,12 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * AI 모델(채우기)을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
-     * 다음에 AI 제거를 고르거나 지우면 다시 불러온다. 지우는 중이면 그 일이 끝난 뒤 내려놓는다(모델은 한 스레드에서만 다룬다).
+     * AI 모델(채우기·분할)과 AI 선택이 읽어 둔 그림을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
+     * 다음에 AI 제거·AI 선택을 고르거나 쓰면 다시 불러온다. 계산하는 중이면 그 일이 끝난 뒤 내려놓는다(모델은 한 스레드에서만 다룬다).
      */
     fun releaseAiModels() {
         inpaintModel.release()
+        objectSegmenter.release()
     }
 
     override fun onCleared() {
