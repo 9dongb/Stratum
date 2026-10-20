@@ -1,6 +1,5 @@
 package com.kiln.stratum
 
-import android.os.Debug
 import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,7 +34,7 @@ class InpaintModelProbeTest {
         val model = LiteRtInpaintModel(context.assets, context.cacheDir, listOf(backend))
         try {
             val input = gradientWithHole()
-            val before = Memory.now()
+            val before = ProcessMemory.now()
             val started = SystemClock.elapsedRealtime()
             val first = try {
                 model.fill(input)
@@ -45,7 +44,7 @@ class InpaintModelProbeTest {
                 return
             }
             val cold = SystemClock.elapsedRealtime() - started
-            val loaded = Memory.now()
+            val loaded = ProcessMemory.now()
 
             assertEquals(InpaintModel.OUTPUT_CHANNELS * SIZE * SIZE, first.size)
             assertTrue("Every value is a number", first.all { it.isFinite() })
@@ -57,7 +56,7 @@ class InpaintModelProbeTest {
                 model.fill(input)
                 (SystemClock.elapsedRealtimeNanos() - runStarted) / 1_000_000
             }
-            val after = Memory.now()
+            val after = ProcessMemory.now()
             times.sort()
             Log.i(
                 TAG,
@@ -107,18 +106,6 @@ class InpaintModelProbeTest {
     }
 
     private fun expected(x: Int) = -0.6f + 1.2f * x / (SIZE - 1)
-
-    /** 앱 프로세스의 메모리(KB) */
-    private data class Memory(val pssKb: Int, val graphicsKb: Int, val nativeKb: Int) {
-        companion object {
-            fun now(): Memory {
-                val info = Debug.MemoryInfo()
-                Debug.getMemoryInfo(info)
-                fun stat(name: String) = info.getMemoryStat(name)?.toIntOrNull() ?: 0
-                return Memory(info.totalPss, stat("summary.graphics"), stat("summary.native-heap"))
-            }
-        }
-    }
 
     private companion object {
         const val TAG = "InpaintProbe"

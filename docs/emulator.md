@@ -57,6 +57,17 @@
 - 선택기 위쪽의 안내 배너가 나타났다 사라지며 사진 칸 위치가 바뀐다. 누르기 전에 `uiautomator dump`로 위치를 다시 읽는다.
 - 테스트용 큰 사진(격자 무늬 12MP·50MP·200MP, EXIF 회전, 투명 PNG, 깨진 파일)은 PC의 파이썬(PIL)으로 만들어 쓰고 저장소에는 넣지 않는다.
 
+## 분할 모델 시험 자료 넣기 (AI 선택 6단계)
+
+- `SegmentProbeTest`는 앱 내부 저장소 `files/seg/`의 파일로만 돈다(없으면 건너뜀). 모델을 고르기 전이라 파일은 저장소에 없다(2026-10-20, 맥의 임시 폴더에서 만듦).
+  - 모델마다(`sam2`·`mobilesam`): `_encoder.tflite`·`_decoder.tflite`, `_prompt.bin`(점 계산 상수: 위치 무늬 행렬 x 128 | y 128, 양의 점 256, 빈 점 256, float32 리틀엔디언), `_input.f32`(인코더 입력 [1,3,1024,1024]), `_tap.txt`(1024 틀의 탭 자리 "x y"), `_mask.f32`(맥에서 같은 입력으로 낸 마스크 로짓 [256,256])
+- 넣기(디버그 앱이 깔려 있어야 한다)
+  1. `adb -s <기기> push <폴더>/. /data/local/tmp/seg/`
+  2. `adb -s <기기> shell "run-as com.kiln.stratum mkdir -p files/seg && run-as com.kiln.stratum sh -c 'cp /data/local/tmp/seg/* files/seg/'"`
+  3. `adb -s <기기> shell rm -rf /data/local/tmp/seg`
+- 돌리기: 위 '에뮬레이터에서만 돌리는 방법'처럼 APK를 `install -r`로 깔고 `am instrument … -e class com.kiln.stratum.SegmentProbeTest`. 잰 값은 `adb logcat -s SegmentProbe`.
+  - 폰에서는 `connectedDebugAndroidTest`를 쓰지 않는다. 끝나면 앱을 지우므로 폰에 만든 프로젝트가 사라질 수 있다. `install -r`은 앱 자료를 남긴다.
+
 ## adb·emulator 위치
 
 - Android SDK 폴더 안에 있다. SDK 폴더는 `local.properties`의 `sdk.dir`에 적혀 있다.

@@ -56,6 +56,14 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    // 분할 모델 시험(SegmentProbeTest)이 LiteRT를 직접 부른다. 앱 APK에 이미 들어 있어(엔진) 컴파일할 때만 쓴다. 빼는 부품은 엔진과 같다.
+    androidTestCompileOnly(libs.litert) {
+        exclude(group = "com.google.android.play")
+        exclude(group = "com.google.android.gms")
+        exclude(group = "com.google.guava")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-guava")
+        exclude(group = "androidx.lifecycle")
+    }
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
