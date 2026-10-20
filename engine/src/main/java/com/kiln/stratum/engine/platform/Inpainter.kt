@@ -17,6 +17,7 @@ import com.kiln.stratum.engine.inpaint.CropWindow
 import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.inpaint.InpaintMask
 import com.kiln.stratum.engine.inpaint.InpaintModel
+import com.kiln.stratum.engine.inpaint.InpaintNoise
 import com.kiln.stratum.engine.inpaint.InpaintPlan
 import com.kiln.stratum.engine.inpaint.InpaintTensor
 import com.kiln.stratum.engine.raster.PixelRect
@@ -43,6 +44,7 @@ import kotlin.math.min
  * 2. 창마다 차례로(앞 창의 결과를 다음 창이 읽는다): 창을 모델 크기로 읽고(줄인 단계는 GPU 2×2 평균, 남은 맞추기는 쌍선형),
  *    구멍을 그 크기로 다시 그려 넓힌 뒤, 모델(또는 매끈한 잇기)로 채우고 둘레 밝기·색에 맞춘 그림을 만든다([InpaintTensor]).
  * 3. 채울 그림을 원본 해상도로 키워(GPU 바이큐빅, 1024px 묶음마다 한 번) 쓰기 몫 ∩ 선택 영역만큼 타일에 바꿔 넣는다(소프트웨어).
+ *    AI 모델로 채운 곳에는 둘레만큼 모자란 고운 잡음을 키우면서 더한다([InpaintNoise], 원본 해상도의 작은 조각 몇 개에서 잼).
  *
  * 몫이 0인 픽셀과 닿지 않은 타일은 그대로다. Kotlin 반복은 계획(1024칸 이하)과 모델 크기(512²)에서만 한다.
  * 보정은 걸지 않은 레이어의 원래 픽셀을 읽는다(리터칭과 같다). P3 문서도 값을 바꾸지 않고 그대로 넣는다.
@@ -78,6 +80,30 @@ internal object Inpainter {
 
     /** 고른 곳을 채울 때 모델이 채울 곳을 고른 곳보다 넓히는 폭(모델 px). 부드러운 경계까지 다 담는다. */
     private const val SELECTION_DILATION = 1f
+
+    /**
+     * [ImageResizer.BICUBIC]에 고운 잡음을 더한 셰이더(AGSL, 결정 기록의 '10단계 잡음 맞추기').
+     * 잡음은 문서 픽셀 자리(`origin + position`의 정수 자리)로 정해지는 표준 정규 값(Box-Muller)에 `noise`(밝기 표준편차, 0..1 눈금)를 곱한 것이고,
+     * 알파를 곱한 R·G·B에 같이 더한 뒤 0 ≤ 색 ≤ 알파로 자른다. 해시는 사인을 쓰지 않는 Dave Hoskins의 hash22다(큰 좌표에서도 고르다).
+     */
+    private const val NOISY_BICUBIC = ImageResizer.BICUBIC_SAMPLE + """
+        uniform float noise;
+        uniform float2 origin;
+
+        float2 hash2(float2 p) {
+            float3 p3 = fract(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.xx + p3.yz) * p3.zy);
+        }
+
+        half4 main(float2 position) {
+            float4 color = bicubic(position);
+            float2 u = hash2(floor(origin + position));
+            float gauss = sqrt(-2.0 * log(max(u.x, 1.0e-7))) * cos(6.2831853 * u.y);
+            color.rgb = clamp(color.rgb + gauss * noise * color.a, float3(0.0), float3(color.a));
+            return half4(color);
+        }
+    """
 
     /** [area]가 닿는 문서 범위(문서 안). 닿지 않으면 null */
     fun bounds(area: InpaintArea, selection: Selection?, size: PixelSize): PixelRect? = when (area) {
@@ -202,7 +228,94 @@ internal object Inpainter {
         // 쓰기 몫: 칠했거나 물체 모양이면 넓힌 띠 안에서 0으로 줄고, 고른 곳이면 넓힌 곳 전체다(타일에서 선택 알파로 다시 자른다)
         val weights = if (area is InpaintArea.Selected) FloatArray(plane) { 1f } else InpaintTensor.writeWeights(distance, radius)
         for (p in 0 until plane) if (!modelHole[p]) weights[p] = 0f
-        return composite(raster, size, window, fill, weights, selection, modelSize, checkCanceled)
+        // 고운 잡음: AI가 채운 곳만(게인맵처럼 매끈한 그림은 더하지 않는다)
+        val noise = if (source is FillSource.Model) {
+            noiseLevel(raster, size, window, fill, weights, holeDistance, straight, modelSize, checkCanceled)
+        } else {
+            0f
+        }
+        checkCanceled()
+        return composite(raster, size, window, fill, weights, selection, modelSize, noise, checkCanceled)
+    }
+
+    /**
+     * 채운 곳에 더할 밝기 잡음의 세기(0..1 눈금, 결정 기록의 '10단계 잡음 맞추기'). 원본 해상도에서 넓힌 구멍 둘레의 원래 픽셀과
+     * 키운 채울 그림의 잡음을 [InpaintNoise]로 재어 모자란 만큼이다. 어느 쪽이든 잴 픽셀이 모자라면 0이다.
+     * 조각([InpaintNoise.PATCH]px)은 둘레 띠와 몫이 1인 곳에서 [InpaintNoise.PATCHES]개씩 고른다.
+     */
+    private fun noiseLevel(
+        raster: Raster,
+        size: PixelSize,
+        window: CropWindow,
+        fill: FloatArray,
+        weights: FloatArray,
+        holeDistance: FloatArray,
+        straight: InpaintTensor.Straight,
+        modelSize: Int,
+        checkCanceled: () -> Unit
+    ): Float {
+        val scale = modelSize.toFloat() / window.size
+        // 문서 픽셀 가운데가 놓이는 모델 칸
+        fun modelIndex(x: Int, y: Int): Int {
+            val mx = floor((x + 0.5f - window.left) * scale).toInt().coerceIn(0, modelSize - 1)
+            val my = floor((y + 0.5f - window.top) * scale).toInt().coerceIn(0, modelSize - 1)
+            return my * modelSize + mx
+        }
+        // 모델 칸 가운데를 가운데로 하는 조각(문서 안으로 자름)
+        fun patchAt(p: Int): PixelRect? {
+            val centerX = window.left + ((p % modelSize) + 0.5f) / scale
+            val centerY = window.top + ((p / modelSize) + 0.5f) / scale
+            val half = InpaintNoise.PATCH / 2
+            val x = centerX.toInt() - half
+            val y = centerY.toInt() - half
+            return PixelRect(x, y, x + InpaintNoise.PATCH, y + InpaintNoise.PATCH).intersect(PixelRect.of(size))
+        }
+
+        val ring = ArrayList<Float>()
+        val ringCells = (0 until modelSize * modelSize).filter {
+            holeDistance[it] >= InpaintNoise.EDGE_GAP && holeDistance[it] <= InpaintNoise.RING && straight.alpha[it] >= 255f
+        }.toIntArray()
+        for (p in InpaintNoise.pick(ringCells, InpaintNoise.PATCHES)) {
+            checkCanceled()
+            val rect = patchAt(p) ?: continue
+            val view = LevelView.at(raster, size, rect, 0, checkCanceled) ?: continue
+            try {
+                val bytes = view.bytes
+                val luma = FloatArray(view.width * view.height)
+                val valid = BooleanArray(view.width * view.height)
+                for (y in 0 until view.height) {
+                    for (x in 0 until view.width) {
+                        val b = view.byteIndex(x, y)
+                        val alpha = bytes[b + 3].toInt() and 0xFF
+                        val i = y * view.width + x
+                        luma[i] = InpaintNoise.luma(
+                            (bytes[b].toInt() and 0xFF).toFloat(),
+                            (bytes[b + 1].toInt() and 0xFF).toFloat(),
+                            (bytes[b + 2].toInt() and 0xFF).toFloat(),
+                            alpha / 255f
+                        )
+                        valid[i] = alpha == 255 && holeDistance[modelIndex(view.left + x, view.top + y)] >= InpaintNoise.EDGE_GAP
+                    }
+                }
+                InpaintNoise.collect(luma, valid, view.width, view.height, ring)
+            } finally {
+                view.recycle()
+            }
+        }
+        val known = InpaintNoise.sigma(ring) ?: return 0f
+
+        val inside = ArrayList<Float>()
+        val fillCells = (0 until modelSize * modelSize).filter { weights[it] >= 1f }.toIntArray()
+        for (p in InpaintNoise.pick(fillCells, InpaintNoise.PATCHES)) {
+            checkCanceled()
+            val rect = patchAt(p) ?: continue
+            val opaque = BooleanArray(rect.width * rect.height)
+            val luma = InpaintNoise.upscaledLuma(fill, modelSize, window.left, window.top, scale, rect.left, rect.top, rect.width, rect.height, opaque)
+            val valid = BooleanArray(opaque.size) { opaque[it] && weights[modelIndex(rect.left + it % rect.width, rect.top + it / rect.width)] >= 1f }
+            InpaintNoise.collect(luma, valid, rect.width, rect.height, inside)
+        }
+        val filled = InpaintNoise.sigma(inside) ?: return 0f
+        return InpaintNoise.added(known, filled) / 255f
     }
 
     /** 모델 없이 둘레 값을 매끈하게 이어 채운 색(0..255, 픽셀마다 R·G·B) */
@@ -259,6 +372,7 @@ internal object Inpainter {
         weights: FloatArray,
         selection: Selection?,
         modelSize: Int,
+        noise: Float,
         checkCanceled: () -> Unit
     ): Raster {
         val scale = modelSize.toFloat() / window.size
@@ -297,7 +411,7 @@ internal object Inpainter {
                 checkCanceled()
                 val area = block.map { tileRect(grid, it) }
                     .reduce { a, b -> PixelRect(min(a.left, b.left), min(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom)) }
-                val upscaled = upscale(colors, window, scale, area) ?: throw NotEnoughMemoryException()
+                val upscaled = upscale(colors, window, scale, area, noise) ?: throw NotEnoughMemoryException()
                 try {
                     for (key in block) {
                         checkCanceled()
@@ -318,14 +432,19 @@ internal object Inpainter {
     /**
      * 채울 그림을 문서 [area] 크기로 키운 소프트웨어 그림(GPU 바이큐빅 한 번).
      * 그림 픽셀 가운데 (x + 0.5)는 채울 그림에서 ((area.left + x + 0.5 - 창 왼쪽) × [scale]) 자리다.
+     * [noise](밝기 표준편차, 0..1 눈금)가 0보다 크면 문서 픽셀 자리로 정해지는 잡음을 R·G·B에 같이 더한다(묶음이 바뀌어도 이어진다).
      */
-    private fun upscale(colors: Bitmap, window: CropWindow, scale: Float, area: PixelRect): Bitmap? {
+    private fun upscale(colors: Bitmap, window: CropWindow, scale: Float, area: PixelRect, noise: Float): Bitmap? {
         val image = BitmapShader(colors, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         image.filterMode = BitmapShader.FILTER_MODE_NEAREST
-        val shader = RuntimeShader(ImageResizer.BICUBIC)
+        val shader = RuntimeShader(if (noise > 0f) NOISY_BICUBIC else ImageResizer.BICUBIC)
         shader.setInputShader("image", image)
         shader.setFloatUniform("scale", scale, scale)
         shader.setFloatUniform("offset", (area.left - window.left) * scale, (area.top - window.top) * scale)
+        if (noise > 0f) {
+            shader.setFloatUniform("noise", noise)
+            shader.setFloatUniform("origin", area.left.toFloat(), area.top.toFloat())
+        }
         val drawn = Retouch.drawOnGpu(shader, area.width, area.height) ?: return null
         try {
             return drawn.copy(Bitmap.Config.ARGB_8888, false)

@@ -8,6 +8,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.inpaint.InpaintArea
+import com.kiln.stratum.engine.inpaint.InpaintNoise
 import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
 import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.SelectShape
@@ -18,8 +19,10 @@ import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
+import java.util.Random
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -99,6 +102,58 @@ class InpaintRegionTest {
         assertTrue("${Integer.toHexString(inside)} is no longer red", Color.red(inside) < 170 && Color.green(inside) > 90)
         assertEquals(Color.RED, pixel(removed, 405, 300))
         assertEquals(Color.RED, pixel(removed, 415, 300))
+    }
+
+    /** 회색 128에 표준편차 [sigma]인 밝기 잡음을 얹은 바탕 800×600(씨앗이 정해져 늘 같다)에 빨간 원 */
+    private fun noisyWithRedSpot(sigma: Double): Document {
+        val random = Random(7)
+        val noise = IntArray(800 * 600) { (random.nextGaussian() * sigma).roundToInt() }
+        return documentOf(800, 600) { px, py ->
+            when {
+                px >= 800 || py >= 600 -> gray(128)
+                hypot(px + 0.5f - 400f, py + 0.5f - 300f) <= 20f -> Color.RED
+                else -> gray((128 + noise[py * 800 + px]).coerceIn(0, 255))
+            }
+        }
+    }
+
+    /** [document]의 ([x0], [y0])부터 [size]² 픽셀에서 잰 밝기 잡음(Immerkær 가운데값, 0..255) */
+    private fun noiseIn(document: Document, x0: Int, y0: Int, size: Int): Float {
+        val luma = FloatArray(size * size) { i ->
+            val color = pixel(document, x0 + i % size, y0 + i / size)
+            InpaintNoise.luma(Color.red(color).toFloat(), Color.green(color).toFloat(), Color.blue(color).toFloat(), 1f)
+        }
+        val responses = ArrayList<Float>()
+        InpaintNoise.collect(luma, BooleanArray(size * size) { true }, size, size, responses)
+        return checkNotNull(InpaintNoise.sigma(responses))
+    }
+
+    @Test
+    fun remove_onNoisyGround_addsMatchingNoise_andLeavesOtherPixelsExactly() {
+        val document = noisyWithRedSpot(6.0)
+
+        // 가짜 모델은 한 가지 색으로 채운다(잡음 없음). 둘레 잡음만큼 더해져야 한다.
+        val removed = InpaintRegion(LayerId(0), painted(400f to 300f, radius = 30f), FakeInpaintModel()).applyTo(document)
+
+        val around = noiseIn(document, 300, 200, 48)
+        val filled = noiseIn(removed, 382, 282, 36)
+        assertEquals(6f, around, 0.6f)
+        assertEquals("filled $filled vs around $around", around, filled, 1.2f)
+        // 채운 곳은 바탕 밝기 그대로다(잡음은 밝기 평균을 바꾸지 않는다)
+        assertGray(pixel(removed, 400, 300), tolerance = 30)
+        for (y in 0 until 600 step 7) {
+            for (x in 0 until 800 step 7) {
+                if (hypot(x + 0.5f - 400f, y + 0.5f - 300f) > 40f) assertEquals("($x, $y)", pixel(document, x, y), pixel(removed, x, y))
+            }
+        }
+    }
+
+    @Test
+    fun remove_onFlatGround_addsNoNoise() {
+        val removed = InpaintRegion(LayerId(0), painted(400f to 300f, radius = 30f), FakeInpaintModel()).applyTo(grayWithRedSpot())
+
+        val first = pixel(removed, 382, 282)
+        for (y in 282 until 318) for (x in 382 until 418) assertEquals("($x, $y)", first, pixel(removed, x, y))
     }
 
     /** 문서 800×600을 [cell]px 칸으로 덮은 마스크에 원(가운데 ([x], [y]), 반지름 [radius]) */

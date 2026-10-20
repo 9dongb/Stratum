@@ -203,12 +203,10 @@ internal object ImageResizer {
     }
 
     /**
-     * 바이큐빅(Catmull-Rom) 보간 셰이더(AGSL). 이웃 4×4 픽셀을 가중 평균한다.
-     * Catmull-Rom은 픽셀 가운데에서는 그 픽셀 값 그대로라, 남은 배율이 1이면(정확히 반씩 줄인 경우) 값이 바뀌지 않는다.
-     * 알파를 미리 곱한 값이라, 가중치가 음수인 곳에서 생기는 넘침을 0 ≤ 색 ≤ 알파 ≤ 1로 잘라 낸다.
-     * AI 제거도 모델이 채운 그림을 원본 해상도로 키울 때 쓴다(결정 기록 'AI 제거·AI 선택').
+     * [BICUBIC]의 읽기 부분: 입력 `image`, 그림 픽셀마다 읽을 자리 `offset + position × scale`, 함수 `bicubic`.
+     * AI 제거의 잡음 섞인 키우기(`Inpainter`)도 같은 읽기를 쓴다. Kotlin으로 같은 계산을 하는 곳: `InpaintNoise.upscaledLuma`.
      */
-    internal const val BICUBIC = """
+    internal const val BICUBIC_SAMPLE = """
         uniform shader image;
         uniform float2 scale;
         uniform float2 offset;
@@ -224,7 +222,7 @@ internal object ImageResizer {
             return 0.0;
         }
 
-        half4 main(float2 position) {
+        float4 bicubic(float2 position) {
             float2 source = offset + position * scale;
             float2 base = floor(source - 0.5);
             float4 sum = float4(0.0);
@@ -240,7 +238,19 @@ internal object ImageResizer {
             float4 color = sum / total;
             color.a = clamp(color.a, 0.0, 1.0);
             color.rgb = clamp(color.rgb, float3(0.0), float3(color.a));
-            return half4(color);
+            return color;
+        }
+    """
+
+    /**
+     * 바이큐빅(Catmull-Rom) 보간 셰이더(AGSL). 이웃 4×4 픽셀을 가중 평균한다.
+     * Catmull-Rom은 픽셀 가운데에서는 그 픽셀 값 그대로라, 남은 배율이 1이면(정확히 반씩 줄인 경우) 값이 바뀌지 않는다.
+     * 알파를 미리 곱한 값이라, 가중치가 음수인 곳에서 생기는 넘침을 0 ≤ 색 ≤ 알파 ≤ 1로 잘라 낸다.
+     * AI 제거도 모델이 채운 그림을 원본 해상도로 키울 때 쓴다(결정 기록 'AI 제거·AI 선택').
+     */
+    internal const val BICUBIC = BICUBIC_SAMPLE + """
+        half4 main(float2 position) {
+            return half4(bicubic(position));
         }
     """
 }
