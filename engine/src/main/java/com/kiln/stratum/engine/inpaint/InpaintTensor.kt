@@ -73,8 +73,12 @@ object InpaintTensor {
      * 채울 그림(알파를 곱한 RGBA 0..1, 픽셀마다 4개). 넓힌 구멍(거리 ≤ [radius]) 밖은 [rgba] 그대로다.
      *
      * 구멍 안은 모델이 채운 색([filled], 0..255 R·G·B)을 둘레의 밝기·색에 맞춘 것이다(복구 브러시의 막과 같다).
-     * - 구멍 바로 바깥 띠([ring] 칸 안의 아는 곳)에서 '원래 - 모델' 차이를 재고, [HoleFill]로 구멍 안에 매끈하게 이어 더한다.
-     *   다른 곳과 크게 다른 차이(어긋난 경계)는 [HoleFill.influence]로 덜 번지게 한다. 띠가 없으면 모델 색 그대로다.
+     * - 구멍 안의 채운 색을 구멍 밖으로 매끈하게 늘이고, 구멍 바로 바깥 띠([ring] 칸 안의 아는 곳)에서 '원래 - 늘인 색' 차이를 잰 뒤,
+     *   [HoleFill]로 구멍 안에 매끈하게 이어 더한다. 그래서 경계를 사이에 둔 밝기·색 차이만 맞춘다.
+     * - 모델이 아는 곳에 다시 그린 색([filled]의 구멍 밖)은 쓰지 않는다. MI-GAN은 아는 곳을 원래와 다르게(보통 더 밝게) 다시 그려,
+     *   그 차이를 더하면 채운 곳이 어두워졌다(폴드8 시험, 2026-10-20).
+     * - 다른 곳과 크게 다른 차이(어긋난 경계)는 [HoleFill.influence]로 덜 번지게 하고, [InpaintPlan.MATCH_OUTLIER]보다 다르면
+     *   (경계에 걸친 다른 물체) 아예 쓰지 않는다. 띠가 없으면 모델 색 그대로다.
      * - 알파는 구멍 밖이 모두 불투명하면 1이고, 아니면 구멍 밖 알파를 같은 방법으로 잇는다.
      */
     fun fillImage(
@@ -91,15 +95,24 @@ object InpaintTensor {
         require(size <= HoleFill.MAX_EDGE) { "Matching runs on small images only: $size" }
         val inHole = BooleanArray(plane) { distance[it] <= radius }
 
-        // 밝기·색: 띠에서 잰 '원래 - 모델' 차이(0..1 눈금)를 구멍 안으로 잇는다
+        // 밝기·색: 구멍 안 채운 색을 밖으로 늘이고, 띠에서 잰 '원래 - 늘인 색' 차이(0..1 눈금)를 구멍 안으로 잇는다
+        val inside = FloatArray(plane * 3)
+        val insideWeights = FloatArray(plane)
+        for (p in 0 until plane) {
+            if (!inHole[p]) continue
+            insideWeights[p] = 1f
+            for (c in 0 until 3) inside[p * 3 + c] = filled[p * 3 + c] / 255f
+        }
+        val extended = HoleFill.fill(inside, insideWeights, size, size, 3)
         val differences = FloatArray(plane * 3)
         val ringWeights = FloatArray(plane)
         for (p in 0 until plane) {
             if (inHole[p] || distance[p] > radius + ring || straight.alpha[p] < InpaintPlan.ALPHA_KNOWN) continue
             ringWeights[p] = 1f
-            for (c in 0 until 3) differences[p * 3 + c] = (straight.rgb[p * 3 + c] - filled[p * 3 + c]) / 255f
+            for (c in 0 until 3) differences[p * 3 + c] = straight.rgb[p * 3 + c] / 255f - extended[p * 3 + c]
         }
-        val correction = HoleFill.fill(differences, ringWeights, size, size, 3, HoleFill.influence(differences, ringWeights, 3))
+        val influence = HoleFill.influence(differences, ringWeights, 3, cutoff = InpaintPlan.MATCH_OUTLIER)
+        val correction = HoleFill.fill(differences, ringWeights, size, size, 3, influence)
 
         // 알파: 구멍 밖은 다 아는 값이다
         var opaque = true

@@ -70,13 +70,15 @@ class InpaintRealModelTest {
             }
             Log.i("InpaintProbe", "InpaintRegion with the real model on ${model.activeBackend}: ${SystemClock.elapsedRealtime() - started} ms")
 
-            // 빨간 원 자리가 그 자리 그러데이션 밝기 근처의 회색이 된다
+            // 빨간 원 자리가 그 자리 그러데이션 밝기의 회색이 된다. 예전 색 맞추기는 모델이 아는 곳을 다시 그린 색을 써서
+            // 약 8 어둡고 초록빛으로 채웠다(폴드8 시험, 2026-10-20). 고친 뒤 맥 CPU에서는 2 안쪽이다.
             for ((x, y) in listOf(400 to 300, 385 to 300, 415 to 300, 400 to 280)) {
                 val color = pixel(removed, x, y)
                 val expected = Color.red(gray(x))
                 assertTrue(
                     "($x, $y): ${Integer.toHexString(color)}, expected about $expected",
-                    abs(Color.red(color) - expected) <= 25 && abs(Color.green(color) - expected) <= 25 && abs(Color.blue(color) - expected) <= 25
+                    abs(Color.red(color) - expected) <= TOLERANCE && abs(Color.green(color) - expected) <= TOLERANCE &&
+                        abs(Color.blue(color) - expected) <= TOLERANCE
                 )
             }
             // 넓힌 띠 밖은 그대로다
@@ -84,5 +86,10 @@ class InpaintRealModelTest {
         } finally {
             model.release()
         }
+    }
+
+    private companion object {
+        /** 채운 회색이 그 자리 그러데이션과 다를 수 있는 값(0..255). 장치마다 계산이 조금 달라 여유를 둔다. */
+        const val TOLERANCE = 5
     }
 }

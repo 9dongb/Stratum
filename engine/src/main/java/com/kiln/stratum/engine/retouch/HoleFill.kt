@@ -29,8 +29,15 @@ object HoleFill {
      * 가운데값은 채널마다 아는 곳 값의 중앙값이고, 다른 정도는 채널 가운데 가장 큰 것이다.
      * 고르게 다른 곳(어두운 곳에 밝은 무늬를 가져옴)은 모두 1에 가깝고, 줄·경계가 어긋난 곳만 작아진다
      * (복구 브러시의 둘레 맞추기와 AI 제거의 색 맞추기, 결정 기록 '리터칭'·'AI 제거·AI 선택').
+     * 다른 정도가 [cutoff]를 넘는 픽셀은 0이다(둘레로 전혀 번지지 않음). 작은 몫도 거친 단계에서 쌓여 번지기 때문이다.
      */
-    fun influence(values: FloatArray, weights: FloatArray, channels: Int, scale: Float = OUTLIER_SCALE): FloatArray {
+    fun influence(
+        values: FloatArray,
+        weights: FloatArray,
+        channels: Int,
+        scale: Float = OUTLIER_SCALE,
+        cutoff: Float = Float.POSITIVE_INFINITY
+    ): FloatArray {
         require(channels > 0 && values.size == weights.size * channels) { "Bad buffers: ${values.size} values, ${weights.size} weights" }
         require(scale > 0f) { "Scale must be positive: $scale" }
         var count = 0
@@ -55,7 +62,7 @@ object HoleFill {
                 var far = 0f
                 for (c in 0 until channels) far = maxOf(far, abs(values[p * channels + c] - medians[c]))
                 val r = far / scale
-                1f / (1f + r * r)
+                if (far > cutoff) 0f else 1f / (1f + r * r)
             }
         }
     }

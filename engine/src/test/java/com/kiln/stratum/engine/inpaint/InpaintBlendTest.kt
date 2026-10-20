@@ -42,6 +42,65 @@ class InpaintBlendTest {
     }
 
     @Test
+    fun aModelThatRepaintsTheSurroundingsBrighter_doesNotDarkenTheFill() {
+        val rgba = solid(100, 100, 100)
+        val distance = InpaintMask.distanceToHole(disc(10f), size, size)
+        // MI-GAN처럼 아는 곳은 30만큼 밝게 다시 그렸지만, 구멍은 둘레 밝기 그대로 채웠다(폴드8 시험에서 채운 곳이 어두워진 경우)
+        val filled = FloatArray(size * size * 3) { if (distance[it / 3] <= 4f) 100f else 130f }
+
+        val result = InpaintTensor.fillImage(rgba, InpaintTensor.unpremultiply(rgba), distance, 4f, filled, size)
+
+        for (p in 0 until size * size) {
+            if (distance[p] > 4f) continue
+            for (c in 0 until 3) assertEquals("pixel $p", 100f, result[p * 4 + c] * 255f, 2f)
+        }
+    }
+
+    @Test
+    fun aFillBrighterThanTheSurroundings_isMatched_evenWhenTheModelRepaintsThemExactly() {
+        val rgba = solid(100, 100, 100)
+        val distance = InpaintMask.distanceToHole(disc(10f), size, size)
+        // 아는 곳은 원래 그대로 다시 그렸고, 구멍만 20만큼 밝게 채웠다
+        val filled = FloatArray(size * size * 3) { if (distance[it / 3] <= 4f) 120f else 100f }
+
+        val result = InpaintTensor.fillImage(rgba, InpaintTensor.unpremultiply(rgba), distance, 4f, filled, size)
+
+        for (p in 0 until size * size) {
+            if (distance[p] > 4f) continue
+            for (c in 0 until 3) assertEquals("pixel $p", 100f, result[p * 4 + c] * 255f, 2f)
+        }
+    }
+
+    @Test
+    fun anObjectCutByTheEdgeOfTheHole_doesNotTintTheFill() {
+        // 회색 바탕 가운데 빨간 원을 왼쪽 반만 채운다(고른 곳이 물체를 자른 경우). 오른쪽 반의 빨강은 띠에 걸친다.
+        val red = BooleanArray(size * size) { hypot((it % size - center).toFloat(), (it / size - center).toFloat()) <= 8f }
+        val rgba = ByteArray(size * size * 4) { i ->
+            when (i % 4) {
+                0 -> if (red[i / 4]) 255 else 128
+                1, 2 -> if (red[i / 4]) 0 else 128
+                else -> 255
+            }.toByte()
+        }
+        val painted = InpaintMask.distanceToHole(disc(12f), size, size)
+        val hole = BooleanArray(size * size) { painted[it] <= 3f && it % size < center }
+        val distance = InpaintMask.distanceToHole(hole, size, size)
+        val straight = InpaintTensor.unpremultiply(rgba)
+        // 가짜 모델처럼 아는 곳은 그대로, 구멍은 아는 곳의 평균색(빨강이 조금 섞임)
+        val known = (0 until size * size).filter { !hole[it] }
+        val mean = FloatArray(3) { c -> known.map { straight.rgb[it * 3 + c] }.average().toFloat() }
+        val filled = FloatArray(size * size * 3) { i -> if (hole[i / 3]) mean[i % 3] else straight.rgb[i] }
+
+        val result = InpaintTensor.fillImage(rgba, straight, distance, 0f, filled, size)
+
+        // 잘린 곳 바로 왼쪽도 둘레의 회색이다(빨간 물체 조각의 색이 번지지 않는다)
+        for ((x, y) in listOf(28 to 32, 30 to 28, 24 to 32)) {
+            val p = y * size + x
+            for (c in 0 until 3) assertEquals("($x, $y) channel $c", 128f, result[p * 4 + c] * 255f, 6f)
+        }
+    }
+
+    @Test
     fun outsideTheDilatedHole_theOriginalStaysExactly() {
         val rgba = ByteArray(size * size * 4) { i -> if (i % 4 == 3) 255.toByte() else (i * 7 % 256).toByte() }
         val distance = InpaintMask.distanceToHole(disc(10f), size, size)

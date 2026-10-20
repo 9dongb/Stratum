@@ -126,6 +126,22 @@ class HoleFillTest {
     }
 
     @Test
+    fun influence_withACutoff_isZeroBeyondIt_andTheSameBelowIt() {
+        val values = FloatArray(100) { 0.2f }
+        values[10] = 0.7f
+        values[20] = 0.3f
+        val weights = FloatArray(100) { 1f }
+
+        val plain = HoleFill.influence(values, weights, 1)
+        val cut = HoleFill.influence(values, weights, 1, cutoff = 0.15f)
+
+        assertTrue(plain[10] > 0f)
+        assertEquals(0f, cut[10], 0f)
+        assertEquals(plain[20], cut[20], 0f)
+        assertEquals(1f, cut[0], 1e-6f)
+    }
+
+    @Test
     fun influence_withNothingKnown_isAllZero() {
         val influence = HoleFill.influence(FloatArray(6), FloatArray(3), 2)
 
