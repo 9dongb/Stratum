@@ -125,6 +125,38 @@ data class SelectSimilarColor(
     }
 }
 
+/**
+ * AI 선택: 문서 좌표 ([x], [y])를 탭한 물체를 모양대로 고른다([ObjectSegmenter], 결정 기록 'AI 제거·AI 선택'). [mode]로 앞 선택 영역과 합친다.
+ * 보이는 레이어를 합친 그림에서 찾고(스포이드와 같은 규칙), 긴 변 1024px 이하로 찾은 모양을 원본 크기로 부드럽게 키운다(자동 선택과 같다).
+ * 문서 밖을 눌렀거나 찾은 모양이 없으면 바뀌지 않는다. 모델을 이 기기에서 쓸 수 없으면
+ * [com.kiln.stratum.engine.segment.SegmentUnavailableException]을 그대로 던진다.
+ *
+ * [segmenter]는 오래 사는 서비스 참조다. 실행 취소 기록은 명령을 보관만 하고 다시 실행할 때는 저장한 문서를 쓰므로, 명령이 서비스를 붙잡지 않는다.
+ */
+data class SelectObject(val x: Float, val y: Float, val mode: SelectionMode, val segmenter: ObjectSegmenter) : CancellableCommand {
+
+    override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
+        val mask = try {
+            segmenter.maskAt(document, x, y, checkCanceled)
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        } ?: return document
+        val size = PixelSize(document.width, document.height)
+        val tiles = MaskTiles.upscaledTiles(mask.alphas, mask.width, mask.height, mask.level, size, checkCanceled)
+        return document.withSelection(combineSelection(document.selection ?: Selection.EMPTY, tiles, mode, MaskTiles))
+    }
+
+    /** 경계 타일마다 알파 타일 한 장(어림: 문서 전체의 1/4, 자동 선택과 같다) */
+    override fun estimateNewBytes(document: Document): Long =
+        tileCount(PixelRect.of(PixelSize(document.width, document.height))) * TILE_PIXEL_COUNT / 4
+
+    /** 그림을 아직 읽지 않았으면 읽기, 모델을 아직 불러오지 않았으면 불러오기까지 */
+    override fun estimateWorkBytes(document: Document): Long = segmenter.workBytes(document)
+
+    /** 기록·로그용. 서비스는 넣지 않는다. */
+    override fun toString(): String = "SelectObject(x=$x, y=$y, mode=$mode)"
+}
+
 /** 모두 선택 */
 data object SelectAll : EditCommand {
     override fun applyTo(document: Document): Document {
