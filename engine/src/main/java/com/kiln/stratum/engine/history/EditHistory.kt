@@ -77,6 +77,19 @@ class EditHistory(
         }
 
     /**
+     * 오래된 실행 취소 단계를 모두 버려도 남는 메모리(바이트): 지금 문서와 다시 실행할 단계의 타일이다(같은 타일 객체는 한 번만 센다).
+     * [releaseOldSteps]로 메모리를 비우기 전에, 비워서 될 일인지 보는 데 쓴다.
+     */
+    val unreleasableBytes: Long
+        get() {
+            val tiles = HashSet<Tile>()
+            val masks = HashSet<MaskTile>()
+            addTiles(document, tiles, masks)
+            for (index in position until steps.size) addTiles(steps[index].after, tiles, masks)
+            return tiles.sumOf { it.byteCount.toLong() } + masks.sumOf { it.byteCount.toLong() }
+        }
+
+    /**
      * [command]를 지금 문서에 적용하고 기록한다. 문서가 바뀌었을 때만 true를 돌려준다.
      *
      * 바뀐 것이 없으면 기록하지 않고, 다시 실행할 단계도 그대로 둔다.

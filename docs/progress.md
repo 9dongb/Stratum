@@ -48,9 +48,16 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
       - 계획의 `BrushPainter`(몫 그림으로 얹기)·`SelectionPreview.maskAt`은 3b단계에서 쓰는 곳·테스트와 함께 더한다(Claude 판단: 쓰지 않는 코드를 먼저 넣지 않는다).
     - 3b단계(이어서): 엔진 명령 `InpaintRegion`과 처리 순서 `Inpainter`, 게인맵 채우기 `GainmapEdits.fill`, `SelectionPreview.maskAt`, `CancellableCommand.estimateWorkBytes`를 더했다. 화면 변화는 없다(4단계에서 연결).
       - 몫 그림으로 얹기는 `BrushPainter`를 고치지 않고 `Inpainter` 안에 두었다(Claude 판단: 붓 자국이 아니라 몫 그림을 쓰는 곳이 여기뿐).
+    - 4단계(사용자 "계속하세요"): 리터칭의 넷째 하위 도구 'AI 제거'를 화면에 연결했다. 칠하고 손을 떼면 AI가 채우고, 실행 취소 한 단계다.
+      - 옵션은 크기만(커버 옵션·메인 띠), 안내 글, 숨긴 레이어 알림, 쓸 수 없는 기기 알림('스팟 복구' 버튼)이다.
+      - AI 제거를 고르면 모델을 미리 불러 두고, 홈으로 나가거나 앱 화면이 모두 사라지면 내려놓는다.
+      - 메모리 확인이 계산 메모리(작업 그림·처음 불러올 모델)도 본다. 규칙은 결정 기록 'AI 제거·AI 선택'의 '4단계 화면 규칙'.
+      - 에뮬레이터 디버그 빌드에서 진짜 모델로 칠한 덩어리가 지워지는 것을 봤다(CPU).
+      - 릴리스 빌드는 앱을 켜자마자 멈춘다. AI 기능을 넣기 전 커밋(749b948)에서도 같아, 처음부터 있던 R8 설정 문제다(기술 주의점). 그래서 릴리스에서 AI 제거가 되는지는 아직 못 봤다.
   - 남은 일
     - 1단계의 폴드8 측정: 사용자가 "나중에 재기"를 골랐다. 폰을 무선 디버깅으로 연결하면 `InpaintModelProbeTest`를 폴드8에서 돌려 GPU·CPU 시간과 메모리를 잰다. 끝 기준은 폴드8 GPU에서 수십 ms 안팎이다.
-    - 4~10단계. 4단계에서 `EditorViewModel.makeRoom`이 `estimateWorkBytes`(잠깐 쓰는 메모리, 모델 불러오기 포함)를 실행 취소 단계 버리기와 따로 보게 고친다.
+      - 4단계부터는 무선 디버깅 없이도 APK를 설치해 리터칭 > AI 제거로 직접 써 보며 속도를 볼 수 있다.
+    - 5~10단계.
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -121,7 +128,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 이동 도구(사용자 피드백 7차) | 완료 | 도구 막대 맨 위·커버 탭 줄 맨 앞(Material Icons open_with). 고른 레이어를 한 손가락으로 끌면 축소본만 옮겨 보이고, 놓으면 실행 취소 한 단계(픽셀 값 그대로, 캔버스 밖은 잘림, 256px 배수면 타일 그대로, 게인맵도 옮김). 숨긴 레이어는 막음. 옵션 없음(커버 안내 한 줄, 메인은 고를 때 알림) |
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌. 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(세로 접히는 선을 피하지 않음). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
-| AI 제거·AI 선택(사용자 요청) | 3b단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 화면 변화 없음. 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
+| AI 제거·AI 선택(사용자 요청) | 4단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 리터칭 넷째 하위 도구 'AI 제거'(칠하고 떼면 지움, 옵션은 크기만, 쓸 수 없는 기기는 알림과 스팟 복구 버튼). 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
 
 ## 결정 기록
 
@@ -210,6 +217,15 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 몫은 창 밖으로 가장자리 값을 늘인다. 이유: 사진 끝에 붙은 물체의 끝 픽셀까지 다 지우게(창은 문서 끝에서 잘린다).
     - 게인맵은 모델 없이 같은 순서로 둘레 게인 값을 매끈하게 잇는다(`FillSource.Smooth`, pull-push).
     - 메모리: 새로 남을 타일(채울 곳 범위 + 64px)은 `estimateNewBytes`, 창 하나의 계산(64MiB)과 모델 불러오기는 `estimateWorkBytes`로 나눴다. 이유: 잠깐 쓰는 메모리 때문에 실행 취소 단계를 버리지 않게(4단계에서 앱이 쓴다).
+  - 4단계 화면 규칙(Claude 판단, 2026-10-20)
+    - 칠하는 동안은 스팟 복구처럼 칠한 곳을 반투명 검정으로 보인다. 칠한 곳은 단단한 원으로 본다(경도·불투명도 없음, 계획대로 옵션은 크기만).
+    - 크기는 리터칭의 다른 하위 도구와 함께 쓴다. 경도는 쓰지 않고 그대로 둔다. 이유: 같은 리터칭 도구라 크기를 따로 두면 바꿀 때마다 헷갈리고, 다른 하위 도구의 경도는 지켜야 한다.
+      - 그래서 세 손가락 좌우 밀기(경도)는 AI 제거에서 아무것도 하지 않고, 위아래 밀기는 크기를 바꾼다. 크기 미리 보기 원은 안쪽 원 없이 그린다.
+    - 모델 미리 불러오기: 편집 화면에서 AI 제거를 고르면 모델을 불러 둔다(계획은 '처음 쓸 때'). 이유: 처음 지울 때의 GPU 준비 시간(몇 초일 수 있음)을 칠하는 동안 숨긴다. 메모리는 약 400MB다(에뮬레이터 CPU 실측, 폴드8은 아직).
+    - 내려놓기: 홈으로 나갈 때, 편집 상태가 사라질 때(ViewModel `onCleared`), 앱 화면이 모두 사라질 때(`onTrimMemory`의 UI_HIDDEN 이상)다. 접기·펼치기와 다른 문서 열기에는 내려놓지 않는다(다시 불러오는 시간이 들지 않게). 지우는 중이면 그 일이 끝난 뒤 내려놓는다.
+    - 쓸 수 없는 기기(GPU·CPU 모두 실패): 알림 막대 "이 기기에서는 AI 제거를 쓸 수 없어요. 스팟 복구 브러시를 써 보세요."와 [스팟 복구] 버튼(누르면 리터칭을 스팟 복구로 바꿈)을 길게 보인다. 문서는 그대로다. 앱을 다시 켤 때까지 다시 해 보지 않는다(1단계 모델 규칙).
+    - 메모리 확인(`makeRoom`): 새로 남을 타일에 더해 계산 메모리(작업 그림 64MiB + 처음이면 모델 약 400MB)까지 남아 있어야 한다. 모자라면 오래된 실행 취소 단계를 더 버리되, 다 버려서 될 때만 버린다(`EditHistory.unreleasableBytes`). 이유: 안 될 일에 실행 취소 기록을 잃지 않게. 계산 메모리가 없는 편집(브러시 등)은 전과 같다.
+    - 처리 중 표시는 따로 문구 없이 전의 처리 중 막대(0.2초 넘게 걸리면)다. 이유: 미리 불러오기로 첫 지우기의 기다림이 줄었다. 처리 중 안내 문구는 AI 선택(처음 읽기)과 함께 8단계에서 정한다.
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
   - 자리: 도구 막대 맨 위, 커버 탭 줄 맨 앞(막대 11개·탭 13개). 아이콘 Material Icons open_with(네 방향 화살표), 탭 이름 '이동', 화면 읽기 이름 '이동 도구'.
@@ -700,6 +716,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 아직 정하지 않았다. 해당 작업을 시작할 때 사용자에게 묻는다.
 
 - AI 제거 1단계의 폴드8 측정: 폰을 무선 디버깅으로 연결할 때(사용자가 "나중에 재기"를 골랐다).
+- 릴리스 빌드가 켜자마자 멈추는 것(처음부터 있던 R8 설정 문제)을 고칠지. AI 제거 4단계에서 찾았고, 따로 고치는 작업으로 제안했다.
 - AI 제거 6단계: 분할 모델 고르기(폴드8 실측을 보여 준 뒤). 큰 모델 파일을 git에 그대로 넣을지 LFS를 쓸지(GitHub는 50MB가 넘는 파일에 경고하고 100MB가 넘으면 받지 않음). 변환 도구(맥의 파이썬 PyTorch·litert-torch)를 설치해도 되는지.
 - 아래쪽 알림 막대('저장됨·보기', '숨긴 레이어에는 그릴 수 없어요' 등)를 화면 정중앙으로 옮길지. 지금은 띠를 덮지 않는 캔버스 정중앙이라, 메인 화면에서 화면으로 보면 도구 막대 폭의 반만큼 오른쪽이다(7차 최종 보고에서 물음, 제스처 알림은 화면 정중앙으로 바꿈).
 
@@ -767,7 +784,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 색 맞추기는 복구 브러시와 같은 `HoleFill.fill`·`HoleFill.influence`를 쓴다(복구 브러시의 `Membrane`도 `HoleFill.influence`를 쓴다).
   - 줄인 그림 읽기는 리터칭과 AI 제거가 함께 쓰는 `LevelView`(platform/LevelView.kt)다. 키우기는 `ImageResizer.BICUBIC`, 선택 영역을 게인맵 크기로 줄이기는 `GainmapEdits.scaledSelection`이다.
   - 명령은 `InpaintRegion(layerId, area, model)`이고, 처리 순서는 `Inpainter.paint`(계획 → 창마다 읽기·구멍·채우기 → 키워 얹기)다. 채울 색은 `FillSource.Model`(AI) 또는 `FillSource.Smooth`(게인맵)다.
-  - 선택 영역을 아무 배율로 그리는 것은 `SelectionPreview.maskAt`이다. 테스트용 가짜 모델은 에뮬레이터 테스트에도 `FakeInpaintModel`(app/src/androidTest)이 있다(밝기 어긋남·실패·불러오기 메모리를 흉내 냄).
+  - 선택 영역을 아무 배율로 그리는 것은 `SelectionPreview.maskAt`이다. 테스트용 가짜 모델은 에뮬레이터 테스트에도 `FakeInpaintModel`(app/src/androidTest)이 있다(밝기 어긋남·실패·불러오기 메모리를 흉내 내고, 미리 불러오기·내려놓기 횟수를 셈).
+  - 앱: `EditorViewModel.inpaintModel`(internal var, 테스트는 가짜로 바꿈)을 AI 제거 획(`Stroke.inpaint` → `InpaintRegion`)이 쓴다. 화면은 `RetouchActions.beginRemove`·`prepareRemove`만 보내고, `SubTool.RETOUCH_REMOVE`는 엔진의 `RetouchMode`가 없어(`retouchMode` null) 편집 화면이 `RetouchOverlay(removing = true)`로 넘긴다.
+  - 모델을 내려놓는 곳은 `EditorViewModel.releaseAiModels`(홈으로 나갈 때·`onCleared`·`MainActivity.onTrimMemory`)다. 새 AI 모델도 여기서 함께 내려놓는다.
+  - 계산하는 동안만 쓰는 메모리는 명령의 `estimateWorkBytes`로 알리고, `makeRoom`이 `EditHistory.unreleasableBytes`로 단계를 버려서 될 때만 버린다. 쓸 수 없는 모델(`InpaintUnavailableException`)은 `runEdit`가 `EditorMessage.RemoveUnavailable`로 알린다.
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.
@@ -845,6 +865,9 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 
 ## 기술 주의점
 
+- 릴리스 빌드(R8, 앱의 `optimization { enable = true; packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**") }`, Android Studio 기본 프로젝트에서 들어옴)는 켜자마자 멈춘다(2026-10-20 확인, 749b948에서도 같음).
+  - R8이 Kotlin 표준 라이브러리의 다중 파일 클래스 조각(`CollectionsKt__MutableCollectionsJVMKt`)을 기본 패키지로 옮겨, 같은 패키지에서만 쓸 수 있는 부모 조각(`CollectionsKt__IterablesKt`)에 닿지 못한다(androidx.startup 시작 단계의 `IllegalAccessError`).
+  - 릴리스 APK를 에뮬레이터에서 보려면 서명이 없어 디버그 키로 서명한다(`apksigner sign --ks ~/.android/debug.keystore …`). 디버그 빌드와 같은 키라 `install -r`로 바꿔 깔린다.
 - LiteRT(2026-10-20 확인):
   - 2.3.0은 Kotlin 2.4로 만들어져, 지금 Kotlin(2.2.10)으로는 컴파일되지 않는다("metadata is 2.4.0, expected 2.2.0"). 2.2.0을 쓴다. 쓰는 API(`CompiledModel`·`TensorBuffer`·`Environment`)는 두 판이 같다.
   - 2.2.0의 `litert`·`litert-api`는 이름(namespace)이 같아 AGP 9의 매니페스트 합치기가 실패한다. `android.uniquePackageNames=false`로 푼다.

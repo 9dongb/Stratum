@@ -70,6 +70,21 @@ class ToolSelectionTest {
     }
 
     @Test
+    fun aiRemove_isTheFourthRetouchSubTool_andIsKeptWhenTheScreenIsRecreated() {
+        assertEquals(listOf(SubTool.RETOUCH_SPOT, SubTool.RETOUCH_HEAL, SubTool.RETOUCH_CLONE, SubTool.RETOUCH_REMOVE), EditTool.Retouch.subTools)
+        // AI 제거는 가져올 곳을 쓰는 리터칭 획(엔진의 RetouchMode)이 아니다
+        assertNull(SubTool.RETOUCH_REMOVE.retouchMode)
+        val selection = ToolSelection(active = null)
+
+        selection.choose(SubTool.RETOUCH_REMOVE)
+        val saved = checkNotNull(with(ToolSelection.Saver) { SaverScope { true }.save(selection) })
+        val restored = checkNotNull(ToolSelection.Saver.restore(saved))
+
+        assertEquals(EditTool.Retouch, restored.active)
+        assertEquals(SubTool.RETOUCH_REMOVE, restored.modeOf(EditTool.Retouch))
+    }
+
+    @Test
     fun saver_keepsToolAndModes() {
         val scope = SaverScope { true }
         val chosen = ToolSelection(EditTool.Select, mapOf(EditTool.Transform to SubTool.ROTATE, EditTool.Select to SubTool.SELECT_LASSO))

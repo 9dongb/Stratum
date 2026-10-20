@@ -42,6 +42,9 @@ import com.kiln.stratum.engine.importing.ImportFailure
 import com.kiln.stratum.engine.importing.ImportPlan
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.importing.ImportSizing
+import com.kiln.stratum.engine.inpaint.InpaintArea
+import com.kiln.stratum.engine.inpaint.InpaintModel
+import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.AddTextLayer
@@ -52,11 +55,13 @@ import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.Deselect
 import com.kiln.stratum.engine.platform.EffectStroke
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.InvertSelection
 import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.LiquifyRenderer
+import com.kiln.stratum.engine.platform.LiteRtInpaintModel
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
@@ -157,6 +162,9 @@ sealed interface EditorMessage {
 
     /** 숨긴 레이어에는 그릴 수 없다(브러시·지우개·리터칭·명암·유동화). 레이어 줄의 눈을 켜면 그릴 수 있다. */
     data object HiddenLayer : EditorMessage
+
+    /** 이 기기에서는 AI 제거(채우기 모델)를 돌릴 수 없다. 문서는 그대로다. 화면은 스팟 복구 브러시로 바꾸는 버튼을 둔다. */
+    data object RemoveUnavailable : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -298,6 +306,12 @@ class EditorViewModel internal constructor(
     /** 지금 더 쓸 수 있는 메모리(바이트). 테스트가 메모리 부족을 흉내 낼 수 있게 바꿀 수 있다. */
     internal var availableMemory: () -> Long = { MemoryBudget.availableBytes(getApplication()) }
 
+    /**
+     * AI 제거가 쓰는 채우기 모델(MI-GAN, 결정 기록 'AI 제거·AI 선택'). AI 제거를 고르거나 처음 지울 때 불러오고,
+     * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 내려놓는다. 테스트는 가짜 모델로 바꾼다.
+     */
+    internal var inpaintModel: InpaintModel = LiteRtInpaintModel(application.assets, application.cacheDir)
+
     /** 앱 내부 저장소의 프로젝트들. 자동 저장은 여기서 끝까지 한다(편집 화면이 사라져도). */
     private val library = ProjectLibrary.get(application)
 
@@ -411,6 +425,7 @@ class EditorViewModel internal constructor(
      * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
      * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
      * [tone]이 있으면 명암(닷지·번) 획이고, [effect]가 있으면 흐림·선명·모자이크 획, [smudge](강도)가 있으면 스머지 획이다.
+     * [inpaint](채우기 모델)가 있으면 AI 제거 획이다.
      */
     private class Stroke(
         val layer: LayerId,
@@ -421,7 +436,8 @@ class EditorViewModel internal constructor(
         val offset: SourceOffset? = null,
         val tone: ToneFill? = null,
         val effect: EffectFill? = null,
-        val smudge: Float? = null
+        val smudge: Float? = null,
+        val inpaint: InpaintModel? = null
     ) {
         val dabs = StrokeDabs(settings.spacing)
 
@@ -430,16 +446,18 @@ class EditorViewModel internal constructor(
 
         /**
          * 그리는 동안 바뀌지 않는 미리 보기용 사본. 복제 도장·복구 브러시는 가져올 곳을 베껴 보이고(복구는 손을 뗀 뒤 둘레에 맞춘다),
-         * 스팟 복구는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
+         * 스팟 복구·AI 제거는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
-        fun live(): LiveStroke = when (retouch) {
-            null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
-            RetouchMode.SPOT_HEAL -> LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
+        fun live(): LiveStroke = when {
+            inpaint != null || retouch == RetouchMode.SPOT_HEAL ->
+                LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
+            retouch == null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
             else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
         }
 
         /** 손을 뗀 뒤 기록할 명령 */
         fun command(): CancellableCommand = when {
+            inpaint != null -> InpaintRegion(layer, InpaintArea.Painted(ArrayList(dabs.dabs), settings.radius), inpaint)
             tone != null -> ToneStroke(layer, ArrayList(dabs.dabs), settings, tone)
             effect != null -> EffectStroke(layer, ArrayList(dabs.dabs), settings, effect)
             smudge != null -> SmudgeStroke(layer, ArrayList(dabs.dabs), settings, smudge)
@@ -546,6 +564,8 @@ class EditorViewModel internal constructor(
         override fun cancel() = cancelStroke()
         override fun moveSource(x: Float, y: Float) = moveCloneSource(x, y)
         override fun toggleSourceLock() = toggleCloneSourceLock()
+        override fun beginRemove(x: Float, y: Float) = beginRemove(StrokePoint(x, y))
+        override fun prepareRemove() = inpaintModel.prepare()
     }
 
     private val _selectionOptions = MutableStateFlow(SelectionOptions())
@@ -1453,6 +1473,19 @@ class EditorViewModel internal constructor(
     }
 
     /**
+     * 고른 레이어에 AI 제거 획을 시작한다(결정 기록 'AI 제거·AI 선택'). 끄는 동안 칠한 곳을 반투명 검정으로 보이고,
+     * 손을 떼면([endStroke]) 칠한 곳(고리처럼 둘러 칠하면 안쪽까지)을 채우기 모델이 둘레에 맞게 채운다. 실행 취소 한 단계다(브러시와 같은 차례).
+     * 리터칭 설정의 크기만 쓰고, 칠한 곳은 단단한 원으로 본다(경도·불투명도 없음). 선택 영역이 있으면 그 안만 바꾼다.
+     */
+    fun beginRemove(point: StrokePoint) {
+        if (!canBeginStroke()) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        val settings = _retouch.value.copy(hardness = 1f, opacity = 1f)
+        startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, inpaint = inpaintModel), point)
+    }
+
+    /**
      * 숨긴 레이어에 그리려 했다고 알린다(포토샵과 같다). 그 알림이 떠 있는 동안([HIDDEN_LAYER_MESSAGE_GAP_MILLIS])은
      * 다시 보내지 않아, 여러 번 눌러도 같은 알림이 줄지어 쌓이지 않는다.
      */
@@ -1955,6 +1988,13 @@ class EditorViewModel internal constructor(
                 if (liveShown) showPreview(before, finishEdit = true)
                 finishEditing(EditorMessage.EditNotEnoughMemory)
                 return@launch
+            } catch (e: InpaintUnavailableException) {
+                // 이 기기에서 채우기 모델을 돌리지 못했다(AI 제거). 문서는 그대로다.
+                Log.w(TAG, "AI remove is unavailable for $command", e)
+                onFinished()
+                if (liveShown) showPreview(before, finishEdit = true)
+                finishEditing(EditorMessage.RemoveUnavailable)
+                return@launch
             }
             if (!history.commit(command, before, after)) {
                 // 바뀐 것이 없다. 슬라이더를 처음 값으로 되돌려 놓았으면 축소본이 아직 미리 보기라 다시 그린다.
@@ -2095,15 +2135,24 @@ class EditorViewModel internal constructor(
     /**
      * 편집 전에 메모리를 확인한다. 새로 생길 메모리만큼 실행 취소 기록에서 오래된 단계를 버리고,
      * 기기에 남은 메모리(버린 만큼 더해서)로도 모자라면 [NotEnoughMemoryException]을 던진다.
+     * 계산하는 동안만 잠깐 쓰는 메모리가 있는 편집(AI 제거의 작업 그림·처음 불러올 모델, [CancellableCommand.estimateWorkBytes])은
+     * 그것까지 남아 있어야 한다. 모자라면 오래된 단계를 더 버리되, 다 버려서 될 때만 버린다(안 될 일에 실행 취소 기록을 잃지 않게).
      */
     private fun makeRoom(history: EditHistory, command: EditCommand, before: Document) {
-        val needed = (command as? CancellableCommand)?.estimateNewBytes(before) ?: 0L
-        if (needed <= 0L) return
+        val cancellable = command as? CancellableCommand ?: return
+        val needed = cancellable.estimateNewBytes(before)
+        val work = cancellable.estimateWorkBytes(before)
+        if (needed <= 0L && work <= 0L) return
         val used = history.bytesInUse
-        val remaining = history.releaseOldSteps((history.maxBytes - needed).coerceAtLeast(0L))
+        var remaining = history.releaseOldSteps((history.maxBytes - needed).coerceAtLeast(0L))
         // 버린 단계의 타일은 가비지 컬렉터가 곧 돌려준다
-        val available = MemoryBudget.availableBytes(getApplication()) + (used - remaining)
-        if (needed > available) throw NotEnoughMemoryException()
+        var available = availableMemory() + (used - remaining)
+        val shortage = needed + work - available
+        if (work > 0L && shortage > 0L && remaining - history.unreleasableBytes >= shortage) {
+            remaining = history.releaseOldSteps(remaining - shortage)
+            available = availableMemory() + (used - remaining)
+        }
+        if (needed + work > available) throw NotEnoughMemoryException()
     }
 
     /** 문서를 닫고 메모리를 비운다. 홈으로 돌아갈 때 부른다. 마지막 문서는 저장한다(백그라운드에서 끝까지). */
@@ -2119,7 +2168,21 @@ class EditorViewModel internal constructor(
         // 아직 화면이 받지 않은 공유 요청은 버린다. 다음에 편집 화면이 열릴 때 뜬금없이 공유 창이 뜨지 않게 한다.
         while (_shareRequests.tryReceive().isSuccess) Unit
         release()
+        releaseAiModels()
         _state.value = EditorState.Empty
+    }
+
+    /**
+     * AI 모델(채우기)을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
+     * 다음에 AI 제거를 고르거나 지우면 다시 불러온다. 지우는 중이면 그 일이 끝난 뒤 내려놓는다(모델은 한 스레드에서만 다룬다).
+     */
+    fun releaseAiModels() {
+        inpaintModel.release()
+    }
+
+    override fun onCleared() {
+        releaseAiModels()
+        super.onCleared()
     }
 
     private suspend fun importAndShow(source: ImageDecoder.Source, sampleSize: Int, name: String) {

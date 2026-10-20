@@ -315,4 +315,16 @@ class EditHistoryTest {
         assertFalse(history.canUndo)
         assertTrue(history.canRedo)
     }
+
+    @Test
+    fun unreleasableBytes_isWhatReleasingEveryOldStepLeaves_withoutReleasing() {
+        val history = EditHistory(canvas)
+        repeat(3) { history.execute(PutTile(TileKey(0, 0), newTile())) }
+        history.undo()
+
+        // 한 가지 색, 지금 문서의 타일, 다시 실행할 타일. 재기만 하고 버리지 않는다.
+        assertEquals(3 * tileBytes, history.unreleasableBytes)
+        assertTrue(history.canUndo)
+        assertEquals(history.unreleasableBytes, history.releaseOldSteps(targetBytes = 0L))
+    }
 }

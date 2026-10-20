@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -531,6 +532,18 @@ class OptionStripTest {
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_CLONE)
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsOff()
         cell("opacity").assertIsDisplayed()
+    }
+
+    @Test
+    fun retouch_aiRemove_hasOnlyTheSize_andTellsHowToUseIt() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Retouch)
+        chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_REMOVE)
+
+        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기만 있다
+        cell("size").assertIsDisplayed()
+        for (key in listOf("hardness", "opacity", "source")) cell(key).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.retouch_hint_remove))
     }
 
     @Test

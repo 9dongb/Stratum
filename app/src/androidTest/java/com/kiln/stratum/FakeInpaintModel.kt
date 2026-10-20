@@ -5,6 +5,7 @@ import com.kiln.stratum.engine.inpaint.InpaintModel
 /**
  * 에뮬레이터 테스트용 채우기 모델(engine/src/test의 것과 같다). 남길 곳은 그 색 그대로, 채울 곳은 남길 곳의 평균색으로 채운다.
  * [offset]을 모든 출력에 더해(-1..1 눈금) 밝기가 어긋난 모델을 흉내 낸다. 불린 횟수를 세고, [failure]가 있으면 그것을 던진다.
+ * 미리 불러오기([prepare])·내려놓기([release])를 부른 횟수도 센다.
  */
 class FakeInpaintModel(
     override val size: Int = 512,
@@ -15,6 +16,22 @@ class FakeInpaintModel(
 
     var calls = 0
         private set
+
+    @Volatile
+    var prepares = 0
+        private set
+
+    @Volatile
+    var releases = 0
+        private set
+
+    override fun prepare() {
+        prepares++
+    }
+
+    override fun release() {
+        releases++
+    }
 
     override fun fill(input: FloatArray): FloatArray {
         calls++

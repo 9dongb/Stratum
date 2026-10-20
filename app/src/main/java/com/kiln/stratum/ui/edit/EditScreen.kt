@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -261,6 +262,8 @@ fun EditScreen(
             selection.choose(subTool)
         }
     }
+    // AI 제거를 쓸 수 없다는 알림의 버튼: 리터칭을 스팟 복구 브러시로 바꾼다
+    val useSpotHeal = { chooseSubTool(SubTool.RETOUCH_SPOT) }
     // 글자를 넣을 자리(문서 좌표 x, y)와 그때의 문서 크기. 글자 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var textAt by rememberSaveable { mutableStateOf<List<Float>?>(null) }
     // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다(누른 자리가 맞지 않는다)
@@ -411,9 +414,14 @@ fun EditScreen(
         val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
             SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
         }
-        // 리터칭: 고른 하위 도구의 획 종류와, 캔버스를 누르면 가져올 곳을 정하는지(복제·복구는 가져올 곳이 없으면 늘 정한다)
+        // 리터칭: 고른 하위 도구의 획 종류와, 캔버스를 누르면 가져올 곳을 정하는지(복제·복구는 가져올 곳이 없으면 늘 정한다).
+        // AI 제거는 가져올 곳이 없는 획이라 스팟 복구처럼 다루고, 손가락은 AI 제거 획을 보낸다(retouchRemoving).
+        val retouchRemoving = selection.modeOf(EditTool.Retouch) == SubTool.RETOUCH_REMOVE
         val retouchMode = selection.modeOf(EditTool.Retouch)?.retouchMode ?: RetouchMode.SPOT_HEAL
         val retouchPicks = retouchMode != RetouchMode.SPOT_HEAL && (retouchPicking || cloneSource == null)
+        // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
+        val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
+        LaunchedEffect(removeChosen) { if (removeChosen) retouchActions.prepareRemove() }
         val retouchControls = RetouchControls(
             settings = retouch,
             onChange = onRetouch,
@@ -429,7 +437,8 @@ fun EditScreen(
         val sizedBrush = when (activeTool) {
             EditTool.Brush -> brush
             EditTool.Eraser -> eraser
-            EditTool.Retouch -> retouch
+            // AI 제거는 경도가 없다(칠한 곳을 단단한 원으로 본다)
+            EditTool.Retouch -> if (retouchRemoving) retouch.copy(hardness = 1f) else retouch
             EditTool.Tone -> toneOptions.brush
             EditTool.Blur -> blurOptions.brush
             EditTool.Mosaic -> mosaicOptions.brush
@@ -583,6 +592,7 @@ fun EditScreen(
                     actions = retouchActions,
                     onPicked = { retouchPicking = false },
                     modifier = Modifier.fillMaxSize(),
+                    removing = retouchRemoving,
                     // 표시를 꾹 눌러 고정을 켜고 끄면 짧게 알린다
                     onLockChanged = { locked -> gestureToast.show(if (locked) sourceLockedText else sourceUnlockedText) }
                 )
@@ -740,7 +750,12 @@ fun EditScreen(
                         when (activeTool) {
                             EditTool.Brush -> onBrush(changed)
                             EditTool.Eraser -> onEraser(changed)
-                            EditTool.Retouch -> onRetouch(changed)
+                            EditTool.Retouch -> when {
+                                !retouchRemoving -> onRetouch(changed)
+                                // AI 제거는 경도가 없어 좌우로 밀기는 하지 않는다(크기만)
+                                axis == SwipeAxis.VERTICAL -> onRetouch(retouch.copy(size = changed.size))
+                                else -> return
+                            }
                             EditTool.Tone -> onToneOptions(toneOptions.copy(brush = changed))
                             EditTool.Blur -> onBlurOptions(blurOptions.copy(brush = changed))
                             EditTool.Mosaic -> onMosaicOptions(mosaicOptions.copy(brush = changed))
@@ -766,7 +781,8 @@ fun EditScreen(
                         EditCanvas(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay, false,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
-                            flip = viewFlip
+                            flip = viewFlip,
+                            onSpotHeal = useSpotHeal
                         )
                         if (crop != null) {
                             Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
@@ -794,6 +810,7 @@ fun EditScreen(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
                             overlayBottom = coverSheetInset,
                             flip = viewFlip,
+                            onSpotHeal = useSpotHeal,
                             floating = {
                                 if (toolOptions != null) {
                                     ToolOptionsSheet(
@@ -821,7 +838,8 @@ fun EditScreen(
                     EditCanvas(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
-                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, flip = viewFlip, floating = floatingUi
+                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, flip = viewFlip,
+                        onSpotHeal = useSpotHeal, floating = floatingUi
                     )
                 }
             }
@@ -1016,6 +1034,7 @@ private fun EditTopBar(
  * 띠를 덮지 않으면서 캔버스 정중앙에 둔다(2026-10-20 사용자 요청). 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
  * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
  * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 배율 표시·알림·띠·패널은 뒤집지 않는다.
+ * AI 제거를 쓸 수 없다는 알림의 '스팟 복구' 버튼을 누르면 [onSpotHeal]을 부른다.
  */
 @Composable
 private fun EditCanvas(
@@ -1034,9 +1053,11 @@ private fun EditCanvas(
     overlayStart: Dp = 0.dp,
     overlayBottom: Dp = 0.dp,
     flip: ViewFlip = ViewFlip.None,
+    onSpotHeal: () -> Unit = {},
     floating: @Composable BoxScope.(WindowInsets) -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val currentOnSpotHeal by rememberUpdatedState(onSpotHeal)
     val context = LocalContext.current
     val notEnoughMemory = stringResource(R.string.edit_not_enough_memory)
     val exportSaved = stringResource(R.string.edit_export_saved)
@@ -1045,6 +1066,8 @@ private fun EditCanvas(
     val view = stringResource(R.string.action_view)
     val autosaveFailed = stringResource(R.string.edit_autosave_failed)
     val hiddenLayer = stringResource(R.string.edit_hidden_layer)
+    val removeUnavailable = stringResource(R.string.edit_remove_unavailable)
+    val spotHeal = stringResource(R.string.subtool_spot_heal_short)
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
     // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
     val busy = (state as? EditorState.Ready)?.busy == true
@@ -1076,6 +1099,11 @@ private fun EditCanvas(
                 EditorMessage.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
                 EditorMessage.AutosaveFailed -> snackbarHostState.showSnackbar(autosaveFailed)
                 EditorMessage.HiddenLayer -> snackbarHostState.showSnackbar(hiddenLayer)
+                EditorMessage.RemoveUnavailable -> {
+                    // 지우지 못한 곳은 스팟 복구 브러시로 고칠 수 있게 바로 바꾸는 버튼을 둔다
+                    val result = snackbarHostState.showSnackbar(removeUnavailable, actionLabel = spotHeal, duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) currentOnSpotHeal()
+                }
             }
         }
     }

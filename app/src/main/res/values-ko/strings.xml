@@ -309,6 +309,9 @@
     <string name="retouch_unlock">가져올 곳 고정 풀기</string>
     <string name="retouch_source_locked">가져올 곳을 고정했어요</string>
     <string name="retouch_source_unlocked">가져올 곳 고정을 풀었어요</string>
+    <string name="subtool_ai_remove">AI 제거</string>
+    <string name="retouch_hint_remove">지울 것을 덮어 칠하고 손을 떼면 AI가 둘레에 맞게 채워요. 그림자까지 조금 넉넉하게 칠하세요.</string>
+    <string name="edit_remove_unavailable">이 기기에서는 AI 제거를 쓸 수 없어요. 스팟 복구 브러시를 써 보세요.</string>
     <string name="tool_blur">흐림·선명·스머지</string>
     <string name="tool_blur_short">흐림</string>
     <string name="subtool_blur">흐림</string>

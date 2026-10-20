@@ -82,6 +82,12 @@ interface RetouchActions {
     /** 가져올 곳 표시를 꾹 눌러 고정을 켜고 끈다 */
     fun toggleSourceLock() {}
 
+    /** 한 손가락이 닿아 AI 제거 획을 시작한다. 손을 떼면([end]) 칠한 곳을 AI가 채운다. */
+    fun beginRemove(x: Float, y: Float) {}
+
+    /** AI 제거를 골랐다. 처음 지울 때 오래 기다리지 않게 채우기 모델을 미리 불러 둔다. */
+    fun prepareRemove() {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : RetouchActions {
         override fun setSource(x: Float, y: Float) = Unit
@@ -120,8 +126,9 @@ class RetouchControls(
 )
 
 /**
- * 리터칭 옵션: 하위 도구(스팟 복구·복구 브러시·복제 도장), (복구 브러시·복제 도장) 가져올 곳 정하기 버튼, 안내 한 줄,
- * 크기, 단단함, (복제 도장만) 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 리터칭 옵션: 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거), (복구 브러시·복제 도장) 가져올 곳 정하기 버튼, 안내 한 줄,
+ * 크기, (AI 제거가 아니면) 단단함, (복제 도장만) 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
  */
 @Composable
 fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -130,7 +137,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.RETOUCH_OPTIONS), gap = 8.dp, fillHeight = false) {
         SubToolSegments(EditTool.Retouch.subTools, mode, onChoose)
         // 할 일(가져올 곳 정하기·안내)을 위쪽에 둔다. 옵션 자리가 좁으면 아래 슬라이더는 밀어서 본다.
-        if (mode != SubTool.RETOUCH_SPOT) {
+        if (mode == SubTool.RETOUCH_HEAL || mode == SubTool.RETOUCH_CLONE) {
             StratumFilterChip(
                 selected = controls.picking,
                 onClick = controls.onPick,
@@ -143,6 +150,7 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
             text = stringResource(
                 when {
                     mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
+                    mode == SubTool.RETOUCH_REMOVE -> R.string.retouch_hint_remove
                     controls.picking -> R.string.retouch_hint_pick
                     mode == SubTool.RETOUCH_HEAL -> R.string.retouch_hint_heal
                     else -> R.string.retouch_hint_clone
@@ -153,7 +161,9 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
             style = MaterialTheme.typography.bodySmall
         )
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)
-        HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview)
+        if (mode != SubTool.RETOUCH_REMOVE) {
+            HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview)
+        }
         // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
         if (mode == SubTool.RETOUCH_CLONE) {
             OptionSlider(
@@ -174,9 +184,10 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
  * - 가져올 곳 표시를 누르면(복구 브러시·복제 도장, 결정 기록 '리터칭'): 끌면 표시가 따라오고 손을 떼면 그 자리가 새 가져올 곳이다.
  *   움직이지 않고 길게 누르면 고정을 켜고 끈다([onLockChanged]에 새 상태를 알린다). 표시를 누른 터치는 칠하지 않는다.
  * - 아니면 한 손가락으로 끌어 [mode] 획을 그린다(브러시와 같다). 두 손가락 조작이 시작되거나 두 번째 손가락이 닿으면 끄던 획을 버린다.
+ * - [removing](AI 제거)이면 [mode] 대신 AI 제거 획을 그린다([RetouchActions.beginRemove]). 가져올 곳은 쓰지 않는다.
  *
  * 가져올 곳은 표시(브러시 크기의 원과 십자, 고정이면 굵은 원과 가운데 점)로 늘 보인다. 정하는 중에는 손가락 자리에,
- * 칠하는 동안에는 가져오는 자리(손가락 - 간격)에, 쉬는 동안에는 [source] 자리에 있다. 스팟 복구는 가져올 곳을 보이지 않는다.
+ * 칠하는 동안에는 가져오는 자리(손가락 - 간격)에, 쉬는 동안에는 [source] 자리에 있다. 스팟 복구·AI 제거는 가져올 곳을 보이지 않는다.
  * 칠하는 동안에는 손가락 자리에 브러시 커서(크기 원)도 보인다(브러시와 같다).
  */
 @Composable
@@ -190,10 +201,15 @@ fun RetouchOverlay(
     actions: RetouchActions,
     onPicked: () -> Unit,
     modifier: Modifier = Modifier,
+    removing: Boolean = false,
     onLockChanged: (locked: Boolean) -> Unit = {}
 ) {
+    // 가져올 곳을 쓰는 획인지(복구 브러시·복제 도장)
+    val usesSource = !removing && mode != RetouchMode.SPOT_HEAL
     val currentActions by rememberUpdatedState(actions)
     val currentMode by rememberUpdatedState(mode)
+    val currentRemoving by rememberUpdatedState(removing)
+    val currentUsesSource by rememberUpdatedState(usesSource)
     val currentPicking by rememberUpdatedState(picking)
     val currentSource by rememberUpdatedState(source)
     val currentRadius by rememberUpdatedState(radius)
@@ -230,9 +246,9 @@ fun RetouchOverlay(
                     }
                     down.consume()
                     movedMarker = null
-                    val picks = currentPicking && currentMode != RetouchMode.SPOT_HEAL
+                    val picks = currentPicking && currentUsesSource
                     // 가져올 곳 표시를 눌렀으면 칠하지 않고 표시를 옮기거나 고정한다
-                    val marker = currentSource?.takeIf { !picks && currentMode != RetouchMode.SPOT_HEAL }
+                    val marker = currentSource?.takeIf { !picks && currentUsesSource }
                     if (marker != null) {
                         val transform = view().transform(area, document)
                         val center = Offset(transform.toScreenX(marker.x.toDouble()).toFloat(), transform.toScreenY(marker.y.toDouble()).toFloat())
@@ -268,11 +284,15 @@ fun RetouchOverlay(
                     finger = down.position
                     if (!picks) {
                         toDocument(down.position) { x, y ->
-                            // ViewModel과 같은 간격: 고정이면 획마다 표시 자리에서, 아니면 정한 간격(처음이면 이 획이 정함)
-                            strokeOffset = currentSource?.takeIf { currentMode != RetouchMode.SPOT_HEAL }?.let { s ->
-                                s.offset?.takeUnless { s.locked } ?: SourceOffset((x - s.x).roundToInt(), (y - s.y).roundToInt())
+                            if (currentRemoving) {
+                                currentActions.beginRemove(x, y)
+                            } else {
+                                // ViewModel과 같은 간격: 고정이면 획마다 표시 자리에서, 아니면 정한 간격(처음이면 이 획이 정함)
+                                strokeOffset = currentSource?.takeIf { currentUsesSource }?.let { s ->
+                                    s.offset?.takeUnless { s.locked } ?: SourceOffset((x - s.x).roundToInt(), (y - s.y).roundToInt())
+                                }
+                                currentActions.begin(x, y, currentMode)
                             }
-                            currentActions.begin(x, y, currentMode)
                         }
                     }
                     // 두 손가락이면 버리고(false), 손을 떼면 끝낸다(true). 그 전에 이 자리가 사라지면(도구를 바꿈, 접기·펼치기)
@@ -319,7 +339,7 @@ fun RetouchOverlay(
         // 칠하는 손가락 자리의 브러시 커서(가져올 곳을 정하는 손가락은 아래 표시만 보인다)
         val touching = finger
         if (touching != null && !fingerPicks) BrushCursor(touching, radius * 2f, view, document)
-        if (mode != RetouchMode.SPOT_HEAL) {
+        if (usesSource) {
             val offset = strokeOffset
             val moved = movedMarker
             Canvas(Modifier.matchParentSize()) {

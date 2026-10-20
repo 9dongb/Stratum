@@ -1,5 +1,6 @@
 package com.kiln.stratum
 
+import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -75,5 +76,11 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         // 앱이 화면에서 사라지면(홈 버튼, 다른 앱으로) 기다리지 않고 지금 작업을 저장한다
         editor.flush()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // 앱 화면이 모두 사라지면 AI 모델을 내려놓는다(수백 MB). 접기·펼치기(화면을 다시 만듦)에는 오지 않는다.
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) editor.releaseAiModels()
     }
 }

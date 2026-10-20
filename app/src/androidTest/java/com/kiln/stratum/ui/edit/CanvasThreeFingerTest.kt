@@ -415,6 +415,23 @@ class CanvasThreeFingerTest {
     }
 
     @Test
+    fun editScreen_aiRemove_swipesChangeOnlyTheSize() {
+        showEditScreen(tool = EditTool.Retouch)
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS)
+
+        // AI 제거는 경도가 없어 좌우로 밀어도 리터칭의 경도(다른 하위 도구가 함께 씀)는 그대로다
+        canvas.performTouchInput { threeFingerSwipe(Offset(200f, 0f), at = Offset(centerX, height * 0.2f)) }
+        composeRule.runOnIdle { assertEquals(BrushSettings(size = 60f, hardness = 0.5f), retouch) }
+
+        canvas.performTouchInput { threeFingerSwipe(Offset(0f, -200f), at = Offset(centerX, height * 0.2f)) }
+        composeRule.runOnIdle {
+            assertTrue("${retouch.size}", retouch.size > 60f)
+            assertEquals(0.5f, retouch.hardness, 0f)
+        }
+    }
+
+    @Test
     fun editScreen_textTool_swipesChangeNothing() {
         showEditScreen(tool = EditTool.Text)
         val before = textStyle

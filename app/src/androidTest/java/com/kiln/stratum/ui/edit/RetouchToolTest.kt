@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
@@ -21,9 +22,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
@@ -48,8 +52,11 @@ import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -102,6 +109,15 @@ class RetouchToolTest {
         override fun toggleSourceLock() {
             calls += "lock"
         }
+
+        override fun beginRemove(x: Float, y: Float) {
+            calls += "remove"
+            points += x to y
+        }
+
+        override fun prepareRemove() {
+            calls += "prepare"
+        }
     }
 
     /** 표시를 꾹 눌러 알린 새 고정 상태 */
@@ -128,7 +144,7 @@ class RetouchToolTest {
         }
     }
 
-    private fun showOverlay(mode: RetouchMode, picking: Boolean, source: CloneSource? = null, onPicked: () -> Unit = {}) {
+    private fun showOverlay(mode: RetouchMode, picking: Boolean, source: CloneSource? = null, onPicked: () -> Unit = {}, removing: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(400.dp, 400.dp))) {
                 StratumTheme {
@@ -143,6 +159,7 @@ class RetouchToolTest {
                             actions = actions,
                             onPicked = onPicked,
                             modifier = Modifier.fillMaxSize(),
+                            removing = removing,
                             onLockChanged = { locks += it }
                         )
                     }
@@ -197,6 +214,29 @@ class RetouchToolTest {
         composeRule.runOnIdle {
             assertEquals(0.4f, settings.opacity, 0.001f)
             assertEquals(1, picks)
+        }
+    }
+
+    @Test
+    fun aiRemove_hasOnlyTheSize_andItsHint() {
+        showOptions(SubTool.RETOUCH_REMOVE)
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
+        assertTrue(!exists(EditScreenTags.RETOUCH_HARDNESS) && !exists(EditScreenTags.RETOUCH_OPACITY) && !exists(EditScreenTags.RETOUCH_SOURCE))
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HINT).assertTextEquals(hint(R.string.retouch_hint_remove))
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).assertIsSelected()
+    }
+
+    @Test
+    fun theFourSubTools_fitOnOneLine_atTheCoverWidth() {
+        showOptions(SubTool.RETOUCH_REMOVE)
+
+        // 하위 도구 넷의 이름이 커버 폭(411dp)에서 잘리지 않는다
+        for (subTool in EditTool.Retouch.subTools) {
+            val results = mutableListOf<TextLayoutResult>()
+            composeRule.onNodeWithText(composeRule.activity.getString(subTool.shortLabel), useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertFalse("$subTool overflows", results.single().hasVisualOverflow)
         }
     }
 
@@ -350,6 +390,25 @@ class RetouchToolTest {
     }
 
     @Test
+    fun aiRemove_paintsARemoveStroke_evenOverTheSourceMarker() {
+        // AI 제거는 가져올 곳을 쓰지 않는다: 가져올 곳을 정하는 중이어도, 표시 위를 눌러도 칠한다
+        showOverlay(RetouchMode.HEAL, picking = true, source = CloneSource(500f, 500f), removing = true)
+        assertTrue(!exists(EditScreenTags.RETOUCH_SOURCE_MARKER))
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput {
+            down(center)
+            moveBy(Offset(30f, 0f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("remove", "extend", "end"), actions.calls)
+            val (x, y) = actions.points.first()
+            assertTrue("start $x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
+        }
+    }
+
+    @Test
     fun aSecondFinger_dropsTheStroke() {
         showOverlay(RetouchMode.SPOT_HEAL, picking = true)
 
@@ -392,6 +451,69 @@ class RetouchToolTest {
             val width = node.touchBoundsInWindow().width / density.density
             assertTrue("$tool is $width dp", width >= 48f)
         }
+    }
+
+    @Test
+    fun editScreen_choosingAiRemove_preparesTheModel_andPaintingRemoves() {
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {}, retouchActions = actions)
+                }
+            }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.runOnIdle { assertTrue(actions.calls.isEmpty()) }
+
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+
+        // 고르면 모델을 미리 불러 두고, 옵션은 크기뿐이다
+        composeRule.runOnIdle { assertEquals(listOf("prepare"), actions.calls) }
+        assertTrue(!exists(EditScreenTags.RETOUCH_HARDNESS))
+        // 캔버스 위쪽(옵션 칸이 덮지 않은 곳)을 칠하면 AI 제거 획이다
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput {
+            down(Offset(centerX, height * 0.2f))
+            moveBy(Offset(30f, 0f))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(listOf("prepare", "remove", "extend", "end"), actions.calls) }
+    }
+
+    @Test
+    fun editScreen_whenAiRemoveCannotRun_offersTheSpotHealingBrush() {
+        val messages = Channel<EditorMessage>(Channel.UNLIMITED)
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(
+                        state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {},
+                        messages = messages.receiveAsFlow(), retouchActions = actions
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+
+        composeRule.runOnIdle { messages.trySend(EditorMessage.RemoveUnavailable) }
+
+        // 알림 막대의 [스팟 복구]를 누르면 리터칭이 스팟 복구 브러시로 바뀐다
+        composeRule.onNodeWithText(hint(R.string.edit_remove_unavailable)).assertIsDisplayed()
+        composeRule.onNode(hasText(hint(R.string.subtool_spot_heal_short)) and hasAnyAncestor(hasTestTag(EditScreenTags.MESSAGE_BAR))).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertExists()
     }
 
     @Test

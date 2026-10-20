@@ -190,14 +190,14 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
 }
 
 /**
- * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, 경도, (복제만) 불투명도.
+ * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
  * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
  */
 @Composable
 internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripItem> {
     val settings = controls.settings
     return buildList {
-        if (mode != SubTool.RETOUCH_SPOT) {
+        if (mode == SubTool.RETOUCH_HEAL || mode == SubTool.RETOUCH_CLONE) {
             add(
                 IconCell(
                     key = "source",
@@ -210,7 +210,10 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
         add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
-        add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
+        // AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 경도가 없다
+        if (mode != SubTool.RETOUCH_REMOVE) {
+            add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
+        }
         // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
         if (mode == SubTool.RETOUCH_CLONE) {
             add(opacityCell(settings.opacity, EditScreenTags.RETOUCH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
@@ -468,6 +471,7 @@ internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
         }
         EditTool.Retouch -> when {
             mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
+            mode == SubTool.RETOUCH_REMOVE -> R.string.retouch_hint_remove
             retouchPicking -> R.string.retouch_hint_pick
             mode == SubTool.RETOUCH_HEAL -> R.string.retouch_hint_heal
             else -> R.string.retouch_hint_clone

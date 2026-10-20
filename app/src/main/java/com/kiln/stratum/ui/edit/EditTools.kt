@@ -53,6 +53,9 @@ enum class SubTool(
     /** 복제 도장: 정한 곳을 그대로 베낀다 */
     RETOUCH_CLONE(R.string.subtool_clone, R.drawable.ic_approval, R.string.subtool_clone_short),
 
+    /** AI 제거: 칠한 곳을 AI(채우기 모델)가 둘레에 맞게 새로 그려 채운다(결정 기록 'AI 제거·AI 선택') */
+    RETOUCH_REMOVE(R.string.subtool_ai_remove, R.drawable.ic_auto_awesome),
+
     /** 닷지: 칠한 곳을 밝게 한다 */
     TONE_DODGE(R.string.subtool_dodge, R.drawable.ic_light_mode),
 
@@ -71,7 +74,8 @@ enum class SubTool(
 
 /**
  * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(이동·선택·리터칭·명암·흐림·모자이크·픽셀 유동화)가 켜져 있다.
- * 아직 만들지 않은 도구(제거 등)는 넣지 않는다(숨김).
+ * 개체 제거(3단계, AI)는 따로 '제거' 도구를 두지 않고 리터칭의 하위 도구 'AI 제거'로 넣었다(2026-10-20 사용자 결정).
+ * 아직 만들지 않은 도구는 넣지 않는다(숨김).
  *
  * @property label 화면 읽기 기능이 읽는 이름
  * @property shortLabel 커버 화면 탭 줄에 보이는 짧은 이름. 6칸이 좁아 따로 둔다.
@@ -111,11 +115,11 @@ enum class EditTool(
     /** 지우개. 브러시와 같은 모양으로 고른 레이어를 지운다(투명하게). */
     Eraser(R.drawable.ic_ink_eraser, R.string.tool_eraser, available = true),
 
-    /** 리터칭(반창고). 하위 도구는 스팟 복구 브러시 / 복구 브러시 / 복제 도장이다. 고른 레이어에 한 손가락으로 칠한다. */
+    /** 리터칭(반창고). 하위 도구는 스팟 복구 브러시 / 복구 브러시 / 복제 도장 / AI 제거다. 고른 레이어에 한 손가락으로 칠한다. */
     Retouch(
         R.drawable.ic_healing,
         R.string.tool_retouch,
-        subTools = listOf(SubTool.RETOUCH_SPOT, SubTool.RETOUCH_HEAL, SubTool.RETOUCH_CLONE),
+        subTools = listOf(SubTool.RETOUCH_SPOT, SubTool.RETOUCH_HEAL, SubTool.RETOUCH_CLONE, SubTool.RETOUCH_REMOVE),
         available = true
     ),
 
