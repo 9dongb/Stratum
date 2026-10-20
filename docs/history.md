@@ -14,6 +14,41 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-20 · AI 제거 1단계: LiteRT·MI-GAN 넣기(폴드8 측정은 남음)
+
+- 요청(사용자, 그대로): "AI 제거 1단계(LiteRT·MI-GAN 실측)를 시작하세요."
+  - 모델 내려받기를 물었을 때 "내려받기 허락 (추천)"을, 폴드8 연결을 물었을 때 "나중에 재기"를 골랐다.
+- 의도: 말하지 않음
+- 커밋:
+  - "LiteRT와 MI-GAN 모델을 넣고 에뮬레이터에서 실행을 확인함(화면 변화 없음, 폴드8 측정은 남음)"
+- 바꾼 것(화면 변화 없음)
+  - 빌드: LiteRT 2.2.0(`com.google.ai.edge.litert:litert`)을 엔진에 넣었다.
+    - 딸린 Play·gms·guava·kotlinx-coroutines-guava·androidx lifecycle은 뺐다.
+    - `android.uniquePackageNames=false`를 넣었고, 앱이 `.tflite`를 압축하지 않게 했다.
+    - 앱 매니페스트에서 LiteRT의 `FOREGROUND_SERVICE` 권한 둘을 지웠고, LiteRT keep 규칙을 더했다.
+  - 모델: `engine/src/main/assets/models/migan_fp16.tflite`(Hugging Face `litert-community/MI-GAN-512-Places2-LiteRT`, 커밋 179a35d, 16,312,640바이트)와 `LICENSE-MI-GAN.txt`(MIT)를 넣었다.
+    - 사용자 허락을 받고 내려받았고, SHA-256 `ef53f8dc…2463c25f`가 Hugging Face가 밝힌 값과 같다.
+  - 엔진: `InpaintModel`(순수 Kotlin 인터페이스, 입출력 형식), `InpaintUnavailableException`, `AiThread`(AI 계산 스레드 `stratum-ai`), `LiteRtInpaintModel`을 더했다.
+    - `LiteRtInpaintModel`은 처음 쓸 때 GPU → CPU 순서로 불러, 시험 그림으로 값을 확인한다. 둘 다 안 되면 쓸 수 없다고 기억한다. GPU 프로그램 캐시를 쓴다.
+  - 설정 > 앱 정보: 오픈소스 목록에 LiteRT를 더하고, MI-GAN의 MIT 고지 전문을 넣었다(두 언어).
+  - 테스트: `PermissionGuardTest`(앱 권한이 androidx 권한 하나뿐인지), `InpaintModelProbeTest`(그러데이션의 구멍을 GPU·CPU로 채우고 시간·메모리를 남김, 그 장치에서 못 돌리면 건너뜀), `SettingsScreenTest`에 MIT 고지 확인을 더했다.
+- 정한 것
+  - LiteRT 판: 저장소 밖 임시 복사본에서 빌드해 보니 2.3.0은 Kotlin 메타데이터 2.4.0 오류로 안 되어 2.2.0으로 했다(계획대로, Kotlin은 그대로).
+  - `android.uniquePackageNames=false`(Claude 판단): 2.2.0의 두 부품 이름이 같아서다. 둘 다 리소스가 없다.
+  - 딸린 부품 빼기(추천 수용): 빼도 모델이 돌아 뺀 채로 두었다. WorkManager와 권한 셋(WAKE_LOCK·ACCESS_NETWORK_STATE·RECEIVE_BOOT_COMPLETED)도 함께 빠졌다.
+  - 처음 불러올 때 메모리 어림: 400MB(에뮬레이터 CPU 실측 +386MB). 폴드8 GPU를 재면 고친다.
+- 확인한 것
+  - `./gradlew assembleDebug test`와 `assembleRelease`(처음 만든 릴리스, R8 경고 없음)가 통과했다.
+  - 합친 매니페스트(디버그·릴리스)의 권한은 전처럼 androidx 권한 하나다(INTERNET 없음).
+  - APK: 모델은 압축하지 않고(Stored) 들어갔다. 16KB 정렬은 "Verification successful"이다.
+    - 디버그 APK는 33MB에서 77MB, 릴리스 APK(서명 전, CPU 종류 4가지)는 48.8MB다.
+    - 늘어난 것: 모델 16.3MB, LiteRT 네이티브 라이브러리 arm64 9.1MB·armeabi-v7a 6.1MB·x86_64 11.9MB.
+  - 에뮬레이터(Pixel_Fold, arm64)
+    - `PermissionGuardTest` 1개, `SettingsScreenTest` 8개가 통과했다.
+    - `InpaintModelProbeTest` CPU: 불러오기 0.2초, 첫 실행 4.9초, 가운데값 1.35초(20번), 앱 메모리 +386MB, 구멍 오차 0.009(그러데이션을 잘 따라감).
+    - GPU는 OpenCL이 없어 OpenGL로 바꾸지만 입력 버퍼를 만들다 실패해 건너뛰었다(에뮬레이터 한계).
+  - 폴드8 측정은 하지 않았다(사용자가 "나중에 재기"). 끝 기준(폴드8 GPU 수십 ms 안팎)은 아직 확인하지 않았다.
+
 ## 2026-10-20 · AI 제거·AI 선택 조사와 계획(0단계 기록)
 
 - 요청(사용자, 그대로): "AI 개체(객체) 제거 기능을 만들고 싶습니다. 보통 온디바이스 모델을 사용하나요? 실무(어도비,삼성 등)에서는 어떤 방식을 통해 어떤 모델들로 구현하는 지 조사해서 구현 계획 세워주세요"

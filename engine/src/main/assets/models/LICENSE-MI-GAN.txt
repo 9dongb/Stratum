@@ -1,0 +1,26 @@
+MI-GAN (Picsart AI Research), 512 px Places2 model, converted to LiteRT (fp16).
+Original code and weights: https://github.com/Picsart-AI-Research/MI-GAN (weights: LICENSE-WEIGHTS, MIT)
+LiteRT conversion: https://huggingface.co/litert-community/MI-GAN-512-Places2-LiteRT (MIT), commit 179a35d8e8a518f6253f9c42fc9b412c6438cf7c
+File: migan_fp16.tflite, 16,312,640 bytes, SHA-256 ef53f8dca69e5ce29629441128322c4d9a0a527b2a043703e0ab497f2463c25f
+
+MIT License
+
+Copyright (c) 2024 Picsart AI Research (PAIR)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

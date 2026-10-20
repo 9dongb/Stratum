@@ -34,6 +34,10 @@ android {
     buildFeatures {
         compose = true
     }
+    // AI 모델 파일은 압축하지 않고 넣는다(LiteRT가 APK 안의 파일을 바로 메모리에 올린다)
+    androidResources {
+        noCompress += "tflite"
+    }
 }
 
 dependencies {

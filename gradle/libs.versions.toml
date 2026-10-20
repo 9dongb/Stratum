@@ -10,6 +10,8 @@ kotlin = "2.2.10"
 composeBom = "2026.02.01"
 # Jetpack WindowManager(폴더블의 접히는 부분 정보). Compose UI가 이미 쓰는 버전과 같다.
 window = "1.5.0"
+# LiteRT(AI 모델 실행, 결정 기록 'AI 제거·AI 선택'). 2.3.0은 Kotlin 2.4로 만들어져 지금 Kotlin(2.2.10)이 읽지 못한다(빌드로 확인).
+litert = "2.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -27,6 +29,7 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-window = { group = "androidx.window", name = "window", version.ref = "window" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

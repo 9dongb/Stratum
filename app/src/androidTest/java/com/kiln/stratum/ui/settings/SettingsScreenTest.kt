@@ -143,6 +143,8 @@ class SettingsScreenTest {
         composeRule.onNodeWithText("1.2.3").assertIsDisplayed()
         composeRule.onNodeWithTag(SettingsTags.LICENSES).performClick()
         composeRule.onNodeWithText(string(R.string.settings_licenses_text), substring = true).assertIsDisplayed()
+        // 앱에 넣은 MI-GAN 모델의 MIT 고지(결정 기록 'AI 제거·AI 선택')
+        composeRule.onNodeWithText(string(R.string.settings_licenses_mit_text), substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

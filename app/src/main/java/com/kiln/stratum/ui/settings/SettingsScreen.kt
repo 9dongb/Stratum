@@ -497,7 +497,11 @@ private fun AboutItems(versionName: String) {
                 tint = StratumTheme.colors.textSecondary
             )
         }
-        if (showLicenses) Description(R.string.settings_licenses_text)
+        if (showLicenses) {
+            Description(R.string.settings_licenses_text)
+            // 앱에 넣은 AI 모델(MI-GAN)은 MIT라 고지 전문을 둔다(결정 기록 'AI 제거·AI 선택')
+            Description(R.string.settings_licenses_mit_text)
+        }
     }
 }
 

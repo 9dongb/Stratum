@@ -14,7 +14,8 @@
 - 에뮬레이터는 PC마다 따로 만든다. 없으면 Android Studio의 Device Manager에서 만든다.
   - `+` → 기기 선택 → 시스템 이미지는 API 37(Google Play) → 이름 입력
   - 이름의 띄어쓰기는 `_`로 바뀐다. 표의 이름과 같아지게 `Medium Phone API 37.0`, `Pixel Fold`로 입력한다.
-  - 16KB 페이지 이미지여도 된다. 앱의 네이티브 라이브러리가 16KB에 맞게 정렬돼 있다(2026-10-17 확인). 네이티브 라이브러리가 든 의존성을 새로 넣으면 다시 확인한다.
+  - 16KB 페이지 이미지여도 된다. 앱의 네이티브 라이브러리가 16KB에 맞게 정렬돼 있다(2026-10-17 확인, LiteRT를 넣은 뒤 2026-10-20에 다시 확인: `zipalign -c -P 16 -v 4 <apk>`가 "Verification successful"). 네이티브 라이브러리가 든 의존성을 새로 넣으면 다시 확인한다.
+  - AI 모델(LiteRT)은 이 에뮬레이터에서 GPU로는 돌지 않고 CPU로만 돈다(OpenCL 없음). 모델 시험(`InpaintModelProbeTest`)의 GPU 쪽은 건너뛴다.
 - 한 번에 하나만 켠다. 아래 `adb` 명령도 에뮬레이터가 하나만 켜져 있다고 보고 쓴 것이다.
 - 켜기: Device Manager의 실행 버튼, 또는 `emulator -avd <이름>`
 - 느리거나 켜지지 않으면 가속을 확인한다: `emulator -accel-check`

@@ -36,8 +36,12 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 8 선택 도구 'AI 선택'
     - 9 AI 제거에서 톡 눌러 고르기
     - 10 품질
-  - 한 일: 조사·계획·0단계(기록)
-  - 남은 일: 1~10. 구현은 사용자가 "시작"이라고 할 때 1단계부터 한다.
+  - 한 일
+    - 조사·계획·0단계(기록)
+    - 1단계(사용자 "AI 제거 1단계(LiteRT·MI-GAN 실측)를 시작하세요"): LiteRT 2.2.0과 MI-GAN 모델(허락받고 내려받아 지문 대조)을 넣고, `LiteRtInpaintModel`·권한 지킴·모델 시험 테스트를 더했다. 에뮬레이터에서는 CPU로 돈다. 화면 변화는 없다.
+  - 남은 일
+    - 1단계의 폴드8 측정: 사용자가 "나중에 재기"를 골랐다. 폰을 무선 디버깅으로 연결하면 `InpaintModelProbeTest`를 폴드8에서 돌려 GPU·CPU 시간과 메모리를 잰다. 끝 기준은 폴드8 GPU에서 수십 ms 안팎이다.
+    - 2~10단계
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -108,7 +112,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 이동 도구(사용자 피드백 7차) | 완료 | 도구 막대 맨 위·커버 탭 줄 맨 앞(Material Icons open_with). 고른 레이어를 한 손가락으로 끌면 축소본만 옮겨 보이고, 놓으면 실행 취소 한 단계(픽셀 값 그대로, 캔버스 밖은 잘림, 256px 배수면 타일 그대로, 게인맵도 옮김). 숨긴 레이어는 막음. 옵션 없음(커버 안내 한 줄, 메인은 고를 때 알림) |
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌. 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(세로 접히는 선을 피하지 않음). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
-| AI 제거·AI 선택(사용자 요청) | 계획 | 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
+| AI 제거·AI 선택(사용자 요청) | 1단계(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(화면 변화 없음, 에뮬레이터 CPU에서 돎). 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
 
 ## 결정 기록
 
@@ -156,9 +160,14 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 판: 사용자가 "확실히 미리 되는지 알 방법 없나요?"라고 물었다.
       - 답: 2.3.0은 Kotlin 2.4로 만들어져 지금 Kotlin 2.2.10에서 빌드되지 않을 가능성이 높고, 확실히 아는 방법은 빌드뿐이다.
       - 그래서 1단계 첫 작업으로 저장소 밖 임시 복사본에서 2.3.0과 2.2.0을 빌드해 고른다. 되면 2.3.0, 안 되면 2.2.0이고, Kotlin은 그대로 둔다(계획 승인).
+      - 결과(2026-10-20): 2.3.0은 "메타데이터 2.4.0, 컴파일러 2.2.0은 2.3.0까지 읽음" 오류로 빌드되지 않아 2.2.0(`litert` 하나, GPU 부품 포함)을 쓴다.
+      - 2.2.0은 `litert`와 `litert-api`가 같은 이름(com.google.ai.edge.litert)이라 AGP 9 검사에 걸려, `gradle.properties`에 `android.uniquePackageNames=false`를 넣었다(Claude 판단). 이유: 둘 다 리소스가 없어 이름이 겹쳐도 R 클래스가 부딪히지 않는다. Kotlin을 올리는 것보다 바꾸는 범위가 작다.
     - 딸린 권한: 빼고 시험한다(추천 수용).
       - `litert-api`가 `FOREGROUND_SERVICE`·`FOREGROUND_SERVICE_DATA_SYNC`와 Play AI 팩용 부품을 끌고 온다(INTERNET은 없음). 처음 보고에서 "권한을 붙이지 않는다"고 한 것은 틀려서 정정했다.
       - 매니페스트에서 지우고 부품을 빼도 도는지 1단계에서 확인한다. 권한이 다시 붙으면 실패하는 테스트(`PermissionGuardTest`)를 둔다.
+      - 결과(2026-10-20): 부품(Play·gms·guava·kotlinx-coroutines-guava·androidx lifecycle)을 빼니 그것들이 끌고 오던 WorkManager와 권한(WAKE_LOCK·ACCESS_NETWORK_STATE·RECEIVE_BOOT_COMPLETED)도 빠졌다.
+        - 두 권한은 앱 매니페스트에서 지웠다. 합친 매니페스트(디버그·릴리스)의 권한은 전처럼 androidx 권한 하나다.
+        - 뺀 채로 모델이 돌고(에뮬레이터 CPU), `PermissionGuardTest`가 통과했다. lifecycle은 앱이 쓰던 2.9.4 그대로다.
     - MediaPipe·ONNX Runtime(1.29부터)은 인터넷 권한을 붙여서 쓰지 않는다.
   - 모델 파일은 git 저장소에 넣는다(추천 수용, MIT 고지 함께). 내려받기는 그때 이름·출처·크기를 말하고 허락을 받는다.
   - 도구 자리: 리터칭의 넷째 하위 도구 'AI 제거'(추천 수용). 칠하고 손을 떼면 지운다(포토샵 모바일 '리터칭 > 제거'와 같다). 따로 '제거' 탭은 두지 않는다(CLAUDE.md 8장 문장을 고침).
@@ -666,7 +675,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 
 아직 정하지 않았다. 해당 작업을 시작할 때 사용자에게 묻는다.
 
-- AI 제거 1단계를 시작할 때: MI-GAN 모델 파일을 내려받아도 되는지(`migan_fp16.tflite`, Hugging Face `litert-community/MI-GAN-512-Places2-LiteRT`, 16,312,640바이트).
+- AI 제거 1단계의 폴드8 측정: 폰을 무선 디버깅으로 연결할 때(사용자가 "나중에 재기"를 골랐다).
 - AI 제거 6단계: 분할 모델 고르기(폴드8 실측을 보여 준 뒤). 큰 모델 파일을 git에 그대로 넣을지 LFS를 쓸지(GitHub는 50MB가 넘는 파일에 경고하고 100MB가 넘으면 받지 않음). 변환 도구(맥의 파이썬 PyTorch·litert-torch)를 설치해도 되는지.
 - 아래쪽 알림 막대('저장됨·보기', '숨긴 레이어에는 그릴 수 없어요' 등)를 화면 정중앙으로 옮길지. 지금은 띠를 덮지 않는 캔버스 정중앙이라, 메인 화면에서 화면으로 보면 도구 막대 폭의 반만큼 오른쪽이다(7차 최종 보고에서 물음, 제스처 알림은 화면 정중앙으로 바꿈).
 
@@ -723,6 +732,13 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 화면 읽기 기능·화면 테스트는 표시 자리의 보이지 않는 칸(`RETOUCH_SOURCE_MARKER`)을 쓴다. 터치는 받지 않는다.
 - **하위 도구 메뉴:** 상태는 `SubToolMenuState`(편집 화면 맨 위에 하나: 열린 도구·버튼 자리·하이라이트·항목 자리), 그림은 `SubToolMenuHost`(Scaffold 뒤 화면 전체: 메뉴 밖을 누르면 닫는 바탕 + 카드, SubToolMenu.kt)다. 도구 버튼(`RailToolButton`·`TabToolItem`)이 `open`·`hover`·`release`를 부른다.
   - 메뉴를 팝업(`StratumDropdownMenu`)으로 바꾸면 끌어 고르기가 되지 않는다(팝업 창은 꾹 누른 손가락의 움직임을 받지 못한다).
+- **AI 모델(AI 제거·AI 선택):** 계획은 `docs/ai-remove-plan.md`다.
+  - 채우기 모델은 엔진의 `InpaintModel`(순수 Kotlin, `engine/inpaint/`, 입력 1×4×512² NCHW, 출력 1×3×512²)이고, LiteRT 구현은 `LiteRtInpaintModel`(engine/platform)이다.
+  - 모델 파일은 `engine/src/main/assets/models/`(MI-GAN `migan_fp16.tflite`와 `LICENSE-MI-GAN.txt`)이고, 앱이 압축하지 않고 넣는다(`noCompress += "tflite"`).
+  - LiteRT 객체는 `AiThread`(스레드 하나, `stratum-ai`)에서만 만들고, 쓰고, 닫는다. 새 AI 모델도 이 스레드를 쓴다.
+  - 엔진에는 Context가 없어서 앱이 `AssetManager`·`cacheDir`만 넘긴다(`CompiledModel.create`에는 ByteBuffer를 받는 판이 없다).
+  - 의존성을 더하거나 바꾸면 합친 매니페스트를 보고 `PermissionGuardTest`를 돌린다. 권한을 일부러 더할 때만(사용자 승인 뒤) 그 테스트의 목록을 고친다.
+  - 모델 실행 시험은 `InpaintModelProbeTest`다(잰 값은 logcat "InpaintProbe"·"LiteRtInpaint"). 그 장치에서 못 돌리면 건너뛴다.
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.
   - 미리 보기: ViewModel의 `moveActions` → `moving`(끄는 중)·`committingShift`(기록을 기다림) → `liveShift()`를 `LayerPreviewCache.render(shift = LayerShift)`에 넘겨 그 레이어 축소본을 옮겨 합친다(`showMove`). 기록하는 순간(`onCommitted`) 지운다. 옮기는 동안 부분 그림은 그리지 않는다(`updateDetail`).
@@ -799,6 +815,15 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 
 ## 기술 주의점
 
+- LiteRT(2026-10-20 확인):
+  - 2.3.0은 Kotlin 2.4로 만들어져, 지금 Kotlin(2.2.10)으로는 컴파일되지 않는다("metadata is 2.4.0, expected 2.2.0"). 2.2.0을 쓴다. 쓰는 API(`CompiledModel`·`TensorBuffer`·`Environment`)는 두 판이 같다.
+  - 2.2.0의 `litert`·`litert-api`는 이름(namespace)이 같아 AGP 9의 매니페스트 합치기가 실패한다. `android.uniquePackageNames=false`로 푼다.
+  - `litert-api`는 Play AI 팩 내려받기용 부품(ai-delivery → Play asset-delivery·WorkManager·gms·guava)과 권한을 끌고 온다. `exclude`로 빼고 두 권한은 `tools:node="remove"`로 지운다.
+  - `CompiledModel.create`는 `(AssetManager, 이름, …)`와 `(파일 경로, …)`만 있다(ByteBuffer 없음).
+  - 에뮬레이터(Pixel_Fold, arm64)는 OpenCL이 없어 OpenGL로 바꾸지만 입력 버퍼를 만들다 실패한다. 그래서 GPU 시험은 건너뛴다.
+  - 에뮬레이터 CPU(XNNPACK)는 fp16 모델을 받는다. 512² 한 번 채우는 데 가운데값 1.35초가 걸렸고(첫 실행 4.9초), 앱 메모리(PSS)가 약 386MB 늘었다.
+  - APK에 넣는 네이티브 라이브러리: arm64 약 9.1MB, armeabi-v7a 약 6.1MB, x86_64 약 11.9MB(32비트 x86은 없음). 모두 16KB 정렬이다(`zipalign -c -P 16`).
+- `connectedDebugAndroidTest`의 `-Pandroid.testInstrumentationRunnerArguments.class=`에 클래스 여러 개를 쉼표로 넣었더니 첫 클래스만 돌았다(2026-10-20). 클래스마다 따로 돌린다.
 - material3 1.4.0의 `TopAppBar`는 `@OptIn(ExperimentalMaterial3Api::class)`가 필요하다. 매개변수 타입 `TopAppBarScrollBehavior`가 실험 기능이기 때문이다.
 - material3 1.4.0 테마:
   - 표면 색 섞기는 `LocalTonalElevationEnabled provides false`로 끈다(표면 색이 surface와 같으면 높이만큼 주 색이 섞인다).
