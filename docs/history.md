@@ -14,6 +14,22 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-20 · AI 제거 3a단계: 리터칭 부품 꺼내기(동작 그대로)
+
+- 요청(사용자, 그대로): "계속하세요"
+- 의도: 말하지 않음
+- 커밋:
+  - "리터칭의 줄인 그림 읽기·튀는 값 줄이기를 AI 제거가 함께 쓰게 꺼냄(동작 그대로)"
+- 바꾼 것(동작·화면 변화 없음)
+  - `RetouchStroke.kt` 안의 private `LevelView`를 `platform/LevelView.kt`(internal)로 옮겼다.
+  - 복구 브러시(`Membrane`)의 튀는 값 줄이기 사본(`influenceOf`와 상수 둘)을 지우고, 2단계의 `HoleFill.influence`(같은 계산)를 쓰게 했다.
+  - `ImageResizer.BICUBIC`과 `GainmapEdits.scaledSelection`을 엔진 안에서 쓸 수 있게 private에서 internal로 바꿨다.
+- 정한 것
+  - 계획에서 3a에 넣은 `BrushPainter`(몫 그림으로 얹기)와 `SelectionPreview.maskAt`은 3b단계에서 쓰는 곳·테스트와 함께 더한다(Claude 판단: 쓰지 않는 코드를 먼저 넣지 않는다).
+- 확인한 것
+  - `./gradlew assembleDebug test`가 통과했다.
+  - 에뮬레이터(Pixel_Fold): 기존 테스트가 바꾸지 않은 채 모두 통과했다. `RetouchStrokeTest` 9개, `EffectStrokeTest` 8개, `SelectionCommandsTest` 16개, `HdrTest` 15개, `ImageResizerTest` 8개, `EditorRetouchTest` 8개.
+
 ## 2026-10-20 · AI 제거 2단계: 순수 Kotlin 판단 로직
 
 - 요청(사용자, 그대로): "폴드8에 내가 apk로 받아서 테스트해도 되나요?(무선디버깅 불가능 현재는) 안된다면 바로 2단계 시작하세요"

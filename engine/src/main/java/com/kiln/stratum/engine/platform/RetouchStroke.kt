@@ -3,8 +3,6 @@ package com.kiln.stratum.engine.platform
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.BlendMode
-import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
@@ -19,7 +17,6 @@ import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
-import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
@@ -32,10 +29,8 @@ import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.retouch.SpotSearch
 import com.kiln.stratum.engine.selection.Selection
-import java.nio.ByteBuffer
 import java.nio.ShortBuffer
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -291,116 +286,6 @@ internal object Retouch {
 }
 
 /**
- * 문서의 한 영역을 어떤 단계(1/2^[level])로 그린 소프트웨어 그림. 가져올 곳 찾기와 밝기·색 맞추기가 읽는다.
- * 쓸 곳은 그림의 ([offsetX], [offsetY])부터 [width]×[height]이고, 그 왼쪽 위는 문서에서 ([left], [top])이다(둘 다 단계 칸에 맞춤).
- * 쓸 곳은 모두 문서 안이다.
- */
-private class LevelView(
-    val bitmap: Bitmap,
-    val level: Int,
-    val left: Int,
-    val top: Int,
-    val offsetX: Int,
-    val offsetY: Int,
-    val width: Int,
-    val height: Int
-) {
-    /** 단계 칸 하나의 문서 픽셀 수 */
-    val cell: Int
-        get() = 1 shl level
-
-    /** 픽셀 바이트(줄마다 [rowBytes], 픽셀마다 R·G·B·A, 알파를 곱한 값). 처음 읽을 때 한 번 꺼낸다. */
-    val bytes: ByteArray by lazy {
-        val buffer = ByteBuffer.allocate(bitmap.byteCount)
-        bitmap.copyPixelsToBuffer(buffer)
-        buffer.array()
-    }
-
-    val rowBytes: Int
-        get() = bitmap.rowBytes
-
-    /** 쓸 곳의 ([x], [y]) 픽셀이 [bytes]에서 시작하는 자리 */
-    fun byteIndex(x: Int, y: Int): Int = (y + offsetY) * rowBytes + (x + offsetX) * 4
-
-    /** 문서 좌표([documentX], [documentY], 단계 칸에 맞춘 것)의 칸이 [bytes]에서 시작하는 자리. 쓸 곳 밖이면 -1. */
-    fun byteIndexAt(documentX: Int, documentY: Int): Int {
-        if (documentX < left || documentY < top) return -1
-        val x = (documentX - left) / cell
-        val y = (documentY - top) / cell
-        return if (x < width && y < height) byteIndex(x, y) else -1
-    }
-
-    /**
-     * 쓸 곳에서 획이 칠하는 곳(픽셀마다). 자국마다 반지름 [radius]보다 [dilate] 칸 넓은 원을 그려 본다.
-     * 안드로이드 그리기(알파 그림)로 그리고 알파를 읽는다.
-     */
-    fun footprint(dabs: List<StrokePoint>, radius: Float, dilate: Float): BooleanArray {
-        val mask = Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
-        try {
-            val canvas = Canvas(mask)
-            val paint = Paint().apply {
-                color = Color.WHITE
-                isAntiAlias = true
-            }
-            val scale = 1f / cell
-            for (dab in dabs) canvas.drawCircle((dab.x - left) * scale, (dab.y - top) * scale, radius * scale + dilate, paint)
-            val buffer = ByteBuffer.allocate(mask.rowBytes * height)
-            mask.copyPixelsToBuffer(buffer)
-            val alpha = buffer.array()
-            return BooleanArray(width * height) { i -> alpha[(i / width) * mask.rowBytes + i % width].toInt() != 0 }
-        } finally {
-            mask.recycle()
-        }
-    }
-
-    fun recycle() = bitmap.recycle()
-
-    companion object {
-        /** [raster]의 [wanted] 영역(문서 밖은 자름)을, 긴 변이 [maxEdge] 이하가 되는 가장 덜 줄인 단계로 그린다([at]). */
-        fun of(raster: Raster, size: PixelSize, wanted: PixelRect, maxEdge: Int, checkCanceled: () -> Unit): LevelView? {
-            val inside = wanted.intersect(PixelRect.of(size)) ?: return null
-            var level = 0
-            while (maxOf(inside.width, inside.height) > maxEdge shl level) level++
-            return at(raster, size, inside, level, checkCanceled)
-        }
-
-        /**
-         * [raster]의 [area](문서 밖은 자름)를 [level] 단계로 그린다. 쓸 곳의 왼쪽 위는 단계 칸에 맞춘다. 문서에 닿지 않으면 null.
-         * 줄이지 않으면(0단계) 타일을 그대로 베끼고(소프트웨어, GPU를 기다리지 않는다), 줄이면 GPU로 축소본처럼 그린다.
-         */
-        fun at(raster: Raster, size: PixelSize, area: PixelRect, level: Int, checkCanceled: () -> Unit): LevelView? {
-            val inside = area.intersect(PixelRect.of(size)) ?: return null
-            val cell = 1 shl level
-            val left = inside.left / cell * cell
-            val top = inside.top / cell * cell
-            if (level == 0) {
-                val rect = PixelRect(left, top, inside.right, inside.bottom)
-                return LevelView(Retouch.compose(raster, size, rect), 0, left, top, 0, 0, rect.width, rect.height)
-            }
-            val region = PreviewLevels.region(size, level, PixelRect(left, top, inside.right, inside.bottom)) ?: return null
-            val drawn = PreviewRenderer.renderRegion(Document.create(size.width, size.height, "", raster), region, checkCanceled)
-                ?: throw NotEnoughMemoryException()
-            val bitmap = try {
-                drawn.copy(Bitmap.Config.ARGB_8888, false) ?: throw NotEnoughMemoryException()
-            } finally {
-                drawn.recycle()
-            }
-            val offsetX = (left shr level) - region.previewLeft
-            val offsetY = (top shr level) - region.previewTop
-            val width = minOf(ceilDiv(inside.right - left, cell), bitmap.width - offsetX)
-            val height = minOf(ceilDiv(inside.bottom - top, cell), bitmap.height - offsetY)
-            if (width <= 0 || height <= 0) {
-                bitmap.recycle()
-                return null
-            }
-            return LevelView(bitmap, level, left, top, offsetX, offsetY, width, height)
-        }
-
-        private fun ceilDiv(value: Int, divisor: Int): Int = (value + divisor - 1) / divisor
-    }
-}
-
-/**
  * 복구 브러시의 밝기·색 맞추기. 칠한 곳 둘레에서 '그 자리 - 가져온 곳'(알파를 곱한 RGBA)을 재고, 칠한 곳 안은 [HoleFill]로 매끈하게 이은 값.
  * 줄인 단계(긴 변 [HoleFill.MAX_EDGE] 이하)의 반정밀도 그림([field])으로 GPU에 올려, 타일마다 쌍선형으로 읽어 더한다([heal]).
  * 줄인 단계에서는 가져올 곳의 옮긴 양을 단계 칸에 맞춰 반올림한다(밝기·색은 매끈해서 차이가 작다).
@@ -486,7 +371,7 @@ private class Membrane(
                     }
                     checkCanceled()
                     // 둘레 차이 중 다른 것들과 크게 다른 곳(어긋난 경계)은 안쪽으로 번지지 않게 몫을 줄인다(그 자리 값은 그대로)
-                    val filled = HoleFill.fill(values, weights, width, height, 4, influenceOf(values, weights))
+                    val filled = HoleFill.fill(values, weights, width, height, 4, HoleFill.influence(values, weights, 4))
                     val field = Bitmap.createBitmap(width, height, Bitmap.Config.RGBA_F16)
                     field.copyPixelsFromBuffer(ShortBuffer.wrap(ShortArray(filled.size) { Half.toHalf(filled[it]) }))
                     return Membrane(field, destination.left, destination.top, cell, offset, size)
@@ -495,45 +380,6 @@ private class Membrane(
                 }
             } finally {
                 destination.recycle()
-            }
-        }
-
-        /** 둘레 차이가 둘레의 가운데값과 이만큼 다르면 안쪽으로 번지는 몫이 반이 된다(0..1 값) */
-        private const val OUTLIER_SCALE = 0.1f
-
-        /** 가운데값을 셀 때 보는 최대 픽셀 수(고르게 건너뛰어 본다) */
-        private const val MEDIAN_SAMPLES = 4096
-
-        /**
-         * 픽셀마다 안쪽으로 번질 몫: 1 / (1 + (차이가 둘레 가운데값과 다른 정도 / [OUTLIER_SCALE])²). 모르는 곳은 0이다.
-         * 가운데값은 채널마다 아는 곳 차이의 중앙값이고, 다른 정도는 채널 가운데 가장 큰 것이다.
-         * 밝기·색이 고르게 다른 곳(어두운 곳에 밝은 무늬를 가져옴)은 모두 1에 가깝고, 줄·경계가 어긋난 곳만 작아진다.
-         */
-        private fun influenceOf(values: FloatArray, weights: FloatArray): FloatArray {
-            var count = 0
-            for (w in weights) if (w > 0f) count++
-            if (count == 0) return FloatArray(weights.size)
-            val step = maxOf(1, count / MEDIAN_SAMPLES)
-            val samples = Array(4) { FloatArray((count + step - 1) / step) }
-            var known = 0
-            var taken = 0
-            for (p in weights.indices) {
-                if (weights[p] == 0f) continue
-                if (known++ % step == 0 && taken < samples[0].size) {
-                    for (c in 0 until 4) samples[c][taken] = values[p * 4 + c]
-                    taken++
-                }
-            }
-            val medians = FloatArray(4) { c -> samples[c].copyOf(taken).also { it.sort() }[taken / 2] }
-            return FloatArray(weights.size) { p ->
-                if (weights[p] == 0f) {
-                    0f
-                } else {
-                    var far = 0f
-                    for (c in 0 until 4) far = maxOf(far, abs(values[p * 4 + c] - medians[c]))
-                    val r = far / OUTLIER_SCALE
-                    1f / (1f + r * r)
-                }
             }
         }
 

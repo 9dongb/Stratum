@@ -137,8 +137,9 @@ internal object GainmapEdits {
     /**
      * 문서 크기([size])의 선택 영역을 게인맵 크기로 줄인 선택 영역(쌍선형으로 줄여 부드러운 경계는 그만큼 옅다).
      * 게인맵 타일마다 그 자리에 닿는 선택 타일만 줄여 그린다. 다 비면 아무 데도 고르지 않은 선택 영역이다.
+     * AI 제거의 게인맵 채우기도 쓴다(결정 기록 'AI 제거·AI 선택').
      */
-    private fun scaledSelection(selection: Selection, size: PixelSize, gainmap: HdrGainmap): Selection {
+    internal fun scaledSelection(selection: Selection, size: PixelSize, gainmap: HdrGainmap): Selection {
         val scaleX = gainmap.width.toFloat() / size.width
         val scaleY = gainmap.height.toFloat() / size.height
         val grid = TileGrid(gainmap.width, gainmap.height)

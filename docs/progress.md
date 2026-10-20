@@ -41,9 +41,14 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 1단계(사용자 "AI 제거 1단계(LiteRT·MI-GAN 실측)를 시작하세요"): LiteRT 2.2.0과 MI-GAN 모델(허락받고 내려받아 지문 대조)을 넣고, `LiteRtInpaintModel`·권한 지킴·모델 시험 테스트를 더했다. 에뮬레이터에서는 CPU로 돈다. 화면 변화는 없다.
     - 2단계(사용자 "폴드8에 내가 apk로 받아서 테스트해도 되나요?(무선디버깅 불가능 현재는) 안된다면 바로 2단계 시작하세요"): 지금 APK로는 잴 수 없다고 답했다(모델을 쓰는 화면이 없고, 측정은 adb로 돌리는 테스트). 4단계 뒤에는 APK로 직접 써 보며 속도를 볼 수 있다.
       - 마스크 연산(`InpaintMask`), 잘라낼 창 계획(`InpaintPlan`), 모델 입력·출력과 색 맞추기(`InpaintTensor`), 채울 곳 종류(`InpaintArea`), `HoleFill.influence`를 순수 Kotlin으로 더했다(JVM 테스트, 화면 변화 없음).
+    - 3a단계(사용자 "계속하세요"): 리터칭 부품을 AI 제거와 함께 쓰게 꺼냈다(동작 그대로).
+      - `LevelView`를 `platform/LevelView.kt`(internal)로 옮겼다.
+      - 복구 브러시의 튀는 값 줄이기 사본을 지우고 `HoleFill.influence`를 쓰게 했다.
+      - `ImageResizer.BICUBIC`·`GainmapEdits.scaledSelection`을 엔진 안에서 쓸 수 있게(internal) 했다.
+      - 계획의 `BrushPainter`(몫 그림으로 얹기)·`SelectionPreview.maskAt`은 3b단계에서 쓰는 곳·테스트와 함께 더한다(Claude 판단: 쓰지 않는 코드를 먼저 넣지 않는다).
   - 남은 일
     - 1단계의 폴드8 측정: 사용자가 "나중에 재기"를 골랐다. 폰을 무선 디버깅으로 연결하면 `InpaintModelProbeTest`를 폴드8에서 돌려 GPU·CPU 시간과 메모리를 잰다. 끝 기준은 폴드8 GPU에서 수십 ms 안팎이다.
-    - 3a~10단계
+    - 3b~10단계
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -114,7 +119,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 이동 도구(사용자 피드백 7차) | 완료 | 도구 막대 맨 위·커버 탭 줄 맨 앞(Material Icons open_with). 고른 레이어를 한 손가락으로 끌면 축소본만 옮겨 보이고, 놓으면 실행 취소 한 단계(픽셀 값 그대로, 캔버스 밖은 잘림, 256px 배수면 타일 그대로, 게인맵도 옮김). 숨긴 레이어는 막음. 옵션 없음(커버 안내 한 줄, 메인은 고를 때 알림) |
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌. 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(세로 접히는 선을 피하지 않음). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
-| AI 제거·AI 선택(사용자 요청) | 2단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 마스크·창 계획·모델 입출력·색 맞추기 계산(순수 Kotlin). 화면 변화 없음. 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
+| AI 제거·AI 선택(사용자 요청) | 3a단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 마스크·창 계획·모델 입출력·색 맞추기 계산(순수 Kotlin). 화면 변화 없음. 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
 
 ## 결정 기록
 
@@ -750,7 +755,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 의존성을 더하거나 바꾸면 합친 매니페스트를 보고 `PermissionGuardTest`를 돌린다. 권한을 일부러 더할 때만(사용자 승인 뒤) 그 테스트의 목록을 고친다.
   - 모델 실행 시험은 `InpaintModelProbeTest`다(잰 값은 logcat "InpaintProbe"·"LiteRtInpaint"). 그 장치에서 못 돌리면 건너뛴다.
   - 순수 Kotlin 계산(`engine/inpaint/`): `InpaintMask`(구멍·고리 안 메우기·거리 변환·덩어리·묶기), `InpaintPlan`(계획 단계·창·넓히기, 상수), `InpaintTensor`(알파 풀기·모델 입력·출력·쓰기 몫·채울 그림), `InpaintArea`. 모두 1024px 이하 또는 512² 배열에서만 부른다.
-  - 색 맞추기는 복구 브러시와 같은 `HoleFill.fill`·`HoleFill.influence`를 쓴다(3a단계에서 복구 브러시의 `Membrane`도 `HoleFill.influence`로 바꾼다).
+  - 색 맞추기는 복구 브러시와 같은 `HoleFill.fill`·`HoleFill.influence`를 쓴다(복구 브러시의 `Membrane`도 `HoleFill.influence`를 쓴다).
+  - 줄인 그림 읽기는 리터칭과 AI 제거가 함께 쓰는 `LevelView`(platform/LevelView.kt)다. 키우기는 `ImageResizer.BICUBIC`, 선택 영역을 게인맵 크기로 줄이기는 `GainmapEdits.scaledSelection`이다.
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.

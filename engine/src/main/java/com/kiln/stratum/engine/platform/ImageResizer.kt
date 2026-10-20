@@ -206,8 +206,9 @@ internal object ImageResizer {
      * 바이큐빅(Catmull-Rom) 보간 셰이더(AGSL). 이웃 4×4 픽셀을 가중 평균한다.
      * Catmull-Rom은 픽셀 가운데에서는 그 픽셀 값 그대로라, 남은 배율이 1이면(정확히 반씩 줄인 경우) 값이 바뀌지 않는다.
      * 알파를 미리 곱한 값이라, 가중치가 음수인 곳에서 생기는 넘침을 0 ≤ 색 ≤ 알파 ≤ 1로 잘라 낸다.
+     * AI 제거도 모델이 채운 그림을 원본 해상도로 키울 때 쓴다(결정 기록 'AI 제거·AI 선택').
      */
-    private const val BICUBIC = """
+    internal const val BICUBIC = """
         uniform shader image;
         uniform float2 scale;
         uniform float2 offset;
