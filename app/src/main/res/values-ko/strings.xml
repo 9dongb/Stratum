@@ -273,6 +273,8 @@
     <string name="selection_copy_description">새 레이어로 복사</string>
     <string name="selection_cut">잘라내기</string>
     <string name="selection_cut_description">새 레이어로 잘라내기</string>
+    <string name="selection_ai_fill">AI 채우기</string>
+    <string name="selection_ai_fill_description">고른 곳을 AI로 채우기</string>
     <string name="selection_hint_drag">캔버스를 끌어서 고르세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
     <string name="selection_hint_lasso">고를 곳을 손가락으로 둘러 그리세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
     <string name="selection_hint_wand">색을 누르면 고른 레이어에서 비슷한 색을 골라요.</string>

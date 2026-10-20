@@ -50,6 +50,9 @@ interface SelectionActions {
     /** 고른 곳을 새 레이어로 복사한다([cut]이면 잘라 낸다) */
     fun copyToLayer(cut: Boolean)
 
+    /** 고른 레이어의 고른 곳을 AI(채우기 모델)로 둘레에 맞게 채운다. 선택은 그대로 남는다. */
+    fun aiFill() {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : SelectionActions {
         override fun shape(shape: SelectionShape) = Unit

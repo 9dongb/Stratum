@@ -65,7 +65,7 @@ import kotlin.math.sqrt
 /**
  * 선택 도구 옵션이 쓰는 값과 할 일.
  *
- * @property hasSelection 지금 고른 곳이 있는지. 해제·반전·지우기·복사·잘라내기는 고른 곳이 있을 때만 켠다.
+ * @property hasSelection 지금 고른 곳이 있는지. 해제·반전·지우기·복사·잘라내기·AI 채우기는 고른 곳이 있을 때만 켠다.
  * @property busy 편집을 처리하는 중이면 동작 버튼을 막는다.
  */
 @Stable
@@ -79,7 +79,7 @@ class SelectionControls(
 
 /**
  * 선택 도구 옵션: 하위 도구(사각형·원형·올가미·자동 선택), 합치는 방법(새로·더하기·빼기·교차),
- * 페더(모양) 또는 허용치·이어진 곳만(자동 선택), 동작 버튼(모두·해제·반전·지우기·복사·잘라내기), 안내 한 줄.
+ * 페더(모양) 또는 허용치·이어진 곳만(자동 선택), 동작 버튼(모두·해제·반전·지우기·복사·잘라내기·AI 채우기), 안내 한 줄.
  * 설정은 바꾸면 다음 선택부터 쓴다(기록하지 않는다). 동작은 누르면 바로 하고 실행 취소 한 단계로 남는다.
  */
 @Composable
@@ -216,6 +216,7 @@ private fun SelectionActionRow(controls: SelectionControls) {
         ActionButton(R.drawable.ic_content_cut, R.string.selection_cut, R.string.selection_cut_description, selected, EditScreenTags.SELECTION_CUT) {
             actions.copyToLayer(cut = true)
         }
+        ActionButton(R.drawable.ic_auto_awesome, R.string.selection_ai_fill, R.string.selection_ai_fill_description, selected, EditScreenTags.SELECTION_AI_FILL, actions::aiFill)
     }
 }
 

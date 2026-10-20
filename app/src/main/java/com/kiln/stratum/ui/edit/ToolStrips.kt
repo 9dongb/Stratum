@@ -124,7 +124,7 @@ internal fun transformStrip(
 
 /**
  * 선택의 띠: 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
- * 그리고 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기(모두 선택만 늘, 나머지는 고른 곳이 있을 때).
+ * 그리고 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기(모두 선택만 늘, 나머지는 고른 곳이 있을 때).
  */
 @Composable
 internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: () -> Unit): List<StripItem> {
@@ -186,6 +186,7 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
         add(IconCell("delete", R.drawable.ic_delete, stringResource(R.string.selection_delete_description), actions::delete, enabled = selected, tag = EditScreenTags.SELECTION_DELETE))
         add(IconCell("copy", R.drawable.ic_content_copy, stringResource(R.string.selection_copy_description), { actions.copyToLayer(cut = false) }, enabled = selected, tag = EditScreenTags.SELECTION_COPY))
         add(IconCell("cut", R.drawable.ic_content_cut, stringResource(R.string.selection_cut_description), { actions.copyToLayer(cut = true) }, enabled = selected, tag = EditScreenTags.SELECTION_CUT))
+        add(IconCell("aiFill", R.drawable.ic_auto_awesome, stringResource(R.string.selection_ai_fill_description), actions::aiFill, enabled = selected, tag = EditScreenTags.SELECTION_AI_FILL))
     }
 }
 

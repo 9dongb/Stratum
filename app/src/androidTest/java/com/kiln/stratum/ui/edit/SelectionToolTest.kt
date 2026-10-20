@@ -92,6 +92,10 @@ class SelectionToolTest {
         override fun copyToLayer(cut: Boolean) {
             calls += if (cut) "cut" else "copy"
         }
+
+        override fun aiFill() {
+            calls += "aiFill"
+        }
     }
 
     private val actions = FakeSelection()
@@ -165,7 +169,7 @@ class SelectionToolTest {
         openCoverTool()
 
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).performScrollTo().assertIsEnabled().performClick()
-        for (tag in listOf(EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT)) {
+        for (tag in listOf(EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL)) {
             composeRule.onNodeWithTag(tag).assertIsNotEnabled()
         }
         composeRule.runOnIdle { assertEquals(listOf("all"), actions.calls) }
@@ -176,11 +180,11 @@ class SelectionToolTest {
         show(411, 800, outline = square)
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select)).performClick()
 
-        for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_NONE)) {
+        for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_NONE)) {
             composeRule.onNodeWithTag(tag).performScrollTo().performClick()
         }
 
-        composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "none"), actions.calls) }
+        composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "aiFill", "none"), actions.calls) }
     }
 
     /**
@@ -340,6 +344,7 @@ class SelectionToolTest {
         composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsEnabled()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_INVERT).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_AI_FILL).assertIsNotEnabled()
     }
 
     @Test
@@ -347,10 +352,10 @@ class SelectionToolTest {
         show(930, 700, outline = square)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
 
-        for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_NONE)) {
+        for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_NONE)) {
             composeRule.onNodeWithTag(tag).performScrollTo().performClick()
         }
 
-        composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "none"), actions.calls) }
+        composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "aiFill", "none"), actions.calls) }
     }
 }

@@ -582,6 +582,7 @@ class EditorViewModel internal constructor(
         override fun invert() = edit(InvertSelection)
         override fun delete() = deleteSelected()
         override fun copyToLayer(cut: Boolean) = copySelectionToLayer(cut)
+        override fun aiFill() = fillSelection()
     }
 
     /** 마지막으로 윤곽선을 찾은 선택 영역과 그 윤곽선(문서 전체). 선택 영역이 그대로면 다시 찾지 않는다. */
@@ -1107,6 +1108,19 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || document.selection == null) return
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
         runEdit(CopySelectedToLayer(activeLayerIn(document), name, cut), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * 고른 레이어의 고른 곳을 채우기 모델(AI)로 둘레에 맞게 채운다(실행 취소 한 단계, 결정 기록 'AI 제거·AI 선택'의 'AI 채우기').
+     * 선택은 그대로 남는다. 선택 영역이 없거나 다른 편집을 처리하는 중이면 무시하고, 숨긴 레이어면 하지 않고 알린다(AI 제거와 같다).
+     * 이 기기에서 모델을 돌리지 못하면 [EditorMessage.RemoveUnavailable]로 알린다.
+     */
+    fun fillSelection() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || document.selection == null) return
+        val layer = document.layers[document.indexOfLayer(activeLayerIn(document))]
+        if (!layer.visible) return tellHiddenLayer()
+        runEdit(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
     }
 
     /**

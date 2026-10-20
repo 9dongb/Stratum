@@ -275,6 +275,8 @@
     <string name="selection_copy_description">Copy to a new layer</string>
     <string name="selection_cut">Cut</string>
     <string name="selection_cut_description">Cut to a new layer</string>
+    <string name="selection_ai_fill">AI fill</string>
+    <string name="selection_ai_fill_description">Fill the selection with AI</string>
     <string name="selection_hint_drag">Drag on the canvas to select. Brushes and the eraser only paint inside the selection.</string>
     <string name="selection_hint_lasso">Draw around the area to select. Brushes and the eraser only paint inside the selection.</string>
     <string name="selection_hint_wand">Tap a color to select similar colors on the chosen layer.</string>

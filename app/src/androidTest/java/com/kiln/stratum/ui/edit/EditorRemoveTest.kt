@@ -19,17 +19,19 @@ import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.SelectionShape
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** AI 제거(리터칭의 넷째 하위 도구)의 편집 흐름을 가짜 채우기 모델로 에뮬레이터에서 확인한다(결정 기록 'AI 제거·AI 선택'). */
+/** AI 제거(리터칭의 넷째 하위 도구)와 선택 도구의 AI 채우기의 편집 흐름을 가짜 채우기 모델로 에뮬레이터에서 확인한다(결정 기록 'AI 제거·AI 선택'). */
 @RunWith(AndroidJUnit4::class)
 class EditorRemoveTest {
 
@@ -161,6 +163,49 @@ class EditorRemoveTest {
         val undone = awaitReady { it.revision > removed.revision }
         assertTrue(dark(shown(undone), 200, 200))
         assertFalse(undone.canUndo)
+    }
+
+    @Test
+    fun aiFill_fillsTheSelection_keepsIt_andIsOneUndoStep() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        openWithDots()
+        onMain { viewModel.selectShape(SelectionShape.Rectangle(170f, 170f, 230f, 230f)) }
+        val selected = awaitReady { it.selection != null }
+
+        onMain { viewModel.selectionActions.aiFill() }
+        val filled = awaitReady { it.revision > selected.revision }
+
+        assertFalse(dark(shown(filled), 200, 200))
+        assertEquals(1, model.calls)
+        // 채운 뒤에도 선택은 남는다
+        assertNotNull(filled.selection)
+        // 실행 취소 한 번이면 점이 돌아온다(선택도 그대로)
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > filled.revision }
+        assertTrue(dark(shown(undone), 200, 200))
+        assertNotNull(undone.selection)
+    }
+
+    @Test
+    fun aiFill_withoutASelection_doesNothing_andOnAHiddenLayerTellsSo() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        val before = openWithDots()
+
+        // 고른 곳이 없으면 하지 않는다
+        onMain { viewModel.selectionActions.aiFill() }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(before.revision, awaitReady { true }.revision)
+
+        // 숨긴 레이어면 하지 않고 알린다(AI 제거와 같다)
+        onMain { viewModel.selectShape(SelectionShape.Rectangle(170f, 170f, 230f, 230f)) }
+        val selected = awaitReady { it.selection != null }
+        onMain { viewModel.edit(SetLayerVisible(LayerId(0), false)) }
+        val hidden = awaitReady { it.revision > selected.revision }
+        onMain { viewModel.selectionActions.aiFill() }
+
+        assertEquals(EditorMessage.HiddenLayer, awaitMessage())
+        assertEquals(hidden.revision, awaitReady { true }.revision)
+        assertEquals(0, model.calls)
     }
 
     @Test

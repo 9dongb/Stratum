@@ -148,6 +148,7 @@ object EditScreenTags {
     const val SELECTION_DELETE = "selectionDelete"
     const val SELECTION_COPY = "selectionCopy"
     const val SELECTION_CUT = "selectionCut"
+    const val SELECTION_AI_FILL = "selectionAiFill"
 
     /** 선택 도구를 고르면 캔버스 위에 겹치는 터치 자리 */
     const val SELECTION_OVERLAY = "selectionOverlay"
