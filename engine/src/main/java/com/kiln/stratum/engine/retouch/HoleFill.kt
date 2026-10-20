@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.retouch
 
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.min
 
@@ -16,6 +17,48 @@ object HoleFill {
 
     /** 메울 그림의 긴 변 최대 픽셀. 이 크기면 Kotlin으로 돌아도 수십 밀리초 안이다. */
     const val MAX_EDGE = 512
+
+    /** 아는 값이 아는 값들의 가운데값과 이만큼 다르면 안쪽으로 번지는 몫이 반이 된다(0..1 눈금의 값) */
+    const val OUTLIER_SCALE = 0.1f
+
+    /** 가운데값을 셀 때 보는 최대 픽셀 수(고르게 건너뛰어 본다) */
+    private const val MEDIAN_SAMPLES = 4096
+
+    /**
+     * [fill]의 `influence`로 쓸 몫. 아는 픽셀마다 1 / (1 + (가운데값과 다른 정도 / [scale])²)이고 모르는 곳(무게 0)은 0이다.
+     * 가운데값은 채널마다 아는 곳 값의 중앙값이고, 다른 정도는 채널 가운데 가장 큰 것이다.
+     * 고르게 다른 곳(어두운 곳에 밝은 무늬를 가져옴)은 모두 1에 가깝고, 줄·경계가 어긋난 곳만 작아진다
+     * (복구 브러시의 둘레 맞추기와 AI 제거의 색 맞추기, 결정 기록 '리터칭'·'AI 제거·AI 선택').
+     */
+    fun influence(values: FloatArray, weights: FloatArray, channels: Int, scale: Float = OUTLIER_SCALE): FloatArray {
+        require(channels > 0 && values.size == weights.size * channels) { "Bad buffers: ${values.size} values, ${weights.size} weights" }
+        require(scale > 0f) { "Scale must be positive: $scale" }
+        var count = 0
+        for (w in weights) if (w > 0f) count++
+        if (count == 0) return FloatArray(weights.size)
+        val step = maxOf(1, count / MEDIAN_SAMPLES)
+        val samples = Array(channels) { FloatArray((count + step - 1) / step) }
+        var known = 0
+        var taken = 0
+        for (p in weights.indices) {
+            if (weights[p] == 0f) continue
+            if (known++ % step == 0 && taken < samples[0].size) {
+                for (c in 0 until channels) samples[c][taken] = values[p * channels + c]
+                taken++
+            }
+        }
+        val medians = FloatArray(channels) { c -> samples[c].copyOf(taken).also { it.sort() }[taken / 2] }
+        return FloatArray(weights.size) { p ->
+            if (weights[p] == 0f) {
+                0f
+            } else {
+                var far = 0f
+                for (c in 0 until channels) far = maxOf(far, abs(values[p * channels + c] - medians[c]))
+                val r = far / scale
+                1f / (1f + r * r)
+            }
+        }
+    }
 
     /**
      * [values](픽셀마다 [channels]개, 줄마다 이어 붙인 값)의 모르는 곳을 채운 새 배열.

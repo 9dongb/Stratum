@@ -108,4 +108,27 @@ class HoleFillTest {
 
         assertTrue(abs(filled[0] - 0.4f) < 1e-6f && abs(filled[1] - 0.2f) < 1e-6f)
     }
+
+    @Test
+    fun influence_isSmallOnlyForAValueFarFromTheOthers_withAnyNumberOfChannels() {
+        for (channels in listOf(1, 3, 4)) {
+            val count = 100
+            val values = FloatArray(count * channels) { 0.2f }
+            values[10 * channels] = 0.7f
+            val weights = FloatArray(count) { if (it == 50) 0f else 1f }
+
+            val influence = HoleFill.influence(values, weights, channels)
+
+            assertEquals("channels $channels", 1f, influence[0], 1e-6f)
+            assertTrue("channels $channels: ${influence[10]}", influence[10] < 0.1f)
+            assertEquals("channels $channels", 0f, influence[50], 0f)
+        }
+    }
+
+    @Test
+    fun influence_withNothingKnown_isAllZero() {
+        val influence = HoleFill.influence(FloatArray(6), FloatArray(3), 2)
+
+        assertTrue(influence.all { it == 0f })
+    }
 }
