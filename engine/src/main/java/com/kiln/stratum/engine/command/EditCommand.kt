@@ -28,6 +28,12 @@ interface CancellableCommand : EditCommand {
 
     /** [document]에 적용하면 새로 생길 픽셀 메모리(바이트)의 어림값. 편집 전에 메모리가 넉넉한지 보는 데 쓴다. */
     fun estimateNewBytes(document: Document): Long = 0L
+
+    /**
+     * 편집하는 동안에만 잠깐 더 쓰는 메모리(바이트)의 어림값(AI 모델 불러오기 등). 실행 취소 기록에는 남지 않는다.
+     * [estimateNewBytes]와 나눠 두어, 잠깐 쓰는 메모리 때문에 오래된 실행 취소 단계를 버리지 않게 한다(결정 기록 'AI 제거·AI 선택').
+     */
+    fun estimateWorkBytes(document: Document): Long = 0L
 }
 
 /** 편집에 쓸 메모리가 모자라 편집하지 못했다. "변화 없음"(같은 문서를 돌려줌)과 구별하려고 따로 둔다. */

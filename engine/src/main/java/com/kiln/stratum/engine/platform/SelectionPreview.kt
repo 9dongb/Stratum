@@ -11,6 +11,8 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import java.nio.ByteBuffer
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * 선택 영역을 화면용으로 줄여 그린다: 끄는 동안의 획을 선택 영역 안으로 자르는 알파 그림과, 윤곽선(개미 행렬).
@@ -20,6 +22,40 @@ object SelectionPreview {
 
     /** 윤곽선을 찾는 줄인 마스크의 긴 변 최대 픽셀 */
     const val OUTLINE_MAX_EDGE = 1024
+
+    /**
+     * [selection]을 문서 ([left], [top])부터 [scale]배로 그린 [width]×[height] 알파 비트맵(바꿀 수 없음, 쌍선형).
+     * 그림 픽셀 (x, y)는 문서 ([left] + x / [scale], [top] + y / [scale])이다. AI 제거가 창마다 고른 곳을 그릴 때 쓴다.
+     */
+    fun maskAt(selection: Selection, left: Float, top: Float, scale: Float, width: Int, height: Int): Bitmap {
+        require(scale > 0f && width > 0 && height > 0) { "Bad mask: ${width}x$height at scale $scale" }
+        val visible = PixelRect(
+            floor(left).toInt(), floor(top).toInt(),
+            ceil(left + width / scale).toInt(), ceil(top + height / scale).toInt()
+        )
+        val picture = Picture()
+        val canvas = picture.beginRecording(width, height)
+        canvas.scale(scale, scale)
+        canvas.translate(-left, -top)
+        val paint = Paint().apply { isFilterBitmap = true }
+        val temporary = ArrayList<Bitmap>()
+        try {
+            for ((key, tile) in selection.tiles) {
+                val rect = PixelRect(key.column * TILE_SIZE, key.row * TILE_SIZE, (key.column + 1) * TILE_SIZE, (key.row + 1) * TILE_SIZE)
+                if (rect.intersect(visible) == null) continue
+                val bitmap = MaskTiles.bitmapOf(tile, temporary)
+                if (bitmap == null) {
+                    canvas.drawRect(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat(), paint)
+                } else {
+                    canvas.drawBitmap(bitmap, rect.left.toFloat(), rect.top.toFloat(), paint)
+                }
+            }
+            picture.endRecording()
+            return Bitmap.createBitmap(picture, width, height, Bitmap.Config.ALPHA_8)
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
+        }
+    }
 
     /**
      * [selection]의 [region]을 그 단계로 줄여 그린 알파 비트맵(바꿀 수 없음). 크기는 region.previewWidth×previewHeight.

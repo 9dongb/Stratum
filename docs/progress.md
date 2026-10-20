@@ -46,9 +46,11 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
       - 복구 브러시의 튀는 값 줄이기 사본을 지우고 `HoleFill.influence`를 쓰게 했다.
       - `ImageResizer.BICUBIC`·`GainmapEdits.scaledSelection`을 엔진 안에서 쓸 수 있게(internal) 했다.
       - 계획의 `BrushPainter`(몫 그림으로 얹기)·`SelectionPreview.maskAt`은 3b단계에서 쓰는 곳·테스트와 함께 더한다(Claude 판단: 쓰지 않는 코드를 먼저 넣지 않는다).
+    - 3b단계(이어서): 엔진 명령 `InpaintRegion`과 처리 순서 `Inpainter`, 게인맵 채우기 `GainmapEdits.fill`, `SelectionPreview.maskAt`, `CancellableCommand.estimateWorkBytes`를 더했다. 화면 변화는 없다(4단계에서 연결).
+      - 몫 그림으로 얹기는 `BrushPainter`를 고치지 않고 `Inpainter` 안에 두었다(Claude 판단: 붓 자국이 아니라 몫 그림을 쓰는 곳이 여기뿐).
   - 남은 일
     - 1단계의 폴드8 측정: 사용자가 "나중에 재기"를 골랐다. 폰을 무선 디버깅으로 연결하면 `InpaintModelProbeTest`를 폴드8에서 돌려 GPU·CPU 시간과 메모리를 잰다. 끝 기준은 폴드8 GPU에서 수십 ms 안팎이다.
-    - 3b~10단계
+    - 4~10단계. 4단계에서 `EditorViewModel.makeRoom`이 `estimateWorkBytes`(잠깐 쓰는 메모리, 모델 불러오기 포함)를 실행 취소 단계 버리기와 따로 보게 고친다.
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -119,7 +121,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 이동 도구(사용자 피드백 7차) | 완료 | 도구 막대 맨 위·커버 탭 줄 맨 앞(Material Icons open_with). 고른 레이어를 한 손가락으로 끌면 축소본만 옮겨 보이고, 놓으면 실행 취소 한 단계(픽셀 값 그대로, 캔버스 밖은 잘림, 256px 배수면 타일 그대로, 게인맵도 옮김). 숨긴 레이어는 막음. 옵션 없음(커버 안내 한 줄, 메인은 고를 때 알림) |
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌. 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(세로 접히는 선을 피하지 않음). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
-| AI 제거·AI 선택(사용자 요청) | 3a단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 마스크·창 계획·모델 입출력·색 맞추기 계산(순수 Kotlin). 화면 변화 없음. 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
+| AI 제거·AI 선택(사용자 요청) | 3b단계까지(폴드8 측정 남음) | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 화면 변화 없음. 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 폴드8에서 재고 정한다. 계획은 `docs/ai-remove-plan.md` |
 
 ## 결정 기록
 
@@ -201,6 +203,13 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 넓히기 = max(3, ⌈4 / 배율⌉) 모델 px(문서에서 4px 이상)이다. 쓰기 몫은 넓힌 띠 안의 2 모델 px에 걸쳐 1에서 0으로 내려간다.
     - 밝기·색 맞추기: '원래 - 모델' 차이를 넓힌 구멍 바로 바깥 8 모델 px 띠에서만 잰다. 이유: 모델 출력이 구멍에서 먼 곳까지 원래와 같다는 보장이 없어, 구멍 경계 가까이만 믿는다.
     - 알파가 8보다 작은 픽셀은 모델에게 모르는 곳으로 준다. 채운 곳의 알파는 둘레가 모두 불투명하면 1, 아니면 둘레 알파를 이어 정한다.
+  - 3b단계 명령 규칙(Claude 판단, 2026-10-20)
+    - 칠해서 지우기: 모델이 채울 곳은 넓힌 자국(고리 안쪽 포함)이다. 선택 영역이 있으면 그 안만 채우고, 밖은 모델에게 보여 준다. 타일에 쓸 때 선택 알파로 다시 자른다.
+    - 고른 곳 채우기(`InpaintArea.Selected`): 모델이 채울 곳은 고른 곳을 1 모델 px 넓힌 것이다. 타일에서 선택 알파로 잘라 부드러운 경계는 그만큼 섞는다. 고리 안 메우기는 하지 않는다(고른 모양 그대로). 채운 뒤에도 선택은 남는다.
+    - 고리 안쪽은 계획 단계(거친 칸)에서 찾아 한 칸 넓혀 두고, 창마다 다시 그린 자국에 더한 뒤 그 창에서도 한 번 더 메운다. 이유: 창이 고리를 자르면 그 창만으로는 안쪽을 알 수 없다.
+    - 몫은 창 밖으로 가장자리 값을 늘인다. 이유: 사진 끝에 붙은 물체의 끝 픽셀까지 다 지우게(창은 문서 끝에서 잘린다).
+    - 게인맵은 모델 없이 같은 순서로 둘레 게인 값을 매끈하게 잇는다(`FillSource.Smooth`, pull-push).
+    - 메모리: 새로 남을 타일(채울 곳 범위 + 64px)은 `estimateNewBytes`, 창 하나의 계산(64MiB)과 모델 불러오기는 `estimateWorkBytes`로 나눴다. 이유: 잠깐 쓰는 메모리 때문에 실행 취소 단계를 버리지 않게(4단계에서 앱이 쓴다).
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
   - 자리: 도구 막대 맨 위, 커버 탭 줄 맨 앞(막대 11개·탭 13개). 아이콘 Material Icons open_with(네 방향 화살표), 탭 이름 '이동', 화면 읽기 이름 '이동 도구'.
@@ -757,6 +766,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 순수 Kotlin 계산(`engine/inpaint/`): `InpaintMask`(구멍·고리 안 메우기·거리 변환·덩어리·묶기), `InpaintPlan`(계획 단계·창·넓히기, 상수), `InpaintTensor`(알파 풀기·모델 입력·출력·쓰기 몫·채울 그림), `InpaintArea`. 모두 1024px 이하 또는 512² 배열에서만 부른다.
   - 색 맞추기는 복구 브러시와 같은 `HoleFill.fill`·`HoleFill.influence`를 쓴다(복구 브러시의 `Membrane`도 `HoleFill.influence`를 쓴다).
   - 줄인 그림 읽기는 리터칭과 AI 제거가 함께 쓰는 `LevelView`(platform/LevelView.kt)다. 키우기는 `ImageResizer.BICUBIC`, 선택 영역을 게인맵 크기로 줄이기는 `GainmapEdits.scaledSelection`이다.
+  - 명령은 `InpaintRegion(layerId, area, model)`이고, 처리 순서는 `Inpainter.paint`(계획 → 창마다 읽기·구멍·채우기 → 키워 얹기)다. 채울 색은 `FillSource.Model`(AI) 또는 `FillSource.Smooth`(게인맵)다.
+  - 선택 영역을 아무 배율로 그리는 것은 `SelectionPreview.maskAt`이다. 테스트용 가짜 모델은 에뮬레이터 테스트에도 `FakeInpaintModel`(app/src/androidTest)이 있다(밝기 어긋남·실패·불러오기 메모리를 흉내 냄).
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.

@@ -14,6 +14,7 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.effect.EffectMath
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
@@ -125,6 +126,25 @@ internal object GainmapEdits {
     }
 
     /** 게인맵만 담은 임시 문서(불투명도 1, 표준, sRGB) */
+    /**
+     * AI 제거한 자리의 게인맵을 둘레의 게인 값으로 매끈하게 채운다(모델 없이 [Inpainter]의 같은 순서, 결정 기록 'AI 제거·AI 선택').
+     * '밝히지 않음'으로 칠하면 HDR 화면에서 지운 자리만 어둡게 보이므로 둘레 밝기를 잇는다.
+     * [selection]이 있으면 그 안에만 채운다(게인맵 크기로 줄인 것).
+     */
+    fun fill(gainmap: HdrGainmap, size: PixelSize, area: InpaintArea, selection: Selection?, checkCanceled: () -> Unit): HdrGainmap {
+        val scaleX = gainmap.width.toFloat() / size.width
+        val scaleY = gainmap.height.toFloat() / size.height
+        val scaledArea = when (area) {
+            is InpaintArea.Painted -> InpaintArea.Painted(scaled(area.dabs, scaleX, scaleY), maxOf(area.radius * minOf(scaleX, scaleY), 0.5f))
+            InpaintArea.Selected -> area
+        }
+        val scaledSelection = selection?.let { scaledSelection(it, size, gainmap) }
+        val filled = Inpainter.paint(
+            gainmap.raster, PixelSize(gainmap.width, gainmap.height), scaledArea, scaledSelection, Inpainter.FillSource.Smooth, checkCanceled
+        )
+        return if (filled === gainmap.raster) gainmap else gainmap.copy(raster = filled)
+    }
+
     private fun documentOf(gainmap: HdrGainmap): Document = Document.create(gainmap.width, gainmap.height, "", gainmap.raster)
 
     private fun rasterOf(document: Document): Raster = (document.layers[0].content as RasterContent).raster

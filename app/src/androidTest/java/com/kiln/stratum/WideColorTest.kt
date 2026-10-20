@@ -17,9 +17,11 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.importing.ImportResult
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.PaintStroke
@@ -114,6 +116,21 @@ class WideColorTest {
         val v = ColorSpace.connect(adobe, p3).transform(240 / 255f, 140 / 255f, 10 / 255f)
         val expected = Color.rgb((v[0].coerceIn(0f, 1f) * 255).roundToInt(), (v[1].coerceIn(0f, 1f) * 255).roundToInt(), (v[2].coerceIn(0f, 1f) * 255).roundToInt())
         assertTrue("${hex(expected)} vs ${hex(value(rasterOf(document), 290, 100))}", near(expected, value(rasterOf(document), 290, 100), tolerance = 2))
+    }
+
+    @Test
+    fun aiRemove_onAP3Document_fillsWithTheRawValues_andKeepsTheColorSpace() {
+        // sRGB에 다 들어가지 않는 P3 값 한 가지로 칠한 사진. 모델에 값을 그대로 넣으므로(sRGB로 바꾸지 않음) 채운 곳도 같은 값이다.
+        val wide = Color.rgb(250, 30, 20)
+        val document = import(png(p3) { wide })
+
+        val removed = InpaintRegion(LayerId(0), InpaintArea.Painted(listOf(StrokePoint(150f, 100f)), 20f), FakeInpaintModel()).applyTo(document)
+
+        assertEquals(DocumentColorSpace.DISPLAY_P3, removed.colorSpace)
+        val raster = rasterOf(removed)
+        assertNotSame(rasterOf(document), raster)
+        assertTrue(hex(value(raster, 150, 100)), near(wide, value(raster, 150, 100), tolerance = 2))
+        assertEquals(wide, value(raster, 10, 10))
     }
 
     @Test

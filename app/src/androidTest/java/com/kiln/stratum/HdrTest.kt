@@ -24,12 +24,14 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.importing.ImportResult
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.DocumentColors
 import com.kiln.stratum.engine.platform.ImageExporter
+import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.MergeDown
@@ -267,6 +269,21 @@ class HdrTest {
         val gainmap = checkNotNull(cloned.layers[0].gainmap)
         assertNear(200, gainmap.value(150, 75))
         assertNear(50, gainmap.value(190, 10))
+    }
+
+    @Test
+    fun aiRemove_fillsTheGainmapFromAround_insteadOfMakingItNeutral() {
+        val document = import(ultraHdrJpeg())
+
+        // 왼쪽 절반(게인 200) 가운데를 지운다
+        val removed = InpaintRegion(LayerId(0), InpaintArea.Painted(listOf(StrokePoint(200f, 300f)), 40f), FakeInpaintModel()).applyTo(document)
+
+        val gainmap = checkNotNull(removed.layers[0].gainmap)
+        assertNotSame(document.layers[0].gainmap, gainmap)
+        // 지운 자리도 둘레처럼 밝힌다(밝히지 않음 0이 아니다)
+        assertNear(200, gainmap.value(50, 75))
+        // 먼 곳은 그대로다
+        assertNear(50, gainmap.value(190, 10), tolerance = 0)
     }
 
     @Test
