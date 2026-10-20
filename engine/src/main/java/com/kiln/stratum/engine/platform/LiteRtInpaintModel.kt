@@ -203,7 +203,7 @@ class LiteRtInpaintModel(
 
         /**
          * 처음 불러올 때 더 쓰는 메모리의 어림(바이트). 에뮬레이터 CPU에서 앱 메모리(PSS)가 약 386MB 늘었다(2026-10-20).
-         * 폴드8 GPU는 아직 재지 않았다(재면 고친다).
+         * 폴드8(2026-10-21): GPU는 불러온 뒤 +249MB, 스무 번 채운 뒤 +307MB이고, CPU는 +388MB·+448MB다. 폴드8은 GPU로 돌아 그대로 둔다.
          */
         private const val LOAD_BYTES_ESTIMATE = 400L * 1024 * 1024
 

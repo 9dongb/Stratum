@@ -7,7 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.CompiledModel
 import com.google.ai.edge.litert.Environment
-import com.google.ai.edge.litert.TensorBuffer
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -49,12 +48,16 @@ class SegmentProbeTest {
         /** SAM 2.1 Tiny 변환본: 인코더가 특징 셋을 한 줄로 내고, 디코더는 그 사이에 점 둘을 끼운 한 줄을 받아 마스크 셋을 낸다(0번을 씀). */
         SAM2("sam2"),
 
-        /** MobileSAM(직접 변환): 디코더가 특징과 점 둘을 따로 받아 마스크 넷과 점수 넷을 낸다(1~3번 중 점수가 가장 높은 것). */
+        /**
+         * MobileSAM(직접 변환): 디코더가 특징과 점 둘을 따로 받아 마스크 넷과 점수 넷을 낸다(1~3번 중 점수가 가장 높은 것).
+         * 폴드8 GPU에서는 인코더 결과가 틀려 마스크가 맞지 않는다(2026-10-21, 보통 정밀도로도 IoU 0.62). CPU는 맞다.
+         */
         MOBILE_SAM("mobilesam")
     }
 
     private fun probe(candidate: Candidate, accelerator: Accelerator) {
-        val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "seg")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = File(context.filesDir, "seg")
         fun file(suffix: String) = File(dir, candidate.prefix + suffix)
         val suffixes = listOf("_encoder.tflite", "_decoder.tflite", "_prompt.bin", "_input.f32", "_tap.txt", "_mask.f32")
         assumeTrue("The model files are not in ${dir.path}", suffixes.all { file(it).isFile })
@@ -63,13 +66,16 @@ class SegmentProbeTest {
         val reference = readFloats(file("_mask.f32"))
         val (tapX, tapY) = file("_tap.txt").readText().trim().split(" ").map { it.toFloat() }
         val points = sparse(readFloats(file("_prompt.bin")), tapX, tapY)
+        // GPU는 컴파일한 프로그램을 남겨 두 번째 불러오기부터 빨라진다(앱의 채우기 모델과 같다). 처음인지 로그에 남긴다.
+        val gpuCache = File(context.cacheDir, "seg-gpu").apply { mkdirs() }
+        val cachedFiles = gpuCache.list()?.size ?: 0
 
         val before = ProcessMemory.now()
         Environment.create().use { env ->
             val loadStarted = SystemClock.elapsedRealtime()
-            val encoder = load(file("_encoder.tflite"), accelerator, env)
+            val encoder = load(file("_encoder.tflite"), accelerator, env, gpuCache)
             encoder.use {
-                val decoder = load(file("_decoder.tflite"), accelerator, env)
+                val decoder = load(file("_decoder.tflite"), accelerator, env, gpuCache)
                 decoder.use {
                     val loaded = SystemClock.elapsedRealtime() - loadStarted
                     val encoderIn = encoder.createInputBuffers()
@@ -77,26 +83,35 @@ class SegmentProbeTest {
                     val decoderIn = decoder.createInputBuffers()
                     val decoderOut = decoder.createOutputBuffers()
                     try {
-                        // 인코더: 처음 한 번(준비 포함)과 이어서 [ENCODER_RUNS]번
-                        encoderIn[0].writeFloat(image)
-                        val encodeCold = timed { firstRun(encoder, encoderIn, encoderOut, accelerator) }
-                        val encodeTimes = LongArray(ENCODER_RUNS) { timed { encoder.run(encoderIn, encoderOut) } }.sorted()
-                        val features = encoderOut[0].readFloat()
+                        // 사진 한 장: 입력 쓰기·실행·특징 읽기까지 잰다(GPU는 실행이 비동기라 결과를 읽어야 끝난다)
+                        lateinit var features: FloatArray
+                        fun encode() {
+                            encoderIn[0].writeFloat(image)
+                            encoder.run(encoderIn, encoderOut)
+                            features = encoderOut[0].readFloat()
+                        }
+                        val encodeCold = timed { firstRun(accelerator) { encode() } }
+                        val encodeTimes = LongArray(ENCODER_RUNS) { timed { encode() } }.sorted()
 
-                        // 디코더: 탭 한 번에 해당한다
-                        when (candidate) {
-                            Candidate.SAM2 -> decoderIn[0].writeFloat(sam2DecoderInput(features, points))
-                            Candidate.MOBILE_SAM -> {
-                                decoderIn[0].writeFloat(features)
-                                decoderIn[1].writeFloat(points)
+                        // 탭 한 번: 디코더 입력 쓰기·실행·마스크 읽기까지 잰다. SAM 2.1 Tiny는 특징 사이에 점을 끼운 한 줄을 사진마다 한 번 만든다.
+                        val sam2Input = if (candidate == Candidate.SAM2) sam2DecoderInput(features, points) else null
+                        lateinit var mask: FloatArray
+                        fun decode() {
+                            when (candidate) {
+                                Candidate.SAM2 -> decoderIn[0].writeFloat(checkNotNull(sam2Input))
+                                Candidate.MOBILE_SAM -> {
+                                    decoderIn[0].writeFloat(features)
+                                    decoderIn[1].writeFloat(points)
+                                }
+                            }
+                            decoder.run(decoderIn, decoderOut)
+                            mask = when (candidate) {
+                                Candidate.SAM2 -> decoderOut[0].readFloat().copyOfRange(0, MASK_PLANE)
+                                Candidate.MOBILE_SAM -> bestMobileSamMask(decoderOut[0].readFloat(), decoderOut[1].readFloat())
                             }
                         }
-                        val decodeCold = timed { firstRun(decoder, decoderIn, decoderOut, accelerator) }
-                        val decodeTimes = LongArray(DECODER_RUNS) { timed { decoder.run(decoderIn, decoderOut) } }.sorted()
-                        val mask = when (candidate) {
-                            Candidate.SAM2 -> decoderOut[0].readFloat().copyOfRange(0, MASK_PLANE)
-                            Candidate.MOBILE_SAM -> bestMobileSamMask(decoderOut[0].readFloat(), decoderOut[1].readFloat())
-                        }
+                        val decodeCold = timed { firstRun(accelerator) { decode() } }
+                        val decodeTimes = LongArray(DECODER_RUNS) { timed { decode() } }.sorted()
                         val after = ProcessMemory.now()
 
                         assertEquals(MASK_PLANE, mask.size)
@@ -105,10 +120,11 @@ class SegmentProbeTest {
                         val maxDiff = mask.indices.maxOf { abs(mask[it] - reference[it]) }
                         Log.i(
                             TAG,
-                            "${candidate.name} on $accelerator: load $loaded ms (encoder ${file("_encoder.tflite").length() / 1_000_000} MB + " +
-                                "decoder ${file("_decoder.tflite").length() / 1_000_000} MB); " +
+                            "${candidate.name} on $accelerator: load $loaded ms " +
+                                "(encoder ${file("_encoder.tflite").length() / 1_000_000} MB + decoder ${file("_decoder.tflite").length() / 1_000_000} MB" +
+                                (if (accelerator == Accelerator.GPU) ", GPU cache files before: $cachedFiles" else "") + "); " +
                                 "encode cold $encodeCold ms, median ${encodeTimes[ENCODER_RUNS / 2]} ms (min ${encodeTimes.first()}, max ${encodeTimes.last()}); " +
-                                "decode cold $decodeCold ms, median ${decodeTimes[DECODER_RUNS / 2]} ms (min ${decodeTimes.first()}, max ${decodeTimes.last()}); " +
+                                "tap cold $decodeCold ms, median ${decodeTimes[DECODER_RUNS / 2]} ms (min ${decodeTimes.first()}, max ${decodeTimes.last()}); " +
                                 "PSS +${(after.pssKb - before.pssKb) / 1024} MB, graphics +${(after.graphicsKb - before.graphicsKb) / 1024} MB, " +
                                 "native heap +${(after.nativeKb - before.nativeKb) / 1024} MB; " +
                                 "mask IoU with the Mac ${"%.4f".format(agreement)}, max logit diff ${"%.3f".format(maxDiff)}"
@@ -122,10 +138,18 @@ class SegmentProbeTest {
         }
     }
 
-    /** [accelerator]로 모델을 불러온다. 이 기기에서 그 장치를 쓸 수 없으면 건너뛴다. */
-    private fun load(file: File, accelerator: Accelerator, env: Environment): CompiledModel = try {
+    /** [accelerator]로 모델을 불러온다. GPU는 [gpuCache]에 컴파일한 프로그램을 남긴다. 이 기기에서 그 장치를 쓸 수 없으면 건너뛴다. */
+    private fun load(file: File, accelerator: Accelerator, env: Environment, gpuCache: File): CompiledModel = try {
         val options = CompiledModel.Options(accelerator)
-        if (accelerator == Accelerator.CPU) options.cpuOptions = CompiledModel.CpuOptions(numThreads = CPU_THREADS)
+        when (accelerator) {
+            Accelerator.CPU -> options.cpuOptions = CompiledModel.CpuOptions(numThreads = CPU_THREADS)
+            Accelerator.GPU -> options.gpuOptions = CompiledModel.GpuOptions(
+                serializationDir = gpuCache.absolutePath,
+                modelCacheKey = file.nameWithoutExtension,
+                serializeProgramCache = true
+            )
+            else -> {}
+        }
         CompiledModel.create(file.absolutePath, options, env)
     } catch (e: Exception) {
         Log.i(TAG, "$accelerator cannot load ${file.name} on this device: $e")
@@ -134,9 +158,9 @@ class SegmentProbeTest {
     }
 
     /** 첫 실행. 이 기기에서 그 장치로 돌리지 못하면 건너뛴다. */
-    private fun firstRun(model: CompiledModel, inputs: List<TensorBuffer>, outputs: List<TensorBuffer>, accelerator: Accelerator) {
+    private inline fun firstRun(accelerator: Accelerator, block: () -> Unit) {
         try {
-            model.run(inputs, outputs)
+            block()
         } catch (e: Exception) {
             Log.i(TAG, "$accelerator cannot run the model on this device: $e")
             assumeNoException("$accelerator cannot run the model on this device", e)
