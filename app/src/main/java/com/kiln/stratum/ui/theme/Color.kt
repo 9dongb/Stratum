@@ -170,6 +170,9 @@ object CanvasOverlayColors {
     /** 자르기 테두리 바깥을 어둡게 */
     val CropScrim = Color(0x8C000000)
 
+    /** AI 제거에서 톡 눌러 고른 물체를 덮는 반투명 검정(칠하는 동안의 미리 보기와 같은 50%) */
+    val RemovePick = Color.Black.copy(alpha = 0.5f)
+
     /** 투명한 곳의 체크 무늬(밝은 칸·어두운 칸) */
     val CheckerLight = Color(0xFFFFFFFF)
     val CheckerDark = Color(0xFFCCCCCC)

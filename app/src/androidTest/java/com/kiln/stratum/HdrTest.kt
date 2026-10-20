@@ -57,6 +57,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import kotlin.math.abs
+import kotlin.math.hypot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -283,6 +284,22 @@ class HdrTest {
         // 지운 자리도 둘레처럼 밝힌다(밝히지 않음 0이 아니다)
         assertNear(200, gainmap.value(50, 75))
         // 먼 곳은 그대로다
+        assertNear(50, gainmap.value(190, 10), tolerance = 0)
+    }
+
+    @Test
+    fun aiRemoveOfAPickedShape_alsoFillsTheGainmapFromAround() {
+        val document = import(ultraHdrJpeg())
+        // 톡 눌러 고른 물체처럼, 문서 크기 마스크(한 칸 1px)로 왼쪽 절반 가운데의 원을 덮는다
+        val width = document.width
+        val height = document.height
+        val alphas = ByteArray(width * height) { i -> if (hypot(i % width + 0.5f - 200f, i / width + 0.5f - 300f) <= 40f) -1 else 0 }
+
+        val removed = InpaintRegion(LayerId(0), InpaintArea.Masked(alphas, width, height, 1f, 1f), FakeInpaintModel()).applyTo(document)
+
+        val gainmap = checkNotNull(removed.layers[0].gainmap)
+        assertNotSame(document.layers[0].gainmap, gainmap)
+        assertNear(200, gainmap.value(50, 75))
         assertNear(50, gainmap.value(190, 10), tolerance = 0)
     }
 

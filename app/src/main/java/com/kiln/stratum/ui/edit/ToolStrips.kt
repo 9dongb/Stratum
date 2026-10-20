@@ -212,6 +212,19 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
         add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
+        if (mode == SubTool.RETOUCH_REMOVE) {
+            // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
+            add(
+                IconCell(
+                    key = "removePicked",
+                    icon = R.drawable.ic_auto_awesome,
+                    description = stringResource(R.string.retouch_remove_picked_description),
+                    onClick = controls.onRemovePicked,
+                    enabled = controls.objectPicked && !controls.busy,
+                    tag = EditScreenTags.RETOUCH_REMOVE_PICKED
+                )
+            )
+        }
         // AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 경도가 없다
         if (mode != SubTool.RETOUCH_REMOVE) {
             add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })

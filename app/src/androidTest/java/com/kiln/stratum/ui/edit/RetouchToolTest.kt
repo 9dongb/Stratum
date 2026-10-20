@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -10,6 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
@@ -17,10 +21,14 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -41,6 +49,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
@@ -118,7 +127,29 @@ class RetouchToolTest {
         override fun prepareRemove() {
             calls += "prepare"
         }
+
+        override fun pickObject(x: Float, y: Float) {
+            calls += "pick"
+            points += x to y
+        }
+
+        override fun removePicked() {
+            calls += "removePicked"
+        }
+
+        override fun clearPicked() {
+            calls += "clearPicked"
+        }
     }
+
+    /** 톡 눌러 고른 물체(문서 전체를 덮는 2단계 마스크 250×250, 한 칸 4px), 고를 때의 문서 번호 0 */
+    private fun aPick(): RemovePick = RemovePick(
+        Bitmap.createBitmap(250, 250, Bitmap.Config.ALPHA_8).apply { eraseColor(android.graphics.Color.BLACK) },
+        level = 2,
+        outline = SelectionOutline(listOf(floatArrayOf(400f, 400f, 600f, 400f, 600f, 600f, 400f, 600f, 400f, 400f))),
+        area = InpaintArea.Masked(ByteArray(250 * 250) { -1 }, 250, 250, 4f, 4f),
+        revision = 0
+    )
 
     /** 표시를 꾹 눌러 알린 새 고정 상태 */
     private val locks = mutableListOf<Boolean>()
@@ -131,20 +162,30 @@ class RetouchToolTest {
     private var settings by mutableStateOf(BrushSettings(size = 60f, hardness = 0.5f))
     private var picks = 0
 
-    private fun controls(source: CloneSource?, picking: Boolean) =
-        RetouchControls(settings, onChange = { settings = it }, source = source, picking = picking, onPick = { picks++ })
+    private fun controls(source: CloneSource?, picking: Boolean, objectPicked: Boolean = false) =
+        RetouchControls(
+            settings, onChange = { settings = it }, source = source, picking = picking, onPick = { picks++ },
+            objectPicked = objectPicked, onRemovePicked = actions::removePicked
+        )
 
-    private fun showOptions(mode: SubTool, source: CloneSource? = null, picking: Boolean = source == null, widthDp: Int = 411) {
+    private fun showOptions(mode: SubTool, source: CloneSource? = null, picking: Boolean = source == null, widthDp: Int = 411, objectPicked: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { RetouchOptions(mode, controls(source, picking), onChoose = {}) }
+                    StratumTheme { RetouchOptions(mode, controls(source, picking, objectPicked), onChoose = {}) }
                 }
             }
         }
     }
 
-    private fun showOverlay(mode: RetouchMode, picking: Boolean, source: CloneSource? = null, onPicked: () -> Unit = {}, removing: Boolean = false) {
+    private fun showOverlay(
+        mode: RetouchMode,
+        picking: Boolean,
+        source: CloneSource? = null,
+        onPicked: () -> Unit = {},
+        removing: Boolean = false,
+        pick: RemovePick? = null
+    ) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(400.dp, 400.dp))) {
                 StratumTheme {
@@ -160,6 +201,7 @@ class RetouchToolTest {
                             onPicked = onPicked,
                             modifier = Modifier.fillMaxSize(),
                             removing = removing,
+                            pick = pick,
                             onLockChanged = { locks += it }
                         )
                     }
@@ -409,6 +451,164 @@ class RetouchToolTest {
     }
 
     @Test
+    fun aiRemove_aTap_picksTheObject_insteadOfPainting() {
+        showOverlay(RetouchMode.SPOT_HEAL, picking = false, removing = true)
+
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).performTouchInput { click(center) }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("pick"), actions.calls)
+            val (x, y) = actions.points.single()
+            assertTrue("$x, $y", abs(x - 500f) < 30f && abs(y - 500f) < 30f)
+        }
+    }
+
+    @Test
+    fun aiRemove_showsThePickedShape_withAnOutline() {
+        var pick by mutableStateOf<RemovePick?>(null)
+        composeRule.setContent {
+            StratumTheme {
+                Box(Modifier.fillMaxSize().background(Color.White).testTag(OVERLAY)) {
+                    RetouchOverlay(
+                        view = { CanvasView.Fit }, document = document, mode = RetouchMode.SPOT_HEAL, picking = false, source = null,
+                        radius = 30f, actions = actions, onPicked = {}, modifier = Modifier.fillMaxSize(), removing = true, pick = pick
+                    )
+                }
+            }
+        }
+        assertTrue(!exists(EditScreenTags.SELECTION_OUTLINE))
+
+        composeRule.runOnIdle { pick = aPick() }
+
+        composeRule.waitForIdle()
+        assertTrue(exists(EditScreenTags.SELECTION_OUTLINE))
+        // 고른 모양 안(윤곽선에서 먼 문서 가운데)은 흰 바탕이 반투명 검정으로 어두워진다
+        val shot = composeRule.onNodeWithTag(OVERLAY).captureToImage().asAndroidBitmap()
+        val center = shot.getPixel(shot.width / 2, shot.height / 2)
+        assertEquals(Integer.toHexString(center), 128f, android.graphics.Color.red(center).toFloat(), 8f)
+    }
+
+    @Test
+    fun aiRemove_theRemoveButton_needsAPick() {
+        var picked by mutableStateOf(false)
+        composeRule.setContent {
+            StratumTheme { RetouchOptions(SubTool.RETOUCH_REMOVE, controls(null, picking = false, objectPicked = picked), onChoose = {}) }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsNotEnabled()
+
+        composeRule.runOnIdle { picked = true }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("removePicked"), actions.calls) }
+    }
+
+    @Test
+    fun editScreen_backDropsThePickFirst_thenClosesTheTool() {
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        var pick by mutableStateOf<RemovePick?>(null)
+        val clearing = object : RetouchActions by actions {
+            override fun clearPicked() {
+                actions.clearPicked()
+                pick = null
+            }
+        }
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(
+                        state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {},
+                        retouchActions = clearing, removePick = pick
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+        composeRule.runOnIdle {
+            actions.calls.clear()
+            pick = aPick()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).performScrollTo().assertIsEnabled()
+
+        // 뒤로 가기는 먼저 고른 물체만 버린다(도구는 그대로)
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.runOnIdle { assertEquals(listOf("clearPicked"), actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPTIONS).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).performScrollTo().assertIsNotEnabled()
+
+        // 그다음 뒤로 가기는 도구를 닫는다
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPTIONS).assertDoesNotExist()
+    }
+
+    @Test
+    fun editScreen_recreatingKeepsThePick_butLeavingAiRemoveDropsIt() {
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        var pick by mutableStateOf<RemovePick?>(null)
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(
+                        state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {},
+                        retouchActions = actions, removePick = pick
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+        composeRule.runOnIdle {
+            actions.calls.clear()
+            pick = aPick()
+        }
+
+        // 접기·펼치기처럼 화면을 다시 만들어도(저장한 상태로 되살림) 고른 물체는 그대로다
+        restoration.emulateSavedInstanceStateRestore()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).performScrollTo().assertIsEnabled()
+        composeRule.runOnIdle { assertFalse(actions.calls.toString(), "clearPicked" in actions.calls) }
+
+        // 하위 도구를 바꾸면(AI 제거를 떠나면) 버린다
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).performClick()
+        composeRule.runOnIdle { assertEquals(1, actions.calls.count { it == "clearPicked" }) }
+    }
+
+    @Test
+    fun editScreen_whenPickingCannotRun_tellsToPaintInstead() {
+        val messages = Channel<EditorMessage>(Channel.UNLIMITED)
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(
+                        state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {},
+                        messages = messages.receiveAsFlow(), retouchActions = actions
+                    )
+                }
+            }
+        }
+
+        composeRule.runOnIdle { messages.trySend(EditorMessage.PickUnavailable) }
+
+        composeRule.onNodeWithText(hint(R.string.edit_pick_unavailable)).assertIsDisplayed()
+    }
+
+    @Test
     fun aSecondFinger_dropsTheStroke() {
         showOverlay(RetouchMode.SPOT_HEAL, picking = true)
 
@@ -526,5 +726,10 @@ class RetouchToolTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         composeRule.assertClickablesAvoid(hinge)
+    }
+
+    private companion object {
+        /** 고른 물체 표시를 찍는 흰 바탕 상자 */
+        const val OVERLAY = "pickOverlay"
     }
 }

@@ -10,6 +10,7 @@ import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.segment.SegmentFeatures
@@ -181,4 +182,8 @@ class ObjectSegmenter(private val model: SegmentModel) {
 }
 
 /** 찾은 물체 모양: 문서를 [level] 단계로 줄인 크기([width]×[height])의 알파(0 또는 255, 줄마다 이어 붙임) */
-class ObjectMask(val alphas: ByteArray, val width: Int, val height: Int, val level: Int)
+class ObjectMask(val alphas: ByteArray, val width: Int, val height: Int, val level: Int) {
+
+    /** AI 제거로 채울 곳(톡 눌러 고른 물체) */
+    fun inpaintArea(): InpaintArea.Masked = (1 shl level).toFloat().let { cell -> InpaintArea.Masked(alphas, width, height, cell, cell) }
+}

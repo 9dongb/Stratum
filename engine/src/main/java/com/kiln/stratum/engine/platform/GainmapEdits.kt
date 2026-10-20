@@ -137,6 +137,7 @@ internal object GainmapEdits {
         val scaledArea = when (area) {
             is InpaintArea.Painted -> InpaintArea.Painted(scaled(area.dabs, scaleX, scaleY), maxOf(area.radius * minOf(scaleX, scaleY), 0.5f))
             InpaintArea.Selected -> area
+            is InpaintArea.Masked -> InpaintArea.Masked(area.alphas, area.width, area.height, area.cellX * scaleX, area.cellY * scaleY)
         }
         val scaledSelection = selection?.let { scaledSelection(it, size, gainmap) }
         val filled = Inpainter.paint(

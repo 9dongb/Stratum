@@ -83,6 +83,31 @@ internal object Inpainter {
     fun bounds(area: InpaintArea, selection: Selection?, size: PixelSize): PixelRect? = when (area) {
         is InpaintArea.Painted -> StrokeDabs.bounds(area.dabs, area.radius, size)
         InpaintArea.Selected -> selection?.tileBounds(size)
+        is InpaintArea.Masked -> maskBounds(area, size)
+    }
+
+    /** 물체 모양에서 덮인 칸들의 범위(문서 안). 1024칸 이하 마스크라 Kotlin으로 돈다. 덮인 칸이 없으면 null */
+    private fun maskBounds(area: InpaintArea.Masked, size: PixelSize): PixelRect? {
+        var minX = area.width
+        var minY = area.height
+        var maxX = -1
+        var maxY = -1
+        for (y in 0 until area.height) {
+            for (x in 0 until area.width) {
+                if (area.alphas[y * area.width + x].toInt() == 0) continue
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxX = max(maxX, x)
+                maxY = max(maxY, y)
+            }
+        }
+        if (maxX < 0) return null
+        return PixelRect(
+            floor(minX * area.cellX).toInt(),
+            floor(minY * area.cellY).toInt(),
+            ceil((maxX + 1) * area.cellX).toInt(),
+            ceil((maxY + 1) * area.cellY).toInt()
+        ).intersect(PixelRect.of(size))
     }
 
     /** [raster]의 [area]를 [source]로 채운 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다. */
@@ -154,7 +179,8 @@ internal object Inpainter {
             drawn
         }
         val distance = InpaintMask.distanceToHole(hole, modelSize, modelSize)
-        val radius = if (area is InpaintArea.Painted) InpaintPlan.dilation(window.scale(modelSize)) else SELECTION_DILATION
+        // 칠한 자국·물체 모양은 넓혀 가장자리의 번진 색까지 채우고, 고른 곳은 고른 모양 그대로(1 모델 px만) 채운다
+        val radius = if (area is InpaintArea.Selected) SELECTION_DILATION else InpaintPlan.dilation(window.scale(modelSize))
         val chosen = selection?.let { alphaBytes(SelectionPreview.maskAt(it, left, top, scale, modelSize, modelSize)) }
         // 모델이 채울 곳: 넓힌 구멍. 선택 영역이 있으면 그 안만 채우고 밖은 모델에게 보여 준다.
         val modelHole = BooleanArray(plane) { distance[it] <= radius && (chosen == null || chosen[it].toInt() != 0) }
@@ -173,8 +199,8 @@ internal object Inpainter {
         }
         checkCanceled()
         val fill = InpaintTensor.fillImage(rgba, straight, holeDistance, 0f, filled, modelSize)
-        // 쓰기 몫: 칠했으면 넓힌 띠 안에서 0으로 줄고, 고른 곳이면 넓힌 곳 전체다(타일에서 선택 알파로 다시 자른다)
-        val weights = if (area is InpaintArea.Painted) InpaintTensor.writeWeights(distance, radius) else FloatArray(plane) { 1f }
+        // 쓰기 몫: 칠했거나 물체 모양이면 넓힌 띠 안에서 0으로 줄고, 고른 곳이면 넓힌 곳 전체다(타일에서 선택 알파로 다시 자른다)
+        val weights = if (area is InpaintArea.Selected) FloatArray(plane) { 1f } else InpaintTensor.writeWeights(distance, radius)
         for (p in 0 until plane) if (!modelHole[p]) weights[p] = 0f
         return composite(raster, size, window, fill, weights, selection, modelSize, checkCanceled)
     }
@@ -372,6 +398,22 @@ internal object Inpainter {
                 bitmap
             }
             InpaintArea.Selected -> SelectionPreview.maskAt(checkNotNull(selection) { "Filling the selection needs one" }, left, top, scale, width, height)
+            is InpaintArea.Masked -> {
+                // 물체 모양 그림을 이 배율로 그린다(쌍선형, 조금이라도 덮인 칸이 구멍이 된다)
+                val shape = Bitmap.createBitmap(area.width, area.height, Bitmap.Config.ALPHA_8)
+                val rowBytes = shape.rowBytes
+                val bytes = ByteArray(rowBytes * area.height)
+                for (y in 0 until area.height) area.alphas.copyInto(bytes, y * rowBytes, y * area.width, (y + 1) * area.width)
+                shape.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
+                val canvas = Canvas(bitmap)
+                canvas.scale(scale, scale)
+                canvas.translate(-left, -top)
+                canvas.scale(area.cellX, area.cellY)
+                canvas.drawBitmap(shape, 0f, 0f, Paint().apply { isFilterBitmap = true })
+                shape.recycle()
+                bitmap
+            }
         }
         return alphaBytes(mask)
     }

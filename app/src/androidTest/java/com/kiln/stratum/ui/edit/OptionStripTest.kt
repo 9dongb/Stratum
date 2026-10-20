@@ -16,6 +16,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -540,9 +541,10 @@ class OptionStripTest {
         pick(EditTool.Retouch)
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_REMOVE)
 
-        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기만 있다
+        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기와 [지우기] 칸(톡 눌러 고른 물체가 있을 때만 켜짐)만 있다
         cell("size").assertIsDisplayed()
         for (key in listOf("hardness", "opacity", "source")) cell(key).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsDisplayed().assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.retouch_hint_remove))
     }
 

@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -19,6 +20,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -36,12 +40,16 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
+import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
@@ -57,6 +65,12 @@ import kotlin.math.roundToInt
  * 가져올 곳을 다시 정하거나 표시를 끌어 옮기면 간격도 새로 정한다.
  */
 data class CloneSource(val x: Float, val y: Float, val offset: SourceOffset? = null, val locked: Boolean = false)
+
+/**
+ * AI 제거에서 톡 눌러 고른 물체(결정 기록 'AI 제거·AI 선택'). 화면은 [shape](알파 그림, 문서를 [level] 단계로 줄인 크기)을
+ * 반투명 검정으로, [outline](문서 좌표)을 점선으로 보인다. [area]는 지울 때 채울 곳, [revision]은 고를 때 보이던 문서의 번호다.
+ */
+class RemovePick(val shape: Bitmap, val level: Int, val outline: SelectionOutline, val area: InpaintArea.Masked, val revision: Long)
 
 /** 캔버스의 리터칭 손가락이 엔진 쪽(ViewModel)에 보내는 일. 좌표는 문서 픽셀이다. */
 interface RetouchActions {
@@ -88,6 +102,15 @@ interface RetouchActions {
     /** AI 제거를 골랐다. 처음 지울 때 오래 기다리지 않게 채우기 모델을 미리 불러 둔다. */
     fun prepareRemove() {}
 
+    /** AI 제거에서 [x],[y]를 톡 눌렀다. 그 자리 물체를 AI가 찾아 지울 곳으로 고른다(반투명으로 보임). */
+    fun pickObject(x: Float, y: Float) {}
+
+    /** 톡 눌러 고른 물체를 지운다(AI 제거) */
+    fun removePicked() {}
+
+    /** 톡 눌러 고른 물체를 버린다(뒤로 가기·하위 도구를 바꿈) */
+    fun clearPicked() {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : RetouchActions {
         override fun setSource(x: Float, y: Float) = Unit
@@ -114,6 +137,9 @@ val SubTool.retouchMode: RetouchMode?
  * @property picking 캔버스를 누르면 가져올 곳을 정하는 중인지(가져올 곳이 없으면 늘 그렇다)
  * @property onPick 가져올 곳 정하기 버튼을 눌렀다(켜고 끈다)
  * @property sizePreview 크기·단단함 슬라이더를 끄는 동안 캔버스에 크기를 보이는 상태(없으면 보이지 않음)
+ * @property objectPicked AI 제거에서 톡 눌러 고른 물체가 있는지. [지우기]는 그때만 켠다.
+ * @property busy 편집을 처리하는 중이면 [지우기]를 막는다.
+ * @property onRemovePicked [지우기]를 눌렀다(고른 물체를 지움)
  */
 @Stable
 class RetouchControls(
@@ -122,12 +148,15 @@ class RetouchControls(
     val source: CloneSource?,
     val picking: Boolean,
     val onPick: () -> Unit,
-    val sizePreview: SizePreviewState? = null
+    val sizePreview: SizePreviewState? = null,
+    val objectPicked: Boolean = false,
+    val busy: Boolean = false,
+    val onRemovePicked: () -> Unit = {}
 )
 
 /**
  * 리터칭 옵션: 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거), (복구 브러시·복제 도장) 가져올 곳 정하기 버튼, 안내 한 줄,
- * 크기, (AI 제거가 아니면) 단단함, (복제 도장만) 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * (AI 제거) 톡 눌러 고른 물체를 지우는 [지우기] 버튼, 크기, (AI 제거가 아니면) 단단함, (복제 도장만) 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
  * AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
  */
 @Composable
@@ -160,6 +189,17 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
             color = StratumTheme.colors.textDescription,
             style = MaterialTheme.typography.bodySmall
         )
+        if (mode == SubTool.RETOUCH_REMOVE) {
+            // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
+            AccentButton(
+                onClick = controls.onRemovePicked,
+                enabled = controls.objectPicked && !controls.busy,
+                modifier = Modifier.testTag(EditScreenTags.RETOUCH_REMOVE_PICKED)
+            ) {
+                Icon(painterResource(R.drawable.ic_auto_awesome), contentDescription = null)
+                Text(stringResource(R.string.retouch_remove_picked), modifier = Modifier.padding(start = 8.dp))
+            }
+        }
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)
         if (mode != SubTool.RETOUCH_REMOVE) {
             HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview)
@@ -185,6 +225,8 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
  *   움직이지 않고 길게 누르면 고정을 켜고 끈다([onLockChanged]에 새 상태를 알린다). 표시를 누른 터치는 칠하지 않는다.
  * - 아니면 한 손가락으로 끌어 [mode] 획을 그린다(브러시와 같다). 두 손가락 조작이 시작되거나 두 번째 손가락이 닿으면 끄던 획을 버린다.
  * - [removing](AI 제거)이면 [mode] 대신 AI 제거 획을 그린다([RetouchActions.beginRemove]). 가져올 곳은 쓰지 않는다.
+ *   끌기 시작할 때(터치 허용 거리) 칠하기 시작하고, 움직이지 않고 떼면(톡) 그 자리 물체를 고른다([RetouchActions.pickObject]).
+ *   고른 물체([pick])는 반투명 검정과 점선으로 보인다.
  *
  * 가져올 곳은 표시(브러시 크기의 원과 십자, 고정이면 굵은 원과 가운데 점)로 늘 보인다. 정하는 중에는 손가락 자리에,
  * 칠하는 동안에는 가져오는 자리(손가락 - 간격)에, 쉬는 동안에는 [source] 자리에 있다. 스팟 복구·AI 제거는 가져올 곳을 보이지 않는다.
@@ -202,6 +244,7 @@ fun RetouchOverlay(
     onPicked: () -> Unit,
     modifier: Modifier = Modifier,
     removing: Boolean = false,
+    pick: RemovePick? = null,
     onLockChanged: (locked: Boolean) -> Unit = {}
 ) {
     // 가져올 곳을 쓰는 획인지(복구 브러시·복제 도장)
@@ -282,17 +325,15 @@ fun RetouchOverlay(
                     }
                     fingerPicks = picks
                     finger = down.position
-                    if (!picks) {
+                    // AI 제거는 끌기 시작할 때 칠하기 시작하고, 움직이지 않고 떼면(톡) 그 자리 물체를 고른다
+                    var painting = !picks && !currentRemoving
+                    if (painting) {
                         toDocument(down.position) { x, y ->
-                            if (currentRemoving) {
-                                currentActions.beginRemove(x, y)
-                            } else {
-                                // ViewModel과 같은 간격: 고정이면 획마다 표시 자리에서, 아니면 정한 간격(처음이면 이 획이 정함)
-                                strokeOffset = currentSource?.takeIf { currentUsesSource }?.let { s ->
-                                    s.offset?.takeUnless { s.locked } ?: SourceOffset((x - s.x).roundToInt(), (y - s.y).roundToInt())
-                                }
-                                currentActions.begin(x, y, currentMode)
+                            // ViewModel과 같은 간격: 고정이면 획마다 표시 자리에서, 아니면 정한 간격(처음이면 이 획이 정함)
+                            strokeOffset = currentSource?.takeIf { currentUsesSource }?.let { s ->
+                                s.offset?.takeUnless { s.locked } ?: SourceOffset((x - s.x).roundToInt(), (y - s.y).roundToInt())
                             }
+                            currentActions.begin(x, y, currentMode)
                         }
                     }
                     // 두 손가락이면 버리고(false), 손을 떼면 끝낸다(true). 그 전에 이 자리가 사라지면(도구를 바꿈, 접기·펼치기)
@@ -307,7 +348,11 @@ fun RetouchOverlay(
                                 keep = false
                                 break
                             }
-                            if (!picks) {
+                            if (!picks && !painting && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                                toDocument(down.position) { x, y -> currentActions.beginRemove(x, y) }
+                                painting = true
+                            }
+                            if (painting) {
                                 for (point in change.historical) toDocument(point.position) { x, y -> currentActions.extend(x, y) }
                                 toDocument(change.position) { x, y -> currentActions.extend(x, y) }
                             }
@@ -327,6 +372,9 @@ fun RetouchOverlay(
                                 toDocument(last) { x, y -> currentActions.setSource(x, y) }
                                 currentOnPicked()
                             }
+                        } else if (!painting) {
+                            // AI 제거를 톡 눌렀다
+                            if (keep == true) toDocument(down.position) { x, y -> currentActions.pickObject(x, y) }
                         } else if (keep == false) {
                             currentActions.cancel()
                         } else {
@@ -336,6 +384,28 @@ fun RetouchOverlay(
                 }
             }
     ) {
+        // AI 제거에서 톡 눌러 고른 물체: 반투명 검정과 점선(선택 영역 윤곽선과 같은 모양)
+        if (removing && pick != null) {
+            val image = remember(pick) { pick.shape.asImageBitmap() }
+            Canvas(Modifier.matchParentSize()) {
+                val area = PixelSize(size.width.roundToInt(), size.height.roundToInt())
+                if (area.width <= 0 || area.height <= 0) return@Canvas
+                val transform = view().transform(area, document)
+                val cell = (1 shl pick.level).toDouble()
+                val left = transform.toScreenX(0.0).roundToInt()
+                val top = transform.toScreenY(0.0).roundToInt()
+                val right = transform.toScreenX(image.width * cell).roundToInt()
+                val bottom = transform.toScreenY(image.height * cell).roundToInt()
+                drawImage(
+                    image = image,
+                    dstOffset = IntOffset(left, top),
+                    dstSize = IntSize(right - left, bottom - top),
+                    colorFilter = ColorFilter.tint(CanvasOverlayColors.RemovePick),
+                    filterQuality = FilterQuality.Low
+                )
+            }
+            SelectionAnts(pick.outline, null, view, document, Modifier.matchParentSize())
+        }
         // 칠하는 손가락 자리의 브러시 커서(가져올 곳을 정하는 손가락은 아래 표시만 보인다)
         val touching = finger
         if (touching != null && !fingerPicks) BrushCursor(touching, radius * 2f, view, document)

@@ -67,6 +67,7 @@ import com.kiln.stratum.engine.platform.LiteRtSegmentModel
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
+import com.kiln.stratum.engine.platform.ObjectMask
 import com.kiln.stratum.engine.platform.ObjectSegmenter
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
@@ -88,6 +89,7 @@ import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
+import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.text.TextStyle
@@ -173,6 +175,9 @@ sealed interface EditorMessage {
 
     /** 이 기기에서는 AI 선택(분할 모델)을 돌릴 수 없다. 문서는 그대로다. 화면은 자동 선택으로 바꾸는 버튼을 둔다. */
     data object SelectUnavailable : EditorMessage
+
+    /** 이 기기에서는 AI 제거에서 톡 눌러 물체를 고를 수 없다(분할 모델). 칠해서 지우기는 그대로 쓸 수 있다. */
+    data object PickUnavailable : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -580,7 +585,15 @@ class EditorViewModel internal constructor(
         override fun toggleSourceLock() = toggleCloneSourceLock()
         override fun beginRemove(x: Float, y: Float) = beginRemove(StrokePoint(x, y))
         override fun prepareRemove() = inpaintModel.prepare()
+        override fun pickObject(x: Float, y: Float) = pickRemoveObject(x, y)
+        override fun removePicked() = removePickedObject()
+        override fun clearPicked() = clearRemovePick()
     }
+
+    private val _removePick = MutableStateFlow<RemovePick?>(null)
+
+    /** AI 제거에서 톡 눌러 고른 물체. 없으면 null이다. 문서가 바뀌면 버린다(그 그림에서 찾은 모양이라). */
+    val removePick: StateFlow<RemovePick?> = _removePick.asStateFlow()
 
     private val _selectionOptions = MutableStateFlow(SelectionOptions())
 
@@ -1545,10 +1558,83 @@ class EditorViewModel internal constructor(
      */
     fun beginRemove(point: StrokePoint) {
         if (!canBeginStroke()) return
+        // 칠하기 시작하면 톡 눌러 고른 물체는 버린다
+        _removePick.value = null
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
         val settings = _retouch.value.copy(hardness = 1f, opacity = 1f)
         startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, inpaint = inpaintModel), point)
+    }
+
+    /**
+     * AI 제거에서 문서 좌표 ([x], [y])를 톡 눌렀다. 그 자리 물체를 분할 모델로 찾아 지울 곳으로 고른다(결정 기록 'AI 제거·AI 선택').
+     * 찾은 모양은 화면이 반투명 검정과 점선으로 보이고, [removePickedObject]로 지운다. 다른 물체를 누르면 바꾸고, 찾지 못하면 고른 것을 버린다.
+     * 보이는 레이어를 합친 그림에서 찾는다(AI 선택과 같다). 다른 편집을 처리하는 중이면 무시하고, 숨긴 레이어면 알린다.
+     * 모델을 쓸 수 없으면 [EditorMessage.PickUnavailable], 메모리가 모자라면 [EditorMessage.EditNotEnoughMemory]로 알린다.
+     * 문서는 바꾸지 않아 실행 취소 기록에 남지 않는다.
+     */
+    fun pickRemoveObject(x: Float, y: Float) {
+        val history = history ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        val document = history.document
+        val pickedAt = revision
+        startEditing()
+        editJob = viewModelScope.launch {
+            val pick = try {
+                // 축소본을 그리는 일과 메모리가 겹치지 않게 편집과 같은 잠금 안에서 찾는다
+                renderMutex.withLock {
+                    makeRoom(history, needed = 0L, work = objectSegmenter.workBytes(document))
+                    withContext(Dispatchers.Default) {
+                        objectSegmenter.maskAt(document, x, y) { ensureActive() }?.let { removePickOf(it, pickedAt) }
+                    }
+                }
+            } catch (e: NotEnoughMemoryException) {
+                Log.w(TAG, "Not enough memory to pick an object", e)
+                finishEditing(EditorMessage.EditNotEnoughMemory)
+                return@launch
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to pick an object", e)
+                finishEditing(EditorMessage.EditNotEnoughMemory)
+                return@launch
+            } catch (e: SegmentUnavailableException) {
+                Log.w(TAG, "Picking an object is unavailable", e)
+                finishEditing(EditorMessage.PickUnavailable)
+                return@launch
+            }
+            _removePick.value = pick
+            finishEditing()
+        }
+    }
+
+    /** 찾은 모양을 화면에 보일 고른 물체로(알파 그림과 문서 좌표 윤곽선). 1024px 이하 마스크라 Kotlin으로 돈다. */
+    private fun removePickOf(mask: ObjectMask, pickedAt: Long): RemovePick {
+        val shape = Bitmap.createBitmap(mask.width, mask.height, Bitmap.Config.ALPHA_8)
+        val rowBytes = shape.rowBytes
+        val bytes = ByteArray(rowBytes * mask.height)
+        for (y in 0 until mask.height) mask.alphas.copyInto(bytes, y * rowBytes, y * mask.width, (y + 1) * mask.width)
+        shape.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(bytes))
+        val cell = (1 shl mask.level).toFloat()
+        val lines = MaskContour.trace(mask.alphas, mask.width, mask.height).map { line -> FloatArray(line.size) { line[it] * cell } }
+        return RemovePick(shape, mask.level, SelectionOutline(lines), mask.inpaintArea(), pickedAt)
+    }
+
+    /**
+     * 톡 눌러 고른 물체를 고른 레이어에서 지운다(채우기 모델, 실행 취소 한 단계, 결정 기록 'AI 제거·AI 선택'). 지우면 고른 것은 버려진다(문서가 바뀜).
+     * 고른 것이 없거나 다른 편집을 처리하는 중이면 무시하고, 숨긴 레이어면 알린다. 선택 영역이 있으면 그 안만 바꾼다(칠해서 지우기와 같다).
+     */
+    fun removePickedObject() {
+        val pick = _removePick.value ?: return
+        if (editing || hasLiveValues || pick.revision != revision) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        runEdit(InpaintRegion(layer.id, pick.area, inpaintModel))
+    }
+
+    /** 톡 눌러 고른 물체를 버린다(뒤로 가기·하위 도구를 바꿈) */
+    fun clearRemovePick() {
+        _removePick.value = null
     }
 
     /**
@@ -2212,8 +2298,11 @@ class EditorViewModel internal constructor(
      */
     private fun makeRoom(history: EditHistory, command: EditCommand, before: Document) {
         val cancellable = command as? CancellableCommand ?: return
-        val needed = cancellable.estimateNewBytes(before)
-        val work = cancellable.estimateWorkBytes(before)
+        makeRoom(history, cancellable.estimateNewBytes(before), cancellable.estimateWorkBytes(before))
+    }
+
+    /** [makeRoom]과 같다. 새로 남을 메모리 [needed]와 잠깐 쓸 메모리 [work](바이트)를 직접 받는다(편집이 아닌 일, AI 제거의 물체 고르기). */
+    private fun makeRoom(history: EditHistory, needed: Long, work: Long) {
         if (needed <= 0L && work <= 0L) return
         val used = history.bytesInUse
         var remaining = history.releaseOldSteps((history.maxBytes - needed).coerceAtLeast(0L))
@@ -2237,6 +2326,7 @@ class EditorViewModel internal constructor(
         detailJob?.cancel()
         editJob?.cancel()
         objectPrepareJob?.cancel()
+        _removePick.value = null
         pendingPhoto = null
         // 아직 화면이 받지 않은 공유 요청은 버린다. 다음에 편집 화면이 열릴 때 뜬금없이 공유 창이 뜨지 않게 한다.
         while (_shareRequests.tryReceive().isSuccess) Unit
@@ -2328,6 +2418,8 @@ class EditorViewModel internal constructor(
             if (!sameDocument) {
                 revision++
                 shownDocument = document
+                // 톡 눌러 고른 물체는 그 그림에서 찾은 모양이라 버린다(지운 뒤에도)
+                _removePick.value = null
                 // 문서 크기가 바뀌면(자르기·회전·크기 변경과 그 실행 취소) 가져올 곳이 다른 자리를 가리키므로 지운다
                 if (previous != null && (previous.width != document.width || previous.height != document.height)) _cloneSource.value = null
             }

@@ -101,6 +101,47 @@ class InpaintRegionTest {
         assertEquals(Color.RED, pixel(removed, 415, 300))
     }
 
+    /** 문서 800×600을 [cell]px 칸으로 덮은 마스크에 원(가운데 ([x], [y]), 반지름 [radius]) */
+    private fun disc(x: Float, y: Float, radius: Float, cell: Int): InpaintArea.Masked {
+        val width = (800 + cell - 1) / cell
+        val height = (600 + cell - 1) / cell
+        val alphas = ByteArray(width * height) { i -> if (hypot((i % width + 0.5f) * cell - x, (i / width + 0.5f) * cell - y) <= radius) -1 else 0 }
+        return InpaintArea.Masked(alphas, width, height, cell.toFloat(), cell.toFloat())
+    }
+
+    @Test
+    fun removeAPickedShape_fillsIt_andLeavesFarPixelsExactly() {
+        val document = grayWithRedSpot()
+        val model = FakeInpaintModel()
+
+        // 톡 눌러 고른 물체처럼 반 크기 마스크(한 칸 2px)로 빨간 원을 덮는다
+        val removed = InpaintRegion(LayerId(0), disc(400f, 300f, 21f, cell = 2), model).applyTo(document)
+
+        assertEquals(1, model.calls)
+        for ((x, y) in listOf(400 to 300, 418 to 300, 400 to 282, 386 to 314)) assertGray(pixel(removed, x, y))
+        // 넓힌 띠 밖은 원래 값 그대로다
+        for (y in 0 until 600 step 7) {
+            for (x in 0 until 800 step 7) {
+                if (hypot(x + 0.5f - 400f, y + 0.5f - 300f) > 40f) assertEquals("($x, $y)", pixel(document, x, y), pixel(removed, x, y))
+            }
+        }
+    }
+
+    @Test
+    fun removeAPickedShape_staysInsideTheSelection_andAnEmptyShapeChangesNothing() {
+        // 왼쪽 절반만 고른다
+        val selected = SelectShape(SelectionShape.Rectangle(0f, 0f, 400f, 600f), SelectionMode.REPLACE).applyTo(grayWithRedSpot())
+
+        val removed = InpaintRegion(LayerId(0), disc(400f, 300f, 21f, cell = 1), FakeInpaintModel()).applyTo(selected)
+
+        val inside = pixel(removed, 385, 300)
+        assertTrue("${Integer.toHexString(inside)} is no longer red", Color.red(inside) < 170 && Color.green(inside) > 90)
+        assertEquals(Color.RED, pixel(removed, 410, 300))
+        // 덮인 칸이 없는 마스크는 바꾸지 않는다
+        val nothing = InpaintArea.Masked(ByteArray(400 * 300), 400, 300, 2f, 2f)
+        assertSame(selected, InpaintRegion(LayerId(0), nothing, FakeInpaintModel()).applyTo(selected))
+    }
+
     @Test
     fun fillSelection_replacesTheSelectedArea_andKeepsTheRestExactly() {
         val document = SelectShape(SelectionShape.Rectangle(370f, 270f, 430f, 330f), SelectionMode.REPLACE).applyTo(grayWithRedSpot())

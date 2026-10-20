@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kiln.stratum.FakeInpaintModel
+import com.kiln.stratum.FakeSegmentModel
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.canvas.CanvasFill
@@ -16,9 +17,11 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
 import com.kiln.stratum.engine.platform.InpaintRegion
+import com.kiln.stratum.engine.platform.ObjectSegmenter
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.segment.SegmentUnavailableException
 import com.kiln.stratum.engine.selection.SelectionShape
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -27,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -206,6 +210,94 @@ class EditorRemoveTest {
         assertEquals(EditorMessage.HiddenLayer, awaitMessage())
         assertEquals(hidden.revision, awaitReady { true }.revision)
         assertEquals(0, model.calls)
+    }
+
+    /** 가짜 분할 모델을 끼운다(톡 눌러 고르기) */
+    private fun useSegmenter(model: FakeSegmentModel = FakeSegmentModel()): FakeSegmentModel =
+        model.also { viewModel.objectSegmenter = ObjectSegmenter(it) }
+
+    private fun awaitPick(predicate: (RemovePick?) -> Boolean): RemovePick? = runBlocking { withTimeout(30_000) { viewModel.removePick.first(predicate) } }
+
+    @Test
+    fun tappingAnObject_picksItsShape_andRemoveFillsIt_asOneUndoStep() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        useSegmenter()
+        val before = openWithDots()
+
+        onMain { viewModel.retouchActions.pickObject(200f, 200f) }
+        val pick = checkNotNull(awaitPick { it != null })
+        // 고르기만으로는 문서가 바뀌지 않는다
+        assertEquals(before.revision, awaitReady { true }.revision)
+        assertEquals(before.revision, pick.revision)
+        val xs = pick.outline.lines.flatMap { line -> line.filterIndexed { i, _ -> i % 2 == 0 } }
+        assertEquals(185f, xs.min(), 6f)
+        assertEquals(215f, xs.max(), 6f)
+
+        onMain { viewModel.retouchActions.removePicked() }
+        val removed = awaitReady { it.revision > before.revision }
+        assertFalse(dark(shown(removed), 200, 200))
+        assertEquals(1, model.calls)
+        // 지우면 고른 것은 버려지고, 실행 취소 한 번이면 점이 돌아온다
+        assertNull(viewModel.removePick.value)
+        onMain { viewModel.undo() }
+        assertTrue(dark(shown(awaitReady { it.revision > removed.revision }), 200, 200))
+    }
+
+    @Test
+    fun paintingClearingOrFindingNothing_dropsThePick() {
+        val segments = useSegmenter()
+        viewModel.inpaintModel = FakeInpaintModel()
+        openWithDots()
+        fun pick() {
+            onMain { viewModel.retouchActions.pickObject(200f, 200f) }
+            awaitPick { it != null }
+            awaitReady { true }
+        }
+
+        // 칠하기 시작하면 버린다
+        pick()
+        onMain {
+            viewModel.retouchActions.beginRemove(600f, 600f)
+            viewModel.retouchActions.cancel()
+        }
+        assertNull(viewModel.removePick.value)
+
+        // 뒤로 가기(버리기)
+        pick()
+        onMain { viewModel.retouchActions.clearPicked() }
+        assertNull(viewModel.removePick.value)
+
+        // 아무것도 찾지 못한 곳을 누르면 앞에 고른 것을 버린다
+        pick()
+        segments.found = false
+        onMain { viewModel.retouchActions.pickObject(600f, 600f) }
+        assertNull(awaitPick { it == null })
+    }
+
+    @Test
+    fun pickingOnAHiddenLayer_tellsSo_andPicksNothing() {
+        val segments = useSegmenter()
+        val before = openWithDots()
+        onMain { viewModel.edit(SetLayerVisible(LayerId(0), false)) }
+        awaitReady { it.revision > before.revision }
+
+        onMain { viewModel.retouchActions.pickObject(200f, 200f) }
+
+        assertEquals(EditorMessage.HiddenLayer, awaitMessage())
+        assertNull(viewModel.removePick.value)
+        assertEquals(0, segments.encodes)
+    }
+
+    @Test
+    fun aSegmenterThatCannotRun_tellsToPaintInstead() {
+        useSegmenter(FakeSegmentModel(failure = SegmentUnavailableException("No device")))
+        val before = openWithDots()
+
+        onMain { viewModel.retouchActions.pickObject(200f, 200f) }
+
+        assertEquals(EditorMessage.PickUnavailable, awaitMessage())
+        assertNull(viewModel.removePick.value)
+        assertEquals(before.revision, awaitReady { true }.revision)
     }
 
     @Test

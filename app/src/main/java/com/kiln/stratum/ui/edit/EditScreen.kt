@@ -144,6 +144,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param retouch 리터칭 설정(크기·단단함·불투명도), [onRetouch]로 바꾼다
  * @param cloneSource 복제 도장·복구 브러시가 가져올 곳(정하지 않았으면 null)
  * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
+ * @param removePick AI 제거에서 톡 눌러 고른 물체(없으면 null). 고를 때의 문서가 지금 보이는 문서일 때만 보인다.
  * @param toneOptions 명암 도구 설정(범위·노출·크기·단단함), [onToneOptions]로 바꾼다
  * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
  * @param blurOptions 흐림 도구(흐림·선명) 설정(강도·크기·경도), [onBlurOptions]로 바꾼다
@@ -194,6 +195,7 @@ fun EditScreen(
     onRetouch: (BrushSettings) -> Unit = {},
     cloneSource: CloneSource? = null,
     retouchActions: RetouchActions = RetouchActions.None,
+    removePick: RemovePick? = null,
     toneOptions: ToneOptions = ToneOptions(),
     onToneOptions: (ToneOptions) -> Unit = {},
     toneActions: ToneActions = ToneActions.None,
@@ -369,6 +371,11 @@ fun EditScreen(
         }
         val closableTool = if (widthClass == WidthClass.Compact) activeTool else activeTool?.takeIf { it in EditTool.railTools }
         BackHandler(enabled = closableTool != null, onBack = selection::close)
+        // AI 제거에서 톡 눌러 고른 물체(지금 보이는 문서의 것)가 있으면 뒤로 가기는 그것부터 버린다(그다음 도구를 닫는다)
+        val shownPick = removePick?.takeIf {
+            it.revision == ready?.revision && activeTool == EditTool.Retouch && selection.modeOf(EditTool.Retouch) == SubTool.RETOUCH_REMOVE
+        }
+        BackHandler(enabled = shownPick != null, onBack = retouchActions::clearPicked)
         // 옵션 창이 떠 있으면 뒤로 가기는 그것부터 닫는다. 도구의 것 바로 뒤에 늘 두어, 창·유동화의 것보다는 먼저 등록된다.
         // (Scaffold 안에 두면 다시 만들어질 때 창보다 나중에 등록돼 창보다 먼저 받는다)
         // 레이어·조정 패널은 뒤로 가기로 닫지 않는다(사용자 결정: 상단 바 버튼으로만 닫음)
@@ -426,13 +433,23 @@ fun EditScreen(
         // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
         LaunchedEffect(removeChosen) { if (removeChosen) retouchActions.prepareRemove() }
+        // AI 제거를 떠나면(도구·하위 도구를 바꿈) 톡 눌러 고른 물체는 버린다. 접기·펼치기로 화면을 다시 만들 때는
+        // AI 제거를 고른 채 다시 시작하므로 그대로 둔다(화면이 사라지는 것만으로는 버리지 않는다).
+        var removeWasChosen by remember { mutableStateOf(removeChosen) }
+        LaunchedEffect(removeChosen) {
+            if (removeWasChosen && !removeChosen) retouchActions.clearPicked()
+            removeWasChosen = removeChosen
+        }
         val retouchControls = RetouchControls(
             settings = retouch,
             onChange = onRetouch,
             source = cloneSource,
             picking = retouchPicks,
             onPick = { if (cloneSource != null) retouchPicking = !retouchPicking },
-            sizePreview = sizePreview
+            sizePreview = sizePreview,
+            objectPicked = shownPick != null,
+            busy = ready?.busy == true,
+            onRemovePicked = retouchActions::removePicked
         ).takeIf { activeTool == EditTool.Retouch }
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
         val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
@@ -597,6 +614,7 @@ fun EditScreen(
                     onPicked = { retouchPicking = false },
                     modifier = Modifier.fillMaxSize(),
                     removing = retouchRemoving,
+                    pick = shownPick,
                     // 표시를 꾹 눌러 고정을 켜고 끄면 짧게 알린다
                     onLockChanged = { locked -> gestureToast.show(if (locked) sourceLockedText else sourceUnlockedText) }
                 )
@@ -1077,6 +1095,7 @@ private fun EditCanvas(
     val removeUnavailable = stringResource(R.string.edit_remove_unavailable)
     val spotHeal = stringResource(R.string.subtool_spot_heal_short)
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
+    val pickUnavailable = stringResource(R.string.edit_pick_unavailable)
     val magicWand = stringResource(R.string.subtool_select_wand)
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
     // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
@@ -1114,6 +1133,7 @@ private fun EditCanvas(
                     val result = snackbarHostState.showSnackbar(removeUnavailable, actionLabel = spotHeal, duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) currentOnSpotHeal()
                 }
+                EditorMessage.PickUnavailable -> snackbarHostState.showSnackbar(pickUnavailable, duration = SnackbarDuration.Long)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

@@ -318,9 +318,12 @@
     <string name="retouch_source_locked">Source locked</string>
     <string name="retouch_source_unlocked">Source unlocked</string>
     <string name="subtool_ai_remove">AI remove</string>
-    <string name="retouch_hint_remove">Paint over what to remove, with a little margin for its shadow. When you lift your finger, AI fills it to match the surroundings.</string>
+    <string name="retouch_hint_remove">Paint over what to remove, with a little margin for its shadow, and lift your finger to let AI fill it. Or tap an object to pick its shape, then tap Remove.</string>
+    <string name="retouch_remove_picked">Remove</string>
+    <string name="retouch_remove_picked_description">Remove the picked object with AI</string>
     <string name="edit_remove_unavailable">AI remove can\'t run on this device. Try the spot healing brush.</string>
     <string name="edit_select_unavailable">AI select can\'t run on this device. Try the magic wand.</string>
+    <string name="edit_pick_unavailable">Tapping to pick an object can\'t run on this device. Paint over what to remove instead.</string>
     <string name="tool_blur">Blur, sharpen and smudge</string>
     <string name="tool_blur_short">Blur</string>
     <string name="subtool_blur">Blur</string>

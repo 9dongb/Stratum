@@ -17,7 +17,8 @@ import kotlin.math.floor
  * [layerId] 레이어의 [area]를 AI 모델([model])로 채운다(AI 제거, 결정 기록 'AI 제거·AI 선택'). 원본 해상도에 바로 적용한다.
  *
  * 채울 곳 둘레를 잘라 모델 크기로 채우고, 원본 타일에는 채울 곳 안만 바꿔 넣는다([Inpainter]). 밖의 픽셀은 값이 그대로다.
- * 선택 영역이 있으면 그 안에만 칠한다([InpaintArea.Selected]이면 선택 영역 자체가 채울 곳이다). 게인맵은 둘레 값으로 매끈하게 잇는다.
+ * 채울 곳은 칠한 자국, 선택 영역([InpaintArea.Selected]이면 선택 영역 자체), 톡 눌러 고른 물체 모양([InpaintArea.Masked])이다.
+ * 선택 영역이 있으면 그 안에만 칠한다. 게인맵은 둘레 값으로 매끈하게 잇는다.
  * 없는 레이어, 빈 레이어, 문서에 닿지 않는 곳, 선택 영역 없이 고른 곳을 채우라는 경우는 문서를 그대로 돌려준다.
  * 모델을 이 기기에서 쓸 수 없으면 [com.kiln.stratum.engine.inpaint.InpaintUnavailableException]을 그대로 던진다.
  *
