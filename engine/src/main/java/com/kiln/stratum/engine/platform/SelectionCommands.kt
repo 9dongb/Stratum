@@ -333,7 +333,9 @@ internal fun MaskTiles.upscaledTiles(alphas: ByteArray, width: Int, height: Int,
             var all = true
             for (y in top..bottom) {
                 for (x in left..right) {
-                    if (alphas[y * width + x] == 0.toByte()) all = false else any = true
+                    val alpha = alphas[y * width + x].toInt() and 0xFF
+                    if (alpha != 0) any = true
+                    if (alpha != 255) all = false
                 }
             }
             when {
