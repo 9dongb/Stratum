@@ -9,20 +9,19 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * 자르기 비율. 자유, 원본, 그리고 새 캔버스와 같은 비율이다(결정 기록 '자르기·회전·뒤집기·크기 변경').
- * 3:4는 사용자 요청으로 더했다(2026-10-21). 저장은 순서 번호라 새 비율은 맨 끝에 더한다.
+ * 자르기 비율. 자유, 원본, 그리고 세로가 기본인 비율이다(사용자 피드백 10차: "세로가 기본 값이게", 결정 기록 '자르기·회전·뒤집기·크기 변경').
+ * 납작해지는 순서(1:1 → 9:16)이고, 가로·세로 바꾸기(↔)를 누르면 가로(5:4·4:3·3:2·16:9)가 된다.
  * [width]:[height]가 0:0이면 정해진 숫자가 없는 비율(자유·원본)이다.
+ * [code]는 되살리기 저장에 쓰는 바뀌지 않는 번호다(앞 판의 순서 번호와 같고, 없어진 비율은 자유로 되살린다).
  */
-enum class CropRatio(val width: Int, val height: Int) {
-    FREE(0, 0),
-    ORIGINAL(0, 0),
-    SQUARE(1, 1),
-    PORTRAIT_4_5(4, 5),
-    STORY_9_16(9, 16),
-    WIDE_16_9(16, 9),
-    PHOTO_3_2(3, 2),
-    PHOTO_4_3(4, 3),
-    PHOTO_3_4(3, 4)
+enum class CropRatio(val width: Int, val height: Int, val code: Int) {
+    FREE(0, 0, 0),
+    ORIGINAL(0, 0, 1),
+    SQUARE(1, 1, 2),
+    PORTRAIT_4_5(4, 5, 3),
+    PORTRAIT_3_4(3, 4, 8),
+    PORTRAIT_2_3(2, 3, 9),
+    STORY_9_16(9, 16, 4)
 }
 
 /** 자르기 테두리에서 끌 수 있는 곳. 모서리 넷, 변 넷, 그리고 안쪽(테두리 옮기기)이다. */
@@ -248,7 +247,7 @@ data class CropFrame(
 
     /** 화면 회전·접기·펼치기 뒤에도 남기도록 숫자 목록으로 바꾼다. */
     fun toSaved(): List<Double> =
-        listOf(left, top, right, bottom, ratio.ordinal.toDouble(), if (swapped) 1.0 else 0.0)
+        listOf(left, top, right, bottom, ratio.code.toDouble(), if (swapped) 1.0 else 0.0)
 
     companion object {
         /** 테두리 짧은 변의 가장 작은 크기(문서 픽셀). */
@@ -265,7 +264,7 @@ data class CropFrame(
                 top = saved[1],
                 right = saved[2],
                 bottom = saved[3],
-                ratio = CropRatio.entries[saved[4].toInt()],
+                ratio = CropRatio.entries.firstOrNull { it.code == saved[4].toInt() } ?: CropRatio.FREE,
                 swapped = saved[5] != 0.0
             )
     }

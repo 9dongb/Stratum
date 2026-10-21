@@ -10,12 +10,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -121,7 +123,7 @@ class EditCropTest {
         show()
         startCropOnCover()
 
-        chooseRatio(CropRatio.PHOTO_3_4)
+        chooseRatio(CropRatio.PORTRAIT_3_4)
         composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsEnabled().performClick()
 
         // 4:3 사진에서 세로 300에 맞춘 3:4(폭 225)
@@ -133,15 +135,17 @@ class EditCropTest {
         show()
         startCropOnCover()
 
-        chooseRatio(CropRatio.WIDE_16_9)
+        // 세로가 기본(사용자 피드백 10차): 9:16을 고르고 바꾸면 16:9이고, 칩 이름도 뒤집혀 보인다
+        chooseRatio(CropRatio.STORY_9_16)
         composeRule.onNodeWithTag(EditScreenTags.CROP_SWAP).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.cropRatio(CropRatio.STORY_9_16)).assert(hasText("16:9"))
         composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
 
-        // 9:16으로 세로 300에 맞춘다(폭 168.75를 반올림)
+        // 16:9로 폭 400에 맞춘다(높이 225)
         composeRule.runOnIdle {
             val rect = (commands.single() as CropImage).rect
-            assertEquals(169, rect.width)
-            assertEquals(300, rect.height)
+            assertEquals(400, rect.width)
+            assertEquals(225, rect.height)
         }
     }
 

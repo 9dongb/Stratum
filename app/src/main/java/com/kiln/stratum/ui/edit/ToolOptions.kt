@@ -185,7 +185,7 @@ private fun CropRatioChips(crop: CropControls, onChosen: () -> Unit = {}) {
                 crop.onRatio(ratio)
                 onChosen()
             },
-            label = { Text(cropRatioLabel(ratio)) },
+            label = { Text(cropRatioLabel(ratio, crop.frame.swapped)) },
             modifier = Modifier.testTag(EditScreenTags.cropRatio(ratio))
         )
     }
@@ -203,13 +203,20 @@ internal fun CropRatioFlow(crop: CropControls, onChosen: () -> Unit) {
     }
 }
 
-/** 비율 칩의 이름. 자유·원본은 말로, 나머지는 '가로:세로'로 보인다. */
+/**
+ * 비율 칩의 이름. 자유·원본은 말로, 나머지는 '가로:세로'로 보인다.
+ * 가로·세로를 바꿨으면([swapped]) 뒤집어 보인다(4:5 → 5:4). 고른 테두리 모양과 이름이 맞게(Claude 판단, 사용자 피드백 10차).
+ */
 @Composable
-internal fun cropRatioLabel(ratio: CropRatio): String =
+internal fun cropRatioLabel(ratio: CropRatio, swapped: Boolean = false): String =
     when (ratio) {
         CropRatio.FREE -> stringResource(R.string.crop_ratio_free)
         CropRatio.ORIGINAL -> stringResource(R.string.crop_ratio_original)
-        else -> stringResource(R.string.crop_ratio_format, ratio.width, ratio.height)
+        else -> if (swapped) {
+            stringResource(R.string.crop_ratio_format, ratio.height, ratio.width)
+        } else {
+            stringResource(R.string.crop_ratio_format, ratio.width, ratio.height)
+        }
     }
 
 /**

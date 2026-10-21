@@ -91,7 +91,7 @@ internal fun textStrip(controls: TextControls): List<StripItem> {
 internal fun transformStrip(crop: CropControls, busy: Boolean, close: () -> Unit): List<StripItem> =
     buildList {
         add(
-            ValueCell("ratio", stringResource(R.string.strip_crop_ratio), cropRatioLabel(crop.frame.ratio)) {
+            ValueCell("ratio", stringResource(R.string.strip_crop_ratio), cropRatioLabel(crop.frame.ratio, crop.frame.swapped)) {
                 CropRatioFlow(crop, onChosen = close)
             }
         )

@@ -5,6 +5,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CropFrameTest {
@@ -71,14 +72,24 @@ class CropFrameTest {
         val square = CropFrame.whole(document).withRatio(CropRatio.SQUARE, document)
         assertFrame(500.0, 0.0, 3500.0, 3000.0, square)
 
-        val wide = CropFrame.whole(document).withRatio(CropRatio.WIDE_16_9, document)
-        assertFrame(0.0, 375.0, 4000.0, 2625.0, wide)
+        // 세로가 기본(사용자 피드백 10차): 9:16으로 세로 3000에 맞춘다
+        val tall = CropFrame.whole(document).withRatio(CropRatio.STORY_9_16, document)
+        assertFrame(2000 - 843.75, 0.0, 2000 + 843.75, 3000.0, tall)
+    }
+
+    @Test
+    fun ratios_arePortraitFirst_fromSquareToTheTallest() {
+        // 4:3·16:9·3:2(가로)는 없고, 가로는 가로·세로 바꾸기로 만든다
+        val fixed = CropRatio.entries.filter { it.width > 0 }
+        assertEquals(listOf("1:1", "4:5", "3:4", "2:3", "9:16"), fixed.map { "${it.width}:${it.height}" })
+        assertTrue(fixed.all { it.width <= it.height })
+        assertTrue(fixed.zipWithNext().all { (a, b) -> a.width.toDouble() / a.height > b.width.toDouble() / b.height })
     }
 
     @Test
     fun withRatio_threeToFour_fitsAPortraitFrame() {
         // 3:4는 4:3 사진에서 세로 3000에 맞춘 세로 테두리다
-        val portrait = CropFrame.whole(document).withRatio(CropRatio.PHOTO_3_4, document)
+        val portrait = CropFrame.whole(document).withRatio(CropRatio.PORTRAIT_3_4, document)
 
         assertEquals(3.0 / 4, portrait.aspect(document)!!, 1e-9)
         assertFrame(875.0, 0.0, 3125.0, 3000.0, portrait)
@@ -98,10 +109,10 @@ class CropFrameTest {
 
     @Test
     fun swapped_flipsTheRatioOrTheFrame() {
-        val tall = CropFrame.whole(document).withRatio(CropRatio.WIDE_16_9, document).swapped(document)
-        // 9:16으로 세로 3000에 맞춘다
-        assertEquals(9.0 / 16, tall.aspect(document)!!, 1e-9)
-        assertFrame(2000 - 843.75, 0.0, 2000 + 843.75, 3000.0, tall)
+        val wide = CropFrame.whole(document).withRatio(CropRatio.STORY_9_16, document).swapped(document)
+        // 바꾸면 16:9로 폭 4000에 맞춘다
+        assertEquals(16.0 / 9, wide.aspect(document)!!, 1e-9)
+        assertFrame(0.0, 375.0, 4000.0, 2625.0, wide)
 
         // 자유 비율은 테두리 모양을 지금 가운데에서 뒤집는다
         val free = CropFrame(1500.0, 1250.0, 2500.0, 1750.0).swapped(document)
@@ -149,7 +160,7 @@ class CropFrameTest {
 
     @Test
     fun lockedEdge_keepsTheRatioAroundTheCenter() {
-        val wide = CropFrame.whole(document).withRatio(CropRatio.WIDE_16_9, document)
+        val wide = CropFrame.whole(document).withRatio(CropRatio.STORY_9_16, document).swapped(document)
 
         val dragged = wide.dragged(CropHandle.RIGHT, -1000.0, 0.0, document, minSide = 10.0)
 
@@ -179,16 +190,25 @@ class CropFrameTest {
         val square = CropFrame(0.4, 0.6, 1000.4, 1000.6, CropRatio.SQUARE)
 
         assertEquals(PixelRect(0, 1, 1000, 1001), square.toPixelRect(document))
-        assertEquals(PixelRect(0, 375, 4000, 2625), CropFrame.whole(document).withRatio(CropRatio.WIDE_16_9, document).toPixelRect(document))
+        assertEquals(PixelRect(0, 375, 4000, 2625), CropFrame.whole(document).withRatio(CropRatio.STORY_9_16, document).swapped(document).toPixelRect(document))
         // 반올림으로 사진 끝을 넘으면 안쪽으로 옮긴다
         assertEquals(PixelRect(3000, 2000, 4000, 3000), CropFrame(2999.6, 1999.6, 3999.9, 2999.9).toPixelRect(document))
     }
 
     @Test
     fun saved_comesBackTheSame() {
-        val frame = CropFrame(1.5, 2.5, 300.25, 400.75, CropRatio.PHOTO_3_2, swapped = true)
+        val frame = CropFrame(1.5, 2.5, 300.25, 400.75, CropRatio.PORTRAIT_2_3, swapped = true)
 
         assertEquals(frame, CropFrame.fromSaved(frame.toSaved()))
+    }
+
+    @Test
+    fun saved_withARatioThatNoLongerExists_comesBackFree() {
+        // 앞 판이 저장한 16:9(번호 5)·3:2(6)·4:3(7)은 자유로 되살린다. 남은 비율은 앞 판 번호 그대로다.
+        val saved = CropFrame(0.0, 0.0, 100.0, 100.0).toSaved()
+        assertEquals(CropRatio.FREE, CropFrame.fromSaved(saved.toMutableList().apply { set(4, 5.0) }).ratio)
+        assertEquals(CropRatio.PORTRAIT_3_4, CropFrame.fromSaved(saved.toMutableList().apply { set(4, 8.0) }).ratio)
+        assertEquals(CropRatio.STORY_9_16, CropFrame.fromSaved(saved.toMutableList().apply { set(4, 4.0) }).ratio)
     }
 
     @Test
