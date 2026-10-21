@@ -41,42 +41,42 @@ class PlacementTest {
     }
 
     @Test
-    fun placeInside_pushesIntoThePiece() {
-        val piece = Region(60, 60, 500, 380)
-        assertEquals(100 to 100, placeInside(100, 100, 56, 200, piece))
+    fun placeInside_pushesIntoTheArea() {
+        val area = Region(60, 60, 500, 380)
+        assertEquals(100 to 100, placeInside(100, 100, 56, 200, area))
         // 오른쪽·아래로 넘치면 안으로, 왼쪽·위로 넘치면 끝으로
-        assertEquals(444 to 180, placeInside(470, 300, 56, 200, piece))
-        assertEquals(60 to 60, placeInside(0, 0, 56, 200, piece))
-        // 조각보다 크면 위 끝(안에서 밀어 봄)
-        assertEquals(100 to 60, placeInside(100, 100, 56, 500, piece))
+        assertEquals(444 to 180, placeInside(470, 300, 56, 200, area))
+        assertEquals(60 to 60, placeInside(0, 0, 56, 200, area))
+        // 영역보다 크면 위 끝(안에서 밀어 봄)
+        assertEquals(100 to 60, placeInside(100, 100, 56, 500, area))
     }
 
     @Test
-    fun stripTop_centersOnTheTool() {
-        // 위아래 자리가 넉넉하면 도구 버튼 가운데(300)에 띠 가운데를 맞춘다
-        assertEquals(200, stripTop(Span(276, 324), height = 200, piece = Span(56, 700)))
+    fun stripTop_centersOnTheCell() {
+        // 위아래 자리가 넉넉하면 칸 가운데(300)에 창 가운데를 맞춘다
+        assertEquals(200, stripTop(Span(276, 324), height = 200, area = Span(56, 700)))
     }
 
     @Test
-    fun stripTop_startsAtTheTool_whenTheTopIsShort() {
-        // 가운데에 맞추면 위로 넘치므로 버튼 위 끝(80)에서 시작한다(영역 위 끝 56이 아니라)
-        assertEquals(80, stripTop(Span(80, 128), height = 300, piece = Span(56, 700)))
-        // 버튼에서 시작하면 아래로 넘칠 때는 넘치지 않게 올린다(80 + 630 > 700)
-        assertEquals(70, stripTop(Span(80, 128), height = 630, piece = Span(56, 700)))
+    fun stripTop_startsAtTheCell_whenTheTopIsShort() {
+        // 가운데에 맞추면 위로 넘치므로 칸 위 끝(80)에서 시작한다(영역 위 끝 56이 아니라)
+        assertEquals(80, stripTop(Span(80, 128), height = 300, area = Span(56, 700)))
+        // 칸에서 시작하면 아래로 넘칠 때는 넘치지 않게 올린다(80 + 630 > 700)
+        assertEquals(70, stripTop(Span(80, 128), height = 630, area = Span(56, 700)))
     }
 
     @Test
-    fun stripTop_endsAtTheTool_whenTheBottomIsShort() {
-        // 가운데에 맞추면 아래로 넘치므로 버튼 아래 끝(660)에서 끝난다
-        assertEquals(360, stripTop(Span(612, 660), height = 300, piece = Span(56, 700)))
+    fun stripTop_endsAtTheCell_whenTheBottomIsShort() {
+        // 가운데에 맞추면 아래로 넘치므로 칸 아래 끝(660)에서 끝난다
+        assertEquals(360, stripTop(Span(612, 660), height = 300, area = Span(56, 700)))
     }
 
     @Test
-    fun stripTop_staysInsideThePiece_whenTaller() {
-        // 띠가 조각보다 크면(안에서 밀어 봄) 조각 위 끝이다
-        assertEquals(56, stripTop(Span(300, 348), height = 800, piece = Span(56, 700)))
-        // 가로 힌지 아래 조각(440~800)에 있는 도구: 조각 위로 나가지 않는다
-        assertEquals(452, stripTop(Span(452, 500), height = 300, piece = Span(440, 800)))
+    fun stripTop_staysInsideTheArea_whenTaller() {
+        // 영역보다 크면(안에서 밀어 봄) 영역 위 끝이다
+        assertEquals(56, stripTop(Span(300, 348), height = 800, area = Span(56, 700)))
+        // 영역(440~800) 위 끝 가까이의 칸: 영역 위로 나가지 않는다
+        assertEquals(452, stripTop(Span(452, 500), height = 300, area = Span(440, 800)))
     }
 
     @Test

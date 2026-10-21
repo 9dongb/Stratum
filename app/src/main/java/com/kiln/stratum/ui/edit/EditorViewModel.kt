@@ -2186,22 +2186,14 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * 설정의 미리 보기 화질을 열린 문서에 바로 건다. 편집 화면 상단 바에서 연 설정에서 돌아올 때 부른다(사용자 피드백 11차 4, 전에는 설정을
-     * 홈에서만 열어 문서를 열 때 읽으면 됐다). 화질이 그대로면 아무것도 하지 않는다. 축소본 단계가 바뀌면 다시 그리고, 아니면 부분 그림만 다시
-     * 계획한다('가볍게'는 맞춤일 때 부분 그림을 지운다). 편집을 처리하는 중이면 그 편집이 끝나며 그리는 축소본이 새 화질을 따른다.
+     * 설정의 미리 보기 화질을 열린 문서에 건다. 편집 화면 상단 바에서 연 설정에서 돌아올 때, 편집 화면을 다시 그리기 전에 부른다
+     * (사용자 피드백 11차 4, 전에는 설정을 홈에서만 열어 문서를 열 때 읽으면 됐다). 화질이 그대로면 아무것도 하지 않는다.
+     * 여기서는 화질만 바꾼다. 다시 그려지는 편집 화면이 캔버스 크기([onCanvasSize])를 알릴 때 축소본 단계가 바뀌었으면 다시 그리고,
+     * 보기([onViewport])를 알릴 때 부분 그림을 다시 계획한다('가볍게'는 맞춤일 때 부분 그림을 지운다).
+     * 여기서 바로 다시 그리면, 곧이어 오는 캔버스 크기 알림이 그 그리기를 취소하고 처음부터 다시 그렸다(검토에서 찾음).
      */
     fun applyPreviewQuality() {
-        val quality = appSettings.values.value.previewQuality
-        if (quality == previewQuality) return
-        previewQuality = quality
-        val document = history?.document ?: return
-        if (editing || _state.value !is EditorState.Ready) return
-        if (levelFor(document) == previewLevel) {
-            planDetail()
-        } else {
-            previewJob?.cancel()
-            previewJob = viewModelScope.launch { showPreview(document) }
-        }
+        previewQuality = appSettings.values.value.previewQuality
     }
 
     /**

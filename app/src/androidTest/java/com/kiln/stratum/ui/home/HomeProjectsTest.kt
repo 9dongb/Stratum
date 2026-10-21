@@ -38,7 +38,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 홈의 최근 프로젝트 격자: 칸 수, 열기, 지우기(묻고 나서), 접히는 선 피하기를 확인한다. */
+/** 홈의 최근 프로젝트 격자: 칸 수, 열기, 지우기(묻고 나서), 접히는 선이 지나도 카드가 그대로인지(사용자 피드백 11차 1) 확인한다. */
 @RunWith(AndroidJUnit4::class)
 class HomeProjectsTest {
 
@@ -170,9 +170,10 @@ class HomeProjectsTest {
 
     @Test
     fun expanded_aVerticalHinge_doesNotChangeTheCards() {
-        // 사용자 피드백 11차 1: 전에는 선에 걸리는 카드만 안쪽 여백을 줘 크기가 달랐다
-        show(projects(8), widthDp = 930, heightDp = 700)
-        val tags = (0 until 8).map { HomeTags.projectName("p$it") }
+        // 사용자 피드백 11차 1: 전에는 선에 걸리는 카드만 안쪽 여백을 줘 크기가 달랐다.
+        // 한 줄(4열)만 본다: 접은 화면에 줄여 넣으면 둘째 줄이 격자 밖으로 잘려 크기가 0으로 읽힌다.
+        show(projects(4), widthDp = 930, heightDp = 700)
+        val tags = (0 until 4).map { HomeTags.projectName("p$it") }
         val before = tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() }
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()

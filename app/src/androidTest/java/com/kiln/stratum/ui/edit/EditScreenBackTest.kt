@@ -145,7 +145,7 @@ class EditScreenBackTest {
 
     @Test
     fun anOpenDialog_closesBeforeTheTool() {
-        // 메인 세로의 창(힌지를 피하는 창)이 열려 있으면 창이 먼저 닫힌다
+        // 메인 세로의 창(화면 가운데의 창)이 열려 있으면 창이 먼저 닫힌다
         show(MAIN_PORTRAIT)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.EXPORT).performClick()

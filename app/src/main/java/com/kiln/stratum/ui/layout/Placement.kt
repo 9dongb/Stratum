@@ -59,9 +59,9 @@ fun flyoutOnLeft(width: Int, anchor: Region, right: Region, left: Region, gap: I
     }
 }
 
-/** 크기 [width]×[height]인 것의 왼쪽 위를 ([x], [y])에 두되 [piece] 안으로 민 자리. [piece]보다 크면 왼쪽·위 끝이다. */
-fun placeInside(x: Int, y: Int, width: Int, height: Int, piece: Region): Pair<Int, Int> =
-    x.coerceAtMost(piece.right - width).coerceAtLeast(piece.left) to y.coerceAtMost(piece.bottom - height).coerceAtLeast(piece.top)
+/** 크기 [width]×[height]인 것의 왼쪽 위를 ([x], [y])에 두되 [area] 안으로 민 자리. [area]보다 크면 왼쪽·위 끝이다. */
+fun placeInside(x: Int, y: Int, width: Int, height: Int, area: Region): Pair<Int, Int> =
+    x.coerceAtMost(area.right - width).coerceAtLeast(area.left) to y.coerceAtMost(area.bottom - height).coerceAtLeast(area.top)
 
 /**
  * 캔버스 왼쪽 위 배율 표시(크기 [width]×[height])의 왼쪽 위 자리(창 좌표, 사용자 피드백 10차 8). 바라는 자리([x], [y])가
@@ -83,16 +83,16 @@ fun actionBarStarts(widths: List<Int>, center: Int, area: Span, gap: Int): List<
 }
 
 /**
- * 높이 [height]인 도구 옵션 띠의 위 끝(창 좌표). 고른 도구 버튼([anchor]의 위아래)의 가운데에 띠의 가운데를 맞춘다.
- * 위쪽 자리가 모자라면 버튼 위 끝에서 시작하고(사용자 요청), 아래쪽 자리가 모자라면 버튼 아래 끝에서 끝낸다.
- * 그래도 [piece](도구가 든 조각의 위아래 구간) 밖으로 나가면 안으로 민다. 띠가 조각보다 크면 조각 위 끝이다.
+ * 띠의 칸([anchor]의 위아래) 옆에 띄우는 높이 [height]인 것(세로 슬라이더 창)의 위 끝(창 좌표). 칸의 가운데에 가운데를 맞춘다.
+ * 위쪽 자리가 모자라면 칸 위 끝에서 시작하고, 아래쪽 자리가 모자라면 칸 아래 끝에서 끝낸다(9차까지 도구 옵션 띠를 고른 도구 버튼 옆에 둘 때의
+ * 규칙, 사용자 요청). 그래도 [area](띄울 수 있는 위아래 구간) 밖으로 나가면 안으로 민다. [area]보다 크면 그 위 끝이다.
  */
-fun stripTop(anchor: Span, height: Int, piece: Span): Int {
+fun stripTop(anchor: Span, height: Int, area: Span): Int {
     val centered = (anchor.start + anchor.end) / 2 - height / 2
     val top = when {
-        centered < piece.start -> anchor.start
-        centered + height > piece.end -> anchor.end - height
+        centered < area.start -> anchor.start
+        centered + height > area.end -> anchor.end - height
         else -> centered
     }
-    return top.coerceAtMost(piece.end - height).coerceAtLeast(piece.start)
+    return top.coerceAtMost(area.end - height).coerceAtLeast(area.start)
 }

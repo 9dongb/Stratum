@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
@@ -136,9 +135,6 @@ private val HoleMargin = 4.dp
 /** [HoleAvoidingBarRow]에서 제목과 첫 버튼 사이에 남길 가장 작은 틈 */
 private val TitleGap = 8.dp
 
-/** M3 상단 바의 제목 자리 왼쪽 끝(앞 버튼이 없을 때). 줄이 놓이기 전 창 위치 어림에만 쓴다. */
-private val BarTitleStart = 16.dp
-
 /**
  * 바 버튼에서 보이는 부분(글자 버튼의 글자, 아이콘 버튼의 아이콘)의 양옆 여백. 글자 버튼 안쪽 여백·(48 − 24)/2와 같다.
  * 버튼(줄)을 [topBarItem]으로 알릴 때 이만큼 줄여 알리면, 버튼 여백만 카메라 구멍에 걸릴 때 바를 내리지 않는다
@@ -162,15 +158,13 @@ fun HoleAvoidingBarRow(
     title: (@Composable () -> Unit)? = null
 ) {
     val density = LocalDensity.current
-    // 이 줄의 창 왼쪽 끝(px). 놓인 뒤에 알고, 바뀌면 다시 놓는다. 처음에는 바 제목 자리(바 왼쪽에서 16dp)로 어림해 첫 화면부터 구멍을 피한다.
-    var rowLeft by remember { mutableStateOf<Float?>(null) }
     Layout(
         content = {
             if (title != null) Box(Modifier.topBarItem(insets, "title")) { title() }
             // 버튼은 보이는 부분(양옆 [BarButtonContentInset] 안쪽)만 알린다. 버튼 여백이 구멍에 걸리는 것은 가려지는 것이 아니다.
             for ((key, action) in actions) Box(Modifier.topBarItem(insets, key, BarButtonContentInset)) { action() }
         },
-        modifier = modifier.fillMaxWidth().onGloballyPositioned { rowLeft = it.positionInWindow().x }
+        modifier = modifier.fillMaxWidth()
     ) { measurables, constraints ->
         val loose = Constraints(maxWidth = constraints.maxWidth, maxHeight = constraints.maxHeight)
         val width = constraints.maxWidth
@@ -188,18 +182,22 @@ fun HoleAvoidingBarRow(
         val height = (placeables.maxOfOrNull { it.height } ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
         layout(width, height) {
             val widths = actionPlaceables.map { it.width }
-            // 구멍은 창 좌표라 이 줄의 창 위치를 빼서 견준다
-            val left = rowLeft ?: with(density) { BarTitleStart.toPx() }
+            // 구멍은 창 좌표라 이 줄의 창 위치를 빼서 견준다. 놓는 순간의 자리를 읽어 첫 화면부터 맞게 놓는다(전에는 놓인 뒤에 알아
+            // 첫 장면은 어림으로 놓았는데, 앞에 뒤로 버튼이 있는 편집 화면 바는 어림이 40dp 어긋나 바가 한 장면 내려갔다 올라왔다).
+            // 정렬선을 재는 단계에서는 자리를 몰라(null) 구멍을 보지 않고 놓고, 곧 이어지는 배치에서 다시 놓는다.
+            val left = coordinates?.positionInWindow()?.x
             val inset = with(density) { BarButtonContentInset.roundToPx() }
-            val starts = holeAvoidingStarts(
-                widths = widths,
-                end = width,
-                holes = insets.holes.map { (it.start - left)..(it.endInclusive - left) },
-                margin = insets.margin,
-                // 제목이 있으면 버튼의 보이지 않는 여백까지는 제목 쪽 틈에 걸쳐도 된다. 제목이 없으면 줄 안에서만 비킨다.
-                minStart = titlePlaceable?.let { it.width + gap - inset } ?: 0,
-                inset = inset
-            ) ?: plainStarts(widths, width)
+            val starts = left?.let {
+                holeAvoidingStarts(
+                    widths = widths,
+                    end = width,
+                    holes = insets.holes.map { (it.start - left)..(it.endInclusive - left) },
+                    margin = insets.margin,
+                    // 제목이 있으면 버튼의 보이지 않는 여백까지는 제목 쪽 틈에 걸쳐도 된다. 제목이 없으면 줄 안에서만 비킨다.
+                    minStart = titlePlaceable?.let { it.width + gap - inset } ?: 0,
+                    inset = inset
+                )
+            } ?: plainStarts(widths, width)
             titlePlaceable?.place(0, (height - titlePlaceable.height) / 2)
             actionPlaceables.forEachIndexed { index, placeable -> placeable.place(starts[index], (height - placeable.height) / 2) }
         }

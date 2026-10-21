@@ -369,7 +369,8 @@ fun EditScreen(
         onCanvasSize(width, height)
     }
     // 자르기를 시작할 때 바꾼 보기. 그대로인 채 자르기가 끝나면 맞춤으로 돌린다(자르기를 위해 바꾼 보기가 남지 않게).
-    var cropStartView by remember { mutableStateOf<CanvasView?>(null) }
+    // 자르는 중에 설정을 열었다 돌아오거나 접고 펴도(편집 화면이 다시 만들어짐) 남게 저장한다(사용자 피드백 11차 검토).
+    var cropStartView by rememberSaveable(stateSaver = CropStartViewSaver) { mutableStateOf<CanvasView?>(null) }
     // 닫힌 화면에서 캔버스 위에 겹쳐 뜬 옵션 칸의 높이(픽셀). 알림 막대·크기 원을 그 위 보이는 자리에 놓는다.
     var coverSheetPx by remember { mutableStateOf(0) }
     // 편집 화면과 캔버스 영역의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 전체 자리에서 캔버스 위쪽 아래에 띄운다.
@@ -1534,4 +1535,10 @@ private fun EditScreenOpeningPreview() {
 private val CropFrameSaver = Saver<CropFrame?, DoubleArray>(
     save = { it?.toSaved()?.toDoubleArray() },
     restore = { CropFrame.fromSaved(it.toList()) }
+)
+
+/** 자르기를 시작할 때 바꾼 보기를 숫자 목록으로 저장한다(맞춤은 빈 목록). 없으면 저장하지 않는다. */
+private val CropStartViewSaver = Saver<CanvasView?, DoubleArray>(
+    save = { it?.toSaved()?.toDoubleArray() },
+    restore = { canvasViewFromSaved(it.toList()) }
 )

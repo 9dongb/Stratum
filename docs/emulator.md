@@ -45,7 +45,7 @@
   - 결과는 마지막의 `OK (N tests)`로 본다. 실패하면 `FAILURES!!!`와 `Tests run`이 나온다.
   - 여기서는 쉼표로 여러 클래스를 주면 준 순서대로 모두 돈다. `<패키지.클래스>#<메서드>`도 섞어 쓸 수 있다.
   - 끝나면 `adb -s emulator-5554 uninstall com.kiln.stratum.test`
-- 테스트 전체는 Pixel_Fold를 펼친 상태(`adb emu unfold`)에서 돌린다(너무 느리면 위 UWB 항목의 마지막 줄처럼 나눠 돌린다). 접은 상태(커버)에서는 화면보다 큰 강제 크기를 쓰는 메인 세로(가로 힌지) 테스트 4개와 체크 무늬 색 테스트 1개가 실패한다(코드 문제가 아님, 2026-10-18 확인).
+- 테스트 전체는 Pixel_Fold를 펼친 상태(`adb emu unfold`)에서 돌린다(너무 느리면 위 UWB 항목의 마지막 줄처럼 나눠 돌린다). 접은 상태(커버)에서는 화면보다 큰 강제 크기 위에 커버 키보드가 열리는 `ResizeDialogTest.medium_statusAndControlsStayInView` 하나가 실패한다(코드 문제가 아님, 펼친 상태에서는 통과, 2026-10-21 확인. 전에는 메인 세로(가로 힌지) 테스트 4개와 체크 무늬 색 테스트 1개였다). 테스트 전에 자동 회전을 끈다(`adb -s emulator-5554 shell settings put system accelerometer_rotation 0`, progress.md 기술 주의점).
 - 화면 테스트(Compose)는 하나에 25~40초 걸릴 수 있다. 멈춘 것이 아니다.
   - 이 PC(2026-10-17)의 에뮬레이터는 그래픽을 GPU가 아니라 CPU로 그려서(켤 때 로그의 `lavapipe`·`swangle`) 시스템 화면까지 느리다.
 

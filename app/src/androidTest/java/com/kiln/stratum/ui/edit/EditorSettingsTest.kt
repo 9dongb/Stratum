@@ -116,6 +116,21 @@ class EditorSettingsTest {
     }
 
     @Test
+    fun previewQuality_changedInSettings_appliesWhenTheEditScreenComesBack() {
+        // 설정은 편집 화면에서 연다(사용자 피드백 11차 4). 돌아올 때 화질을 건 뒤, 다시 만들어진 편집 화면이 캔버스 크기(그대로)를 알리면
+        // 새 화질의 축소본(반 크기)으로 다시 그린다
+        assertEquals(1, openWideCanvas().base.region.level)
+
+        onMain {
+            settings.update { it.copy(previewQuality = PreviewQuality.LIGHT) }
+            viewModel.applyPreviewQuality()
+            viewModel.onCanvasSize(CANVAS_AREA.width, CANVAS_AREA.height)
+        }
+
+        awaitState { it is EditorState.Ready && it.base.region.level == 2 }
+    }
+
+    @Test
     fun foregroundColor_isWhatTheBrushAndTheTextPaint_andTheBackgroundIsKept() {
         val blue = 0xFF1E88E5.toInt()
         assertEquals(PaintColors.DEFAULT, settings.values.value.paintColors)
