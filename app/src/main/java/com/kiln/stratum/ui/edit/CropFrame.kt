@@ -9,6 +9,7 @@ import kotlin.math.roundToInt
 
 /**
  * 자르기 비율. 자유, 원본, 그리고 새 캔버스와 같은 비율이다(결정 기록 '자르기·회전·뒤집기·크기 변경').
+ * 3:4는 사용자 요청으로 더했다(2026-10-21). 저장은 순서 번호라 새 비율은 맨 끝에 더한다.
  * [width]:[height]가 0:0이면 정해진 숫자가 없는 비율(자유·원본)이다.
  */
 enum class CropRatio(val width: Int, val height: Int) {
@@ -19,7 +20,8 @@ enum class CropRatio(val width: Int, val height: Int) {
     STORY_9_16(9, 16),
     WIDE_16_9(16, 9),
     PHOTO_3_2(3, 2),
-    PHOTO_4_3(4, 3)
+    PHOTO_4_3(4, 3),
+    PHOTO_3_4(3, 4)
 }
 
 /** 자르기 테두리에서 끌 수 있는 곳. 모서리 넷, 변 넷, 그리고 안쪽(테두리 옮기기)이다. */

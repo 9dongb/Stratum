@@ -36,6 +36,16 @@ class CropFrameTest {
     }
 
     @Test
+    fun withRatio_threeToFour_fitsAPortraitFrame() {
+        // 3:4는 4:3 사진에서 세로 3000에 맞춘 세로 테두리다
+        val portrait = CropFrame.whole(document).withRatio(CropRatio.PHOTO_3_4, document)
+
+        assertEquals(3.0 / 4, portrait.aspect(document)!!, 1e-9)
+        assertFrame(875.0, 0.0, 3125.0, 3000.0, portrait)
+        assertEquals(PixelRect(875, 0, 3125, 3000), portrait.toPixelRect(document))
+    }
+
+    @Test
     fun withRatio_original_usesTheDocumentShape() {
         // 자유롭게 줄인 테두리에서 원본 비율을 고르면 4:3으로 사진 안에 가장 크게 맞춘다
         val small = CropFrame(1000.0, 1000.0, 2000.0, 1500.0)

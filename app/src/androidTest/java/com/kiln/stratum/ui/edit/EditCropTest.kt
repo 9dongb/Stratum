@@ -106,6 +106,18 @@ class EditCropTest {
     }
 
     @Test
+    fun threeToFourRatio_sendsAPortraitCrop() {
+        show()
+        startCropOnCover()
+
+        chooseRatio(CropRatio.PHOTO_3_4)
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsEnabled().performClick()
+
+        // 4:3 사진에서 세로 300에 맞춘 3:4(폭 225)
+        composeRule.runOnIdle { assertEquals(listOf(CropImage(PixelRect(88, 0, 313, 300), document)), commands) }
+    }
+
+    @Test
     fun swap_turnsTheRatio() {
         show()
         startCropOnCover()
@@ -188,7 +200,13 @@ class EditCropTest {
         composeRule.onNodeWithTag(
             if (tabExists) EditScreenTags.tabTool(EditTool.Transform) else EditScreenTags.railTool(EditTool.Transform)
         ).performClick()
-        chooseRatio(CropRatio.SQUARE)
+        // 메인 화면은 띠의 비율 칸을 눌러야 비율 칩이 뜬다(밀어 보지 않는 옵션 창이라 바로 누른다, 펼친 에뮬레이터에서도 돌게)
+        if (tabExists) {
+            chooseRatio(CropRatio.SQUARE)
+        } else {
+            composeRule.onNodeWithTag(EditScreenTags.strip("ratio")).performClick()
+            composeRule.onNodeWithTag(EditScreenTags.cropRatio(CropRatio.SQUARE)).performClick()
+        }
 
         // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다
         tester.emulateSavedInstanceStateRestore()
