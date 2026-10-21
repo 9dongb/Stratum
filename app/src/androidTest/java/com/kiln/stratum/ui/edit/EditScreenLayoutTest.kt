@@ -20,6 +20,7 @@ import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
+import com.kiln.stratum.ui.layout.workBarContentPx
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
@@ -112,9 +113,14 @@ class EditScreenLayoutTest {
 
         // 도구 막대: 버튼 48dp에 양쪽 4dp(56dp), 그리고 옆쪽 시스템 바·카메라 구멍 여백
         assertEquals(56 * density + start, rail.layoutBoundsInWindow().width, 1f)
-        // 상단 바: 버튼 높이(48dp)에 상태 표시줄(또는 버튼에 걸리는 카메라 구멍) 높이만 더한다
+        // 상단 바: 내용 줄(상태 표시줄 높이, 사용자 피드백 10차)에 상태 표시줄(또는 버튼에 걸리는 카메라 구멍) 높이만 더한다
+        val content = workBarContentPx(insets, density)
         val height = bar.layoutBoundsInWindow().height
-        assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
+        assertTrue("top bar $height px (content $content)", height >= content + statusTop - 1f && height <= content + safeTop + 1f)
+        // 바 버튼은 가로 48dp, 세로는 바 내용 줄 높이다(사용자 결정)
+        val undo = composeRule.onNodeWithTag(EditScreenTags.UNDO).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(48 * density, undo.width, 1f)
+        assertEquals(content, undo.height, 1f)
     }
 
     @Test

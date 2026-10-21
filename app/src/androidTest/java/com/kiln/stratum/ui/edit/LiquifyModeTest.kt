@@ -45,6 +45,7 @@ import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
+import com.kiln.stratum.ui.layout.workBarContentPx
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -219,9 +220,10 @@ class LiquifyModeTest {
         val statusTop = insets.getInsets(WindowInsets.Type.statusBars()).top
         val safeTop = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
 
-        // 편집 화면 상단 바와 같은 48dp에 상태 표시줄(또는 버튼·제목에 걸리는 카메라 구멍) 높이만 더한다
+        // 편집 화면 상단 바와 같은 내용 줄(상태 표시줄 높이)에 상태 표시줄(또는 버튼·제목에 걸리는 카메라 구멍) 높이만 더한다
+        val content = workBarContentPx(insets, density)
         val height = bar.layoutBoundsInWindow().height
-        assertTrue("top bar $height px", height >= 48 * density + statusTop - 1f && height <= 48 * density + safeTop + 1f)
+        assertTrue("top bar $height px (content $content)", height >= content + statusTop - 1f && height <= content + safeTop + 1f)
     }
 
     @Test

@@ -51,16 +51,17 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.StripPosition
-import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
-import com.kiln.stratum.ui.components.StratumIconButton
+import com.kiln.stratum.ui.components.TopBarAccentButton
+import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.WidthClass
-import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.BarButtonContentInset
+import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
@@ -289,7 +290,7 @@ fun LiquifyMode(
 }
 
 /**
- * 위쪽 막대: 취소, 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(48dp)다.
+ * 위쪽 막대: 취소, 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(상태 표시줄 높이)다.
  * 모두 되돌리기는 자리를 아끼려고 아이콘 버튼이다(커버 폭에서도 이름이 잘리지 않게).
  * [cancelAndApplyOnTop]이 거짓이면(닫힌 화면) 취소·적용은 맨 아래 X·✓ 줄([CoverWorkBar])에 있어 여기에는 두지 않는다.
  */
@@ -297,36 +298,40 @@ fun LiquifyMode(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions, cancelAndApplyOnTop: Boolean = true) {
-    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
+    val barHeight = workTopBarHeight()
+    val barInsets = rememberTopBarInsets(barHeight)
     TopAppBar(
         title = { Text(stringResource(R.string.tool_liquify), Modifier.topBarItem(barInsets, "title")) },
         modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.LIQUIFY_TOP_BAR),
         navigationIcon = {
             if (cancelAndApplyOnTop) {
-                StratumIconButton(
+                TopBarIconButton(
                     onClick = actions::cancel,
+                    height = barHeight,
                     enabled = !state.busy,
-                    modifier = Modifier.topBarItem(barInsets, "cancel").testTag(EditScreenTags.LIQUIFY_CANCEL)
+                    modifier = Modifier.topBarItem(barInsets, "cancel", BarButtonContentInset).testTag(EditScreenTags.LIQUIFY_CANCEL)
                 ) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
                 }
             }
         },
         actions = {
-            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
-                StratumIconButton(onClick = actions::undo, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
+            // 버튼 줄은 보이는 부분만 알린다(편집 화면 상단 바와 같다)
+            Row(Modifier.topBarItem(barInsets, "actions", BarButtonContentInset), verticalAlignment = Alignment.CenterVertically) {
+                TopBarIconButton(onClick = actions::undo, height = barHeight, enabled = state.canUndo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_UNDO)) {
                     Icon(painterResource(R.drawable.ic_undo), contentDescription = stringResource(R.string.liquify_undo))
                 }
-                StratumIconButton(onClick = actions::redo, enabled = state.canRedo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_REDO)) {
+                TopBarIconButton(onClick = actions::redo, height = barHeight, enabled = state.canRedo && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_REDO)) {
                     Icon(painterResource(R.drawable.ic_redo), contentDescription = stringResource(R.string.liquify_redo))
                 }
-                StratumIconButton(onClick = actions::reset, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
+                TopBarIconButton(onClick = actions::reset, height = barHeight, enabled = state.changed && !state.busy, modifier = Modifier.testTag(EditScreenTags.LIQUIFY_RESET)) {
                     Icon(painterResource(R.drawable.ic_restart_alt), contentDescription = stringResource(R.string.liquify_reset))
                 }
                 // 적용은 편집 화면의 내보내기처럼 파란 글자 버튼이다(사용자 결정). 닫힌 화면은 맨 아래 ✓다.
                 if (cancelAndApplyOnTop) {
-                    AccentButton(
+                    TopBarAccentButton(
                         onClick = actions::apply,
+                        height = barHeight,
                         enabled = state.changed && !state.busy,
                         modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.LIQUIFY_APPLY)
                     ) {
@@ -335,7 +340,7 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions, cancelAn
                 }
             }
         },
-        expandedHeight = WorkTopBarHeight,
+        expandedHeight = barHeight,
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )

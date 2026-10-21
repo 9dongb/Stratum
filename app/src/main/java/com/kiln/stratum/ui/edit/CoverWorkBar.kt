@@ -29,7 +29,7 @@ import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.windowInsets
@@ -78,18 +78,19 @@ fun CoverWorkBar(
 }
 
 /**
- * 닫힌 화면 새 창의 위 줄: 창 이름만 보인다(취소·완료는 맨 아래 [CoverWorkBar]). 편집 화면 상단 바와 같은 높이(48dp)이고,
+ * 닫힌 화면 새 창의 위 줄: 창 이름만 보인다(취소·완료는 맨 아래 [CoverWorkBar]). 편집 화면 상단 바와 같은 높이(상태 표시줄 높이)이고,
  * 카메라 구멍이 이름에 걸리면 구멍 아래로 내린다(편집 화면 상단 바와 같다).
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoverWindowTopBar(title: String, modifier: Modifier = Modifier) {
-    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
+    val barHeight = workTopBarHeight()
+    val barInsets = rememberTopBarInsets(barHeight)
     TopAppBar(
         title = { Text(title, Modifier.topBarItem(barInsets, "title")) },
         modifier = modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_WINDOW_TOP_BAR),
-        expandedHeight = WorkTopBarHeight,
+        expandedHeight = barHeight,
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )

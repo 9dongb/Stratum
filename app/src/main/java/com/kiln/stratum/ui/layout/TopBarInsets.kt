@@ -17,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -34,8 +36,22 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
-/** 편집 화면·유동화 작업 모드의 상단 바 높이(결정 기록 '화면 공간'). 버튼의 누르는 자리(48dp)가 꼭 들어간다. */
-val WorkTopBarHeight: Dp = 48.dp
+/**
+ * 편집 화면·유동화 작업 모드·커버 새 창의 상단 바 높이: 상태 표시줄 높이다(사용자 피드백 10차 6: "헤더 줄여달라는 크기는 상태표시줄 위아래 폭 만큼").
+ * 상태 표시줄을 숨겨도 그 자리 높이를 읽는다. 상태 표시줄이 없는 창(여러 창 등)은 32dp이고, 버튼이 들어가게 24~48dp 안이다.
+ * 바의 버튼은 이 높이에 맞춘 것([com.kiln.stratum.ui.components.TopBarIconButton] 등)이다.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun workTopBarHeight(): Dp {
+    val density = LocalDensity.current
+    val status = with(density) { WindowInsets.statusBarsIgnoringVisibility.getTop(density).toDp() }
+    return (if (status > 0.dp) status else FallbackWorkTopBarHeight).coerceIn(MinWorkTopBarHeight, MaxWorkTopBarHeight)
+}
+
+private val FallbackWorkTopBarHeight = 32.dp
+private val MinWorkTopBarHeight = 24.dp
+private val MaxWorkTopBarHeight = 48.dp
 
 /**
  * 상단 바의 창 여백(결정 기록 '전체 화면').
@@ -118,8 +134,12 @@ private val TitleGap = 8.dp
 /** M3 상단 바의 제목 자리 왼쪽 끝(앞 버튼이 없을 때). 줄이 놓이기 전 창 위치 어림에만 쓴다. */
 private val BarTitleStart = 16.dp
 
-/** 바 버튼에서 보이는 부분(글자 버튼의 글자, 아이콘 버튼의 아이콘)의 양옆 여백. 글자 버튼 안쪽 여백·(48 − 24)/2와 같다. */
-private val ButtonContentInset = 12.dp
+/**
+ * 바 버튼에서 보이는 부분(글자 버튼의 글자, 아이콘 버튼의 아이콘)의 양옆 여백. 글자 버튼 안쪽 여백·(48 − 24)/2와 같다.
+ * 버튼(줄)을 [topBarItem]으로 알릴 때 이만큼 줄여 알리면, 버튼 여백만 카메라 구멍에 걸릴 때 바를 내리지 않는다
+ * (사용자 피드백 10차: 버튼 여백이 구멍에 걸리는 것은 가려지는 것이 아니다).
+ */
+val BarButtonContentInset = 12.dp
 
 /**
  * 상단 바 한 줄: 왼쪽에 [title], 오른쪽 끝부터 [actions](이름, 버튼). 위쪽 카메라 구멍([insets]의 구멍)에 걸리는 버튼은
@@ -140,8 +160,8 @@ fun HoleAvoidingBarRow(
     Layout(
         content = {
             Box(Modifier.topBarItem(insets, "title")) { title() }
-            // 버튼은 보이는 부분(양옆 [ButtonContentInset] 안쪽)만 알린다. 버튼 여백이 구멍에 걸리는 것은 가려지는 것이 아니다.
-            for ((key, action) in actions) Box(Modifier.topBarItem(insets, key, ButtonContentInset)) { action() }
+            // 버튼은 보이는 부분(양옆 [BarButtonContentInset] 안쪽)만 알린다. 버튼 여백이 구멍에 걸리는 것은 가려지는 것이 아니다.
+            for ((key, action) in actions) Box(Modifier.topBarItem(insets, key, BarButtonContentInset)) { action() }
         },
         modifier = modifier.fillMaxWidth().onGloballyPositioned { rowLeft = it.positionInWindow().x }
     ) { measurables, constraints ->
@@ -155,7 +175,7 @@ fun HoleAvoidingBarRow(
             val widths = actionPlaceables.map { it.width }
             // 구멍은 창 좌표라 이 줄의 창 위치를 빼서 견준다
             val left = rowLeft ?: with(density) { BarTitleStart.toPx() }
-            val inset = with(density) { ButtonContentInset.roundToPx() }
+            val inset = with(density) { BarButtonContentInset.roundToPx() }
             val starts = holeAvoidingStarts(
                 widths = widths,
                 end = width,

@@ -95,14 +95,16 @@ import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
-import com.kiln.stratum.ui.components.StratumIconButton
-import com.kiln.stratum.ui.components.StratumIconToggleButton
+import com.kiln.stratum.ui.components.TopBarAccentButton
+import com.kiln.stratum.ui.components.TopBarIconButton
+import com.kiln.stratum.ui.components.TopBarIconToggleButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
-import com.kiln.stratum.ui.layout.WorkTopBarHeight
+import com.kiln.stratum.ui.layout.BarButtonContentInset
+import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
@@ -1101,7 +1103,8 @@ class ZoomBadge(val viewState: CanvasViewState, val documentSize: PixelSize)
 
 /**
  * 편집 화면 상단 바: 뒤로, 가운데 배율 표시([zoom]), 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
- * 작업 공간을 넓게 쓰려고 버튼이 꼭 들어가는 높이(48dp)로 낮게 두고, 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
+ * 작업 공간을 넓게 쓰려고 상태 표시줄 높이([workTopBarHeight])로 낮게 두고, 바 높이에 맞춘 버튼([TopBarIconButton] 등)을 쓴다.
+ * 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
  * 배율 표시는 바의 내용 줄 위에 겹쳐 놓아 바 가운데(화면 가운데)에 온다([CanvasZoomChip]).
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
@@ -1118,14 +1121,15 @@ private fun EditTopBar(
     panels: PanelToggles? = null,
     zoom: ZoomBadge? = null
 ) {
-    val barInsets = rememberTopBarInsets(WorkTopBarHeight)
+    val barHeight = workTopBarHeight()
+    val barInsets = rememberTopBarInsets(barHeight)
     Box {
     TopAppBar(
         title = {},
         // 캔버스(작업 공간)와 기본 배경 바를 1dp 구분선으로 나눈다(시안)
         modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.TOP_BAR),
         navigationIcon = {
-            StratumIconButton(onClick = onBack, modifier = Modifier.topBarItem(barInsets, "back")) {
+            TopBarIconButton(onClick = onBack, height = barHeight, modifier = Modifier.topBarItem(barInsets, "back", BarButtonContentInset)) {
                 Icon(
                     painter = painterResource(R.drawable.ic_arrow_back),
                     contentDescription = stringResource(R.string.action_back)
@@ -1133,14 +1137,16 @@ private fun EditTopBar(
             }
         },
         actions = {
-            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
-                StratumIconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
+            // 버튼 줄은 보이는 부분(양 끝 버튼 여백 안쪽)만 알린다: 커버 위 가운데 카메라 구멍에 실행 취소 버튼의 여백만 걸릴 때
+            // (한국어 '내보내기'처럼 줄이 넓을 때) 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차)
+            Row(Modifier.topBarItem(barInsets, "actions", BarButtonContentInset), verticalAlignment = Alignment.CenterVertically) {
+                TopBarIconButton(onClick = onUndo, height = barHeight, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_undo),
                         contentDescription = stringResource(R.string.action_undo)
                     )
                 }
-                StratumIconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
+                TopBarIconButton(onClick = onRedo, height = barHeight, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_redo),
                         contentDescription = stringResource(R.string.action_redo)
@@ -1149,9 +1155,10 @@ private fun EditTopBar(
                 // 조정·레이어 패널 버튼(프로크리에이트처럼 켜고 끈다). 열린 패널의 버튼이 켜진 모양이다.
                 if (panels != null) {
                     for (panel in MainPanel.entries) {
-                        StratumIconToggleButton(
+                        TopBarIconToggleButton(
                             checked = panels.open == panel,
                             onCheckedChange = { panels.onToggle(panel) },
+                            height = barHeight,
                             enabled = panels.enabled,
                             modifier = Modifier.testTag(EditScreenTags.panelToggle(panel))
                         ) {
@@ -1163,8 +1170,9 @@ private fun EditTopBar(
                     }
                 }
                 // 내보내기는 시안처럼 파란 글자 버튼이다(사용자 결정, 자리는 그대로)
-                AccentButton(
+                TopBarAccentButton(
                     onClick = onExport,
+                    height = barHeight,
                     enabled = canExport,
                     modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.EXPORT)
                 ) {
@@ -1172,12 +1180,12 @@ private fun EditTopBar(
                 }
             }
         },
-        expandedHeight = WorkTopBarHeight,
+        expandedHeight = barHeight,
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )
-    // 바의 내용 줄(아래쪽 48dp) 위에 겹친다. 바가 구멍 아래로 내려가도 내용 줄과 같은 높이다.
-    zoom?.let { CanvasZoomChip(it.viewState, it.documentSize, barInsets, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(WorkTopBarHeight)) }
+    // 바의 내용 줄(아래쪽, 바 높이) 위에 겹친다. 바가 구멍 아래로 내려가도 내용 줄과 같은 높이다.
+    zoom?.let { CanvasZoomChip(it.viewState, it.documentSize, barInsets, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(barHeight)) }
     }
 }
 

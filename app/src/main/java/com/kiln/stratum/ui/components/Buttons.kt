@@ -33,19 +33,20 @@ import com.kiln.stratum.ui.theme.StratumTheme
 // 앱의 버튼(결정 기록 '디자인(시안)'): 알약 대신 모서리 8dp, 좌우 여백 12dp, 보이는 높이 30dp.
 // 누르는 영역과 차지하는 자리는 M3처럼 48dp라 버튼을 바꿔도 배치가 움직이지 않는다.
 
-/** 주요 버튼(내보내기·적용·확인 등): 파란 채움 */
+/** 주요 버튼(내보내기·적용·확인 등): 파란 채움. [minHeight]는 보이는 높이(낮은 상단 바는 더 낮게, [TopBarAccentButton]). */
 @Composable
 fun AccentButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = StratumDimens.ButtonPadding,
+    minHeight: Dp = StratumDimens.ButtonHeight,
     content: @Composable RowScope.() -> Unit
 ) {
     val colors = StratumTheme.colors
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = StratumDimens.ButtonHeight),
+        modifier = modifier.heightIn(min = minHeight),
         enabled = enabled,
         shape = StratumShapes.Control,
         colors = ButtonDefaults.buttonColors(
