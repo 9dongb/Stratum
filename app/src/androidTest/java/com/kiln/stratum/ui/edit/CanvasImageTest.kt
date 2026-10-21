@@ -42,6 +42,15 @@ class CanvasImageTest {
 
     private fun hex(color: Int) = Integer.toHexString(color)
 
+    /**
+     * 두 색이 채널마다 [tolerance] 안으로 같은지. 1px 선은 캔버스 크기에 따라 픽셀 경계에 걸쳐 바탕과 조금 섞일 수 있다
+     * (커버 화면 개편으로 캔버스 높이가 바뀌어 테두리가 채널마다 1 밝게 섞였다).
+     */
+    private fun assertColorNear(expected: Int, actual: Int, tolerance: Int = 3) {
+        val near = listOf(24, 16, 8, 0).all { shift -> kotlin.math.abs((expected shr shift and 0xff) - (actual shr shift and 0xff)) <= tolerance }
+        assertEquals(hex(expected), if (near) hex(expected) else hex(actual))
+    }
+
     @Test
     fun transparentCanvas_showsCheckerboardInsideAndOutlineOutside() {
         // 완전히 투명한 축소본(가로로 긴 100×50)
@@ -76,7 +85,7 @@ class CanvasImageTest {
             .run { CheckerSquare.roundToPx() }
         assertEquals(hex(CanvasOverlayColors.CheckerDark.toArgb()), hex(shot.getPixel(fit.left + square + 1, fit.top + 1)))
         // 캔버스 바로 위 바깥은 테두리, 더 바깥은 캔버스 배경이다
-        assertEquals(hex(outline.toArgb()), hex(shot.getPixel(middleX, fit.top - 1)))
+        assertColorNear(outline.toArgb(), shot.getPixel(middleX, fit.top - 1))
         assertEquals(hex(background.toArgb()), hex(shot.getPixel(middleX, fit.top / 2)))
     }
 

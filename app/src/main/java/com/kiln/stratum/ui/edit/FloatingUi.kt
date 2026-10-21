@@ -36,7 +36,7 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 상단 바 버튼으로 여는 조정·레이어 패널. 메인 화면은 캔버스 위에 떠 있는 패널, 커버 화면은 아래 옵션 자리에 보인다(결정 기록 '커버 화면 개편'). */
+/** 상단 바 버튼으로 여는 조정·레이어 패널. 메인 화면은 캔버스 위에 떠 있는 패널, 커버 화면은 조정 막대·막대 위 레이어 시트다(결정 기록 '커버 화면 개편'). */
 enum class MainPanel { ADJUST, LAYERS }
 
 /**

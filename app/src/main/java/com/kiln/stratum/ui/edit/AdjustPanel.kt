@@ -60,7 +60,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.ToneCurve
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
-import com.kiln.stratum.ui.components.StratumFilterChip
+import com.kiln.stratum.ui.components.StratumActionChip
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.components.edgeDivider
@@ -220,8 +220,7 @@ private fun CommitOnDispose(actions: AdjustActions) {
 /** 커버 화면 조정 막대의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
 @Composable
 private fun AdjustChip(item: AdjustItem, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    StratumFilterChip(
-        selected = false,
+    StratumActionChip(
         onClick = onClick,
         enabled = enabled,
         label = { Text(stringResource(item.label), maxLines = 1, softWrap = false) },

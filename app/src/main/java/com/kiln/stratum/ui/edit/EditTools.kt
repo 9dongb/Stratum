@@ -163,8 +163,8 @@ enum class EditTool(
          */
         val coverTabs: List<EditTool> = listOf(Transform, Select, Brush, Retouch, Liquify)
 
-        /** 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구(도구 막대 순서) */
-        val coverMoreTools: List<EditTool> = railTools.filter { it !in coverTabs }
+        /** 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구(승인된 계획의 순서: 이동·지우개·텍스트·명암·흐림·모자이크) */
+        val coverMoreTools: List<EditTool> = listOf(Move, Eraser, Text, Tone, Blur, Mosaic)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

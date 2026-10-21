@@ -151,7 +151,7 @@ interface LiquifyActions {
  *   (유동화에는 단단함이 없어 압력으로 대신한다, 결정 기록 '세 손가락 제스처').
  * - 옵션: 크기, 압력, 도구(뒤틀기·오목·볼록·재구성)(사용자 피드백 8차 1-5 정정: "도구 표시를 왼쪽 상단에 기존 도구들처럼").
  *   펼친 화면은 편집 화면과 같은 왼쪽 위 띠(손잡이로 옮기고 같은 자리 [stripPosition]을 기억)이고 캔버스가 창 전체를 쓴다.
- *   닫힌 화면은 크기·압력을 아래 옵션 칸에, 도구 탭을 맨 아래 X와 ✓ 사이에 둔다(사용자 피드백 8차 1-1).
+ *   닫힌 화면은 크기·압력을 편집 화면과 같은 한 줄 막대에, 도구 탭을 맨 아래 X와 ✓ 사이에 둔다(사용자 피드백 8차 1-1, 커버 화면 개편).
  * - 시스템 뒤로는 띠의 옵션 창이 떠 있으면 그것부터 닫고, 아니면 취소와 같다.
  * - [flip]: 편집 화면의 화면 반전(보기만 뒤집음)을 캔버스에 그대로 건다.
  */
@@ -170,9 +170,8 @@ fun LiquifyMode(
     // 띠의 옵션 창(세로 슬라이더)은 작업 모드 안에서만 쓴다. 떠 있으면 뒤로 가기는 그것부터 닫는다(취소보다 나중에 등록해 먼저 받는다).
     val floating = rememberFloatingState()
     BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
-    // 닫힌 화면의 한 줄 막대(크기·압력)에서 펼친 칩. 펼쳐져 있으면 뒤로 가기는 칩 줄로 돌아간다(취소보다 먼저).
+    // 닫힌 화면의 한 줄 막대(크기·압력)에서 펼친 칩. 펼쳐져 있으면 뒤로 가기는 칩 줄로 돌아간다(닫힌 화면에서만, 취소보다 먼저).
     val coverBar = rememberCoverBarState()
-    BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
     val viewState = rememberCanvasViewState(state.documentSize)
     // 작업 모드와 캔버스의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다).
     var screenTop by remember { mutableFloatStateOf(0f) }
@@ -245,6 +244,7 @@ fun LiquifyMode(
                     LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.weight(1f).fillMaxWidth())
                     // 크기·압력은 편집 화면과 같은 한 줄 막대다(칩을 누르면 같은 줄이 슬라이더, 결정 기록 '커버 화면 개편').
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
+                    BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
                     CoverToolBar(items = liquifyBar(state, actions, sizePreview), state = coverBar)
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(

@@ -174,6 +174,19 @@ class AdjustPanelTest {
         composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
+
+        // 이미 고른 도구의 탭을 눌러도 조정만 꺼지고 도구는 그대로다(내려놓지 않음)
+        composeRule.togglePanel(MainPanel.ADJUST)
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
+        // 하위 도구가 있는 도구도 메뉴를 열지 않고 그 도구의 막대를 보인다
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.togglePanel(MainPanel.ADJUST)
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("mode")).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
     }
 
     @Test

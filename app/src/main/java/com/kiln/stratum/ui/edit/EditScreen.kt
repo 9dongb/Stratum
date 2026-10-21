@@ -393,13 +393,12 @@ fun EditScreen(
         }
     ) {
         val widthClass = widthClassOf(maxWidth.value)
-        // 커버 화면 옵션 자리의 최대 높이를 정하는 창 높이
+        // 창 높이(글자 창·색 팔레트가 낮은 화면에서 팔레트 높이를 정할 때 씀)
         val windowHeight = maxHeight
         // 문서가 열려 있어야 도구를 쓴다. 고른 도구가 있으면 그 옵션을 보인다.
         val toolsEnabled = ready != null
         val activeTool = selection.active.takeIf { toolsEnabled }
         // 뒤로 가기: 도구를 골랐으면 그 도구를 닫는다(결정 기록 '뒤로 가기로 도구 닫기'). 스포이드·자르기는 도구를 닫으면 함께 끝난다.
-        // 메인 화면에서는 도구 막대의 도구만 본다. 커버에서 고른 조정·레이어는 메인에서 보이지 않아 뒤로를 먹지 않는다.
         // 늘 두고 켜고 끄기만 해서, 홈으로 가는 처리(StratumApp)보다 나중에·창과 유동화보다 먼저 등록된 순서를 지킨다.
         val density = LocalDensity.current
         // 자르기·회전을 시작할 때(그리고 돌릴 때) 보이는 사진([shown], 돌린 크기) 전체가 보이게 맞춘 보기.
@@ -435,8 +434,7 @@ fun EditScreen(
                 cropStartView = null
             }
         }
-        val closableTool = if (widthClass == WidthClass.Compact) activeTool else activeTool?.takeIf { it in EditTool.railTools }
-        BackHandler(enabled = closableTool != null, onBack = selection::close)
+        BackHandler(enabled = activeTool != null, onBack = selection::close)
         // 커버 화면에서 연 조정·레이어는 뒤로 가기로 닫는다(도구보다 먼저, 결정 기록 '커버 화면 개편' Q2 A: 아래 시트는 뒤로 가기로 닫히는 것이 보통).
         // 메인 화면 패널은 뒤로 가기로 닫지 않는다(사용자 결정). 자르기 중에는 패널을 숨기므로 보지 않는다.
         val coverPanel = floating.panel.takeIf { widthClass == WidthClass.Compact && !cropMode }
@@ -620,7 +618,12 @@ fun EditScreen(
             coverAdjust && adjustControls != null && coverBar.expandedFor(barContent) == CURVE_BAR_KEY -> CoverOverlay.CURVE
             else -> null
         }
-        val coverSheetInset = if (coverOverlay != null) with(density) { coverSheetPx.toDp() } else 0.dp
+        // 겹친 것을 캔버스 높이까지 펼쳐도(레이어 시트) 알림 막대·크기 원이 들어갈 자리는 남긴다
+        val coverSheetInset = if (coverOverlay != null) {
+            with(density) { minOf(coverSheetPx, (viewState.area.height - CoverOverlayMinRoom.roundToPx()).coerceAtLeast(0)).toDp() }
+        } else {
+            0.dp
+        }
         // 메인 화면: 도구 막대에서 고른 도구의 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '편집 화면 도구 배치').
         // 띠가 없는 도구는 패널 위쪽에 옵션을 보인다. 조정·레이어는 패널에 늘 있다.
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
@@ -1018,10 +1021,13 @@ fun EditScreen(
                             onChoose = chooseSubTool,
                             moreOpen = moreShown,
                             onMore = { coverMoreOpen = !coverMoreOpen },
-                            // 도구 탭을 누르면 더보기 줄을 닫고, 조정을 보던 중이면 끈다(조정은 고른 도구와 같은 자리를 쓴다, 결정 기록 '커버 화면 개편')
+                            // 도구 탭을 누르면 더보기 줄을 닫고, 조정을 보던 중이면 끈다(조정은 고른 도구와 같은 막대를 쓴다, 결정 기록 '커버 화면 개편').
+                            // 조정을 끈 것이면 알려, 탭이 이미 고른 도구를 내려놓지 않고 그 막대를 보이게 한다.
                             onTabTap = {
                                 coverMoreOpen = false
-                                if (floating.panel == MainPanel.ADJUST) floating.closePanel()
+                                val adjustOpen = floating.panel == MainPanel.ADJUST
+                                if (adjustOpen) floating.closePanel()
+                                adjustOpen
                             },
                             menu = subToolMenu
                         )
@@ -1062,6 +1068,11 @@ fun EditScreen(
             current = { selection.modeOf(it) },
             onChoose = {
                 subToolMenu.close()
+                // 커버 탭의 메뉴에서 고르면 탭을 누른 것과 같이 더보기 줄을 닫고 조정을 끈다(그 도구의 막대가 보이게)
+                if (widthClass == WidthClass.Compact) {
+                    coverMoreOpen = false
+                    if (floating.panel == MainPanel.ADJUST) floating.closePanel()
+                }
                 chooseSubTool(it)
             }
         )
@@ -1161,6 +1172,9 @@ fun EditScreen(
 
 /** 커버 화면에서 캔버스 아래쪽 위에 겹쳐 뜨는 것(결정 기록 '커버 화면 개편'): 더보기 줄, 레이어 시트, 곡선 편집기 */
 private enum class CoverOverlay { MORE, LAYERS, CURVE }
+
+/** 겹친 것이 캔버스를 다 덮어도 그 위에 남겨 두는 높이(알림 막대 한 줄과 크기 원이 들어감) */
+private val CoverOverlayMinRoom = 96.dp
 
 /** 상단 바의 조정·레이어 패널 버튼(커버·메인 화면): 열린 패널, 누를 수 있는지, 누르면 할 일(열고 닫음) */
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
@@ -1273,7 +1287,7 @@ private fun EditTopBar(
  * [floating]은 캔버스 위에 겹치는 메인 화면의 띠·옵션 창·패널이다. 캔버스 영역 전체(시스템 바 쪽 포함)를 받고, 내용이 피할 여백을 함께 받는다.
  * 알림 막대는 화면 가로 정중앙에 둔다(사용자 피드백 9차): 캔버스 영역의 왼쪽 끝이 편집 화면 왼쪽 끝([screenStart], 창 루트 기준)에서
  * 떨어진 만큼(도구 막대) 오른쪽을 비운다. 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
- * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
+ * 닫힌 화면은 잠깐 뜨는 것(더보기 줄·레이어 시트·곡선 편집기)을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
  * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 알림·띠·패널은 뒤집지 않는다.
  * AI 제거를 쓸 수 없다는 알림의 '스팟 복구' 버튼을 누르면 [onSpotHeal]을, AI 선택을 쓸 수 없다는 알림의 '자동 선택' 버튼을 누르면 [onMagicWand]를 부른다.
  * 손으로 배율을 바꾸면 캔버스 왼쪽 위에 배율 표시가 잠깐 보인다([CanvasZoomChip], 도구 옵션 띠([avoid], 창 좌표)를 피함).

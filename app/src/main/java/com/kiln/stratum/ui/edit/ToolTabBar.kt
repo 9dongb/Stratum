@@ -47,7 +47,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.MenuLongPress
@@ -62,7 +61,8 @@ import kotlin.math.roundToInt
  * 커버 화면(Compact) 아래 도구 탭 줄(결정 기록 '커버 화면 개편'): [자르기][선택][브러시][리터칭][유동화][더보기]
  * (사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요"). 여섯 칸이 폭을 똑같이 나누고 밀어 보지 않는다.
  * 도구 칸은 누르면 그 도구를 고르고, 다시 누르면 내려놓는다. 하위 도구가 있는 도구는 길게 누르거나 고른 뒤 다시 누르면 하위 도구 메뉴가 뜬다.
- * 도구 칸을 누르면 [onTabTap]을 먼저 부른다(편집 화면이 더보기 줄과 조정 막대를 닫는다).
+ * 도구 칸을 누르거나 그 칸의 하위 도구 메뉴에서 고르면 [onTabTap]을 먼저 부른다(편집 화면이 더보기 줄과 조정 막대를 닫는다).
+ * 조정 막대를 닫으며 누른 것이면(참을 돌려줌) 같은 막대가 그 도구로 돌아오는 것이라, 이미 고른 도구를 내려놓거나 메뉴를 열지 않는다.
  * 더보기 칸은 나머지 도구 줄([CoverMoreTools])을 열고 닫는다([onMore]). 더보기 줄의 도구를 골라 두면 더보기 칸이 그 도구의 아이콘·이름으로 켜진다.
  * 고른 칸은 도구 막대처럼 아이콘 뒤 모서리 8dp 사각형(선택 배경)과 선택 색 아이콘·이름이다. 아래 시스템 바는 피한다(키보드는 보지 않는다).
  *
@@ -77,7 +77,7 @@ fun ToolTabBar(
     moreOpen: Boolean,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
-    onTabTap: () -> Unit = {},
+    onTabTap: () -> Boolean = { false },
     menu: SubToolMenuState = remember { SubToolMenuState() }
 ) {
     val colors = StratumTheme.colors
@@ -110,7 +110,7 @@ private fun RowScope.TabToolItem(
     enabled: Boolean,
     menu: SubToolMenuState,
     onChoose: (SubTool) -> Unit,
-    onTabTap: () -> Unit
+    onTabTap: () -> Boolean
 ) {
     val haptic = LocalHapticFeedback.current
     val menuLabel = stringResource(R.string.subtool_menu)
@@ -123,10 +123,15 @@ private fun RowScope.TabToolItem(
         bounds[0]?.let { menu.open(tool, it, MenuSide.ABOVE) }
         Unit
     }
-    // 고른 도구를 다시 누르면 하위 도구 메뉴를 연다(하위 도구가 없는 도구는 내려놓는다)
+    // 고른 도구를 다시 누르면 하위 도구 메뉴를 연다(하위 도구가 없는 도구는 내려놓는다).
+    // 조정 막대를 닫으며 누른 것이면 그 도구의 막대를 보이기만 한다(고르지 않았으면 고른다).
     val tap = {
-        onTabTap()
-        if (selected && tool.hasSubTools) openMenu() else selection.tap(tool)
+        val revealed = onTabTap()
+        when {
+            revealed && selected -> Unit
+            selected && tool.hasSubTools -> openMenu()
+            else -> selection.tap(tool)
+        }
     }
     // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
     MenuLongPress {
@@ -154,6 +159,7 @@ private fun RowScope.TabToolItem(
                             onRelease = { position ->
                                 menu.release(position)?.let {
                                     menu.close()
+                                    onTabTap()
                                     onChoose(it)
                                 }
                             }

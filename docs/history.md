@@ -14,6 +14,33 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-22 · 커버 화면 개편 7단계: 검토·전체 테스트·마무리
+
+- 요청·의도·계획: 0단계 항목과 같다(계획 `docs/cover-redesign-plan.md`의 7번).
+- 커밋:
+  - "커버 화면 개편 검토에서 찾은 조정 끄는 탭·유동화 뒤로 가기·레이어 시트 알림 자리·더보기 순서를 고치고 마무리 기록을 남김"
+- 스스로 검토(하위 에이전트, CLAUDE.md 규칙과 동작)
+  - CLAUDE.md 3장(모듈 구조): 어긋난 곳이 없다. 이번 일의 :app 코드는 엔진에 명령을 보내기만 하고 픽셀을 계산하지 않으며, :engine은 바뀐 곳이 없다(같은 기간의 엔진 변경 `MaskEdge`·`SelectionCommands`는 AI 세션의 것으로 kotlin.math·android.graphics만 씀).
+  - 테마·부품·문구: 색·모양은 토큰만, 칩은 ui/components의 `StratumActionChip`·`StratumFilterChip`만 쓰고, 새 문구는 영어·한국어 모두 있다. 쓰지 않는 문구·이름표·그림은 남지 않았다.
+  - 고친 것:
+    - 조정을 켠 채 이미 고른 도구의 탭을 누르면 조정만 끄고 도구는 그대로 둔다. 전에는 그 도구까지 내려놓거나(브러시) 하위 도구 메뉴를 열었다(선택·리터칭). 탭을 꾹 눌러 메뉴에서 하위 도구를 고르면 조정을 끄고 더보기 줄을 닫는다(전에는 조정 막대가 남아 고른 도구의 칩이 보이지 않았다).
+    - 유동화 새 창의 '펼친 칩 접기' 뒤로 가기를 커버에서만 둔다. 전에는 커버에서 칩을 펼친 채 펼친 화면으로 바꾸면 뒤로 가기가 보이지 않는 칩을 접느라 한 번 헛돌았다.
+    - 레이어 시트를 캔버스 높이까지 펼쳐도 그 위에 96dp를 남겨 알림 막대('저장됨·보기' 등)와 크기 원이 들어가게 한다.
+    - 조정 항목 칩도 화면 읽기 기능이 버튼으로 읽는다(`StratumActionChip`).
+    - 더보기 줄의 순서를 승인된 계획대로 이동·지우개·텍스트·명암·흐림·모자이크로 둔다(전에는 도구 막대 순서라 텍스트가 맨 끝).
+    - 지운 코드(`ColorRow`·옵션 칸)를 가리키던 주석과, 이제 할 일이 없는 '도구 막대의 도구만' 거르기를 정리했다.
+    - 기록: progress.md 진행표(떠 있는 패널·화면 반전)·결정 기록(화면 반전 버튼 자리)과 CLAUDE.md 6장에 남은 '레이어 탭'을 지금 자리(커버는 레이어 시트, 메인은 떠 있는 레이어 패널)로 고쳤다.
+  - CanvasImageTest(투명 캔버스의 테두리 색): 캔버스 높이가 바뀌어 1px 테두리가 픽셀 경계에 걸쳐 채널마다 1 섞였다(#3a3c43 → #3b3d44, 눈에는 같음). 채널마다 3까지는 같은 색으로 보게 고쳤다.
+- 확인한 것
+  - 빌드·단위 테스트 통과(`ThemeUsageGuardTest` 포함).
+  - 에뮬레이터 테스트(Pixel_Fold, 자동 회전 끔)
+    - 접은 화면 전체(검토에서 고치기 전 코드, 약 80분): 732개 중 730개 통과. 실패 둘은 위의 `CanvasImageTest`(고침)와 `ResizeDialogTest.medium_statusAndControlsStayInView`다. 뒤의 것은 큰 강제 크기 위로 커버 키보드가 열려 창 높이가 모자라는 것으로, 전부터 접은 화면에서만 실패하고 펼친 화면에서는 통과한다(progress.md '기술 주의점').
+    - 고친 뒤 접은 화면: 바뀐 곳을 보는 10개 클래스(`AdjustPanelTest`·`CanvasImageTest`·`CoverOptionsTest`·`EditScreenBackTest`·`EditToolsTest`(하위 도구 메뉴 포함)·`FloatingPanelTest`·`LayerPanelTest`·`LiquifyModeTest`·`MoveToolTest`·`ResizeDialogTest`(접은 화면에서 늘 실패하는 하나는 뺌)) 111개 모두 통과.
+    - 펼친 화면: 메인 화면 배치를 보는 9개 클래스(`EditScreenLayoutTest`·`EditTopBarTest`·`OptionStripTest`·`FloatingPanelTest`·`AdjustPanelTest`·`LayerPanelTest`·`SelectionToolTest`·`EditScreenBackTest`·`ResizeDialogTest`) 119개 모두 통과(위의 `medium_statusAndControlsStayInView` 포함).
+  - 실제 앱 화면
+    - 커버(411dp): 레이어 시트, 조정 막대·슬라이더 줄·곡선 편집기, 유동화 막대, 자르기·회전 창의 옵션 줄을 화면으로 봤다(시트 끌기·제목 누르기는 `LayerPanelTest`가 본다).
+    - 펼친 화면(메인 가로): 도구 막대, 왼쪽 위 띠(브러시), 오른쪽 위 조정 패널, 상단 바가 개편 전과 같다. 확인용으로 만든 캔버스는 지웠다.
+
 ## 2026-10-22 · 커버 화면 개편 6단계: 옛 옵션 칸 정리와 규칙 문서
 
 - 요청·의도·계획: 0단계 항목과 같다(계획 `docs/cover-redesign-plan.md`의 6번).
