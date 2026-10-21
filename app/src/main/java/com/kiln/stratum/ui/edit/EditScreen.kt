@@ -933,9 +933,11 @@ fun EditScreen(
                                     coverCropTab,
                                     crop,
                                     busy = ready?.busy == true,
+                                    // 높이는 편집 화면의 한 줄 막대와 같다(결정 기록 '커버 화면 개편')
                                     modifier = Modifier
                                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .height(coverRowHeight())
+                                        .padding(horizontal = 8.dp)
                                 )
                             }
                             // 맨 아래 줄: X(취소) · [자르기 | 회전] 탭 · 크기 변경 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)

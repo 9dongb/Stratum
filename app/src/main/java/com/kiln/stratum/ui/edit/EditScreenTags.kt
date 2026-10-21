@@ -205,7 +205,6 @@ object EditScreenTags {
     const val LIQUIFY_TOP_BAR = "liquifyTopBar"
     const val LIQUIFY_CANVAS = "liquifyCanvas"
     const val LIQUIFY_OVERLAY = "liquifyOverlay"
-    const val LIQUIFY_OPTIONS = "liquifyOptions"
     const val LIQUIFY_CANCEL = "liquifyCancel"
     const val LIQUIFY_UNDO = "liquifyUndo"
     const val LIQUIFY_REDO = "liquifyRedo"

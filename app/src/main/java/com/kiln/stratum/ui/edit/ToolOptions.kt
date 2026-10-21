@@ -27,6 +27,8 @@ import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.ToolActionButton
+import com.kiln.stratum.ui.components.horizontalScrollFadeEdges
+import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
  * 자르기·회전 화면(사용자 피드백 8차 1)이 쓰는 지금 테두리와 할 일. 편집 화면이 테두리와 아직 적용하지 않은 방향을 들고 있어 여기로 넘긴다.
@@ -104,10 +106,11 @@ fun ToolOptions(
 /**
  * 닫힌 화면 자르기·회전 창(결정 기록 '닫힌 화면 새 창')의 옵션: 고른 탭([CropTab])이 자르기면 비율 칩 줄(옆으로 밀어 봄)·가로세로 바꾸기,
  * 회전이면 왼쪽·오른쪽 90°와 좌우·상하 뒤집기다(사용자 피드백 8차 1). 탭과 크기 변경, 취소·적용은 창 맨 아래 줄([CoverCropTabs]·[CoverWorkBar])이다.
+ * 높이는 편집 화면의 한 줄 막대와 같고(편집 화면이 정함, 결정 기록 '커버 화면 개편'), 두 탭 모두 한 줄이라 탭을 바꿔도 사진 크기가 그대로다.
  */
 @Composable
 internal fun CoverCropOptions(tab: CropTab, crop: CropControls, busy: Boolean, modifier: Modifier = Modifier) {
-    Box(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS)) {
+    Box(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS), contentAlignment = Alignment.CenterStart) {
         when (tab) {
             CropTab.CROP -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { CropRatioRow(crop) }
@@ -151,12 +154,14 @@ internal fun CoverCropTabs(tab: CropTab, onTab: (CropTab) -> Unit, resizeEnabled
     }
 }
 
-/** 자르기 비율 칩. 폭이 좁으면 옆으로 밀어 본다. 고른 비율이 선택된 것으로 보인다. */
+/** 자르기 비율 칩. 폭이 좁으면 옆으로 밀어 보고, 더 있는 쪽 끝을 흐리게 그린다. 고른 비율이 선택된 것으로 보인다. */
 @Composable
 private fun CropRatioRow(crop: CropControls) {
+    val scroll = rememberScrollState()
     Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.horizontalScrollFadeEdges(scroll, StratumTheme.colors.panel).horizontalScroll(scroll),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         CropRatioChips(crop)
     }
@@ -211,11 +216,16 @@ internal fun cropRatioLabel(ratio: CropRatio, swapped: Boolean = false): String 
 
 /**
  * 자르기·회전 창의 돌리기·뒤집기 버튼 네 개(사용자 피드백 8차 1). 누르면 보이는 사진만 돌리고, ✓를 누를 때 자르기와 함께 실행 취소 한 단계로 적용한다.
- * 폭이 모자라면 두 줄로 놓인다.
+ * 한 줄이고, 폭이 모자라면 옆으로 밀어 본다(옵션 줄 높이가 늘 같게).
  */
 @Composable
 private fun CropTurnButtons(crop: CropControls, enabled: Boolean) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val scroll = rememberScrollState()
+    Row(
+        modifier = Modifier.horizontalScrollFadeEdges(scroll, StratumTheme.colors.panel).horizontalScroll(scroll),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         IconLabelButton(R.drawable.ic_rotate_90_degrees_ccw, R.string.rotate_left, enabled, EditScreenTags.ROTATE_LEFT) {
             crop.onTurn(Orientation.ROTATE_COUNTERCLOCKWISE)
         }
@@ -232,7 +242,7 @@ private fun CropTurnButtons(crop: CropControls, enabled: Boolean) {
     }
 }
 
-/** 아이콘 아래에 이름이 있는 버튼(두 줄까지). 누르는 영역은 48dp 이상이다. */
+/** 아이콘 아래에 이름이 있는 버튼(한 줄, 위아래 여백을 줄여 한 줄 막대 높이에 든다). 누르는 영역은 48dp 이상이다. */
 @Composable
 private fun IconLabelButton(
     @DrawableRes icon: Int,
@@ -249,7 +259,7 @@ private fun IconLabelButton(
         modifier = Modifier.testTag(tag),
         enabled = enabled,
         minWidth = 72.dp,
-        maxLines = 2,
-        iconRotation = iconRotation
+        iconRotation = iconRotation,
+        compact = true
     )
 }

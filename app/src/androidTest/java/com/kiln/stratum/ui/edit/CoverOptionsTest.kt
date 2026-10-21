@@ -112,7 +112,16 @@ class CoverOptionsTest {
         composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertDoesNotExist()
         val canvas = canvasBounds()
-        val options = composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$canvas should end above the crop options $options", canvas.bottom <= options.top + 1f)
+        val options = composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).fetchSemanticsNode()
+        val bounds = options.layoutBoundsInWindow()
+        assertTrue("$canvas should end above the crop options $bounds", canvas.bottom <= bounds.top + 1f)
+        // 옵션 줄은 한 줄 막대와 같은 높이이고, 회전 탭으로 바꿔도 같아 사진 크기가 그대로다
+        val dp = with(options.layoutInfo.density) { 1.dp.toPx() }
+        assertEquals(56 * dp, bounds.height, 1f)
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
+        composeRule.waitForIdle()
+        assertEquals(bounds, composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow())
+        assertEquals(canvas, canvasBounds())
+        composeRule.onNodeWithTag(EditScreenTags.FLIP_VERTICAL).performScrollTo().assertIsDisplayed()
     }
 }

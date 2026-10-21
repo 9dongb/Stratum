@@ -82,6 +82,11 @@ internal fun blurBar(mode: SubTool, controls: BlurControls, onChoose: (SubTool) 
 @Composable
 internal fun mosaicBar(controls: MosaicControls): List<BarItem> = valueChips(mosaicStrip(controls))
 
+/** 유동화 새 창(커버)의 막대: 크기, 압력. 도구(뒤틀기·오목·볼록·재구성)는 맨 아래 X와 ✓ 사이의 탭이다(새 창 공통 규칙). */
+@Composable
+internal fun liquifyBar(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<BarItem> =
+    valueChips(liquifyStrip(state, actions, sizePreview))
+
 /**
  * 선택의 막대: 하위 도구(사각형·원형·올가미·자동·개체), 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
  * 동작(모두·해제·반전·지우기·복사·잘라내기·AI 채우기, 펼치면 버튼 줄). 개체 선택은 페더가 없다(띠와 같다).

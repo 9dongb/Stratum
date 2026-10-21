@@ -5,7 +5,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,13 +13,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -67,7 +63,6 @@ import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
-import kotlin.math.roundToInt
 
 /**
  * 픽셀 유동화 작업 모드의 화면 상태(열려 있을 때만). [preview]는 고른 레이어만 비튼 축소본이다.
@@ -175,6 +170,9 @@ fun LiquifyMode(
     // 띠의 옵션 창(세로 슬라이더)은 작업 모드 안에서만 쓴다. 떠 있으면 뒤로 가기는 그것부터 닫는다(취소보다 나중에 등록해 먼저 받는다).
     val floating = rememberFloatingState()
     BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
+    // 닫힌 화면의 한 줄 막대(크기·압력)에서 펼친 칩. 펼쳐져 있으면 뒤로 가기는 칩 줄로 돌아간다(취소보다 먼저).
+    val coverBar = rememberCoverBarState()
+    BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
     val viewState = rememberCanvasViewState(state.documentSize)
     // 작업 모드와 캔버스의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다).
     var screenTop by remember { mutableFloatStateOf(0f) }
@@ -237,7 +235,6 @@ fun LiquifyMode(
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = StratumTheme.colors.workspace) {
         BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { screenTop = it.positionInRoot().y }) {
             val widthClass = widthClassOf(maxWidth.value)
-            val maxOptionsHeight = maxHeight * 0.4f
             // 닫힌 화면(커버)은 새 창 공통 규칙대로 취소·적용을 맨 아래 X·✓ 줄에 둔다(결정 기록 '닫힌 화면 새 창')
             val coverWindow = widthClass == WidthClass.Compact
             // 배치가 바뀌거나(접기·펼치기) 적용하기 시작하면 띠의 옵션 창을 닫는다
@@ -246,17 +243,9 @@ fun LiquifyMode(
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
                 if (coverWindow) {
                     LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.weight(1f).fillMaxWidth())
-                    Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
-                        // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다
-                        LiquifyOptions(
-                            state, actions, sizePreview,
-                            Modifier
-                                .heightIn(max = maxOptionsHeight)
-                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
+                    // 크기·압력은 편집 화면과 같은 한 줄 막대다(칩을 누르면 같은 줄이 슬라이더, 결정 기록 '커버 화면 개편').
+                    // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
+                    CoverToolBar(items = liquifyBar(state, actions, sizePreview), state = coverBar)
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(
                         onCancel = actions::cancel,
@@ -449,21 +438,6 @@ fun LiquifyOverlay(
     ) {
         val at = finger
         if (at != null) BrushCursor(at, brushSize, view, document)
-    }
-}
-
-/** 닫힌 화면의 옵션 칸: 크기(끄는 동안 [sizePreview]가 캔버스에 크기를 보임)와 압력. 도구 탭은 맨 아래 줄이고, 설명 줄은 두지 않는다(사용자 피드백 8차 1-7). */
-@Composable
-private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState, modifier: Modifier) {
-    Column(modifier.testTag(EditScreenTags.LIQUIFY_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        SizeSlider(state.size, actions::setSize, EditScreenTags.LIQUIFY_SIZE, sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.liquify_strength),
-            shown = stringResource(R.string.layer_percent, (state.strength * 100).roundToInt()),
-            fraction = state.strength,
-            onFraction = { actions.setStrength(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
-            tag = EditScreenTags.LIQUIFY_STRENGTH
-        )
     }
 }
 

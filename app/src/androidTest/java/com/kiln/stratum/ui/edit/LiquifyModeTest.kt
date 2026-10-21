@@ -429,7 +429,11 @@ class LiquifyModeTest {
         show(411, 800)
 
         composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.BLOAT)).performClick()
+        // 크기·압력은 한 줄 막대의 칩이다. 누르면 같은 줄이 슬라이더가 되고 ✓로 돌아온다(결정 기록 '커버 화면 개편').
+        composeRule.expandBarChip("size")
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(300f)) }
+        composeRule.collapseBar()
+        composeRule.expandBarChip("strength")
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
 
         composeRule.runOnIdle {
@@ -449,8 +453,23 @@ class LiquifyModeTest {
     }
 
     @Test
+    fun cover_backFoldsAnOpenChip_beforeCancelling() {
+        show(411, 800)
+        composeRule.expandBarChip("size")
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).assertIsDisplayed()
+
+        // 펼친 칩이 있으면 뒤로 가기는 칩 줄로 돌아가고, 다음 뒤로 가기가 취소다
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue("${actions.calls}", actions.calls.isEmpty()) }
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.runOnIdle { assertEquals(listOf("cancel"), actions.calls) }
+    }
+
+    @Test
     fun cover_toolTabsAreOnTheBottomRowBetweenCancelAndApply() {
-        // 사용자 피드백 8차 1-1: 고르는 탭은 맨 아래 X와 ✓ 사이(닫힌 화면 공통 규칙). 위 옵션 칸은 크기·압력만이다(설명 줄 없음).
+        // 사용자 피드백 8차 1-1: 고르는 탭은 맨 아래 X와 ✓ 사이(닫힌 화면 공통 규칙). 그 위는 크기·압력 칩의 한 줄 막대다(결정 기록 '커버 화면 개편').
         show(411, 800)
         val cancel = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANCEL).fetchSemanticsNode().layoutBoundsInWindow()
         val apply = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).fetchSemanticsNode().layoutBoundsInWindow()
@@ -464,9 +483,14 @@ class LiquifyModeTest {
         }
         assertTrue("tabs end at $left, apply $apply", left <= apply.left)
         composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsSelected()
-        composeRule.onNode(hasTestTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)) and hasAnyAncestor(hasTestTag(EditScreenTags.LIQUIFY_OPTIONS))).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_STRENGTH).assertIsDisplayed()
+        composeRule.onNode(hasTestTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)) and hasAnyAncestor(hasTestTag(EditScreenTags.COVER_TOOL_BAR))).assertDoesNotExist()
+        // 막대는 맨 아래 줄 바로 위다(X는 그 줄 안에서 위아래 여백만큼 안쪽)
+        val barNode = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode()
+        val bar = barNode.layoutBoundsInWindow()
+        val dp = with(barNode.layoutInfo.density) { 1.dp.toPx() }
+        assertTrue("the bar $bar should sit right above the bottom row ($cancel)", bar.bottom <= cancel.top + 1f && cancel.top - bar.bottom < 12 * dp)
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("strength")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
     }
 
@@ -480,7 +504,7 @@ class LiquifyModeTest {
         val canvas = canvasNode.layoutBoundsInWindow()
         val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow()
 
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
         // 오른쪽 칸이 없어 캔버스가 창 폭 전체이고, 띠는 그 위 왼쪽 위에 떠 있다
         assertEquals(mode.width, canvas.width, 2 * dp)
         assertEquals(canvas.left + 4 * dp, strip.left, 2 * dp)

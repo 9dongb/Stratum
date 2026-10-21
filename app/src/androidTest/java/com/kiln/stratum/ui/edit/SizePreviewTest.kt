@@ -203,6 +203,8 @@ class SizePreviewTest {
             }
         }
 
+        // 커버 유동화의 크기는 한 줄 막대의 칩이다(누르면 같은 줄이 슬라이더)
+        composeRule.expandBarChip("size")
         dragShowsTheSizeUntilRelease(EditScreenTags.LIQUIFY_SIZE)
     }
 }
