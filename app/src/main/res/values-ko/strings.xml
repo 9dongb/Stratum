@@ -267,8 +267,8 @@
     <string name="subtool_select_lasso">올가미</string>
     <string name="subtool_select_wand">자동 선택</string>
     <string name="subtool_select_wand_short">자동</string>
-    <string name="subtool_select_ai">AI 선택</string>
-    <string name="subtool_select_ai_short">AI</string>
+    <string name="subtool_select_ai">개체 선택</string>
+    <string name="subtool_select_ai_short">개체</string>
     <string name="selection_mode_replace">새로</string>
     <string name="selection_mode_add">더하기</string>
     <string name="selection_mode_subtract">빼기</string>
@@ -326,7 +326,7 @@
     <string name="retouch_remove_picked">지우기</string>
     <string name="retouch_remove_picked_description">고른 물체를 AI로 지우기</string>
     <string name="edit_remove_unavailable">이 기기에서는 AI 제거를 쓸 수 없어요. 스팟 복구 브러시를 써 보세요.</string>
-    <string name="edit_select_unavailable">이 기기에서는 AI 선택을 쓸 수 없어요. 자동 선택을 써 보세요.</string>
+    <string name="edit_select_unavailable">이 기기에서는 개체 선택을 쓸 수 없어요. 자동 선택을 써 보세요.</string>
     <string name="edit_pick_unavailable">이 기기에서는 물체를 톡 눌러 고를 수 없어요. 지울 것을 덮어 칠해 주세요.</string>
     <string name="tool_blur">흐림·선명·스머지</string>
     <string name="tool_blur_short">흐림</string>

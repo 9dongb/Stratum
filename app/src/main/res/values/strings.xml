@@ -269,8 +269,8 @@
     <string name="subtool_select_lasso">Lasso</string>
     <string name="subtool_select_wand">Magic wand</string>
     <string name="subtool_select_wand_short">Wand</string>
-    <string name="subtool_select_ai">AI select</string>
-    <string name="subtool_select_ai_short">AI</string>
+    <string name="subtool_select_ai">Object select</string>
+    <string name="subtool_select_ai_short">Object</string>
     <string name="selection_mode_replace">New</string>
     <string name="selection_mode_add">Add</string>
     <string name="selection_mode_subtract">Subtract</string>
@@ -328,7 +328,7 @@
     <string name="retouch_remove_picked">Remove</string>
     <string name="retouch_remove_picked_description">Remove the picked object with AI</string>
     <string name="edit_remove_unavailable">AI remove can\'t run on this device. Try the spot healing brush.</string>
-    <string name="edit_select_unavailable">AI select can\'t run on this device. Try the magic wand.</string>
+    <string name="edit_select_unavailable">Object select can\'t run on this device. Try the magic wand.</string>
     <string name="edit_pick_unavailable">Tapping to pick an object can\'t run on this device. Paint over what to remove instead.</string>
     <string name="tool_blur">Blur, sharpen and smudge</string>
     <string name="tool_blur_short">Blur</string>
