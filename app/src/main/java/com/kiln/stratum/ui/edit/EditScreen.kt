@@ -103,7 +103,6 @@ import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.TopBarIconToggleButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.BarButtonContentInset
@@ -1338,10 +1337,13 @@ private fun EditCanvas(
         // (배율을 바꾼 직후 연 옵션 창이 배율 표시 밑에 깔려 누른 것이 화면 맞춤이 되지 않게)
         shownSize?.let { CanvasZoomChip(viewState, it, Modifier.fillMaxSize().windowInsetsPadding(insets), avoid) }
         floating(insets)
-        // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우되(도구 막대 폭만큼 오른쪽을 비움) 펼친 화면의 접히는 선과
-        // 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
+        // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우고(도구 막대 폭만큼 오른쪽을 비움) 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을
+        // 피한다. 접히는 선은 보지 않는다(사용자 피드백 11차 1).
         val railWidth = with(LocalDensity.current) { (canvasStart - screenStart).coerceAtLeast(0f).toDp() }
-        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(end = railWidth, bottom = overlayBottom), margin = 8.dp) {
+        Box(
+            Modifier.fillMaxSize().windowInsetsPadding(insets).padding(end = railWidth, bottom = overlayBottom).padding(8.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
             SnackbarHost(snackbarHostState, Modifier.testTag(EditScreenTags.MESSAGE_BAR))
         }
     }

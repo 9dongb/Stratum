@@ -28,9 +28,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -44,7 +42,7 @@ import org.junit.runner.RunWith
 
 /**
  * 캔버스 왼쪽 위의 배율 표시(사용자 피드백 10차 8): 처음에는 없고, 손으로 배율을 바꿀 때만 왼쪽 위에 보였다가 1초 뒤 0.5초 동안
- * 서서히 사라지며, 보이는 동안 누르면 화면에 맞춘다. 옮기기만 하면 보이지 않고, 도구 옵션 띠와 접히는 선을 피한다.
+ * 서서히 사라지며, 보이는 동안 누르면 화면에 맞춘다. 옮기기만 하면 보이지 않고, 도구 옵션 띠를 피한다(접히는 선은 보지 않는다, 11차).
  * 숨은 동안의 화면 읽기 기능(캔버스 그림의 배율·'화면에 맞추기')도 본다. 자리 계산은 `HingePlacementTest`가 본다.
  */
 @RunWith(AndroidJUnit4::class)
@@ -77,7 +75,7 @@ class CanvasZoomChipTest {
         composeRule.waitForIdle()
     }
 
-    /** 배율 표시만 띄운다(화면 크기 700×900, 확대한 보기). 힌지를 피하는지 볼 때 쓴다. */
+    /** 배율 표시만 띄운다(화면 크기 700×900, 확대한 보기). 힌지와 상관없는지 볼 때 쓴다. */
     private fun showChipAlone(): CanvasViewState {
         val viewState = CanvasViewState(CanvasView.Free(scale = 2.5, centerX = 100.0, centerY = 100.0))
         composeRule.setContent {
@@ -255,31 +253,17 @@ class CanvasZoomChipTest {
     }
 
     @Test
-    fun movesOffAVerticalHinge() {
+    fun staysAtTheTopLeft_evenOnAHinge() {
+        // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 선 오른쪽·아래로 옮겼다)
         showChipAlone()
-        // 배율 표시 한가운데를 세로로 지나가는 힌지
-        val centerX = bounds(EditScreenTags.ZOOM_CHIP).center.x.roundToInt()
+        val before = bounds(EditScreenTags.ZOOM_CHIP)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
+        // 배율 표시 한가운데를 세로로, 또 가로로 지나는 힌지
+        val vertical = Hinge(left = before.center.x.roundToInt(), top = 0, right = before.center.x.roundToInt(), bottom = screen.bottom.roundToInt(), isVertical = true)
+        val horizontal = Hinge(left = 0, top = before.center.y.roundToInt(), right = screen.right.roundToInt(), bottom = before.center.y.roundToInt(), isVertical = false)
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(vertical, horizontal) }
 
-        composeRule.assertClickablesAvoid(hinge)
-        val margin = with(composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).fetchSemanticsNode().layoutInfo.density) { HingeMargin.roundToPx() }
-        assertTrue("chip is not right of the band", bounds(EditScreenTags.ZOOM_CHIP).left >= centerX + margin)
-    }
-
-    @Test
-    fun movesOffAHorizontalHinge() {
-        showChipAlone()
-        val centerY = bounds(EditScreenTags.ZOOM_CHIP).center.y.roundToInt()
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-        val margin = with(composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).fetchSemanticsNode().layoutInfo.density) { HingeMargin.roundToPx() }
-        assertTrue("chip is not below the band", bounds(EditScreenTags.ZOOM_CHIP).top >= centerY + margin)
+        assertEquals(before, bounds(EditScreenTags.ZOOM_CHIP))
     }
 }

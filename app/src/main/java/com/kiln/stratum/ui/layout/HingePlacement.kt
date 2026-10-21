@@ -199,66 +199,22 @@ fun placeInside(x: Int, y: Int, width: Int, height: Int, piece: Region): Pair<In
     x.coerceAtMost(piece.right - width).coerceAtLeast(piece.left) to y.coerceAtMost(piece.bottom - height).coerceAtLeast(piece.top)
 
 /**
- * 캔버스 왼쪽 위 배율 표시(크기 [width]×[height])의 왼쪽 위 자리(창 좌표, 사용자 피드백 10차 8). 바라는 자리([x], [y])에서 시작해
- * 피할 곳([avoid], 도구 옵션 띠)과 [gap]보다 가까우면 그 오른쪽([gap]만큼 띄움)으로, 세로 힌지의 띠([verticalBands])에 걸리면 띠 오른쪽으로,
- * 가로 힌지의 띠([horizontalBands])에 걸리면 띠 아래로 옮긴다. 옮긴 자리가 또 걸리면 또 옮긴다.
+ * 캔버스 왼쪽 위 배율 표시(크기 [width]×[height])의 왼쪽 위 자리(창 좌표, 사용자 피드백 10차 8). 바라는 자리([x], [y])가
+ * 피할 곳([avoid], 도구 옵션 띠)과 [gap]보다 가까우면 그 오른쪽([gap]만큼 띄움)으로 옮긴다. 접히는 선은 보지 않는다(사용자 피드백 11차 1).
  */
-fun zoomChipSpot(
-    x: Int,
-    y: Int,
-    width: Int,
-    height: Int,
-    verticalBands: List<Span>,
-    horizontalBands: List<Span>,
-    avoid: Region?,
-    gap: Int
-): Pair<Int, Int> {
-    var left = x
-    var top = y
-    // 옮길 때마다 오른쪽·아래로만 가므로 몇 번이면 멈춘다(띠·힌지가 몇 개뿐)
-    repeat(MAX_SPOT_MOVES) {
-        val band = verticalBands.firstOrNull { it.start < left + width && left < it.end }
-        val row = horizontalBands.firstOrNull { it.start < top + height && top < it.end }
-        val blocked = avoid?.takeIf { it.left - gap < left + width && left < it.right + gap && it.top - gap < top + height && top < it.bottom + gap }
-        when {
-            row != null -> top = row.end
-            band != null -> left = band.end
-            blocked != null -> left = blocked.right + gap
-            else -> return left to top
-        }
-    }
-    return left to top
+fun zoomChipSpot(x: Int, y: Int, width: Int, height: Int, avoid: Region?, gap: Int): Pair<Int, Int> {
+    val blocked = avoid?.takeIf { it.left - gap < x + width && x < it.right + gap && it.top - gap < y + height && y < it.bottom + gap }
+    return (blocked?.let { it.right + gap } ?: x) to y
 }
-
-private const val MAX_SPOT_MOVES = 8
 
 /**
  * 작업 표시줄 버튼들(폭 [widths], 왼쪽부터, 사이 [gap])의 왼쪽 자리(사용자 피드백 10차 1). 버튼 줄의 가운데를 [center](화면 가운데)에 맞추되
- * [area] 안으로 민다. 세로 힌지의 띠([bands])에 걸리면 버튼을 띠 양쪽으로 나눈다: 반(올림)을 띠 왼쪽 끝에, 나머지를 띠 오른쪽 끝에 붙이고,
- * 한쪽에 들어가지 않으면 그쪽 개수를 줄인다. 어떻게 나눠도 들어가지 않으면 넓은 쪽에 모두 둔다.
+ * [area] 안으로 민다(줄이 [area]보다 넓으면 왼쪽 끝부터). 접히는 선이 지나도 나누지 않는다(사용자 피드백 11차 1).
  */
-fun actionBarStarts(widths: List<Int>, center: Int, area: Span, bands: List<Span>, gap: Int): List<Int> {
-    fun rowWidth(part: List<Int>) = if (part.isEmpty()) 0 else part.sum() + gap * (part.size - 1)
-    fun row(start: Int, part: List<Int>): List<Int> {
-        var x = start
-        return part.map { width -> x.also { x += width + gap } }
-    }
-    val total = rowWidth(widths)
-    val centered = (center - total / 2).coerceAtMost(area.end - total).coerceAtLeast(area.start)
-    val band = bands.firstOrNull { it.start < centered + total && centered < it.end } ?: return row(centered, widths)
-    val leftRoom = band.start - area.start
-    val rightRoom = area.end - band.end
-    // 반(올림)에 가까운 나누기부터 본다
-    val half = (widths.size + 1) / 2
-    val split = widths.indices.plus(widths.size).sortedBy { kotlin.math.abs(it - half) }.firstOrNull { count ->
-        rowWidth(widths.take(count)) <= leftRoom && rowWidth(widths.drop(count)) <= rightRoom
-    }
-    if (split != null) {
-        val left = widths.take(split)
-        val right = widths.drop(split)
-        return row(band.start - rowWidth(left), left) + row(band.end, right)
-    }
-    return if (leftRoom >= rightRoom) row((band.start - total).coerceAtLeast(area.start), widths) else row(band.end, widths)
+fun actionBarStarts(widths: List<Int>, center: Int, area: Span, gap: Int): List<Int> {
+    val total = if (widths.isEmpty()) 0 else widths.sum() + gap * (widths.size - 1)
+    var x = (center - total / 2).coerceAtMost(area.end - total).coerceAtLeast(area.start)
+    return widths.map { width -> x.also { x += width + gap } }
 }
 
 /**
@@ -286,13 +242,6 @@ fun panelRegion(area: Region, verticalBands: List<Span>, horizontalBands: List<S
     val rows = pieceAt(Span(area.top, area.bottom), horizontalBands, area.top)
     return Region(columns.start, rows.start, columns.end, rows.end)
 }
-
-/**
- * [range]에서 [bands]가 덮는 부분을 빼고 남은 구간 중 가장 긴 것. 길이가 같으면 앞의 것이다.
- * 띠가 다 덮어 남는 구간이 없으면 [range]를 그대로 돌려준다.
- */
-fun widestFreeSpan(range: Span, bands: List<Span>): Span =
-    subtract(range, bands).maxByOrNull { it.end - it.start } ?: range
 
 /** [range]에서 [bands]가 덮는 부분을 뺀 나머지 구간들. 길이가 0인 구간은 뺀다. */
 private fun subtract(range: Span, bands: List<Span>): List<Span> {

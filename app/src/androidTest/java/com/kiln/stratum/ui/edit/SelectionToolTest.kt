@@ -486,9 +486,11 @@ class SelectionToolTest {
     }
 
     @Test
-    fun expanded_actionBar_splitsAroundACenterHinge() {
+    fun expanded_actionBar_staysOneCenteredRow_evenAcrossACenterHinge() {
+        // 사용자 피드백 11차 1: 접히는 선을 비켜 가운데를 비워 두지 않는다(전에는 선 양쪽으로 나눴다)
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        val before = barActionTags.map { bounds(it) }
         // 펼친 폴드처럼 화면 가운데를 세로로 지나는 힌지
         val centerX = bounds(EditScreenTags.TOP_BAR).center.x.roundToInt()
         val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = 10_000, isVertical = true)
@@ -496,9 +498,13 @@ class SelectionToolTest {
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.waitForIdle()
 
-        composeRule.assertClickablesAvoid(hinge)
         val buttons = barActionTags.map { bounds(it) }
-        assertTrue("$buttons should be on both sides of $centerX", buttons.any { it.right < centerX } && buttons.any { it.left > centerX })
+        assertEquals("the hinge should not move the buttons", before, buttons)
+        // 버튼 사이가 모두 같다(가운데가 비지 않음)
+        val gaps = buttons.zipWithNext { a, b -> b.left - a.right }
+        assertTrue("$gaps", gaps.max() - gaps.min() < 2f)
+        val row = (buttons.first().left + buttons.last().right) / 2
+        assertEquals(centerX.toFloat(), row, 4f)
     }
 
     @Test

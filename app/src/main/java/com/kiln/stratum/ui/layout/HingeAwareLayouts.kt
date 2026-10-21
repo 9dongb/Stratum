@@ -6,7 +6,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -182,92 +181,6 @@ fun HingeAvoidingTopStart(
                     gap = 0,
                     bands = hinges.filter { !it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-top) }
                 ).single()
-            }
-            placeable.place(x, y)
-        }
-    }
-}
-
-/**
- * 하나를 아래쪽 가운데에 놓되, 힌지의 띠(양쪽 [HingeMargin])를 피한다. 잠깐 뜨는 알림 막대에 쓴다.
- *
- * - 세로 힌지의 띠가 가로를 나누면, 띠 밖에서 가장 넓은 칸에 들어가도록 폭을 줄여 그 칸 가운데에 놓는다.
- * - 가로 힌지의 띠에 걸리면 띠 위로 올린다.
- *
- * 폭을 정하려면 자기 위치(창 좌표)가 필요해서, 배치하는 순간에 위치를 읽고 그때 크기를 잰다.
- * 받은 영역을 다 차지하지만 터치는 받지 않는다([HingeAvoidingTopStart]와 같다).
- */
-@Composable
-fun HingeAvoidingBottom(
-    modifier: Modifier = Modifier,
-    margin: Dp = 0.dp,
-    content: @Composable () -> Unit
-) {
-    val hinges = LocalHinges.current
-    Layout(content = content, modifier = modifier) { measurables, constraints ->
-        val width = constraints.maxWidth
-        val height = constraints.maxHeight
-        val marginPx = margin.roundToPx()
-        val hingeMarginPx = HingeMargin.roundToPx()
-        layout(width, height) {
-            // 정렬선을 재는 단계에서는 위치를 몰라(null) 띠 없이 놓고, 곧 이어지는 배치에서 다시 놓는다
-            val origin = coordinates?.positionInWindow()
-            val row = Span(marginPx, (width - marginPx).coerceAtLeast(marginPx))
-            val span = if (origin == null) {
-                row
-            } else {
-                widestFreeSpan(row, hinges.filter { it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-origin.x.roundToInt()) })
-            }
-            val placeable = measurables.single().measure(
-                Constraints(maxWidth = (span.end - span.start).coerceAtLeast(0), maxHeight = height)
-            )
-            val x = span.start + (span.end - span.start - placeable.width) / 2
-            var y = height - marginPx - placeable.height
-            if (origin != null) {
-                val top = origin.y.roundToInt()
-                // 아래에서부터 올라가며, 걸리는 띠가 있으면 그 띠 위로 올린다
-                for (band in hinges.filter { !it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-top) }.sortedByDescending { it.start }) {
-                    if (y < band.end && y + placeable.height > band.start) y = band.start - placeable.height
-                }
-            }
-            placeable.place(x, y)
-        }
-    }
-}
-
-/**
- * 하나를 위쪽 가운데에 놓되, 가로 힌지의 띠(양쪽 [HingeMargin])에 걸리면 띠 아래로 내린다. 잠깐 뜨는 제스처 알림에 쓴다.
- *
- * - 세로 힌지는 피하지 않고 영역 가운데에 놓는다. 누르는 것이 없는 짧은 알림이라 접히는 선에 걸려도 된다(사용자: "중앙에 떠도 됩니다").
- * - 놓을 것이 없으면(사라지는 알림이 다 사라짐) 아무것도 놓지 않는다.
- *
- * 받은 영역을 다 차지하지만 터치는 받지 않는다([HingeAvoidingTopStart]와 같다).
- */
-@Composable
-fun HingeAvoidingTop(
-    modifier: Modifier = Modifier,
-    margin: Dp = 0.dp,
-    content: @Composable () -> Unit
-) {
-    val hinges = LocalHinges.current
-    Layout(content = content, modifier = modifier) { measurables, constraints ->
-        val width = constraints.maxWidth
-        val height = constraints.maxHeight
-        val marginPx = margin.roundToPx()
-        val hingeMarginPx = HingeMargin.roundToPx()
-        layout(width, height) {
-            val measurable = measurables.firstOrNull() ?: return@layout
-            // 정렬선을 재는 단계에서는 위치를 몰라(null) 띠 없이 놓고, 곧 이어지는 배치에서 다시 놓는다
-            val origin = coordinates?.positionInWindow()
-            val placeable = measurable.measure(Constraints(maxWidth = width, maxHeight = height))
-            val x = (width - placeable.width) / 2
-            var y = marginPx
-            if (origin != null) {
-                val top = origin.y.roundToInt()
-                // 위에서부터 내려가며, 걸리는 띠가 있으면 그 띠 아래로 내린다
-                for (band in hinges.filter { !it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-top) }.sortedBy { it.start }) {
-                    if (y < band.end && y + placeable.height > band.start) y = band.end
-                }
             }
             placeable.place(x, y)
         }

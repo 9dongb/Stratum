@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.testTag
@@ -24,7 +26,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.kiln.stratum.ui.layout.HingeAvoidingTop
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlinx.coroutines.delay
@@ -70,7 +71,7 @@ fun rememberGestureToastState(): GestureToastState = remember { GestureToastStat
 
 /**
  * 제스처 알림: 캔버스 위쪽 가운데에 짧게 뜨는 알약 모양 글자다. 반대 색이라 어떤 사진 위에서도 보이고, 화면 읽기 기능이 읽는다.
- * 왼쪽 위 배율 표시를 피해 [GESTURE_TOAST_TOP] 아래에 둔다. 세로 힌지가 지나도 가운데에 두고(사용자 요청), 가로 힌지에 걸리면 그 아래로 내린다.
+ * 왼쪽 위 배율 표시를 피해 [GESTURE_TOAST_TOP] 아래, 가로 가운데에 둔다. 접히는 선은 보지 않는다(사용자 피드백 11차 1).
  * 안드로이드 기본 토스트와 달리 앱 안에 그려, 화면 아래의 옵션·탭 줄을 가리지 않고 잇달아 띄워도 쌓이지 않는다.
  * 캔버스 전체를 덮는 자리에 놓는다. 알림 자체도 터치를 받지 않아, 떠 있는 동안에도 그 밑을 누를 수 있다.
  */
@@ -82,7 +83,7 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
             state.hide()
         }
     }
-    HingeAvoidingTop(modifier, margin = GESTURE_TOAST_TOP) {
+    Box(modifier.padding(top = GESTURE_TOAST_TOP), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(visible = state.text != null, enter = fadeIn(), exit = fadeOut()) {
             // Surface는 아래로 가는 터치를 막으므로 쓰지 않는다. 알림이 떠 있어도 그 밑의 캔버스·옵션 창을 그대로 누를 수 있다.
             Text(

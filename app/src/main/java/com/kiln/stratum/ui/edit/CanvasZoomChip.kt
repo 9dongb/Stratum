@@ -26,8 +26,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.zoomChipSpot
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -40,7 +38,8 @@ import kotlinx.coroutines.delay
  * 사라지게 해주세요. (약간의 시간을 두고 그라데이션으로 사라지도록 해서 사용자가 비율부분을 클릭하면 화면에 맞춰지게 해주세요)").
  * 손으로 배율을 바꿀 때만([CanvasViewState.zoomChanges]) 보이고, 마지막으로 바꾼 뒤 [ZOOM_CHIP_HOLD_MILLIS] 동안 있다가
  * [ZOOM_CHIP_FADE_MILLIS] 동안 서서히 사라진다. 보이는 동안 누르면 화면에 맞추고 맞춘 배율을 잠깐 보인다. 누르는 영역은 48dp다(Material Surface).
- * 접히는 선(힌지)과 도구 옵션 띠([avoid], 창 좌표)를 피해 놓는다(띠가 왼쪽 위에 있으면 그 오른쪽). [documentSize]는 보이는(돌린) 문서 크기다.
+ * 도구 옵션 띠([avoid], 창 좌표)를 피해 놓는다(띠가 왼쪽 위에 있으면 그 오른쪽). 접히는 선은 보지 않는다(사용자 피드백 11차 1).
+ * [documentSize]는 보이는(돌린) 문서 크기다.
  * 캔버스 영역 전체를 덮는 자리에 두고, 터치는 표시만 받는다. 숨은 동안의 맞추기는 캔버스의 화면 읽기 동작('화면에 맞추기')이 한다.
  */
 @Composable
@@ -61,7 +60,6 @@ fun CanvasZoomChip(viewState: CanvasViewState, documentSize: PixelSize, modifier
     val scale = viewState.scaleFor(documentSize) ?: return
     val percent = zoomPercentText(scale)
     val description = stringResource(R.string.canvas_zoom_fit_description, percent)
-    val hinges = LocalHinges.current
     Layout(
         content = {
             Surface(
@@ -102,19 +100,9 @@ fun CanvasZoomChip(viewState: CanvasViewState, documentSize: PixelSize, modifier
             }
             val left = origin.x.roundToInt()
             val top = origin.y.roundToInt()
-            val hingeMargin = HingeMargin.roundToPx()
             // 보이는 칸(높이 32dp)은 누르는 자리(48dp) 가운데라, 누르는 자리를 캔버스 위 끝에 붙이면 보이는 칸이 위에서 8dp 떨어진다
             // (도구 옵션 띠의 위 끝과 같은 줄)
-            val (x, y) = zoomChipSpot(
-                x = left + margin,
-                y = top,
-                width = placeable.width,
-                height = placeable.height,
-                verticalBands = hinges.filter { it.isVertical }.map { it.band(hingeMargin) },
-                horizontalBands = hinges.filter { !it.isVertical }.map { it.band(hingeMargin) },
-                avoid = avoid(),
-                gap = margin
-            )
+            val (x, y) = zoomChipSpot(x = left + margin, y = top, width = placeable.width, height = placeable.height, avoid = avoid(), gap = margin)
             placeable.place(x - left, y - top)
         }
     }
