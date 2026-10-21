@@ -29,6 +29,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.down
+import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.test.up
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -40,6 +43,7 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.components.SLIDER_THUMB_TAG
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -185,6 +189,76 @@ class AdjustPanelTest {
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.CONTRAST), useUnmergedTree = true)
             .performTouchInput { doubleClick(centerLeft + Offset(20f, 0f)) }
         composeRule.runOnIdle { assertEquals(Adjustments(saturation = 0.3f), fake.committed) }
+    }
+
+    /** [item] 줄 슬라이더의 원(손잡이). 누르는 자리는 원 둘레 48dp라 원 가운데를 누르면 원을 잡는다. */
+    private fun thumb(item: AdjustItem) =
+        composeRule.onNode(hasTestTag(SLIDER_THUMB_TAG) and hasAnyAncestor(hasTestTag(EditScreenTags.adjustSlider(item))), useUnmergedTree = true)
+
+    private fun thumbCenterX(item: AdjustItem): Float = thumb(item).fetchSemanticsNode().layoutBoundsInWindow().center.x
+
+    @Test
+    fun doubleTapOnTheThumb_resetsThatItem_andOneTapChangesNothing() {
+        fake.committed = Adjustments(exposure = 0.5f, contrast = 0.2f)
+        openCompactAdjust()
+
+        // 원을 한 번 톡: 누른 자리로 튀지 않고 아무것도 기록하지 않는다
+        thumb(AdjustItem.EXPOSURE).performTouchInput { click(center + Offset(6f, 0f)) }
+        // 다음 두 번 톡과 이어지지 않게 두 번 톡 시간을 넘긴다
+        composeRule.mainClock.advanceTimeBy(1_000)
+        composeRule.runOnIdle {
+            assertEquals(0, fake.previews)
+            assertEquals(0, fake.commits)
+            assertEquals(0, fake.records)
+        }
+
+        thumb(AdjustItem.EXPOSURE).performTouchInput { doubleClick(center) }
+
+        composeRule.runOnIdle {
+            assertEquals(Adjustments(contrast = 0.2f), fake.committed)
+            // 초기화 한 번만 기록한다(누른 자리로 튄 값이 따로 기록되지 않는다)
+            assertEquals(1, fake.records)
+            assertEquals(0, fake.commits)
+        }
+    }
+
+    @Test
+    fun draggingTheThumb_followsTheFinger_withoutJumpingToIt() {
+        fake.committed = Adjustments(exposure = 0.5f)
+        openCompactAdjust()
+        val before = thumbCenterX(AdjustItem.EXPOSURE)
+
+        // 원 가운데에서 조금 오른쪽을 잡고 오른쪽으로 끈다
+        val drag = 120f
+        thumb(AdjustItem.EXPOSURE).performTouchInput {
+            down(center + Offset(10f, 0f))
+            moveBy(Offset(drag / 2, 0f))
+            moveBy(Offset(drag / 2, 0f))
+            up()
+        }
+
+        composeRule.runOnIdle {
+            assertTrue("exposure ${fake.committed.exposure}", fake.committed.exposure > 0.5f)
+            // 놓을 때 한 번 기록한다
+            assertEquals(1, fake.commits)
+        }
+        // 잡은 자리(+10px)로 튀지 않고 원이 손가락이 끈 만큼 옮겨졌다(값은 0.01 단위라 1~2px 어긋날 수 있다)
+        assertEquals(before + drag, thumbCenterX(AdjustItem.EXPOSURE), 3f)
+    }
+
+    @Test
+    fun mainPanel_doubleTapOnTheThumb_resetsToo() {
+        fake.committed = Adjustments(saturation = -0.4f)
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
+
+        slider(AdjustItem.SATURATION).performScrollTo()
+        thumb(AdjustItem.SATURATION).performTouchInput { doubleClick(center) }
+
+        composeRule.runOnIdle {
+            assertEquals(Adjustments.NONE, fake.committed)
+            assertEquals(1, fake.records)
+        }
     }
 
     @Test

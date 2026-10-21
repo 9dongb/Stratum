@@ -203,7 +203,7 @@ private fun AdjustChip(item: AdjustItem, selected: Boolean, changed: Boolean, en
 
 /**
  * 슬라이더 한 줄: 이름, 슬라이더, 숫자. 끄는 동안 미리 보고, 놓으면 기록한다.
- * 이름을 두 번 누르면 그 항목만 0으로 돌린다(라이트룸과 같은 방식). 화면 읽기 기능에서는 '초기화' 동작으로 한다.
+ * 이름이나 슬라이더 원을 두 번 누르면 그 항목만 0으로 돌린다(라이트룸과 같은 방식). 화면 읽기 기능에서는 '초기화' 동작으로 한다.
  */
 @Composable
 private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
@@ -241,6 +241,8 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
             valueRange = item.min..item.max,
             enabled = controls.enabled,
             centered = true,
+            // 원을 두 번 톡 해도 그 항목만 초기화한다(2026-10-21 사용자 요청). 이름 두 번 누르기와 같다.
+            onThumbDoubleTap = reset,
             modifier = Modifier
                 .weight(1f)
                 .semantics {
