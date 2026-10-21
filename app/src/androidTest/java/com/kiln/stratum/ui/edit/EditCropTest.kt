@@ -79,7 +79,7 @@ class EditCropTest {
     }
 
     private fun startCropOnCover() {
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
     }
 
     private fun chooseRatio(ratio: CropRatio) {

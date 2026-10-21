@@ -115,7 +115,7 @@ class BrushToolsTest {
     @Test
     fun compactBrush_showsOptions_andChangesTheSettings() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
 
         // 색 줄에는 전경색·배경색과 바꾸기 버튼이 있다(맞바꾸는 것은 ViewModel이 한다)
@@ -133,7 +133,7 @@ class BrushToolsTest {
     @Test
     fun eraser_hasNoColors() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Eraser)).performClick()
+        composeRule.chooseCoverTool(EditTool.Eraser)
 
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_COLORS).assertDoesNotExist()
@@ -142,7 +142,7 @@ class BrushToolsTest {
     @Test
     fun draggingOnTheCanvas_sendsAStrokeInDocumentCoordinates() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
 
         composeRule.onNodeWithTag(EditScreenTags.STROKE_OVERLAY).performTouchInput {
             swipe(start = center, end = center + Offset(width * 0.2f, 0f), durationMillis = 300)
@@ -160,7 +160,7 @@ class BrushToolsTest {
     @Test
     fun aSecondFinger_cancelsTheStroke() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
 
         composeRule.onNodeWithTag(EditScreenTags.STROKE_OVERLAY).performTouchInput {
             down(0, center)
@@ -178,7 +178,7 @@ class BrushToolsTest {
     fun text_tapThenType_addsAtTheTappedPoint() {
         show(411, 800)
         // 탭이 커버 폭보다 많아(12개) 글자 탭은 옆으로 밀어야 보인다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Text)
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OPTIONS).assertIsDisplayed()
 
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(center) }

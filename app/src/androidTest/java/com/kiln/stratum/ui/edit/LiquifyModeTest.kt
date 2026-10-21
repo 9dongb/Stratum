@@ -631,7 +631,7 @@ class LiquifyModeTest {
         }
 
         // 탭 줄 뒤쪽에 있어 커버 폭에서는 밀어야 다 보인다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Liquify)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Liquify)
 
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(1, started) }

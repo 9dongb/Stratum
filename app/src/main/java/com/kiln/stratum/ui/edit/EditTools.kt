@@ -103,8 +103,6 @@ enum class EditTool(
         subTools = listOf(SubTool.CROP, SubTool.RESIZE),
         available = true
     ),
-    /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
-    Adjust(R.drawable.ic_tune, R.string.tool_adjust, available = true),
     /** 선택. 하위 도구는 사각형 / 원형 / 올가미 / 자동 선택 / AI 선택이다. 고른 곳에만 브러시·지우개가 그려진다. */
     Select(
         R.drawable.ic_highlight_alt,
@@ -149,20 +147,24 @@ enum class EditTool(
     /** 글자. 고르면 캔버스를 눌러 그 자리에 글자 레이어를 더한다. */
     Text(R.drawable.ic_text_fields, R.string.tool_text, available = true),
     /** 픽셀 유동화. 고르면 편집 화면을 덮는 작업 모드가 열린다(도구로 남지 않는다). */
-    Liquify(R.drawable.ic_waves, R.string.tool_liquify, R.string.tool_liquify_short, available = true),
-    /** 레이어. 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */
-    Layers(R.drawable.ic_layers, R.string.tool_layers, available = true);
+    Liquify(R.drawable.ic_waves, R.string.tool_liquify, R.string.tool_liquify_short, available = true);
 
     /** 하위 도구가 있는지. */
     val hasSubTools: Boolean
         get() = subTools.isNotEmpty()
 
     companion object {
-        /** 메인 화면 왼쪽 도구 막대의 도구(이동이 맨 위, 사용자 요청). 조정·레이어는 패널에 있다. */
+        /** 메인 화면 왼쪽 도구 막대의 도구(이동이 맨 위, 사용자 요청). 조정·레이어는 상단 바 버튼으로 여는 패널이다. */
         val railTools: List<EditTool> = listOf(Move, Transform, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify)
 
-        /** 커버 화면 아래 탭 줄의 도구(이동이 맨 앞). 조정·레이어는 고르면 캔버스 아래 옵션 자리에 열린다. 폭이 모자라면 옆으로 밀어 본다. */
-        val tabTools: List<EditTool> = listOf(Move, Transform, Adjust, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify, Layers)
+        /**
+         * 커버 화면 아래 탭 줄의 도구(사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요").
+         * 맨 끝에 더보기 칸이 하나 더 있다. 조정·레이어는 메인 화면처럼 상단 바 버튼으로 연다(결정 기록 '커버 화면 개편').
+         */
+        val coverTabs: List<EditTool> = listOf(Transform, Select, Brush, Retouch, Liquify)
+
+        /** 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구(도구 막대 순서) */
+        val coverMoreTools: List<EditTool> = railTools.filter { it !in coverTabs }
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

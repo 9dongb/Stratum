@@ -129,7 +129,7 @@ class TextEditTest {
 
     private fun openTextTool() {
         // 탭이 커버 폭보다 많아 글자 탭은 옆으로 밀어야 보인다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Text)
     }
 
     private fun string(id: Int) = composeRule.activity.getString(id)

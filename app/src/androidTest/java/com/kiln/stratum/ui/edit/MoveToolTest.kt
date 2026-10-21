@@ -108,13 +108,15 @@ class MoveToolTest {
     }
 
     @Test
-    fun cover_moveIsTheFirstTab_withoutAnOptionsSheet() {
+    fun cover_moveIsTheFirstInTheMoreRow_withoutAnOptionsSheet() {
         show(411, 800)
-        val move = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
-        val transform = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$move should be left of $transform", move.right <= transform.left + 1f)
-
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
+        // 커버 탭 줄에는 없고(사용자 지정 탭: 자르기·선택·브러시·리터칭·유동화·더보기), 더보기 줄 맨 앞이다
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        val move = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
+        val eraser = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Eraser)).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$move should be left of $eraser", move.right <= eraser.left + 1f)
+        composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).performClick()
 
         // 고를 옵션이 없어 옵션 칸을 띄우지 않는다(설명 줄도 뺌, 사용자 피드백 8차 1-7)
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).assertExists()
@@ -124,7 +126,7 @@ class MoveToolTest {
     @Test
     fun dragging_sendsTheMoveInDocumentCoordinates() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
+        composeRule.chooseCoverTool(EditTool.Move)
 
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).performTouchInput {
             down(center)
@@ -145,7 +147,7 @@ class MoveToolTest {
     @Test
     fun aSecondFinger_dropsTheMove() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
+        composeRule.chooseCoverTool(EditTool.Move)
 
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).performTouchInput {
             down(0, center)

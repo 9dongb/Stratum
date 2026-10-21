@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,7 +36,7 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 메인 화면에서 상단 바 버튼으로 여는, 캔버스 위에 떠 있는 패널 */
+/** 상단 바 버튼으로 여는 조정·레이어 패널. 메인 화면은 캔버스 위에 떠 있는 패널, 커버 화면은 아래 옵션 자리에 보인다(결정 기록 '커버 화면 개편'). */
 enum class MainPanel { ADJUST, LAYERS }
 
 /**
@@ -72,12 +73,6 @@ class FloatingState(panel: MainPanel? = null) {
         panel = if (panel == target) null else target
     }
 
-    /** [target] 패널을 연다(커버에서 고른 조정·레이어를 펼친 화면으로 이을 때) */
-    fun openPanel(target: MainPanel) {
-        flyout = null
-        panel = target
-    }
-
     fun closeFlyout() {
         flyout = null
     }
@@ -108,13 +103,22 @@ fun rememberFloatingState(): FloatingState = rememberSaveable(saver = FloatingSt
 @Composable
 fun FloatingDismissLayer(state: FloatingState, modifier: Modifier = Modifier) {
     if (state.flyout == null) return
+    DismissLayer(onDismiss = state::closeFlyout, modifier = modifier.testTag(EditScreenTags.FLOATING_DISMISS))
+}
+
+/**
+ * 잠깐 뜬 것(옵션 창, 커버 화면 더보기 줄)이 있는 동안 캔버스를 덮는 바탕. 손가락이 닿으면 [onDismiss]로 닫기만 하고,
+ * 그 터치는 손을 뗄 때까지 도구로 가지 않는다(그리지 않음). 두 손가락·세 손가락 제스처는 부모(CanvasViewport)가 먼저 읽어 그대로 된다.
+ */
+@Composable
+fun DismissLayer(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val dismiss by rememberUpdatedState(onDismiss)
     Box(
         modifier
-            .testTag(EditScreenTags.FLOATING_DISMISS)
-            .pointerInput(state) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    state.closeFlyout()
+                    dismiss()
                     down.consume()
                     // 손을 뗄 때까지 이 터치를 모두 가진다(도구 동작으로 이어지지 않게)
                     while (true) {

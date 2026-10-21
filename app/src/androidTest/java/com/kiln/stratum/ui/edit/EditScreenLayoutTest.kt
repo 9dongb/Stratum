@@ -68,11 +68,14 @@ class EditScreenLayoutTest {
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertExists()
+        // 탭은 자르기·선택·브러시·리터칭·유동화와 더보기다(결정 기록 '커버 화면 개편')
         composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
-            .assertCountEquals(EditTool.tabTools.size)
+            .assertCountEquals(EditTool.coverTabs.size + 1)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).assertDoesNotExist()
-        // 커버는 조정·레이어가 탭이라 상단 바의 패널 버튼이 없다
-        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).assertDoesNotExist()
+        // 조정·레이어는 탭이 아니라 메인 화면처럼 상단 바의 패널 버튼이다
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).assertExists()
     }
 
     @Test

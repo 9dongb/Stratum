@@ -159,7 +159,7 @@ class LayerPanelTest {
     private fun openCompactLayers(fake: FakeLayers) {
         show(fake, 411, 800)
         // 탭 줄 끝에 있어 커버 폭에서는 밀어야 보인다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Layers)).performScrollTo().performClick()
+        composeRule.togglePanel(MainPanel.LAYERS)
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
     }
 

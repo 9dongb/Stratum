@@ -225,21 +225,20 @@ class ViewFlipTest {
                 }
             }
         }
-        val layersTab = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Layers))
-        layersTab.performScrollTo().performClick()
+        composeRule.togglePanel(MainPanel.LAYERS)
         val horizontal = composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL)
         horizontal.assertIsOff().performClick()
         horizontal.assertIsOn()
         composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_VERTICAL).assertIsOff()
-        // 레이어 탭을 닫으면 캔버스 전체가 보인다: 왼쪽이 파랑(오른쪽 반이 뒤집혀 보임)
-        layersTab.performScrollTo().performClick()
+        // 레이어를 닫으면 캔버스 전체가 보인다: 왼쪽이 파랑(오른쪽 반이 뒤집혀 보임)
+        composeRule.togglePanel(MainPanel.LAYERS)
         assertColor(Color.BLUE, colorAt(EditScreenTags.CANVAS, 0.1f, 0.5f))
         assertColor(Color.RED, colorAt(EditScreenTags.CANVAS, 0.9f, 0.5f))
 
         // 접기·펼치기처럼 화면이 다시 만들어져도 남는다
         tester.emulateSavedInstanceStateRestore()
         assertColor(Color.BLUE, colorAt(EditScreenTags.CANVAS, 0.1f, 0.5f))
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Layers)).performScrollTo().performClick()
+        composeRule.togglePanel(MainPanel.LAYERS)
         composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).assertIsOn().performClick().assertIsOff()
         composeRule.runOnIdle { assertTrue("$commands", commands.isEmpty()) }
     }

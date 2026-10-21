@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 
 /** 상단 바를 카메라 구멍 아래로 내릴지 정하는 계산(결정 기록 '전체 화면') */
 class TopBarInsetsTest {
@@ -60,6 +62,17 @@ class TopBarInsetsTest {
         assertEquals(listOf(460, 560, 760, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(865f..880f), margin = 10f, minStart = 150, inset = 30))
         // 옮기면 보이는 부분이 구멍 앞(840)에서 끝난다: 셋째 750~870(보이는 부분 780~840), 그 앞 버튼들도 이어서
         assertEquals(listOf(450, 550, 750, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(850f..860f), margin = 10f, minStart = 150, inset = 30))
+    }
+
+    @Test
+    fun coverEditBar_sixButtons_fitBesideACenterHole_onlyOnAWideCover() {
+        // 커버 화면 개편: 편집 화면 바 오른쪽 버튼이 여섯(실행 취소·다시 실행·조정·레이어·공유·설정, 48dp, 보이는 부분은 양옆 12dp 안쪽)이다.
+        // 버튼 줄은 뒤로 버튼(56dp) 뒤에서 바 끝 8dp 앞까지다. 1dp를 1로 셈하고 구멍은 줄 기준 가로 범위다.
+        val widths = List(6) { 48 }
+        // 폴드8 커버(약 475dp): 줄 폭 411, 위 가운데 구멍(화면 약 219~257 → 줄 163~201)이어도 구멍 양옆에 다 들어간다
+        assertNotNull(holeAvoidingStarts(widths, end = 475 - 56 - 8, holes = listOf(163f..201f), margin = 4f, minStart = 0, inset = 12))
+        // Pixel_Fold 에뮬레이터 커버(411dp): 줄 폭 347, 구멍(화면 약 183~225 → 줄 127~169)이면 모자라 바를 내린다
+        assertNull(holeAvoidingStarts(widths, end = 411 - 56 - 8, holes = listOf(127f..169f), margin = 4f, minStart = 0, inset = 12))
     }
 
     @Test

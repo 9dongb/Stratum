@@ -174,7 +174,7 @@ class ToneToolTest {
             }
         }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Tone)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Tone)
 
         composeRule.onNodeWithTag(EditScreenTags.TONE_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.TONE_OVERLAY).assertExists()

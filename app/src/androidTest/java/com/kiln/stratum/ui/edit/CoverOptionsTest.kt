@@ -53,12 +53,12 @@ class CoverOptionsTest {
         }
     }
 
-    private fun tab(tool: EditTool) = composeRule.onNodeWithTag(EditScreenTags.tabTool(tool)).performScrollTo().performClick()
+    private fun tab(tool: EditTool) = composeRule.chooseCoverTool(tool)
 
     private fun canvasBounds() = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
 
     @Test
-    fun toolAdjustAndLayerTabs_overlayTheCanvas_andKeepItsSize() {
+    fun toolsAdjustAndLayers_overlayTheCanvas_andKeepItsSize() {
         show()
         // 첫 화면이 자리 잡은 뒤(상단 바가 카메라 구멍을 피해 내려오는 등)부터 본다
         composeRule.waitForIdle()
@@ -66,13 +66,21 @@ class CoverOptionsTest {
         val before = canvasBounds()
         composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
 
-        for (tool in listOf(EditTool.Select, EditTool.Adjust, EditTool.Layers, EditTool.Brush)) {
-            tab(tool)
+        // 도구 탭, 상단 바의 조정·레이어 버튼(결정 기록 '커버 화면 개편'), 레이어를 끄면 다시 고른 도구, 다른 도구
+        val steps = listOf<Pair<String, () -> Unit>>(
+            "select" to { tab(EditTool.Select) },
+            "adjust" to { composeRule.togglePanel(MainPanel.ADJUST) },
+            "layers" to { composeRule.togglePanel(MainPanel.LAYERS) },
+            "layers off" to { composeRule.togglePanel(MainPanel.LAYERS) },
+            "brush" to { tab(EditTool.Brush) }
+        )
+        for ((name, step) in steps) {
+            step()
             composeRule.waitForIdle()
-            assertEquals("$tool canvas", before, canvasBounds())
+            assertEquals("$name canvas", before, canvasBounds())
             // 옵션 칸은 캔버스 아래쪽 위에 겹쳐 있다
             val sheet = composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
-            assertTrue("$tool sheet $sheet should overlap $before", sheet.top < before.bottom && sheet.bottom <= before.bottom + 1f)
+            assertTrue("$name sheet $sheet should overlap $before", sheet.top < before.bottom && sheet.bottom <= before.bottom + 1f)
         }
         // 탭을 닫아도 그대로다(하위 도구가 있는 선택은 다시 누르면 메뉴라, 하위 도구가 없는 브러시로 닫는다)
         tab(EditTool.Brush)

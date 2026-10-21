@@ -138,7 +138,7 @@ class SizePreviewTest {
     @Test
     fun cover_brushSizeAndHardness_showTheSizeWhileDragging_andHideItOnRelease() {
         showEditScreen(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
 
         dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_SIZE)
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performScrollTo()

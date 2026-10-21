@@ -52,7 +52,7 @@ class BrushCursorTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(tool)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(tool)
     }
 
     private fun cursorShowsWhilePainting(overlayTag: String) {

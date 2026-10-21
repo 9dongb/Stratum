@@ -21,12 +21,14 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 /**
  * 편집 화면 상단 바(사용자 피드백 10차·11차).
  * - 맨 오른쪽은 설정 버튼이고 누르면 설정을 연다(11차 4). 바로 왼쪽이 내보내기(공유 아이콘, 11차 3)다.
- * - 위쪽 카메라 구멍: 구멍에 걸리는 버튼은 구멍 왼쪽으로 비켜 놓아(홈 위 줄과 같다) 바를 구멍 아래로 내리지 않는다.
- *   커버(Pixel_Fold 접은 화면)는 버튼이 넷(실행 취소·다시 실행·내보내기·설정)이라 실행 취소 버튼이 위 가운데 구멍에 걸린다.
+ * - 위쪽 카메라 구멍: 구멍에 걸리는 버튼은 구멍 왼쪽으로 비켜 놓고(홈 위 줄과 같다), 비킬 자리가 없을 때만 바를 구멍 아래로 내린다.
+ *   커버 화면 개편으로 오른쪽 버튼이 여섯(실행 취소·다시 실행·조정·레이어·내보내기·설정)이 되어, Pixel_Fold 접은 화면(411dp)에서는
+ *   구멍 양옆에 다 들어가지 않아 바가 내려간다. 폴드8 커버(약 475dp)는 들어간다(TopBarInsetsTest).
  *   구멍 테스트는 위쪽 구멍이 있는 기기에서만 돌고, 화면 크기는 기기 그대로다(구멍 자리가 창 좌표라).
  *   앱처럼 상태 표시줄을 숨기고 본다(보이면 상태 표시줄 높이와 구멍 높이가 같아 내려간 것을 알 수 없다).
  */
@@ -37,7 +39,7 @@ class EditTopBarTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun cameraHoleAtTheTop_noButtonSitsUnderIt_andTheBarStaysUp() {
+    fun cameraHoleAtTheTop_noButtonSitsUnderIt() {
         composeRule.runOnUiThread { hideStatusBar(composeRule.activity.window) }
         composeRule.waitUntil(5_000) {
             composeRule.runOnUiThread { composeRule.activity.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.statusBars()) == false }
@@ -54,20 +56,24 @@ class EditTopBarTest {
 
         val bar = composeRule.onNodeWithTag(EditScreenTags.TOP_BAR).fetchSemanticsNode()
         val density = bar.layoutInfo.density.density
-        // 버튼의 보이는 부분(양옆 12dp 안쪽)이 구멍과 4dp보다 가까우면 안 된다
+        // 버튼의 보이는 부분(양옆 12dp 안쪽)이 구멍과 4dp보다 가까우면 안 된다(바가 구멍 아래로 내려갔으면 겹치지 않는다)
         val inset = 12 * density
         val margin = 4 * density
-        for (tag in listOf(EditScreenTags.UNDO, EditScreenTags.REDO, EditScreenTags.EXPORT, EditScreenTags.SETTINGS)) {
+        val tags = listOf(EditScreenTags.UNDO, EditScreenTags.REDO) + MainPanel.entries.map { EditScreenTags.panelToggle(it) } +
+            listOf(EditScreenTags.EXPORT, EditScreenTags.SETTINGS)
+        for (tag in tags) {
             val button = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
             for (hole in holes) {
-                assertTrue(
-                    "$tag $button sits under the camera hole $hole",
-                    button.right - inset + margin <= hole.left || button.left + inset - margin >= hole.right
-                )
+                val besideHole = button.right - inset + margin <= hole.left || button.left + inset - margin >= hole.right
+                val belowHole = button.top >= hole.bottom - 1
+                assertTrue("$tag $button sits under the camera hole $hole", besideHole || belowHole)
             }
         }
-        // 바는 내용 줄(상태 표시줄 높이)만큼이다: 구멍 높이만큼 내려가지 않는다
-        assertEquals(workBarContentPx(insets, density), bar.layoutBoundsInWindow().height, 1f)
+        // 바는 내용 줄(상태 표시줄 높이)만큼이거나(구멍 양옆에 다 들어감), 비킬 자리가 없으면 구멍 바로 아래까지 내려간다(내용 줄 + 구멍 높이)
+        val content = workBarContentPx(insets, density)
+        val lowered = content + holes.maxOf { it.bottom }
+        val height = bar.layoutBoundsInWindow().height
+        assertTrue("bar height $height should be $content or $lowered", abs(height - content) <= 1f || abs(height - lowered) <= 1f)
     }
 
     @Test

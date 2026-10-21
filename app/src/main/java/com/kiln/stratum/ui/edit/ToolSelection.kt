@@ -42,6 +42,11 @@ class ToolSelection(active: EditTool?, modes: Map<EditTool, SubTool> = emptyMap(
         active = if (active == tool) null else tool
     }
 
+    /** [tool]을 고른다. 이미 고른 도구여도 내려놓지 않는다(커버 화면 더보기 줄에서 고를 때). */
+    fun pick(tool: EditTool) {
+        active = tool
+    }
+
     /**
      * 하위 도구 [subTool]을 고른다(길게 누른 메뉴, 옵션 위쪽 버튼). 그 하위 도구가 속한 도구를 고른 상태가 된다.
      * 한 번 하고 끝나는 하위 도구(크기 변경)는 화면이 창을 띄우고, 고른 도구는 바꾸지 않는다.

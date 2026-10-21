@@ -304,7 +304,7 @@ class CanvasThreeFingerTest {
                 }
             }
         }
-        if (tool != null) composeRule.onNodeWithTag(EditScreenTags.tabTool(tool)).performScrollTo().performClick()
+        if (tool != null) composeRule.chooseCoverTool(tool)
     }
 
     @Test
@@ -405,11 +405,11 @@ class CanvasThreeFingerTest {
             assertEquals(40f, brush.size, 0f)
         }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Tone)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Tone)
         canvas.performTouchInput { threeFingerSwipe(Offset(-200f, 0f), at = Offset(centerX, height * 0.2f)) }
         composeRule.runOnIdle { assertTrue("${tone.brush.hardness}", tone.brush.hardness < 0.3f) }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
         canvas.performTouchInput { threeFingerSwipe(Offset(0f, 200f), at = Offset(centerX, height * 0.2f)) }
         composeRule.runOnIdle { assertTrue("${retouch.size}", retouch.size < 60f) }
     }

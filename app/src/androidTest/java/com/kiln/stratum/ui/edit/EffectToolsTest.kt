@@ -221,11 +221,11 @@ class EffectToolsTest {
             }
         }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Blur)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Blur)
         composeRule.onNodeWithTag(EditScreenTags.BLUR_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.BLUR_OVERLAY).assertExists()
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Mosaic)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Mosaic)
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_OVERLAY).assertExists()
     }

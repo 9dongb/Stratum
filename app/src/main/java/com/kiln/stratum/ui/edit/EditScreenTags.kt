@@ -84,13 +84,22 @@ object EditScreenTags {
     const val TOOL_RAIL = "toolRail"
     const val TOOL_TAB_BAR = "toolTabBar"
 
-    /** 커버 탭 줄 안의 칸들(옆으로 밀어 보는 줄) */
+    /** 커버 탭 줄 안의 칸들 */
     const val TOOL_TAB_ROW = "toolTabRow"
+
+    /** 커버 탭 줄 맨 끝의 더보기 칸 */
+    const val MORE_TAB = "moreTab"
+
+    /** 커버 화면 더보기 줄(탭 줄에 없는 도구들) */
+    const val COVER_MORE_TOOLS = "coverMoreTools"
+
+    /** 커버 화면 더보기 줄의 [tool] 칸 */
+    fun moreTool(tool: EditTool): String = "moreTool_${tool.name}"
 
     /** 메인 화면의 떠 있는 레이어·조정 패널 */
     const val FLOATING_PANEL = "floatingPanel"
 
-    /** 상단 바의 [panel] 패널 버튼(메인 화면) */
+    /** 상단 바의 [panel] 패널 버튼(커버·메인 화면) */
     fun panelToggle(panel: MainPanel): String = "panelToggle_${panel.name}"
     const val ADJUST_PANEL = "adjustPanel"
     const val ADJUST_RESET_ALL = "adjustResetAll"

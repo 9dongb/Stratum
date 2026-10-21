@@ -78,7 +78,7 @@ class EditScreenBackTest {
     @Test
     fun cover_backClosesTheTool_thenGoesHome() {
         show(COVER)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertExists()
 
         back()
@@ -90,9 +90,10 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun cover_adjustTab_closesToo() {
+    fun cover_adjustPanel_closesFirst() {
+        // 커버에서 상단 바 버튼으로 연 조정·레이어는 뒤로 가기로 닫는다(결정 기록 '커버 화면 개편' Q2 A, 메인 패널과 다름)
         show(COVER)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performScrollTo().performClick()
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertExists()
 
         back()
@@ -119,7 +120,7 @@ class EditScreenBackTest {
         // 커버에서 조정을 고른 채 펼치면 메인에서는 떠 있는 조정 패널로 열린다.
         // 패널은 상단 바 버튼으로만 닫으므로(사용자 결정) 뒤로 가기는 패널을 그대로 두고 홈으로 간다.
         show(COVER)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performScrollTo().performClick()
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertExists()
@@ -132,7 +133,7 @@ class EditScreenBackTest {
     @Test
     fun crop_backCancelsTheCrop() {
         show(COVER)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
         composeRule.onNodeWithTag(EditScreenTags.CROP_OVERLAY).assertExists()
 
         back()

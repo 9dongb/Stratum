@@ -105,7 +105,7 @@ class ColorPaletteTest {
 
     private fun openCoverBrush() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
     }
 
     private fun shownHex(): String =
@@ -180,7 +180,7 @@ class ColorPaletteTest {
     @Test
     fun text_usesTheSameTwoColors() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Text)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Text)
 
         background.performClick()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.color_choose_background)).assertIsDisplayed()

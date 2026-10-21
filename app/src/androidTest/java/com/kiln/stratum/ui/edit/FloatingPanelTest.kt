@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -275,16 +276,19 @@ class FloatingPanelTest {
     }
 
     @Test
-    fun foldingWithATool_keepsThePanel_forUnfolding() {
+    fun foldingWithAPanelAndATool_keepsBoth() {
         show(MAIN_LANDSCAPE)
         toggle(MainPanel.LAYERS).performClick()
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
 
-        // 커버에는 고른 도구(브러시)가 보이고, 패널은 끄지 않았으므로 다시 펼치면 그대로 보인다
+        // 조정·레이어의 켬·끔은 커버와 메인 화면이 같은 상태다(결정 기록 '커버 화면 개편'): 커버에서도 레이어가 보이고 버튼이 켜져 있으며,
+        // 고른 도구(브러시)는 그대로다. 다시 펼치면 패널과 띠가 그대로 보인다.
         composeRule.runOnIdle { size.value = COVER }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
+        toggle(MainPanel.LAYERS).assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).assertIsSelected()
 
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
         composeRule.waitForIdle()
@@ -322,10 +326,12 @@ class FloatingPanelTest {
     }
 
     @Test
-    fun adjustChosenOnTheCover_opensTheAdjustPanelWhenUnfolded_andFoldingBringsTheTabBack() {
+    fun adjustOpenedOnTheCover_staysOpenWhenUnfoldedAndFolded() {
         show(COVER)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performClick()
+        // 커버도 상단 바의 조정 버튼으로 연다(결정 기록 '커버 화면 개편')
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+        toggle(MainPanel.ADJUST).assertIsOn()
 
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
         composeRule.waitForIdle()

@@ -117,7 +117,7 @@ class EyedropperTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(tool)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(tool)
     }
 
     @Test

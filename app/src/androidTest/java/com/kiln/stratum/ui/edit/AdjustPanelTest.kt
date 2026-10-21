@@ -125,7 +125,7 @@ class AdjustPanelTest {
 
     private fun openCompactAdjust() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performClick()
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
     }
 
@@ -359,7 +359,7 @@ class AdjustPanelTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Adjust)).performClick()
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CURVE)).performScrollTo().performClick()
 
         // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다

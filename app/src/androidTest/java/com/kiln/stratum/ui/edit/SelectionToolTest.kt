@@ -160,7 +160,7 @@ class SelectionToolTest {
 
     private fun openCoverTool() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select)).performClick()
+        composeRule.chooseCoverTool(EditTool.Select)
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertIsDisplayed()
     }
 
@@ -201,7 +201,7 @@ class SelectionToolTest {
     @Test
     fun actions_withASelection_areSent() {
         show(411, 800, outline = square)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select)).performClick()
+        composeRule.chooseCoverTool(EditTool.Select)
 
         for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_NONE)) {
             composeRule.onNodeWithTag(tag).performScrollTo().performClick()
@@ -365,7 +365,7 @@ class SelectionToolTest {
     fun outline_isDrawnWhateverToolIsChosen() {
         show(411, 800, outline = square)
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OUTLINE).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OUTLINE).assertIsDisplayed()
     }
 

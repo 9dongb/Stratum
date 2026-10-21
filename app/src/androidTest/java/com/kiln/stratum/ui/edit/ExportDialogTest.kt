@@ -195,7 +195,7 @@ class ExportDialogTest {
     fun cover_cropWindowHasNoExportButton() {
         show()
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
 
         // 닫힌 화면 자르기는 새 창이라 편집 상단 바(내보내기)가 없다(결정 기록 '닫힌 화면 새 창')
         composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertExists()

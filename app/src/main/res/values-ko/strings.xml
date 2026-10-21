@@ -100,6 +100,9 @@
     <string name="tool_eraser">지우개</string>
     <string name="tool_text">텍스트</string>
     <string name="tool_layers">레이어</string>
+    <string name="tool_more">더보기</string>
+    <string name="tool_more_active">더보기: %1$s</string>
+    <string name="more_tools_title">도구 더보기</string>
 
     <!-- 편집 패널 -->
 

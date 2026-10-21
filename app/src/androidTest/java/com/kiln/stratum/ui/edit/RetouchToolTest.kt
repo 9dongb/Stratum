@@ -503,7 +503,7 @@ class RetouchToolTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
         composeRule.runOnIdle {
             actions.calls.clear()
@@ -542,7 +542,7 @@ class RetouchToolTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
         composeRule.runOnIdle {
             actions.calls.clear()
@@ -627,7 +627,7 @@ class RetouchToolTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
     }
 
     @Test
@@ -721,16 +721,16 @@ class RetouchToolTest {
             }
         }
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
 
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).assertExists()
-        // 탭이 커버 폭보다 많아 옆으로 밀어 보고, 어떤 탭도 누르는 영역이 48dp보다 좁지 않다
+        // 탭 여섯(더보기 포함)이 커버 폭을 나눠 모두 보이고, 어떤 탭도 누르는 영역이 48dp보다 좁지 않다(결정 기록 '커버 화면 개편')
         val density = composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).fetchSemanticsNode().layoutInfo.density
-        for (tool in EditTool.tabTools) {
-            val node = composeRule.onNodeWithTag(EditScreenTags.tabTool(tool)).performScrollTo().assertIsDisplayed().fetchSemanticsNode()
+        for (tag in EditTool.coverTabs.map { EditScreenTags.tabTool(it) } + EditScreenTags.MORE_TAB) {
+            val node = composeRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode()
             val width = node.touchBoundsInWindow().width / density.density
-            assertTrue("$tool is $width dp", width >= 48f)
+            assertTrue("$tag is $width dp", width >= 48f)
         }
     }
 
@@ -749,7 +749,7 @@ class RetouchToolTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
         composeRule.runOnIdle { assertTrue(actions.calls.isEmpty()) }
 
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
@@ -785,7 +785,7 @@ class RetouchToolTest {
                 }
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+        composeRule.chooseCoverTool(EditTool.Retouch)
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
 
         composeRule.runOnIdle { messages.trySend(EditorMessage.RemoveUnavailable) }
