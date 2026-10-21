@@ -57,7 +57,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 /**
  * 홈 화면(갤러리). 앱을 새로 실행하면 항상 여기서 시작한다. 프로크리에이트 갤러리를 본떴다(사용자 요청, 결정 기록 '홈 갤러리').
  *
- * - 위 줄: 앱 이름과 오른쪽의 [선택] [사진 열기] [+](새 캔버스) [설정]
+ * - 위 줄: 앱 이름과 오른쪽의 [선택] [사진 열기] [+](새 캔버스). 설정은 편집 화면 상단 바에서 연다(사용자 피드백 11차 4).
  * - 그 아래 프로젝트 격자(커버 2열, 메인 4열, 기획서): 그림 비율대로의 작은 그림과 이름·크기. 누르면 열고, 이름을 누르면 이름 바꾸기,
  *   길게 누르면 메뉴(이름 바꾸기·지우기)
  * - 선택: [선택]을 누르면 카드를 눌러 여러 개 고르고 [지우기]로 한꺼번에 지운다(되돌릴 수 없어 한 번 더 묻는다). 뒤로 가기는 선택을 끝낸다.
@@ -79,8 +79,7 @@ fun HomeScreen(
     projects: List<ProjectInfo> = emptyList(),
     onOpenProject: (String) -> Unit = {},
     onDeleteProjects: (List<String>) -> Unit = {},
-    onRenameProject: (id: String, name: String) -> Unit = { _, _ -> },
-    onOpenSettings: () -> Unit = {}
+    onRenameProject: (id: String, name: String) -> Unit = { _, _ -> }
 ) {
     // 새 캔버스 창을 열었는지와 입력값. 접기·펼치기로 시트↔창이 바뀌어도 이어지도록 창 밖에서 기억한다.
     var showNewCanvas by rememberSaveable { mutableStateOf(false) }
@@ -119,8 +118,7 @@ fun HomeScreen(
                     onDone = endSelecting,
                     onDeleteSelected = { confirmDelete = selected },
                     onOpenPhoto = onOpenPhoto,
-                    onNewCanvas = { showNewCanvas = true },
-                    onOpenSettings = onOpenSettings
+                    onNewCanvas = { showNewCanvas = true }
                 )
             }
         ) { innerPadding ->
@@ -183,7 +181,7 @@ fun HomeScreen(
 }
 
 /**
- * 홈 위 줄: 왼쪽에 앱 이름(굵고 크게, 사용자 피드백 10차. 선택 중이면 고른 수), 오른쪽에 [선택] [사진 열기] [+] [설정](선택 중이면 [지우기] [완료]).
+ * 홈 위 줄: 왼쪽에 앱 이름(굵고 크게, 사용자 피드백 10차. 선택 중이면 고른 수), 오른쪽에 [선택] [사진 열기] [+](선택 중이면 [지우기] [완료]).
  * 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 위쪽 카메라 구멍에 걸리는 버튼은 구멍 왼쪽으로 비켜 놓고, 그래도 걸릴 때만 바를 내린다
  * (결정 기록 '전체 화면', [HoleAvoidingBarRow]).
  */
@@ -197,8 +195,7 @@ private fun HomeTopBar(
     onDone: () -> Unit,
     onDeleteSelected: () -> Unit,
     onOpenPhoto: () -> Unit,
-    onNewCanvas: () -> Unit,
-    onOpenSettings: () -> Unit
+    onNewCanvas: () -> Unit
 ) {
     val barInsets = rememberTopBarInsets(TopAppBarDefaults.TopAppBarExpandedHeight)
     val title = when {
@@ -241,11 +238,6 @@ private fun HomeTopBar(
             "newCanvas" to {
                 StratumIconButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.NEW_CANVAS)) {
                     Icon(painter = painterResource(R.drawable.ic_add), contentDescription = stringResource(R.string.home_new_canvas))
-                }
-            },
-            "settings" to {
-                StratumIconButton(onClick = onOpenSettings, modifier = Modifier.testTag(HomeTags.SETTINGS)) {
-                    Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
                 }
             }
         )

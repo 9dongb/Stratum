@@ -147,25 +147,26 @@ private val BarTitleStart = 16.dp
 val BarButtonContentInset = 12.dp
 
 /**
- * 상단 바 한 줄: 왼쪽에 [title], 오른쪽 끝부터 [actions](이름, 버튼). 위쪽 카메라 구멍([insets]의 구멍)에 걸리는 버튼은
+ * 상단 바 한 줄: 왼쪽에 [title](없어도 됨), 오른쪽 끝부터 [actions](이름, 버튼). 위쪽 카메라 구멍([insets]의 구멍)에 걸리는 버튼은
  * 그 버튼부터 왼쪽 버튼들을 구멍 왼쪽으로 비켜 놓아, 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차 7: 커버 홈 헤더가 구멍만큼 높아졌다).
- * 비키면 제목과 겹칠 만큼 자리가 모자라면 그대로 둔다(그때는 지금처럼 바가 구멍 아래로 내려간다).
+ * 비키면 제목(제목이 없으면 줄 왼쪽 끝)과 겹칠 만큼 자리가 모자라면 그대로 둔다(그때는 지금처럼 바가 구멍 아래로 내려간다).
  * 제목은 버튼을 오른쪽 끝에 붙였을 때 남는 폭까지만 쓴다(넘치면 제목 글자가 정한 대로 줄인다, 홈은 '…').
  * 제목과 버튼마다 [topBarItem]으로 자리를 알린다(버튼 키는 [actions]의 이름). 바의 제목 자리에 바 폭으로 둔다.
+ * 편집 화면 바는 제목 없이 오른쪽 버튼만 둔다(뒤로 버튼은 바의 앞 버튼 자리, 사용자 피드백 11차 4).
  */
 @Composable
 fun HoleAvoidingBarRow(
     insets: TopBarInsets,
-    title: @Composable () -> Unit,
     actions: List<Pair<String, @Composable () -> Unit>>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    title: (@Composable () -> Unit)? = null
 ) {
     val density = LocalDensity.current
     // 이 줄의 창 왼쪽 끝(px). 놓인 뒤에 알고, 바뀌면 다시 놓는다. 처음에는 바 제목 자리(바 왼쪽에서 16dp)로 어림해 첫 화면부터 구멍을 피한다.
     var rowLeft by remember { mutableStateOf<Float?>(null) }
     Layout(
         content = {
-            Box(Modifier.topBarItem(insets, "title")) { title() }
+            if (title != null) Box(Modifier.topBarItem(insets, "title")) { title() }
             // 버튼은 보이는 부분(양옆 [BarButtonContentInset] 안쪽)만 알린다. 버튼 여백이 구멍에 걸리는 것은 가려지는 것이 아니다.
             for ((key, action) in actions) Box(Modifier.topBarItem(insets, key, BarButtonContentInset)) { action() }
         },
@@ -173,13 +174,18 @@ fun HoleAvoidingBarRow(
     ) { measurables, constraints ->
         val loose = Constraints(maxWidth = constraints.maxWidth, maxHeight = constraints.maxHeight)
         val width = constraints.maxWidth
+        val gap = with(density) { TitleGap.roundToPx() }
         // 버튼을 먼저 재고, 제목에는 버튼을 오른쪽 끝에 붙였을 때 남는 폭까지만 준다(글자를 크게 쓰거나 줄이 좁으면 제목이 '…'로 줄어
         // 버튼 밑에 깔리지 않는다. TopAppBar의 제목과 같다)
-        val actionPlaceables = measurables.drop(1).map { it.measure(loose) }
-        val titleWidth = (width - actionPlaceables.sumOf { it.width } - with(density) { TitleGap.roundToPx() }).coerceAtLeast(0)
-        val titlePlaceable = measurables.first().measure(loose.copy(maxWidth = titleWidth))
-        val placeables = listOf(titlePlaceable) + actionPlaceables
-        val height = placeables.maxOf { it.height }.coerceIn(constraints.minHeight, constraints.maxHeight)
+        val actionPlaceables = (if (title != null) measurables.drop(1) else measurables).map { it.measure(loose) }
+        val titlePlaceable = if (title != null) {
+            val titleWidth = (width - actionPlaceables.sumOf { it.width } - gap).coerceAtLeast(0)
+            measurables.first().measure(loose.copy(maxWidth = titleWidth))
+        } else {
+            null
+        }
+        val placeables = listOfNotNull(titlePlaceable) + actionPlaceables
+        val height = (placeables.maxOfOrNull { it.height } ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
         layout(width, height) {
             val widths = actionPlaceables.map { it.width }
             // 구멍은 창 좌표라 이 줄의 창 위치를 빼서 견준다
@@ -190,10 +196,11 @@ fun HoleAvoidingBarRow(
                 end = width,
                 holes = insets.holes.map { (it.start - left)..(it.endInclusive - left) },
                 margin = insets.margin,
-                minStart = titlePlaceable.width + with(density) { TitleGap.roundToPx() } - inset,
+                // 제목이 있으면 버튼의 보이지 않는 여백까지는 제목 쪽 틈에 걸쳐도 된다. 제목이 없으면 줄 안에서만 비킨다.
+                minStart = titlePlaceable?.let { it.width + gap - inset } ?: 0,
                 inset = inset
             ) ?: plainStarts(widths, width)
-            titlePlaceable.place(0, (height - titlePlaceable.height) / 2)
+            titlePlaceable?.place(0, (height - titlePlaceable.height) / 2)
             actionPlaceables.forEachIndexed { index, placeable -> placeable.place(starts[index], (height - placeable.height) / 2) }
         }
     }

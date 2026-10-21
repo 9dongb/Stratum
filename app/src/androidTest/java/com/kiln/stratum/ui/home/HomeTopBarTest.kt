@@ -5,11 +5,13 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.FontScale
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import org.junit.Assert.assertTrue
@@ -44,7 +46,7 @@ class HomeTopBarTest {
         // 버튼의 보이는 부분(양옆 12dp 안쪽)이 구멍과 4dp보다 가까우면 안 된다
         val inset = 12 * density
         val margin = 4 * density
-        for (tag in listOf(HomeTags.SELECT, HomeTags.OPEN_PHOTO, HomeTags.NEW_CANVAS, HomeTags.SETTINGS)) {
+        for (tag in listOf(HomeTags.SELECT, HomeTags.OPEN_PHOTO, HomeTags.NEW_CANVAS)) {
             val button = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
             val shownLeft = button.left + inset
             val shownRight = button.right - inset
@@ -55,6 +57,14 @@ class HomeTopBarTest {
         // 제목도 구멍에 걸리지 않는다
         val title = composeRule.onNodeWithTag(HomeTags.TITLE).fetchSemanticsNode().layoutBoundsInWindow()
         for (hole in holes) assertTrue("title $title sits under $hole", title.right <= hole.left || title.left >= hole.right)
+    }
+
+    @Test
+    fun noSettingsButton_itMovedToTheEditScreenTopBar() {
+        // 설정은 편집 화면 상단 바 맨 오른쪽에서 연다(사용자 피드백 11차 4, EditTopBarTest)
+        composeRule.setContent { StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _, _ -> }) } }
+
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.action_settings)).assertDoesNotExist()
     }
 
     @Test

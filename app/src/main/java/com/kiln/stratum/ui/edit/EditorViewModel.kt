@@ -318,7 +318,7 @@ class EditorViewModel internal constructor(
     val exportChoice: StateFlow<ExportChoice> = combine(lastExportChoice, appSettings.values) { last, values -> last ?: values.export }
         .stateIn(viewModelScope, SharingStarted.Eagerly, appSettings.values.value.export)
 
-    /** 열린 문서의 미리 보기 화질. 문서를 열 때 설정에서 읽는다. */
+    /** 열린 문서의 미리 보기 화질. 문서를 열 때와 설정에서 돌아올 때([applyPreviewQuality]) 설정에서 읽는다. */
     private var previewQuality = PreviewQuality.STANDARD
 
     /** 지금 더 쓸 수 있는 메모리(바이트). 테스트가 메모리 부족을 흉내 낼 수 있게 바꿀 수 있다. */
@@ -2183,6 +2183,25 @@ class EditorViewModel internal constructor(
         if (levelFor(document) == previewLevel) return
         previewJob?.cancel()
         previewJob = viewModelScope.launch { showPreview(document) }
+    }
+
+    /**
+     * 설정의 미리 보기 화질을 열린 문서에 바로 건다. 편집 화면 상단 바에서 연 설정에서 돌아올 때 부른다(사용자 피드백 11차 4, 전에는 설정을
+     * 홈에서만 열어 문서를 열 때 읽으면 됐다). 화질이 그대로면 아무것도 하지 않는다. 축소본 단계가 바뀌면 다시 그리고, 아니면 부분 그림만 다시
+     * 계획한다('가볍게'는 맞춤일 때 부분 그림을 지운다). 편집을 처리하는 중이면 그 편집이 끝나며 그리는 축소본이 새 화질을 따른다.
+     */
+    fun applyPreviewQuality() {
+        val quality = appSettings.values.value.previewQuality
+        if (quality == previewQuality) return
+        previewQuality = quality
+        val document = history?.document ?: return
+        if (editing || _state.value !is EditorState.Ready) return
+        if (levelFor(document) == previewLevel) {
+            planDetail()
+        } else {
+            previewJob?.cancel()
+            previewJob = viewModelScope.launch { showPreview(document) }
+        }
     }
 
     /**

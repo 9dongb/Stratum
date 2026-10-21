@@ -97,7 +97,6 @@ object HomeTags {
     const val DELETE_SELECTED = "homeDeleteSelected"
     const val OPEN_PHOTO = "homeOpenPhoto"
     const val NEW_CANVAS = "homeNewCanvas"
-    const val SETTINGS = "homeSettings"
     const val RENAME_FIELD = "homeRenameField"
     const val RENAME_OK = "homeRenameOk"
 

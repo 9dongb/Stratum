@@ -105,6 +105,7 @@ import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.BarButtonContentInset
+import com.kiln.stratum.ui.layout.HoleAvoidingBarRow
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
@@ -168,6 +169,7 @@ import kotlinx.coroutines.flow.first
  * @param eyedropperActions 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일
  * @param stripPosition 메인 화면 도구 옵션 띠를 옮겨 놓은 자리(없으면 캔버스 왼쪽 위), [onStripPosition]으로 바꾼다(손잡이를 놓을 때)
  * @param toolHelpSeen 이번 실행에서 안내 글을 이미 보인 하위 도구(리터칭·명암을 처음 고를 때 알림, 편집 상태가 들어 접기·펼치기에도 남는다)
+ * @param onOpenSettings 상단 바 맨 오른쪽 설정 버튼을 눌렀다(사용자 피드백 11차 4). 설정에서 뒤로 가면 보던 그대로 돌아온다.
  */
 @Composable
 fun EditScreen(
@@ -229,7 +231,8 @@ fun EditScreen(
     moveActions: MoveActions = MoveActions.None,
     stripPosition: StripPosition? = null,
     onStripPosition: (StripPosition) -> Unit = {},
-    toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() }
+    toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
+    onOpenSettings: () -> Unit = {}
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -834,6 +837,7 @@ fun EditScreen(
                         // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
                         canExport = ready != null && !ready.busy && !cropMode,
                         onExport = { exportDraft = exportChoice },
+                        onOpenSettings = onOpenSettings,
                         // 메인 화면만: 조정·레이어 패널 버튼. 자르기 중에는 막는다(조정·레이어를 막으므로)
                         panels = if (widthClass == WidthClass.Compact) {
                             null
@@ -1130,9 +1134,11 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, mod
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
 
 /**
- * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기(공유 아이콘).
+ * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기(공유 아이콘), 맨 오른쪽 설정.
  * 작업 공간을 넓게 쓰려고 상태 표시줄 높이([workTopBarHeight])로 낮게 두고, 바 높이에 맞춘 버튼([TopBarIconButton] 등)을 쓴다.
- * 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
+ * 오른쪽 버튼은 하나씩 자리를 알려, 위쪽 카메라 구멍에 걸리는 버튼은 구멍 왼쪽으로 비켜 놓는다(홈 위 줄과 같은 [HoleAvoidingBarRow]).
+ * 커버는 버튼이 넷이라 실행 취소 버튼이 위 가운데 구멍에 걸린다(사용자 피드백 11차 4). 비킬 자리가 없을 때만 바를 구멍 아래로 내린다
+ * (결정 기록 '화면 공간').
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1145,12 +1151,70 @@ private fun EditTopBar(
     onRedo: () -> Unit,
     canExport: Boolean,
     onExport: () -> Unit,
+    onOpenSettings: () -> Unit,
     panels: PanelToggles? = null
 ) {
     val barHeight = workTopBarHeight()
     val barInsets = rememberTopBarInsets(barHeight)
+    // 조정·레이어 패널 버튼(메인 화면만, 프로크리에이트처럼 켜고 끈다). 열린 패널의 버튼이 켜진 모양이다.
+    val panelActions: List<Pair<String, @Composable () -> Unit>> = panels?.let { toggles ->
+        MainPanel.entries.map { panel ->
+            val toggle: @Composable () -> Unit = {
+                TopBarIconToggleButton(
+                    checked = toggles.open == panel,
+                    onCheckedChange = { toggles.onToggle(panel) },
+                    height = barHeight,
+                    enabled = toggles.enabled,
+                    modifier = Modifier.testTag(EditScreenTags.panelToggle(panel))
+                ) {
+                    Icon(
+                        painter = painterResource(if (panel == MainPanel.ADJUST) R.drawable.ic_tune else R.drawable.ic_layers),
+                        contentDescription = stringResource(if (panel == MainPanel.ADJUST) R.string.tool_adjust else R.string.tool_layers)
+                    )
+                }
+            }
+            panel.name to toggle
+        }
+    }.orEmpty()
+    val actions = listOf<Pair<String, @Composable () -> Unit>>(
+        "undo" to {
+            TopBarIconButton(onClick = onUndo, height = barHeight, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_undo),
+                    contentDescription = stringResource(R.string.action_undo)
+                )
+            }
+        },
+        "redo" to {
+            TopBarIconButton(onClick = onRedo, height = barHeight, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_redo),
+                    contentDescription = stringResource(R.string.action_redo)
+                )
+            }
+        }
+    ) + panelActions + listOf<Pair<String, @Composable () -> Unit>>(
+        // 내보내기는 다른 바 아이콘과 같은 색의 공유 아이콘이다(사용자 피드백 11차 3, 전에는 파란 '내보내기' 글자 버튼)
+        "export" to {
+            TopBarIconButton(onClick = onExport, height = barHeight, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_ios_share),
+                    contentDescription = stringResource(R.string.action_export)
+                )
+            }
+        },
+        // 설정은 맨 오른쪽이다(사용자 피드백 11차 4, 전에는 홈 위 줄). 문서를 바꾸지 않아 처리 중·자르기 중에도 누를 수 있고, 돌아오면 그대로다.
+        "settings" to {
+            TopBarIconButton(onClick = onOpenSettings, height = barHeight, modifier = Modifier.testTag(EditScreenTags.SETTINGS)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings),
+                    contentDescription = stringResource(R.string.action_settings)
+                )
+            }
+        }
+    )
     TopAppBar(
-        title = {},
+        title = { HoleAvoidingBarRow(insets = barInsets, actions = actions) },
         // 캔버스(작업 공간)와 기본 배경 바를 1dp 구분선으로 나눈다(시안)
         modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(EditScreenTags.TOP_BAR),
         navigationIcon = {
@@ -1159,48 +1223,6 @@ private fun EditTopBar(
                     painter = painterResource(R.drawable.ic_arrow_back),
                     contentDescription = stringResource(R.string.action_back)
                 )
-            }
-        },
-        actions = {
-            // 버튼 줄은 보이는 부분(양 끝 버튼 여백 안쪽)만 알린다: 커버 위 가운데 카메라 구멍에 실행 취소 버튼의 여백만 걸릴 때
-            // 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차)
-            Row(Modifier.topBarItem(barInsets, "actions", BarButtonContentInset), verticalAlignment = Alignment.CenterVertically) {
-                TopBarIconButton(onClick = onUndo, height = barHeight, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_undo),
-                        contentDescription = stringResource(R.string.action_undo)
-                    )
-                }
-                TopBarIconButton(onClick = onRedo, height = barHeight, enabled = canRedo, modifier = Modifier.testTag(EditScreenTags.REDO)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_redo),
-                        contentDescription = stringResource(R.string.action_redo)
-                    )
-                }
-                // 조정·레이어 패널 버튼(프로크리에이트처럼 켜고 끈다). 열린 패널의 버튼이 켜진 모양이다.
-                if (panels != null) {
-                    for (panel in MainPanel.entries) {
-                        TopBarIconToggleButton(
-                            checked = panels.open == panel,
-                            onCheckedChange = { panels.onToggle(panel) },
-                            height = barHeight,
-                            enabled = panels.enabled,
-                            modifier = Modifier.testTag(EditScreenTags.panelToggle(panel))
-                        ) {
-                            Icon(
-                                painter = painterResource(if (panel == MainPanel.ADJUST) R.drawable.ic_tune else R.drawable.ic_layers),
-                                contentDescription = stringResource(if (panel == MainPanel.ADJUST) R.string.tool_adjust else R.string.tool_layers)
-                            )
-                        }
-                    }
-                }
-                // 내보내기는 다른 바 아이콘과 같은 색의 공유 아이콘이다(사용자 피드백 11차 3, 전에는 파란 '내보내기' 글자 버튼)
-                TopBarIconButton(onClick = onExport, height = barHeight, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_ios_share),
-                        contentDescription = stringResource(R.string.action_export)
-                    )
-                }
             }
         },
         expandedHeight = barHeight,

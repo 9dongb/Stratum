@@ -53,6 +53,8 @@ object EditScreenTags {
     const val BUSY = "editBusy"
     const val UNDO = "undo"
     const val REDO = "redo"
+    /** 상단 바 맨 오른쪽 설정 버튼(사용자 피드백 11차 4) */
+    const val SETTINGS = "editSettings"
     const val TOOL_OPTIONS = "toolOptions"
     /** 닫힌 화면(커버)의 도구 옵션 칸(캔버스 아래쪽 위에 겹쳐 뜸) */
     const val COVER_OPTIONS = "coverOptions"

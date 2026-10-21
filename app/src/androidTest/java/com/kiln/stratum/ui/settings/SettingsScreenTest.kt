@@ -30,7 +30,6 @@ import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.settings.PreviewQuality
 import com.kiln.stratum.settings.SettingsValues
 import com.kiln.stratum.settings.ThemeMode
-import com.kiln.stratum.ui.home.HomeScreen
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
@@ -184,18 +183,6 @@ class SettingsScreenTest {
         composeRule.runOnIdle { hinges.value = listOf(Hinge(left = screen.left.roundToInt(), top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)) }
 
         assertEquals(before, tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() })
-    }
-
-    @Test
-    fun homeSettingsButton_opensSettings() {
-        var opened = 0
-        composeRule.setContent {
-            StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _, _ -> }, onOpenSettings = { opened++ }) }
-        }
-
-        composeRule.onNodeWithContentDescription(string(R.string.action_settings)).performClick()
-
-        composeRule.runOnIdle { assertEquals(1, opened) }
     }
 
     private companion object {
