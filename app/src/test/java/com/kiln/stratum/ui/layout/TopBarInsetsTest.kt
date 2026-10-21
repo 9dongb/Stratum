@@ -79,31 +79,4 @@ class TopBarInsetsTest {
         // 위쪽에 구멍이 둘인 화면: 하나만 걸려도 내린다
         assertTrue(cutoutBlocks(listOf(584f..664f, 1100f..1150f), listOf(back, actions), margin = 10f))
     }
-
-    @Test
-    fun barLabel_sitsInTheMiddleOfTheBar() {
-        // 메인 가로: 뒤로(0~56)와 버튼들(700~930) 사이, 바 가운데 465에 폭 60을 둔다
-        assertEquals(435, barLabelLeft(60, 465, 0, 930, listOf(0f..56f, 700f..930f), emptyList(), 4f))
-    }
-
-    @Test
-    fun barLabel_movesInsideTheFreeSpace_whenButtonsCrowdTheMiddle() {
-        // 커버: 오른쪽 버튼들(221~411)이 가운데(205)에 가까워, 가운데에 두면 걸리므로 그 왼쪽으로 민다
-        assertEquals(157, barLabelLeft(60, 205, 0, 411, listOf(0f..56f, 221f..411f), emptyList(), 4f))
-    }
-
-    @Test
-    fun barLabel_stepsBesideACameraHole() {
-        // 폴드8 커버처럼 위 가운데 구멍(183~225): 빈 곳(60~217) 안에서 구멍 왼쪽에 붙인다
-        assertEquals(119, barLabelLeft(60, 205, 0, 411, listOf(0f..56f, 221f..411f), listOf(183f..225f), 4f))
-        // 넓은 바에서 구멍이 가운데면 가까운 쪽 옆
-        val left = barLabelLeft(60, 465, 0, 930, listOf(0f..56f, 700f..930f), listOf(440f..490f), 4f)
-        assertTrue("label at $left should clear the hole", left + 60 + 4 <= 440 || left - 4 >= 490)
-    }
-
-    @Test
-    fun barLabel_staysPut_whenThereIsNoRoom() {
-        // 빈 곳이 글자 칸보다 좁으면 가운데 그대로다
-        assertEquals(175, barLabelLeft(60, 205, 0, 411, listOf(0f..180f, 210f..411f), emptyList(), 4f))
-    }
 }

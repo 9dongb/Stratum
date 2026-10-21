@@ -188,4 +188,30 @@ class CanvasViewTest {
             assertEquals("$orientation", Offset(10f + x.toFloat(), 20f + y.toFloat()), corners[0])
         }
     }
+
+    @Test
+    fun zoomChanges_countOnlyRealZooms() {
+        val state = CanvasViewState(CanvasView.Fit)
+        // 두 손가락으로 옮길 때의 작은 떨림은 쌓여도 1%를 넘지 않으면 세지 않는다
+        repeat(5) { state.noteZoom(1.001) }
+        state.noteZoom(1 / 1.004)
+        assertEquals(0, state.zoomChanges)
+        // 1%를 넘게 바꾸면 한 번 세고, 그때부터 다시 잰다
+        state.noteZoom(1.02)
+        assertEquals(1, state.zoomChanges)
+        state.noteZoom(1.005)
+        assertEquals(1, state.zoomChanges)
+        state.noteZoom(0.98)
+        assertEquals(2, state.zoomChanges)
+    }
+
+    @Test
+    fun fit_fitsAndCountsAsAZoom() {
+        val state = CanvasViewState(CanvasView.Free(scale = 2.0, centerX = 10.0, centerY = 10.0))
+
+        state.fit()
+
+        assertEquals(CanvasView.Fit, state.view)
+        assertEquals(1, state.zoomChanges)
+    }
 }

@@ -228,36 +228,6 @@ internal fun holeAvoidingStarts(
     return starts.toList()
 }
 
-/**
- * 상단 바 가운데에 겹쳐 둘 글자 칸(폭 [width], 배율 표시)의 왼쪽 자리(창 x, px, 사용자 피드백 9차).
- * 바 가운데([center])에 두되 가운데 양쪽 버튼·제목([items]) 사이 빈 곳 안으로 밀고, 카메라 구멍([holes], 폴드8 커버는 위 가운데)에
- * 걸리면 빈 곳 안에서 구멍 바로 옆(처음 자리에 가까운 쪽)으로 비킨다. 빈 곳이 모자라면 그 끝에, 구멍을 피할 자리가 없으면 그대로 둔다.
- * [margin]은 버튼·구멍과 둘 여유다. [barLeft]·[barRight]는 바의 양 끝이다(가운데 쪽에 버튼이 없을 때의 빈 곳 끝).
- */
-internal fun barLabelLeft(
-    width: Int,
-    center: Int,
-    barLeft: Int,
-    barRight: Int,
-    items: Collection<ClosedFloatingPointRange<Float>>,
-    holes: List<ClosedFloatingPointRange<Float>>,
-    margin: Float
-): Int {
-    val freeStart = items.filter { it.endInclusive <= center }.maxOfOrNull { it.endInclusive + margin } ?: barLeft.toFloat()
-    val freeEnd = items.filter { it.start >= center }.minOfOrNull { it.start - margin } ?: barRight.toFloat()
-    val lowest = freeStart.toInt()
-    val highest = (freeEnd - width).toInt()
-    val wanted = center - width / 2
-    if (highest < lowest) return wanted
-    val placed = wanted.coerceIn(lowest, highest)
-    fun blocked(left: Int) = holes.any { it.start < left + width + margin && left - margin < it.endInclusive }
-    if (!blocked(placed)) return placed
-    val candidates = holes.flatMap { listOf((it.start - margin - width).toInt(), (it.endInclusive + margin).toInt() + 1) }
-        .filter { it in lowest..highest && !blocked(it) }
-    return candidates.minByOrNull { kotlin.math.abs(it - wanted) } ?: placed
-}
-
-
 /** 창 맨 위에서 [band] 안으로 들어오는 카메라 구멍들의 가로 범위(px). 구멍 자리는 창 좌표로 온다. */
 private fun topHoles(view: View, band: Float): List<ClosedFloatingPointRange<Float>> =
     view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty()

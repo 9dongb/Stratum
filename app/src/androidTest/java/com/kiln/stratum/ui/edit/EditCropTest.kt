@@ -7,11 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.preview.PreviewLevels
@@ -257,14 +259,13 @@ class EditCropTest {
     private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
 
     /**
-     * 배율 표시가 캔버스에 [size] 사진을 맞춘 배율인지 본다. 테스트가 잰 캔버스 크기와 앱의 계산이 반올림 한 자리(1%) 다를 수 있어
-     * 1.5% 안이면 같다고 본다(돌린 사진과 원래 사진의 맞춤 배율은 그보다 훨씬 다르다).
+     * 캔버스가 알리는 배율(화면 읽기 기능, 사용자 피드백 10차 8부터 배율 표시는 배율을 바꿀 때만 보인다)이 캔버스에 [size] 사진을 맞춘 배율인지 본다.
+     * 테스트가 잰 캔버스 크기와 앱의 계산이 반올림 한 자리(1%) 다를 수 있어 1.5% 안이면 같다고 본다(돌린 사진과 원래 사진의 맞춤 배율은 그보다 훨씬 다르다).
      */
     private fun assertZoomFits(size: PixelSize) {
         val canvas = bounds(EditScreenTags.CANVAS)
         val expected = minOf(canvas.width / size.width, canvas.height / size.height).toDouble() * 100
-        val chip = composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).fetchSemanticsNode()
-        val description = chip.config[SemanticsProperties.ContentDescription].single()
+        val description = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         val percent = checkNotNull(Regex("""(\d+(?:\.\d+)?)%""").find(description)) { description }.groupValues[1].toDouble()
         assertEquals("$description should be the fit zoom of $size", expected, percent, 1.5)
     }
@@ -307,8 +308,9 @@ class EditCropTest {
         composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).performClick()
 
         assertZoomFits(document)
-        // 맞춤이면 누를 것이 없다
-        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertHasNoClickAction()
+        // 맞춤이면 화면에 맞추는 동작이 없다
+        val actions = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+        assertTrue("$actions", actions.none { it.label == composeRule.activity.getString(R.string.canvas_fit) })
     }
 
     @Test

@@ -199,6 +199,40 @@ fun placeInside(x: Int, y: Int, width: Int, height: Int, piece: Region): Pair<In
     x.coerceAtMost(piece.right - width).coerceAtLeast(piece.left) to y.coerceAtMost(piece.bottom - height).coerceAtLeast(piece.top)
 
 /**
+ * 캔버스 왼쪽 위 배율 표시(크기 [width]×[height])의 왼쪽 위 자리(창 좌표, 사용자 피드백 10차 8). 바라는 자리([x], [y])에서 시작해
+ * 피할 곳([avoid], 도구 옵션 띠)과 [gap]보다 가까우면 그 오른쪽([gap]만큼 띄움)으로, 세로 힌지의 띠([verticalBands])에 걸리면 띠 오른쪽으로,
+ * 가로 힌지의 띠([horizontalBands])에 걸리면 띠 아래로 옮긴다. 옮긴 자리가 또 걸리면 또 옮긴다.
+ */
+fun zoomChipSpot(
+    x: Int,
+    y: Int,
+    width: Int,
+    height: Int,
+    verticalBands: List<Span>,
+    horizontalBands: List<Span>,
+    avoid: Region?,
+    gap: Int
+): Pair<Int, Int> {
+    var left = x
+    var top = y
+    // 옮길 때마다 오른쪽·아래로만 가므로 몇 번이면 멈춘다(띠·힌지가 몇 개뿐)
+    repeat(MAX_SPOT_MOVES) {
+        val band = verticalBands.firstOrNull { it.start < left + width && left < it.end }
+        val row = horizontalBands.firstOrNull { it.start < top + height && top < it.end }
+        val blocked = avoid?.takeIf { it.left - gap < left + width && left < it.right + gap && it.top - gap < top + height && top < it.bottom + gap }
+        when {
+            row != null -> top = row.end
+            band != null -> left = band.end
+            blocked != null -> left = blocked.right + gap
+            else -> return left to top
+        }
+    }
+    return left to top
+}
+
+private const val MAX_SPOT_MOVES = 8
+
+/**
  * 높이 [height]인 도구 옵션 띠의 위 끝(창 좌표). 고른 도구 버튼([anchor]의 위아래)의 가운데에 띠의 가운데를 맞춘다.
  * 위쪽 자리가 모자라면 버튼 위 끝에서 시작하고(사용자 요청), 아래쪽 자리가 모자라면 버튼 아래 끝에서 끝낸다.
  * 그래도 [piece](도구가 든 조각의 위아래 구간) 밖으로 나가면 안으로 민다. 띠가 조각보다 크면 조각 위 끝이다.

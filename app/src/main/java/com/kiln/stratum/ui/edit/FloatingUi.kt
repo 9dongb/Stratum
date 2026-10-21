@@ -63,6 +63,9 @@ class FloatingState(panel: MainPanel? = null) {
     /** 도구 막대 버튼의 자리(창 좌표). 도구 옵션 띠를 고른 도구 옆에 띄운다([OptionStripHost]). */
     internal val toolAnchors = mutableStateMapOf<EditTool, Region>()
 
+    /** 놓인 도구 옵션 띠의 자리(창 좌표, [OptionStripHost]가 놓을 때 알림). 띠가 없으면 null. 배율 표시가 띠를 피한다([CanvasZoomChip]). */
+    internal var stripRegion: Region? by mutableStateOf(null)
+
     /** [key] 칸의 옵션 창을 열고, 이미 열려 있으면 닫는다. 열린 패널은 그대로 둔다. */
     fun toggleFlyout(key: String) {
         flyout = if (flyout == key) null else key

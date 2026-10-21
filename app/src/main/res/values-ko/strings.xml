@@ -90,6 +90,7 @@
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
     <string name="canvas_zoom_description">배율 %1$s%%</string>
+    <string name="canvas_fit">화면에 맞추기</string>
 
     <!-- 편집 도구. _short는 커버 화면 탭 줄에 보이는 짧은 이름이고, 나머지는 화면 읽기 기능이 읽는 이름이다. -->
     <string name="tool_transform">자르기·변형</string>

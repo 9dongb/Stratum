@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -252,6 +253,8 @@ fun OptionStripHost(
     // 손잡이를 끄는 동안 바라는 자리(영역 왼쪽 위 기준 px). 끌지 않을 때는 null이다.
     var dragging by remember { mutableStateOf<Offset?>(null) }
     val currentOnPosition by rememberUpdatedState(onPosition)
+    // 놓인 자리는 배율 표시가 피한다([FloatingState.stripRegion]). 띠가 사라지면 지운다.
+    DisposableEffect(state) { onDispose { state.stripRegion = null } }
     // 손을 뗀 자리는 끈 만큼 옮긴 자리다(배치를 기다리지 않는다: 빠르게 끌고 떼면 그사이 배치가 없을 수 있다).
     // 접히는 선에 걸친 자리여도 그대로 남기고, 놓을 때마다 선 밖으로 맞춰 놓는다.
     val finish = {
@@ -319,6 +322,8 @@ fun OptionStripHost(
             placed.y = y - top
             placed.maxX = (width - placeable.width).coerceAtLeast(0)
             placed.maxY = (height - placeable.height).coerceAtLeast(0)
+            val region = Region(x, y, x + placeable.width, y + placeable.height)
+            if (state.stripRegion != region) state.stripRegion = region
             placeable.place(x - left, y - top)
         }
     }

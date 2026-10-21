@@ -4,12 +4,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.unit.dp
-import com.kiln.stratum.ui.edit.EditScreenTags
 import org.junit.Assert.assertTrue
 
 /**
@@ -53,15 +50,9 @@ fun SemanticsNode.touchBoundsInWindow(): Rect {
 private const val CLIP_EPSILON_PX = 0.5f
 
 /**
- * 힌지 규칙의 예외(사용자 결정, CLAUDE.md 6장): 상단 바 가운데의 배율 표시는 펼친 화면 가운데의 접히는 선 위에도 둔다.
- * 확대 상태에서는 눌러 맞추는 버튼이라 검사에서 뺀다.
- */
-private val HingeRuleExceptions = setOf(EditScreenTags.ZOOM_CHIP)
-
-/**
  * 누를 수 있는 것(비활성 포함)의 터치 영역(최소 48dp)이 모두 [hinge]의 띠(양쪽 [HingeMargin]) 밖에 있는지 확인한다.
  * 화면 크기 강제(ForcedSize)는 밀도를 바꾸므로, 띠의 폭은 노드마다 그 노드의 밀도로 잰다.
- * 스크롤해서 가려진 것처럼 보이는 부분이 없는(경계가 빈) 것은 누를 수 없으므로 건너뛴다. [HingeRuleExceptions]도 건너뛴다.
+ * 스크롤해서 가려진 것처럼 보이는 부분이 없는(경계가 빈) 것은 누를 수 없으므로 건너뛴다.
  */
 fun ComposeTestRule.assertClickablesAvoid(hinge: Hinge) {
     val nodes = onAllNodes(hasClickAction()).fetchSemanticsNodes()
@@ -69,7 +60,6 @@ fun ComposeTestRule.assertClickablesAvoid(hinge: Hinge) {
     for (node in nodes) {
         val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
         if (node.layoutBoundsInWindow().isEmpty) continue
-        if (node.config.getOrNull(SemanticsProperties.TestTag) in HingeRuleExceptions) continue
         val bounds = node.touchBoundsInWindow()
         val (start, end) = if (hinge.isVertical) bounds.left to bounds.right else bounds.top to bounds.bottom
         assertTrue(

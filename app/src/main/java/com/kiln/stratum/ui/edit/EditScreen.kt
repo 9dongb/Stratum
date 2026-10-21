@@ -64,8 +64,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -104,6 +107,7 @@ import com.kiln.stratum.ui.layout.HingeAvoidingBottom
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.BarButtonContentInset
+import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
@@ -281,8 +285,6 @@ fun EditScreen(
     } else {
         applyingOrientation?.takeIf { ready?.busy == true && it.first == ready.revision }?.second ?: Orientation.IDENTITY
     }
-    // 보이는(돌린) 문서 크기. 보기·테두리·배율 표시가 쓴다.
-    val shownSize = ready?.let { shownOrientation.targetSize(it.documentSize) }
     // 닫힌 화면 자르기·회전 창 맨 아래에서 고른 탭(자르기·회전). 마지막에 고른 것을 다음에도 연다.
     var coverCropTab by rememberSaveable { mutableStateOf(CropTab.CROP) }
     // 자르기·회전에서 바꾼 것(돌리기·뒤집기, 사진 전체가 아닌 테두리)이 있는지. 있으면 크기 변경을 막는다(크기를 바꾸면 사라지므로).
@@ -810,9 +812,7 @@ fun EditScreen(
                             null
                         } else {
                             PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
-                        },
-                        // 배율 표시는 상단 바 가운데에 늘 보인다(사용자 피드백 9차)
-                        zoom = shownSize?.let { ZoomBadge(viewState, it) }
+                        }
                     )
                 }
             },
@@ -962,7 +962,10 @@ fun EditScreen(
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
                         reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
                         orientation = shownOrientation,
-                        onSpotHeal = useSpotHeal, onMagicWand = useMagicWand, floating = floatingUi
+                        onSpotHeal = useSpotHeal, onMagicWand = useMagicWand,
+                        // 배율 표시는 도구 옵션 띠를 피한다(띠가 왼쪽 위에 있으면 그 오른쪽)
+                        avoid = { floating.stripRegion },
+                        floating = floatingUi
                     )
                 }
             }
@@ -1098,14 +1101,10 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, mod
 /** 메인 화면 상단 바의 조정·레이어 패널 버튼: 열린 패널, 누를 수 있는지, 누르면 할 일(열고 닫음) */
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
 
-/** 상단 바 가운데 배율 표시의 보기 상태와 문서 크기(맞춤 배율을 구한다) */
-class ZoomBadge(val viewState: CanvasViewState, val documentSize: PixelSize)
-
 /**
- * 편집 화면 상단 바: 뒤로, 가운데 배율 표시([zoom]), 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
+ * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
  * 작업 공간을 넓게 쓰려고 상태 표시줄 높이([workTopBarHeight])로 낮게 두고, 바 높이에 맞춘 버튼([TopBarIconButton] 등)을 쓴다.
  * 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
- * 배율 표시는 바의 내용 줄 위에 겹쳐 놓아 바 가운데(화면 가운데)에 온다([CanvasZoomChip]).
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1118,12 +1117,10 @@ private fun EditTopBar(
     onRedo: () -> Unit,
     canExport: Boolean,
     onExport: () -> Unit,
-    panels: PanelToggles? = null,
-    zoom: ZoomBadge? = null
+    panels: PanelToggles? = null
 ) {
     val barHeight = workTopBarHeight()
     val barInsets = rememberTopBarInsets(barHeight)
-    Box {
     TopAppBar(
         title = {},
         // 캔버스(작업 공간)와 기본 배경 바를 1dp 구분선으로 나눈다(시안)
@@ -1184,9 +1181,6 @@ private fun EditTopBar(
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )
-    // 바의 내용 줄(아래쪽, 바 높이) 위에 겹친다. 바가 구멍 아래로 내려가도 내용 줄과 같은 높이다.
-    zoom?.let { CanvasZoomChip(it.viewState, it.documentSize, barInsets, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(barHeight)) }
-    }
 }
 
 /**
@@ -1202,6 +1196,8 @@ private fun EditTopBar(
  * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
  * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 알림·띠·패널은 뒤집지 않는다.
  * AI 제거를 쓸 수 없다는 알림의 '스팟 복구' 버튼을 누르면 [onSpotHeal]을, AI 선택을 쓸 수 없다는 알림의 '자동 선택' 버튼을 누르면 [onMagicWand]를 부른다.
+ * 손으로 배율을 바꾸면 캔버스 왼쪽 위에 배율 표시가 잠깐 보인다([CanvasZoomChip], 도구 옵션 띠([avoid], 창 좌표)를 피함).
+ * 화면 읽기 기능에는 캔버스가 지금 배율을 알리고, 확대·이동한 상태면 '화면에 맞추기' 동작을 준다(배율 표시는 잠깐만 보이므로).
  */
 @Composable
 private fun EditCanvas(
@@ -1222,6 +1218,7 @@ private fun EditCanvas(
     orientation: Orientation = Orientation.IDENTITY,
     onSpotHeal: () -> Unit = {},
     onMagicWand: () -> Unit = {},
+    avoid: () -> Region? = { null },
     floating: @Composable BoxScope.(WindowInsets) -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -1240,6 +1237,10 @@ private fun EditCanvas(
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
     val pickUnavailable = stringResource(R.string.edit_pick_unavailable)
     val magicWand = stringResource(R.string.subtool_select_wand)
+    val zoomFormat = stringResource(R.string.canvas_zoom_description)
+    val fitLabel = stringResource(R.string.canvas_fit)
+    // 보이는(돌린) 문서 크기. 배율 표시와 화면 읽기 기능의 배율이 쓴다.
+    val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
     // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
     val busy = (state as? EditorState.Ready)?.busy == true
@@ -1299,12 +1300,26 @@ private fun EditCanvas(
                 .fillMaxSize()
                 .windowInsetsPadding(insets)
                 .onSizeChanged { onCanvasSize(it.width, it.height) }
-                .testTag(EditScreenTags.CANVAS),
+                .testTag(EditScreenTags.CANVAS)
+                .semantics {
+                    // 지금 배율(예: '배율 250%'). 확대·이동한 상태면 화면에 맞추는 동작을 준다.
+                    shownSize?.let { size -> viewState.scaleFor(size) }?.let { stateDescription = zoomFormat.format(zoomPercentText(it)) }
+                    if (viewState.view is CanvasView.Free) {
+                        customActions = listOf(
+                            CustomAccessibilityAction(fitLabel) {
+                                viewState.fit()
+                                true
+                            }
+                        )
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip, orientation)
         }
         floating(insets)
+        // 배율을 바꿀 때만 왼쪽 위에 잠깐 보이는 배율 표시(사용자 피드백 10차 8). 띠·옵션 창 위에 그린다(띠는 피해 놓는다).
+        shownSize?.let { CanvasZoomChip(viewState, it, Modifier.fillMaxSize().windowInsetsPadding(insets), avoid) }
         // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우되(도구 막대 폭만큼 오른쪽을 비움) 펼친 화면의 접히는 선과
         // 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
         val railWidth = with(LocalDensity.current) { (canvasStart - screenStart).coerceAtLeast(0f).toDp() }

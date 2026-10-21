@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
+import kotlin.math.abs
 
 /**
  * 캔버스 보기 상태를 들고 있는 곳. 두 손가락으로 움직이는 동안 자주 바뀌므로, 그리는 쪽은 그리는 순간에 읽는다.
@@ -36,11 +38,38 @@ class CanvasViewState(initial: CanvasView) {
 
     /**
      * 지금 보이는 배율(문서 1픽셀이 화면 몇 픽셀인지). 맞춤이면 캔버스 크기로 구한 맞춤 배율이고, 캔버스 크기를 아직 모르면 null이다.
-     * 상단 바의 배율 표시가 쓴다(늘 보임, 사용자 피드백 9차).
+     * 배율 표시([CanvasZoomChip])와 화면 읽기 기능의 캔버스 배율이 쓴다.
      */
     fun scaleFor(document: PixelSize): Double? = when (val shown = view) {
         is CanvasView.Free -> shown.scale
         CanvasView.Fit -> area.takeIf { it.width > 0 && it.height > 0 }?.let { fitScale(PixelSize(it.width, it.height), document) }
+    }
+
+    /**
+     * 손으로 배율을 바꾼 횟수(두 손가락 확대·축소, 배율 표시 누르기). 늘 때마다 배율 표시가 캔버스 왼쪽 위에 잠깐 보인다
+     * (사용자 피드백 10차 8: "비율 조정 시에만 좌측 상단에 보여지고 사라지게"). 옮기기만 한 것과 화면이 보기를 바꾼 것(자르기 시작 등)은
+     * 세지 않는다. 저장하지 않는다(접기·펼치기 뒤에는 보이지 않는다).
+     */
+    var zoomChanges: Int by mutableIntStateOf(0)
+        private set
+
+    /** 마지막으로 센 뒤 손으로 곱한 배율. [ZOOM_CHANGE_STEP]보다 많이 바뀌면 한 번 센다(두 손가락으로 옮길 때의 작은 떨림은 세지 않게). */
+    private var zoomDrift = 1.0
+
+    /** 두 손가락 조작이 배율을 [factor]배 했다 */
+    fun noteZoom(factor: Double) {
+        zoomDrift *= factor
+        if (abs(zoomDrift - 1.0) > ZOOM_CHANGE_STEP) {
+            zoomDrift = 1.0
+            zoomChanges++
+        }
+    }
+
+    /** 화면에 맞추고, 맞춘 배율을 배율 표시로 잠깐 보인다(배율 표시 누르기, 화면 읽기 기능의 '화면에 맞추기') */
+    fun fit() {
+        view = CanvasView.Fit
+        zoomDrift = 1.0
+        zoomChanges++
     }
 
     companion object {
@@ -140,6 +169,8 @@ fun CanvasViewport(
                                 area = PixelSize(size.width, size.height),
                                 document = documentSize
                             )
+                            // 배율을 바꾸면 배율 표시가 잠깐 보인다(옮기기만 하면 보이지 않는다)
+                            if (zoom != 1f) viewState.noteZoom(zoom.toDouble())
                         }
                     },
                     onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null,
@@ -184,6 +215,9 @@ fun CanvasViewport(
         }
     }
 }
+
+/** 손으로 바꾼 배율이 이만큼(1%) 넘게 쌓이면 배율 표시를 보인다([CanvasViewState.noteZoom]) */
+private const val ZOOM_CHANGE_STEP = 0.01
 
 /** 엔진 쪽에 알릴 보기를 정하는 것들: 캔버스 크기, 보기, 보이는(돌린) 문서 크기, 돌린 방향, 원래 문서 크기 */
 private data class ViewportInputs(

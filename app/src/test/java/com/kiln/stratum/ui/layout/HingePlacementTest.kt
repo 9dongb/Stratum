@@ -318,4 +318,33 @@ class HingePlacementTest {
         assertEquals(Region(440, 50, 900, 700), panelRegion(area, listOf(Span(400, 440)), emptyList()))
         assertEquals(Region(100, 50, 900, 380), panelRegion(area, emptyList(), listOf(Span(380, 420))))
     }
+
+    @Test
+    fun zoomChipSpot_staysAtTheCorner_whenNothingIsInTheWay() {
+        assertEquals(70 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = emptyList(), horizontalBands = emptyList(), avoid = null, gap = 8))
+    }
+
+    @Test
+    fun zoomChipSpot_goesRightOfTheStrip() {
+        // 띠(64~120, 60~400)가 구석에 있으면 그 오른쪽(120 + 8)
+        val strip = Region(64, 60, 120, 400)
+        assertEquals(128 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = emptyList(), horizontalBands = emptyList(), avoid = strip, gap = 8))
+        // 띠를 아래로 옮겨 두었으면(구석과 8 넘게 떨어짐) 구석 그대로다
+        val lower = Region(64, 101, 120, 400)
+        assertEquals(70 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = emptyList(), horizontalBands = emptyList(), avoid = lower, gap = 8))
+    }
+
+    @Test
+    fun zoomChipSpot_stepsOffHinges() {
+        // 세로 힌지 띠(80~120)에 걸리면 띠 오른쪽, 가로 힌지 띠(50~90)에 걸리면 띠 아래
+        assertEquals(120 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = listOf(Span(80, 120)), horizontalBands = emptyList(), avoid = null, gap = 8))
+        assertEquals(70 to 90, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = emptyList(), horizontalBands = listOf(Span(50, 90)), avoid = null, gap = 8))
+    }
+
+    @Test
+    fun zoomChipSpot_keepsMovingUntilClear() {
+        // 띠 오른쪽(128)이 세로 힌지 띠(150~190)에 걸리면 힌지 오른쪽(190)
+        val strip = Region(64, 60, 120, 400)
+        assertEquals(190 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = listOf(Span(150, 190)), horizontalBands = emptyList(), avoid = strip, gap = 8))
+    }
 }
