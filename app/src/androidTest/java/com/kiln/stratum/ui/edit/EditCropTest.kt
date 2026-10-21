@@ -3,9 +3,14 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -17,6 +22,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -54,13 +61,16 @@ class EditCropTest {
         return EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document, canUndo = canUndo, canRedo = canUndo)
     }
 
+    /** 화면에 넘길 상태. 정하지 않으면 [ready]다(테스트가 바쁨·문서 번호를 바꿔 편집 흐름을 흉내 낼 때 정한다). */
+    private var shown by mutableStateOf<EditorState.Ready?>(null)
+
     private fun show(widthDp: Int = 411, heightDp: Int = 800, canUndo: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
                     StratumTheme {
                         EditScreen(
-                            state = ready(canUndo),
+                            state = shown ?: ready(canUndo),
                             onBack = {},
                             onCanvasSize = { _, _ -> },
                             onViewport = {},
@@ -241,6 +251,61 @@ class EditCropTest {
     }
 
     private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
+
+    /**
+     * 배율 표시가 캔버스에 [size] 사진을 맞춘 배율인지 본다. 테스트가 잰 캔버스 크기와 앱의 계산이 반올림 한 자리(1%) 다를 수 있어
+     * 1.5% 안이면 같다고 본다(돌린 사진과 원래 사진의 맞춤 배율은 그보다 훨씬 다르다).
+     */
+    private fun assertZoomFits(size: PixelSize) {
+        val canvas = bounds(EditScreenTags.CANVAS)
+        val expected = minOf(canvas.width / size.width, canvas.height / size.height).toDouble() * 100
+        val chip = composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).fetchSemanticsNode()
+        val description = chip.config[SemanticsProperties.ContentDescription].single()
+        val percent = checkNotNull(Regex("""(\d+(?:\.\d+)?)%""").find(description)) { description }.groupValues[1].toDouble()
+        assertEquals("$description should be the fit zoom of $size", expected, percent, 1.5)
+    }
+
+    @Test
+    fun main_aTurnAndCropThatFails_doesNotLeaveTheTurnedLookBehind() {
+        // ✓를 누른 뒤 결과가 올 때까지는 돌린 모습(300×400)이다. 하지 못하고 끝나면(메모리 부족 등) 원래 모습으로 돌아가고,
+        // 같은 문서로 다시 바쁠 때(다른 편집을 기록하는 동안)도 돌린 모습이 보이지 않는다
+        shown = ready()
+        show(930, 700)
+        val turned = PixelSize(document.height, document.width)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_RIGHT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
+        composeRule.runOnIdle { shown = ready().copy(busy = true) }
+        assertZoomFits(turned)
+
+        // 하지 못하고 끝났다(문서 번호 그대로)
+        composeRule.runOnIdle { shown = ready() }
+        assertZoomFits(document)
+        // 같은 문서로 다시 바쁘다
+        composeRule.runOnIdle { shown = ready().copy(busy = true) }
+        assertZoomFits(document)
+    }
+
+    @Test
+    fun main_cancellingAfterTurningAndZooming_showsTheWholeOriginalPhoto() {
+        // 돌린 채 확대한 보기는 돌린 사진의 좌표라, 취소하면 원래 사진에 맞춘 보기로 돌아간다
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_RIGHT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput {
+            pinch(
+                start0 = center - Offset(20f, 0f), end0 = center - Offset(200f, 0f),
+                start1 = center + Offset(20f, 0f), end1 = center + Offset(200f, 0f)
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).performClick()
+
+        assertZoomFits(document)
+        // 맞춤이면 누를 것이 없다
+        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertHasNoClickAction()
+    }
 
     @Test
     fun cancel_endsCroppingWithoutEditing() {

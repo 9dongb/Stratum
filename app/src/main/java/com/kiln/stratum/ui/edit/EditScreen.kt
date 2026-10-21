@@ -268,6 +268,12 @@ fun EditScreen(
     var cropOrientation by rememberSaveable(ready?.revision) { mutableStateOf(Orientation.IDENTITY) }
     // ✓를 누른 뒤 결과가 올 때까지(그때의 문서 번호와 방향) 돌린 모습을 그대로 보인다. 돌리기 전 모습이 잠깐 보였다가 돌아가며 깜빡이지 않게.
     var applyingOrientation by remember { mutableStateOf<Pair<Long, Orientation>?>(null) }
+    // 결과가 오거나(문서 번호가 바뀜) 하지 못하고 끝나면(메모리 부족 등으로 바쁨이 풀림) 지운다.
+    // 남겨 두면 같은 문서로 다시 바쁠 때(다른 편집을 기록하는 동안) 돌린 모습이 잘못 보인다.
+    LaunchedEffect(ready?.busy, ready?.revision) {
+        val applying = applyingOrientation ?: return@LaunchedEffect
+        if (ready == null || ready.revision != applying.first || !ready.busy) applyingOrientation = null
+    }
     val shownOrientation = if (cropMode) {
         cropOrientation
     } else {
@@ -410,9 +416,11 @@ fun EditScreen(
                 }
             } else {
                 cropFrame = null
+                // 돌리거나 뒤집은 채 나가면, 그동안 확대·이동한 보기는 돌린 사진의 좌표라 원래 사진에 맞지 않는다. 맞춤으로 돌린다.
+                val turned = cropOrientation != Orientation.IDENTITY
                 // 취소하면 돌리던 방향도 버린다(적용했으면 문서가 바뀌어 저절로 새로 시작한다)
                 cropOrientation = Orientation.IDENTITY
-                if (cropStartView != null && viewState.view == cropStartView) viewState.view = CanvasView.Fit
+                if (turned || (cropStartView != null && viewState.view == cropStartView)) viewState.view = CanvasView.Fit
                 cropStartView = null
             }
         }
@@ -728,9 +736,10 @@ fun EditScreen(
                     view = { viewState.view },
                     document = ready.documentSize,
                     // 보이는 글자 레이어의 글자 상자 안을 누르면(맨 위 것) 그 레이어를 고르고 고치는 창을 연다(사용자 피드백 8차 1-6).
+                    // 보이는 것은 눈이 켜지고 불투명도가 0보다 큰 레이어다(엔진의 Layer.isShown과 같은 규칙).
                     // 그 밖을 누르면 그 자리에 새 글자를 넣는 창이다(글자 옵션의 크기·전경색으로 시작).
                     onTap = { x, y ->
-                        val hit = ready.layers.lastOrNull { it.visible && it.text?.contains(x, y) == true }
+                        val hit = ready.layers.lastOrNull { it.visible && it.opacity > 0f && it.text?.contains(x, y) == true }
                         val spec = hit?.text
                         textDraft = if (hit != null && spec != null) {
                             layerActions.select(hit.id)

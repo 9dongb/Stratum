@@ -562,26 +562,28 @@ class LiquifyModeTest {
     @Test
     fun mainScreens_theStripStartsWhereTheEditScreenLeftIt_andTheHandleMovesIt() {
         // 편집 화면의 띠와 같은 자리(설정에 남은 자리, 캔버스 왼쪽 위에서의 dp)를 쓰고, 손잡이로 옮기면 그 자리를 알린다
-        stripPosition = StripPosition(300f, 120f)
+        stripPosition = StripPosition(300f, 40f)
         show(930, 700)
         val canvasNode = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANVAS).fetchSemanticsNode()
         val dp = with(canvasNode.layoutInfo.density) { 1.dp.toPx() }
         val canvas = canvasNode.layoutBoundsInWindow()
         val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(canvas.left + 300 * dp, strip.left, 2 * dp)
-        assertEquals(canvas.top + 120 * dp, strip.top, 2 * dp)
+        assertEquals(canvas.top + 40 * dp, strip.top, 2 * dp)
+        // 아래로는 캔버스 아래 여백(8dp) 위까지만 옮길 수 있다(접은 화면에 줄여 넣은 테스트에서는 캔버스가 낮다). 남은 자리만큼만 끈다.
+        val dy = minOf(60f, canvas.bottom - 8 * dp - strip.bottom - 1f).coerceAtLeast(0f)
 
         composeRule.onNodeWithTag(EditScreenTags.STRIP_HANDLE).performTouchInput {
             down(center)
-            moveBy(Offset(50f, 30f))
-            moveBy(Offset(50f, 30f))
+            moveBy(Offset(50f, dy / 2))
+            moveBy(Offset(50f, dy / 2))
             up()
         }
 
         composeRule.runOnIdle {
             val spot = positions.last()
             assertEquals(300f + 100f / dp, spot.x, 1f)
-            assertEquals(120f + 60f / dp, spot.y, 1f)
+            assertEquals(40f + dy / dp, spot.y, 1f)
         }
     }
 

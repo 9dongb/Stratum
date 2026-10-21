@@ -212,6 +212,20 @@ class EditorBrushTest {
     }
 
     @Test
+    fun goingHomeInTheMiddleOfAStrokeOnATextLayer_doesNotAskLater() {
+        // 손가락을 댄 채 홈으로 나가면, 손가락 자리가 사라질 때 획이 끝난다. 그 질문이 다음 문서에 뜨지 않는다.
+        withText()
+
+        onMain {
+            viewModel.beginStroke(StrokePoint(50f, 100f), erase = false)
+            viewModel.close()
+            viewModel.endStroke()
+        }
+
+        onMain { assertEquals(null, viewModel.rasterizeAsk.value) }
+    }
+
+    @Test
     fun dismissingTheQuestion_keepsTheTextLayer() {
         val added = withText()
         onMain {

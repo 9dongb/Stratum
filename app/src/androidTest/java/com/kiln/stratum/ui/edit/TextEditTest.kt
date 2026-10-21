@@ -2,6 +2,8 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +13,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -24,6 +27,13 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
+import androidx.test.espresso.action.CoordinatesProvider
+import androidx.test.espresso.action.GeneralClickAction
+import androidx.test.espresso.action.Press
+import androidx.test.espresso.action.Tap
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
@@ -83,10 +93,10 @@ class TextEditTest {
         override fun setVisible(id: LayerId, visible: Boolean) = Unit
     }
 
-    private fun show(textVisible: Boolean = true) {
+    private fun show(textVisible: Boolean = true, textOpacity: Float = 1f) {
         val layers = listOf(
             LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE),
-            LayerSummary(LayerId(1), "Hello", 1f, BlendMode.NORMAL, Adjustments.NONE, visible = textVisible, text = spec)
+            LayerSummary(LayerId(1), "Hello", textOpacity, BlendMode.NORMAL, Adjustments.NONE, visible = textVisible, text = spec)
         )
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
@@ -154,6 +164,57 @@ class TextEditTest {
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(center) }
 
         composeRule.onNodeWithText(string(R.string.text_prompt_title)).assertExists()
+    }
+
+    @Test
+    fun textLayerAtZeroOpacity_isNotEdited_soTheTapAddsNewText() {
+        // 불투명도 0%는 보이지 않는 레이어다(눈을 끈 것과 같다)
+        show(textOpacity = 0f)
+        openTextTool()
+
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(center) }
+
+        composeRule.onNodeWithText(string(R.string.text_prompt_title)).assertExists()
+    }
+
+    /** 새 글자 창을 열고 'Hi'를 적은 뒤 색 칸을 눌러 같은 시트를 팔레트로 바꾼다(커버) */
+    private fun typeHiThenOpenThePalette() {
+        show()
+        openTextTool()
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(Offset(width * 0.1f, height * 0.1f)) }
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_FIELD).performTextInput("Hi")
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_PROMPT_COLOR).performClick()
+        composeRule.onNodeWithText(string(R.string.text_color_title)).assertExists()
+    }
+
+    /** 시트가 올라와 글자 쪽이 'Hi' 그대로 보이고, 넣으면 그 글자가 간다 */
+    private fun assertBackOnTheTextWithHi() {
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_FIELD).assertIsDisplayed().assert(hasText("Hi"))
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_ADD).performClick()
+        composeRule.runOnIdle { assertEquals("Hi", added.single().first) }
+    }
+
+    @Test
+    fun cover_backOnThePalette_goesBackToTheText_withTheSheetStillUp() {
+        typeHiThenOpenThePalette()
+
+        Espresso.pressBack()
+
+        assertBackOnTheTextWithHi()
+    }
+
+    @Test
+    fun cover_tappingOutsideThePalette_goesBackToTheText_withTheSheetUpAgain() {
+        // 창 밖을 누르면 M3 시트가 먼저 내려가지만, 팔레트 쪽이면 글자 쪽으로 바꿔 다시 올린다(보이지 않는 시트가 터치를 막지 않게)
+        typeHiThenOpenThePalette()
+
+        val aboveTheSheet = CoordinatesProvider { view ->
+            val location = IntArray(2).also { view.getLocationOnScreen(it) }
+            floatArrayOf(location[0] + view.width / 2f, location[1] + view.height * 0.05f)
+        }
+        Espresso.onView(isRoot()).inRoot(isDialog()).perform(GeneralClickAction(Tap.SINGLE, aboveTheSheet, Press.FINGER, InputDevice.SOURCE_UNKNOWN, MotionEvent.BUTTON_PRIMARY))
+
+        assertBackOnTheTextWithHi()
     }
 
     @Test

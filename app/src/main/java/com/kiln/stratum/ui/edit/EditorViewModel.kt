@@ -1701,7 +1701,10 @@ class EditorViewModel internal constructor(
     fun confirmRasterize() {
         val layer = _rasterizeAsk.value ?: return
         _rasterizeAsk.value = null
+        val document = history?.document ?: return
         if (editing || hasLiveValues) return
+        // 물은 뒤에 그 레이어가 없어졌거나 이미 픽셀 레이어면 하지 않는다
+        if (document.layers.none { it.id == layer && it.text != null }) return
         edit(RasterizeLayer(layer))
     }
 
@@ -2683,6 +2686,9 @@ class EditorViewModel internal constructor(
         _liveOpacity.value = null
         liveCommitPending = false
         drawing = null
+        // 글자 레이어에 시작한 획과 그 질문도 버린다. 홈으로 나간 뒤 획이 끝나도(손가락 자리가 사라짐) 다음 문서에서 묻지 않게.
+        textStrokeLayer = null
+        _rasterizeAsk.value = null
         retouchOffsetFixedByStroke = false
         lastStrokePoint = null
         queuedStrokes.clear()

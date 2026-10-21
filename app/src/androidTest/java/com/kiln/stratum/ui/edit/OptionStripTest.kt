@@ -543,15 +543,19 @@ class OptionStripTest {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Brush)
         val before = stripBounds()
+        val canvasNode = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode()
+        val dp = with(canvasNode.layoutInfo.density) { 1.dp.toPx() }
+        val canvas = canvasNode.layoutBoundsInWindow()
+        // 아래로는 캔버스 아래 여백(8dp) 위까지만 옮길 수 있다. 큰 화면을 접은 화면에 줄여 넣으면(접은 상태로 돌린 테스트)
+        // 시스템 막대가 상대적으로 커서 캔버스가 낮으므로, 남은 자리만큼만 끈다
+        val dy = minOf(120f, canvas.bottom - 8 * dp - before.bottom - 1f).coerceAtLeast(0f)
 
-        dragHandle(300f, 120f)
+        dragHandle(300f, dy)
 
         val after = stripBounds()
         assertEquals(before.left + 300f, after.left, 3f)
-        assertEquals(before.top + 120f, after.top, 3f)
+        assertEquals(before.top + dy, after.top, 3f)
         // 놓은 자리를 설정에 알린다(캔버스 왼쪽 위에서의 dp)
-        val dp = with(composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutInfo.density) { 1.dp.toPx() }
-        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
         composeRule.runOnIdle {
             val saved = checkNotNull(stripPosition)
             assertEquals(after.left - canvas.left, saved.x * dp, 2f)

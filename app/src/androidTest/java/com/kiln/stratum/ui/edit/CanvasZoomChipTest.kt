@@ -30,6 +30,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,6 +115,12 @@ class CanvasZoomChipTest {
     fun sitsInTheMiddleOfTheBar_evenOverACenterHinge() {
         show(DpSize(930.dp, 700.dp))
         val bar = bounds(EditScreenTags.TOP_BAR)
+        // 접은 폴드(커버)처럼 바 가운데 위에 카메라 구멍이 있는 기기에서는 배율 표시가 구멍을 비켜야 맞으므로 건너뛴다
+        val holes = composeRule.runOnIdle { composeRule.activity.window.decorView.rootWindowInsets.displayCutout?.boundingRects.orEmpty() }
+        assumeTrue(
+            "a camera hole $holes sits over the middle of the bar $bar",
+            holes.none { it.top < bar.bottom && it.left <= bar.center.x && it.right >= bar.center.x }
+        )
         assertEquals(bar.center.x, bounds(EditScreenTags.ZOOM_CHIP).center.x, 2f)
 
         // 펼친 폴드의 가운데 접히는 선 위에도 그대로 둔다(사용자 결정: 배율 표시만 힌지 규칙의 예외)

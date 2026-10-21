@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
@@ -46,6 +48,7 @@ import com.kiln.stratum.ui.layout.WidthClass
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * 글자 옵션이 쓰는 모양과 바꾸기. 모양은 ViewModel이 든다(앱을 끌 때까지 남음).
@@ -211,8 +214,22 @@ fun TextPrompt(
     }
     if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = dismiss, sheetState = sheetState) {
+        val scope = rememberCoroutineScope()
+        // 시트는 창 밖을 누르거나 아래로 밀면 먼저 내려간 뒤 onDismissRequest를 부른다(M3).
+        // 팔레트 쪽이면 글자 쪽으로 바꾸고 시트를 다시 올린다(내려간 채로 두면 보이지 않는 시트 창이 터치를 막는다).
+        val sheetDismiss: () -> Unit = {
+            if (palette != null) {
+                onChange(draft.copy(palette = null))
+                scope.launch { sheetState.show() }
+            } else {
+                onDismiss()
+            }
+        }
+        ModalBottomSheet(onDismissRequest = sheetDismiss, sheetState = sheetState) {
             HideStatusBarInSheet()
+            // 팔레트 쪽의 뒤로 가기는 시트 창 안에서 먼저 받아, 시트를 내리지 않고 글자 쪽으로 바꾼다.
+            // M3에 맡기면 시트가 내려가고, 밀어서 뒤로 가기(예측 뒤로 가기)의 줄어든 모습이 다시 올린 시트에 남는다.
+            BackHandler(enabled = palette != null) { onChange(draft.copy(palette = null)) }
             Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)) {
                 Text(title, style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))
