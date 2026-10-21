@@ -140,8 +140,11 @@ class SizePreviewTest {
         showEditScreen(411, 800)
         composeRule.chooseCoverTool(EditTool.Brush)
 
+        // 한 줄 막대의 크기·경도 칩을 펼친 슬라이더(결정 기록 '커버 화면 개편')
+        composeRule.expandBarChip("size")
         dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_SIZE)
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performScrollTo()
+        composeRule.collapseBar()
+        composeRule.expandBarChip("hardness")
         dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_HARDNESS)
     }
 

@@ -1,8 +1,10 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 
 /**
  * 커버 화면(Compact)에서 [tool]을 누른다(결정 기록 '커버 화면 개편'). 탭 줄에 있는 도구는 그 탭을 누르고,
@@ -18,7 +20,35 @@ fun SemanticsNodeInteractionsProvider.chooseCoverTool(tool: EditTool) {
     }
 }
 
+/** 커버 한 줄 막대의 [key] 칩을 누른다(값 칩은 슬라이더 줄, 고르기 칩은 고를 것들, 동작 칩은 버튼 줄로 펼친다) */
+fun SemanticsNodeInteractionsProvider.expandBarChip(key: String) {
+    // 칩이 넘쳐 옆으로 밀어 보는 줄이면 보이게 민 뒤 누른다
+    onNodeWithTag(EditScreenTags.bar(key)).performScrollTo().performClick()
+}
+
+/** 막대 칩 [keys]의 가로 자리(창 기준, 줄 밖으로 밀려 있어도 잘리지 않은 자리) */
+fun SemanticsNodeInteractionsProvider.barChipLefts(keys: List<String>): List<Float> =
+    keys.map { onNodeWithTag(EditScreenTags.bar(it)).fetchSemanticsNode().positionInWindow.x }
+
+/** 펼친 칩을 접는다(막대 오른쪽 끝 ✓) */
+fun SemanticsNodeInteractionsProvider.collapseBar() {
+    onNodeWithTag(EditScreenTags.BAR_DONE).performClick()
+}
+
+/** 커버에서 고른 도구의 하위 도구를 막대의 하위 도구 칩으로 고른다(펼친 줄이 넘치면 그 칩이 보이게 민 뒤 누른다) */
+fun SemanticsNodeInteractionsProvider.chooseCoverSubTool(subTool: SubTool) {
+    expandBarChip("subTool")
+    onNodeWithTag(EditScreenTags.subToolOption(subTool)).performScrollTo().performClick()
+}
+
 /** 상단 바의 [panel] 버튼(조정·레이어)을 누른다(켜고 끔). 커버·메인 화면 모두 같은 버튼이다. */
 fun SemanticsNodeInteractionsProvider.togglePanel(panel: MainPanel) {
     onNodeWithTag(EditScreenTags.panelToggle(panel)).performClick()
 }
+
+/**
+ * 글자가 한 줄로 잘리지 않고 다 보이는지. 옆으로 밀어 보는 줄 안의 글자는 폭 제한 없이 놓여 `hasVisualOverflow`가 늘 참이라
+ * (글 상자 폭이 무한대) 그것으로 보지 않고, 한 줄이며 놓인 폭이 글자 끝까지 닿는지 본다.
+ */
+fun TextLayoutResult.showsWholeLine(): Boolean =
+    lineCount == 1 && !didOverflowHeight && size.width + 1f >= getLineRight(0)

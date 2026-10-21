@@ -85,11 +85,13 @@ class EditToolsTest {
     fun compact_tapShowsOptions_tapAgainHides() {
         show(411, 800)
 
+        // 브러시의 칩은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편'). 다시 누르면 내려놓고 막대는 안내 글이다.
         brushTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
 
         brushTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
     }
 
     @Test
@@ -110,10 +112,12 @@ class EditToolsTest {
 
         selectTab.performTouchInput { longClick() }
 
-        // 길게 누른 뒤에 클릭이 일어났다면 도구가 내려놓여 옵션이 사라졌을 것이다
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertExists()
+        // 길게 누른 뒤에 클릭이 일어났다면 도구가 내려놓여 막대의 칸이 사라졌을 것이다
+        composeRule.onNodeWithTag(EditScreenTags.bar("mode")).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_RECT)).assertIsSelected()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
+        // 고른 하위 도구는 한 줄 막대의 하위 도구 칩에도 보인다(결정 기록 '커버 화면 개편')
+        composeRule.expandBarChip("subTool")
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
     }
 
@@ -289,6 +293,7 @@ class EditToolsTest {
         val tab = selectTab.fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("menu $menu should be above $tab", menu.bottom <= tab.top + 1f)
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
+        composeRule.expandBarChip("subTool")
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
     }
 

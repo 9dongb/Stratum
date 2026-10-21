@@ -14,6 +14,7 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
@@ -161,26 +162,33 @@ class SelectionToolTest {
     private fun openCoverTool() {
         show(411, 800)
         composeRule.chooseCoverTool(EditTool.Select)
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertIsDisplayed()
+        // 선택의 칸은 한 줄 막대에 있다(결정 기록 '커버 화면 개편')
+        composeRule.onNodeWithTag(EditScreenTags.bar("mode")).assertIsDisplayed()
     }
 
     @Test
     fun cover_optionsChangeTheSettings() {
         openCoverTool()
 
+        // 합치는 방법 칩을 펼쳐 고르면 칩 줄로 돌아온다. 페더 칩은 펼치면 슬라이더다.
+        composeRule.expandBarChip("mode")
         composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.ADD)).performClick()
+        composeRule.expandBarChip("feather")
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
+        composeRule.collapseBar()
         composeRule.runOnIdle {
             assertEquals(SelectionMode.ADD, options.mode)
             assertEquals(fractionToFeather(0.2f), options.feather, 0f)
         }
 
         // 자동 선택은 허용치와 이어진 곳만을 보인다
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_WAND)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).assertDoesNotExist()
+        composeRule.chooseCoverSubTool(SubTool.SELECT_WAND)
+        composeRule.onNodeWithTag(EditScreenTags.bar("feather")).assertDoesNotExist()
+        composeRule.expandBarChip("tolerance")
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        composeRule.collapseBar()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_CONTIGUOUS).performScrollTo().performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_CONTIGUOUS).assertIsOff()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_CONTIGUOUS).assertIsNotSelected()
         composeRule.runOnIdle {
             assertEquals(128, options.tolerance)
             assertEquals(false, options.contiguous)
@@ -191,6 +199,8 @@ class SelectionToolTest {
     fun actions_needASelection_exceptSelectAll() {
         openCoverTool()
 
+        // 동작은 동작 칩을 펼친 버튼 줄이다(결정 기록 '커버 화면 개편')
+        composeRule.expandBarChip("actions")
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).performScrollTo().assertIsEnabled().performClick()
         for (tag in listOf(EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL)) {
             composeRule.onNodeWithTag(tag).assertIsNotEnabled()
@@ -202,6 +212,7 @@ class SelectionToolTest {
     fun actions_withASelection_areSent() {
         show(411, 800, outline = square)
         composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.expandBarChip("actions")
 
         for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_NONE)) {
             composeRule.onNodeWithTag(tag).performScrollTo().performClick()
@@ -211,7 +222,7 @@ class SelectionToolTest {
     }
 
     /**
-     * 닫힌 화면은 옵션 칸이 캔버스 아래쪽 위에 겹쳐 뜨므로(결정 기록 '닫힌 화면 도구 옵션') 보이는 위쪽 자리를 누른다.
+     * 캔버스 위쪽 자리를 누른다(한 줄 막대는 캔버스 아래에 있어 겹치지 않는다, 결정 기록 '커버 화면 개편').
      * 화면에 맞춘 1000×1000 문서에서 그 자리의 문서 좌표도 함께 돌려준다.
      */
     private fun TouchInjectionScope.visiblePoint(): Pair<Offset, Offset> {
@@ -245,7 +256,7 @@ class SelectionToolTest {
     @Test
     fun dragWithLasso_sendsTheFingerPath() {
         openCoverTool()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).performClick()
+        composeRule.chooseCoverSubTool(SubTool.SELECT_LASSO)
 
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
             down(visiblePoint().first)
@@ -268,7 +279,7 @@ class SelectionToolTest {
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput { click(visiblePoint().first) }
         composeRule.runOnIdle { assertEquals(listOf("none"), actions.calls) }
 
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_WAND)).performClick()
+        composeRule.chooseCoverSubTool(SubTool.SELECT_WAND)
         var tapped = Offset.Zero
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
             val (point, document) = visiblePoint()
@@ -285,11 +296,11 @@ class SelectionToolTest {
     @Test
     fun aiSelect_hasNoSliders_readsAhead_andATapSendsTheObjectPoint() {
         openCoverTool()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_AI)).performClick()
+        composeRule.chooseCoverSubTool(SubTool.SELECT_AI)
 
         // 페더·허용치가 없고(설명 줄도 없다, 사용자 피드백 8차 1-7), 고르자마자 그림을 미리 읽는다
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("tolerance")).assertDoesNotExist()
         composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }
 
         // 끌면 무시하고, 누르면 그 자리의 물체를 고른다
@@ -314,8 +325,10 @@ class SelectionToolTest {
     @Test
     fun cover_theFiveSubToolNames_fitOnOneRow() {
         openCoverTool()
+        // 하위 도구 칩을 펼친 줄의 칩마다 이름이 잘리지 않는다(칩은 이름 폭이고 줄은 옆으로 밀어 본다)
+        composeRule.expandBarChip("subTool")
 
-        // 칸이 좁으면 글자는 칸 폭으로 놓이고 넘친 부분이 잘려 보인다('Rectangl'). 글자 배치가 넘쳤는지 본다.
+        // 칸이 좁으면 글자는 칸 폭으로 놓이고 넘친 부분이 잘려 보인다('Rectangl'). 글자가 한 줄로 다 놓였는지 본다.
         for (subTool in EditTool.Select.subTools) {
             val label = composeRule.onNode(
                 hasText(composeRule.activity.getString(subTool.shortLabel)) and hasAnyAncestor(hasTestTag(EditScreenTags.subToolOption(subTool))),
@@ -323,7 +336,7 @@ class SelectionToolTest {
             ).fetchSemanticsNode()
             val layouts = mutableListOf<TextLayoutResult>()
             label.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
-            assertFalse("$subTool label is cut", layouts.single().hasVisualOverflow)
+            assertTrue("$subTool label is cut", layouts.single().showsWholeLine())
         }
     }
 
@@ -522,9 +535,10 @@ class SelectionToolTest {
     }
 
     @Test
-    fun cover_keepsTheActionsInTheOptions_withoutTheBar() {
+    fun cover_keepsTheActionsInTheToolBar_withoutTheActionBar() {
         openCoverTool()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertDoesNotExist()
-        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.SELECTION_OPTIONS))).assertExists()
+        composeRule.expandBarChip("actions")
+        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.COVER_TOOL_BAR))).assertExists()
     }
 }

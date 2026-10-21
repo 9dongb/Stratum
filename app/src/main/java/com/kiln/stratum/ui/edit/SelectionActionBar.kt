@@ -32,9 +32,6 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun SelectionActionBar(controls: SelectionControls, screenCenterX: Float, modifier: Modifier = Modifier, onInset: (Int) -> Unit = {}) {
-    val ready = !controls.busy
-    val selected = ready && controls.hasSelection
-    val actions = controls.actions
     val colors = StratumTheme.colors
     val currentOnInset by rememberUpdatedState(onInset)
     DisposableEffect(Unit) { onDispose { currentOnInset(0) } }
@@ -48,17 +45,7 @@ fun SelectionActionBar(controls: SelectionControls, screenCenterX: Float, modifi
                 border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
                 shadowElevation = ActionBarElevation
             ) {}
-            BarButton(R.drawable.ic_select_all, R.string.selection_all, R.string.selection_all_description, ready, EditScreenTags.SELECTION_ALL, actions::all)
-            BarButton(R.drawable.ic_deselect, R.string.selection_none, null, selected, EditScreenTags.SELECTION_NONE, actions::none)
-            BarButton(R.drawable.ic_flip_to_front, R.string.selection_invert, null, selected, EditScreenTags.SELECTION_INVERT, actions::invert)
-            BarButton(R.drawable.ic_delete, R.string.selection_delete, R.string.selection_delete_description, selected, EditScreenTags.SELECTION_DELETE, actions::delete)
-            BarButton(R.drawable.ic_content_copy, R.string.selection_copy, R.string.selection_copy_description, selected, EditScreenTags.SELECTION_COPY) {
-                actions.copyToLayer(cut = false)
-            }
-            BarButton(R.drawable.ic_content_cut, R.string.selection_cut, R.string.selection_cut_description, selected, EditScreenTags.SELECTION_CUT) {
-                actions.copyToLayer(cut = true)
-            }
-            BarButton(R.drawable.ic_auto_awesome, R.string.selection_ai_fill, R.string.selection_ai_fill_description, selected, EditScreenTags.SELECTION_AI_FILL, actions::aiFill)
+            SelectionActionButtons(controls)
         },
         modifier = modifier
     ) { measurables, constraints ->
@@ -92,17 +79,37 @@ fun SelectionActionBar(controls: SelectionControls, screenCenterX: Float, modifi
     }
 }
 
-/** 작업 표시줄의 버튼: 아이콘 아래 짧은 이름(커버 옵션의 동작 버튼과 같다). [description]이 있으면 화면 읽기 기능은 그 긴 이름으로 읽는다. */
+/**
+ * 선택 동작 버튼 일곱: 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기. 모두 선택은 늘, 나머지는 고른 곳이 있을 때만 켠다.
+ * 메인 화면 작업 표시줄([SelectionActionBar])과 커버 한 줄 막대의 동작 줄(결정 기록 '커버 화면 개편', [compact])이 같이 쓴다.
+ */
 @Composable
-private fun BarButton(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    ToolActionButton(
-        icon = icon,
-        label = stringResource(label),
-        onClick = onClick,
-        modifier = Modifier.testTag(tag),
-        enabled = enabled,
-        description = description?.let { stringResource(it) }
-    )
+internal fun SelectionActionButtons(controls: SelectionControls, compact: Boolean = false) {
+    val ready = !controls.busy
+    val selected = ready && controls.hasSelection
+    val actions = controls.actions
+    @Composable
+    fun button(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) =
+        ToolActionButton(
+            icon = icon,
+            label = stringResource(label),
+            onClick = onClick,
+            modifier = Modifier.testTag(tag),
+            enabled = enabled,
+            description = description?.let { stringResource(it) },
+            compact = compact
+        )
+    button(R.drawable.ic_select_all, R.string.selection_all, R.string.selection_all_description, ready, EditScreenTags.SELECTION_ALL, actions::all)
+    button(R.drawable.ic_deselect, R.string.selection_none, null, selected, EditScreenTags.SELECTION_NONE, actions::none)
+    button(R.drawable.ic_flip_to_front, R.string.selection_invert, null, selected, EditScreenTags.SELECTION_INVERT, actions::invert)
+    button(R.drawable.ic_delete, R.string.selection_delete, R.string.selection_delete_description, selected, EditScreenTags.SELECTION_DELETE, actions::delete)
+    button(R.drawable.ic_content_copy, R.string.selection_copy, R.string.selection_copy_description, selected, EditScreenTags.SELECTION_COPY) {
+        actions.copyToLayer(cut = false)
+    }
+    button(R.drawable.ic_content_cut, R.string.selection_cut, R.string.selection_cut_description, selected, EditScreenTags.SELECTION_CUT) {
+        actions.copyToLayer(cut = true)
+    }
+    button(R.drawable.ic_auto_awesome, R.string.selection_ai_fill, R.string.selection_ai_fill_description, selected, EditScreenTags.SELECTION_AI_FILL, actions::aiFill)
 }
 
 /** 작업 표시줄 버튼 사이 */

@@ -118,9 +118,10 @@ class MoveToolTest {
         assertTrue("$move should be left of $eraser", move.right <= eraser.left + 1f)
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).performClick()
 
-        // 고를 옵션이 없어 옵션 칸을 띄우지 않는다(설명 줄도 뺌, 사용자 피드백 8차 1-7)
+        // 고를 옵션이 없어 옵션 칸을 띄우지 않고(설명 줄도 뺌, 사용자 피드백 8차 1-7), 한 줄 막대에는 도구 이름만 보인다(결정 기록 '커버 화면 개편')
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.tool_move_short))
     }
 
     @Test

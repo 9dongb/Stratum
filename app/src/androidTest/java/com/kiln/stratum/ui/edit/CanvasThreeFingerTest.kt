@@ -398,7 +398,7 @@ class CanvasThreeFingerTest {
     fun editScreen_swipes_changeTheChosenToolsOwnSettings() {
         showEditScreen(tool = EditTool.Eraser)
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS)
-        // 닫힌 화면은 옵션 칸이 캔버스 아래쪽 위에 겹쳐 뜨므로(결정 기록 '닫힌 화면 도구 옵션') 보이는 위쪽에서 민다
+        // 캔버스 위쪽에서 민다(어느 도구든 옵션은 캔버스 아래 한 줄 막대에 있다)
         canvas.performTouchInput { threeFingerSwipe(Offset(0f, -200f), at = Offset(centerX, height * 0.3f)) }
         composeRule.runOnIdle {
             assertTrue("${eraser.size}", eraser.size > 80f)
@@ -417,7 +417,7 @@ class CanvasThreeFingerTest {
     @Test
     fun editScreen_aiRemove_swipesChangeOnlyTheSize() {
         showEditScreen(tool = EditTool.Retouch)
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).performClick()
+        composeRule.chooseCoverSubTool(SubTool.RETOUCH_REMOVE)
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS)
 
         // AI 제거는 경도가 없어 좌우로 밀어도 리터칭의 경도(다른 하위 도구가 함께 씀)는 그대로다

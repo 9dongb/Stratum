@@ -104,6 +104,7 @@ fun SecondaryButton(
 /**
  * 아이콘 아래에 짧은 이름이 있는 동작 버튼(회전·뒤집기, 선택 동작). 아이콘·이름은 보조 색이고 꺼지면 비활성 색이다.
  * M3 글자 버튼과 같은 여백이라 줄 배치가 그대로다. [description]이 있으면 화면 읽기 기능은 그 긴 이름으로 읽는다.
+ * [compact]면 위아래 여백을 4dp로 줄여(높이 약 52dp) 커버 화면 한 줄 막대(56dp) 안에 이름이 잘리지 않고 들어간다.
  */
 @Composable
 fun ToolActionButton(
@@ -115,13 +116,15 @@ fun ToolActionButton(
     minWidth: Dp = 64.dp,
     maxLines: Int = 1,
     iconRotation: Float = 0f,
-    description: String? = null
+    description: String? = null,
+    compact: Boolean = false
 ) {
     val colors = StratumTheme.colors
     TextButton(
         onClick = onClick,
         enabled = enabled,
         shape = StratumShapes.Control,
+        contentPadding = if (compact) StratumDimens.ButtonPadding else ButtonDefaults.TextButtonContentPadding,
         colors = ButtonDefaults.textButtonColors(contentColor = colors.textSecondary, disabledContentColor = colors.textDisabled),
         modifier = modifier
             .widthIn(min = minWidth)

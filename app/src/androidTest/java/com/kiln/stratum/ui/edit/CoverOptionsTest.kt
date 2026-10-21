@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -25,8 +26,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 닫힌 화면 공통 규칙 ①(결정 기록 '닫힌 화면 도구 옵션'): 도구·조정·레이어 탭을 골라도 옵션 칸은 캔버스 위에 겹쳐 뜨고,
- * 캔버스 크기(보던 이미지의 크기·자리)는 그대로다. 자르기(새 창)는 빠진다.
+ * 닫힌 화면 공통 규칙(결정 기록 '커버 화면 개편', 전 '닫힌 화면 도구 옵션'): 아래는 늘 한 줄 막대 + 탭 줄이고 캔버스는 그 위만 쓴다.
+ * 그래서 도구·조정·레이어를 고르거나 바꾸거나 닫아도 캔버스 크기(보던 이미지의 크기·자리)는 그대로다.
+ * 아직 막대로 옮기지 않은 것(조정·레이어)과 더보기 줄은 캔버스 아래쪽 위에 겹쳐 뜬다. 자르기(새 창)는 빠진다.
  */
 @RunWith(AndroidJUnit4::class)
 class CoverOptionsTest {
@@ -57,47 +59,63 @@ class CoverOptionsTest {
 
     private fun canvasBounds() = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
 
+    private fun assertOverlapsTheCanvasBottom(name: String, tag: String, canvas: androidx.compose.ui.geometry.Rect) {
+        val sheet = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$name $sheet should overlap $canvas", sheet.top < canvas.bottom && sheet.bottom <= canvas.bottom + 1f)
+    }
+
     @Test
-    fun toolsAdjustAndLayers_overlayTheCanvas_andKeepItsSize() {
+    fun theBarSitsBelowTheCanvas_andTheCanvasKeepsItsSize() {
         show()
         // 첫 화면이 자리 잡은 뒤(상단 바가 카메라 구멍을 피해 내려오는 등)부터 본다
         composeRule.waitForIdle()
         composeRule.runOnIdle { canvasSizes.clear() }
         val before = canvasBounds()
+        // 막대는 캔버스 바로 아래(겹치지 않음)이고, 도구가 없으면 안내 글이다
+        val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(before.bottom, bar.top, 1f)
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
 
-        // 도구 탭, 상단 바의 조정·레이어 버튼(결정 기록 '커버 화면 개편'), 레이어를 끄면 다시 고른 도구, 다른 도구
+        // 막대로 옮긴 도구는 옵션 칸 없이 막대만 바뀐다(이동은 옵션이 없다)
+        for (tool in listOf(EditTool.Brush, EditTool.Select, EditTool.Retouch, EditTool.Tone, EditTool.Mosaic, EditTool.Text, EditTool.Move)) {
+            tab(tool)
+            composeRule.waitForIdle()
+            assertEquals("$tool canvas", before, canvasBounds())
+            composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
+        }
+        // 아직 옮기지 않은 것(상단 바의 조정·레이어)은 캔버스 아래쪽 위에 겹쳐 뜬다
         val steps = listOf<Pair<String, () -> Unit>>(
-            "select" to { tab(EditTool.Select) },
             "adjust" to { composeRule.togglePanel(MainPanel.ADJUST) },
-            "layers" to { composeRule.togglePanel(MainPanel.LAYERS) },
-            "layers off" to { composeRule.togglePanel(MainPanel.LAYERS) },
-            "brush" to { tab(EditTool.Brush) }
+            "layers" to { composeRule.togglePanel(MainPanel.LAYERS) }
         )
         for ((name, step) in steps) {
             step()
             composeRule.waitForIdle()
             assertEquals("$name canvas", before, canvasBounds())
-            // 옵션 칸은 캔버스 아래쪽 위에 겹쳐 있다
-            val sheet = composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
-            assertTrue("$name sheet $sheet should overlap $before", sheet.top < before.bottom && sheet.bottom <= before.bottom + 1f)
+            assertOverlapsTheCanvasBottom(name, EditScreenTags.COVER_OPTIONS, before)
         }
-        // 탭을 닫아도 그대로다(하위 도구가 있는 선택은 다시 누르면 메뉴라, 하위 도구가 없는 브러시로 닫는다)
-        tab(EditTool.Brush)
+        composeRule.togglePanel(MainPanel.LAYERS)
+        // 더보기 줄도 겹쳐 뜨고, 더보기 칸을 다시 누르면 닫힌다
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
+        assertOverlapsTheCanvasBottom("more", EditScreenTags.COVER_MORE_TOOLS, before)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
         assertEquals(before, canvasBounds())
-        // 탭을 고르고 바꾸고 닫는 동안 캔버스 크기가 한 번도 바뀌지 않았다(축소본을 다시 그리지 않음)
+        // 고르고 바꾸고 닫는 동안 캔버스 크기가 한 번도 바뀌지 않았다(축소본을 다시 그리지 않음)
         composeRule.runOnIdle { assertTrue("canvas sizes $canvasSizes", canvasSizes.isEmpty()) }
     }
 
     @Test
-    fun crop_isANewWindow_soTheCanvasFitsAboveItsOptions() {
+    fun crop_isANewWindow_withoutTheBarOrTheTabs() {
         show()
-        val before = canvasBounds()
         tab(EditTool.Transform)
         composeRule.waitForIdle()
-        val cropping = canvasBounds()
-        assertTrue("$cropping should be shorter than $before", cropping.height < before.height)
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_BAR).assertDoesNotExist()
+        val canvas = canvasBounds()
+        val options = composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$canvas should end above the crop options $options", canvas.bottom <= options.top + 1f)
     }
 }

@@ -76,13 +76,29 @@ class EditScreenBackTest {
     }
 
     @Test
+    fun cover_backFoldsAnOpenChip_thenClosesTheTool() {
+        // 커버 한 줄 막대(결정 기록 '커버 화면 개편'): 칩을 펼쳤으면 뒤로 가기는 칩 줄로 돌아가고, 다음 뒤로 가기가 도구를 닫는다
+        show(COVER)
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.expandBarChip("size")
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertExists()
+
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, homeBacks) }
+    }
+
+    @Test
     fun cover_backClosesTheTool_thenGoesHome() {
         show(COVER)
         composeRule.chooseCoverTool(EditTool.Brush)
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
 
         back()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(0, homeBacks) }
 
         back()

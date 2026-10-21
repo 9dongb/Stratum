@@ -250,6 +250,8 @@ fun EditScreen(
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 커버 화면 더보기 줄(탭 줄에 없는 도구)이 열려 있는지(결정 기록 '커버 화면 개편'). 고르는 메뉴라 잠깐만 뜬다.
     var coverMoreOpen by rememberSaveable { mutableStateOf(false) }
+    // 커버 화면 한 줄 막대에서 펼친 칩(슬라이더·고를 것·동작 줄, 결정 기록 '커버 화면 개편')
+    val coverBar = rememberCoverBarState()
     // 크기·단단함 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
     val sizePreview = rememberSizePreviewState()
     // 두 손가락·세 손가락 톡의 짧은 알림(결정 기록 '제스처 알림')
@@ -444,6 +446,13 @@ fun EditScreen(
         // 메인 화면 패널은 뒤로 가기로 닫지 않는다(사용자 결정). 자르기 중에는 패널을 숨기므로 보지 않는다.
         val coverPanel = floating.panel.takeIf { widthClass == WidthClass.Compact && !cropMode }
         BackHandler(enabled = coverPanel != null, onBack = floating::closePanel)
+        // 커버 한 줄 막대의 내용(도구·하위 도구·조정). 펼친 칩은 이 내용에 딸려, 바뀌면 곧바로 칩 줄이 보인다(결정 기록 '커버 화면 개편').
+        val activeMode = activeTool?.let { selection.modeOf(it) }
+        val barContent = "${activeTool?.name}/${activeMode?.name}/${floating.panel == MainPanel.ADJUST}"
+        // 내용이 바뀌면 지난 내용에서 펼친 칩을 잊는다(같은 도구로 돌아와도 칩 줄부터). 화면이 다시 만들어질 때(접기·펼치기)는 그대로 둔다.
+        LaunchedEffect(barContent) { if (coverBar.owner != null && coverBar.owner != barContent) coverBar.collapse() }
+        // 칩을 펼쳤으면(슬라이더·고를 것·동작 줄) 뒤로 가기는 칩 줄로 돌아간다(조정·레이어·도구보다 먼저)
+        BackHandler(enabled = widthClass == WidthClass.Compact && coverBar.expandedFor(barContent) != null && !cropMode, onBack = coverBar::collapse)
         // AI 제거에서 톡 눌러 고른 물체(지금 보이는 문서의 것)가 있으면 뒤로 가기는 그것부터 버린다(그다음 도구를 닫는다)
         val shownPick = removePick?.takeIf {
             it.revision == ready?.revision && activeTool == EditTool.Retouch && selection.modeOf(EditTool.Retouch) == SubTool.RETOUCH_REMOVE
@@ -457,7 +466,6 @@ fun EditScreen(
         val moreShown = coverMoreOpen && widthClass == WidthClass.Compact && !cropMode
         BackHandler(enabled = moreShown) { coverMoreOpen = false }
         // 도구·하위 도구·배치가 바뀌거나, 자르기·유동화를 시작하거나, 다른 크기의 문서를 보면 옵션 창을 닫는다(칸이 바뀌거나 사라진다)
-        val activeMode = activeTool?.let { selection.modeOf(it) }
         LaunchedEffect(activeTool, activeMode, widthClass, cropMode, ready?.documentSize, liquify != null) { floating.closeFlyout() }
         // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 옵션 창을 닫는다.
         // 패널은 그대로 둔다(창·작업 모드 아래에 남았다가, 닫히면 다시 보인다)
@@ -591,28 +599,27 @@ fun EditScreen(
             EditTool.Mosaic -> mosaicOptions.brush
             else -> null
         }
-        // 이동 도구는 고를 옵션이 없어 커버에 옵션 칸을 띄우지 않는다(사용자 피드백 8차 1-7: 설명 줄도 뺌)
-        val toolOptions: (@Composable () -> Unit)? = activeTool?.takeIf { it != EditTool.Move }?.let {
-            {
-                ToolOptions(
-                    selection,
-                    onChoose = chooseSubTool,
-                    brush = brushControls,
-                    text = textControls,
-                    select = selectionControls,
-                    retouch = retouchControls,
-                    tone = toneControls,
-                    blur = blurControls,
-                    mosaic = mosaicControls
-                )
-            }
+        // 커버 화면 한 줄 막대의 칩(결정 기록 '커버 화면 개편'). 값·할 일·이름표는 메인 띠의 칸과 같다.
+        val coverBarItems: List<BarItem> = if (widthClass != WidthClass.Compact) {
+            emptyList()
+        } else {
+            when (activeTool) {
+                EditTool.Brush, EditTool.Eraser -> brushControls?.let { brushBar(it) }
+                EditTool.Text -> textControls?.let { textBar(it) }
+                EditTool.Select -> selectionControls?.let { selectionBar(checkNotNull(selection.modeOf(EditTool.Select)), it, chooseSubTool) }
+                EditTool.Retouch -> retouchControls?.let { retouchBar(checkNotNull(selection.modeOf(EditTool.Retouch)), it, chooseSubTool) }
+                EditTool.Tone -> toneControls?.let { toneBar(checkNotNull(selection.modeOf(EditTool.Tone)), it, chooseSubTool) }
+                EditTool.Blur -> blurControls?.let { blurBar(checkNotNull(selection.modeOf(EditTool.Blur)), it, chooseSubTool) }
+                EditTool.Mosaic -> mosaicControls?.let { mosaicBar(it) }
+                else -> null
+            }.orEmpty()
         }
-        // 커버 화면 옵션 칸의 내용: 상단 바 버튼으로 연 조정·레이어(고른 도구보다 위, 결정 기록 '커버 화면 개편'), 없으면 고른 도구의 옵션.
-        // 더보기 줄이 떠 있는 동안은 더보기 줄을 보인다(아래 floating).
+        // 커버 화면에서 캔버스 아래쪽 위에 겹쳐 뜨는 칸: 상단 바 버튼으로 연 조정·레이어(결정 기록 '커버 화면 개편').
+        // 도구의 옵션은 겹치지 않는 한 줄 막대에 있다. 더보기 줄이 떠 있는 동안은 더보기 줄을 보인다(아래 floating).
         val coverSheet: (@Composable () -> Unit)? = when (coverPanel) {
             MainPanel.ADJUST -> adjustControls?.let { controls -> { AdjustCompact(controls, adjustItem, onItem = { adjustItem = it }) } }
             MainPanel.LAYERS -> layerControls?.let { controls -> { LayerCompact(controls) } }
-            null -> toolOptions
+            null -> null
         }
         // 닫힌 화면 공통 규칙(결정 기록 '닫힌 화면 도구 옵션'): 옵션 칸은 캔버스를 줄이지 않고 아래쪽 위에 겹쳐 뜬다.
         // 그래서 탭을 고르거나 바꾸거나 닫아도 보던 이미지의 크기·자리가 그대로다. 자르기(새 창)는 따로다.
@@ -655,13 +662,13 @@ fun EditScreen(
         LaunchedEffect(subToolMenu.isOpen) { if (subToolMenu.isOpen) floating.closeFlyout() }
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
         // 선택 도구의 동작(모두·해제·반전·지우기·복사·잘라내기·AI 채우기)은 메인 화면에서 화면 아래 가운데 작업 표시줄이다(사용자 피드백 10차 1)
-        val selectionBar = selectionControls?.takeIf { widthClass != WidthClass.Compact }
-        val selectionBarInset = with(LocalDensity.current) { (if (selectionBar != null) selectionBarPx else 0).toDp() }
+        val selectionActionBar = selectionControls?.takeIf { widthClass != WidthClass.Compact }
+        val selectionBarInset = with(LocalDensity.current) { (if (selectionActionBar != null) selectionBarPx else 0).toDp() }
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
             // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다. 선택 도구의 작업 표시줄이 있으면 그 위까지만 늘어난다.
             if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(bottom = selectionBarInset))
-            selectionBar?.let {
+            selectionActionBar?.let {
                 SelectionActionBar(it, screenCenterX, Modifier.fillMaxSize().windowInsetsPadding(insets)) { inset -> selectionBarPx = inset }
             }
             if (stripItems != null && railTool != null) {
@@ -954,7 +961,8 @@ fun EditScreen(
                             )
                         }
                     } else {
-                        // 캔버스는 상단 바와 탭 줄 사이 전체를 늘 차지하고, 옵션 칸은 그 아래쪽 위에 겹쳐 뜬다(이미지 크기·자리 그대로)
+                        // 아래는 늘 한 줄 막대 + 탭 줄이고 캔버스는 그 위만 쓴다(결정 기록 '커버 화면 개편'). 그래서 도구를 바꾸거나 닫아도 사진 크기·자리가 그대로다.
+                        // 아직 옮기지 않은 조정·레이어와 더보기 줄은 전처럼 캔버스 아래쪽 위에 겹쳐 뜬다.
                         EditCanvas(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
@@ -966,6 +974,8 @@ fun EditScreen(
                             onMagicWand = useMagicWand,
                             floating = {
                                 val sheetModifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { coverSheetPx = it.height }
+                                // 겹친 칸이 사라지면 그 높이를 지운다(가져올 곳 표시를 놓을 때 지난 높이만큼 비키지 않게)
+                                if (moreShown || coverSheet != null) DisposableEffect(Unit) { onDispose { coverSheetPx = 0 } }
                                 if (moreShown) {
                                     // 더보기 줄: 탭 줄에 없는 도구. 고르면 닫고, 조정을 보던 중이면 끈다(같은 자리에 도구 옵션을 보이게).
                                     CoverMoreTools(
@@ -982,6 +992,14 @@ fun EditScreen(
                                     ToolOptionsSheet(coverSheet, maxHeight = sheetMaxHeight, modifier = sheetModifier)
                                 }
                             }
+                        )
+                        CoverToolBar(
+                            items = coverBarItems,
+                            state = coverBar,
+                            content = barContent,
+                            onClose = activeTool?.let { { selection.close() } },
+                            // 도구가 없으면 안내 글, 칩이 없는 도구(이동)는 도구 이름
+                            empty = activeTool?.let { stringResource(it.shortLabel) } ?: stringResource(R.string.bar_hint_choose_tool)
                         )
                         ToolTabBar(
                             selection,

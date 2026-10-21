@@ -163,11 +163,12 @@ private fun ColorSlotButton(controls: ColorControls, slot: ColorSlot) {
 }
 
 /**
- * 색 칸: 무지개 테두리 동그라미('색 고르기'를 알림)와 이름([label]). 누르면 [onClick](팔레트를 연다). 누르는 영역은 48dp다.
- * 색 줄의 전경색·배경색과 글자 창의 색(사용자 피드백 8차 1-6)이 같이 쓴다. 화면 읽기 기능은 [description]('전경색, #000000')을 한 번에 읽는다.
+ * 색 칸: 무지개 테두리 동그라미('색 고르기'를 알림)와 이름([label], 없으면 동그라미만). 누르면 [onClick](팔레트를 연다). 누르는 영역은 48dp다.
+ * 색 줄의 전경색·배경색, 글자 창의 색(사용자 피드백 8차 1-6), 커버 한 줄 막대([ColorButtons])가 같이 쓴다.
+ * 화면 읽기 기능은 [description]('전경색, #000000')을 한 번에 읽는다.
  */
 @Composable
-internal fun ColorSwatchButton(color: Int, label: String, description: String, tag: String, onClick: () -> Unit) {
+internal fun ColorSwatchButton(color: Int, label: String?, description: String, tag: String, onClick: () -> Unit) {
     val chooseLabel = stringResource(R.string.color_choose)
     Row(
         modifier = Modifier
@@ -182,7 +183,8 @@ internal fun ColorSwatchButton(color: Int, label: String, description: String, t
                 }
             }
             .clickable(onClickLabel = chooseLabel, role = Role.Button, onClick = onClick)
-            .padding(start = 4.dp, end = 12.dp),
+            // 이름이 없으면 동그라미 양옆을 넓혀 누르는 영역을 48dp로 둔다
+            .padding(start = if (label == null) 8.dp else 4.dp, end = if (label == null) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -192,8 +194,41 @@ internal fun ColorSwatchButton(color: Int, label: String, description: String, t
                 .padding(4.dp)
                 .background(Color(color or OPAQUE), StratumShapes.Dot)
         )
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
+        if (label != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
+        }
+    }
+}
+
+/**
+ * 커버 화면 한 줄 막대의 색 버튼들(결정 기록 '커버 화면 개편'): 전경색·배경색(이름 없이 무지개 테두리 동그라미, 누르면 그 색의 팔레트),
+ * 바꾸기, 스포이드. [ColorRow]와 같은 이름표·화면 읽기 이름이고, 이름 글자만 없어 좁다. 누르는 영역은 모두 48dp다.
+ * 사용자 피드백 7차("한번 탭했을 때 두개의 색(전경색, 배경색)이 바로 나오고 ... 각 색을 누르면 색 고르기 창이 나오도록")를 막대에서도 지킨다.
+ */
+@Composable
+internal fun ColorButtons(controls: ColorControls) {
+    for (slot in ColorSlot.entries) {
+        val color = controls.colors[slot]
+        ColorSwatchButton(
+            color = color,
+            label = null,
+            description = stringResource(colorSlotDescription(slot), colorHex(color)),
+            tag = EditScreenTags.colorSlot(slot),
+            onClick = { controls.onOpenPalette(slot) }
+        )
+    }
+    StratumIconButton(onClick = controls.onSwap, modifier = Modifier.testTag(EditScreenTags.COLOR_SWAP)) {
+        Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.color_swap))
+    }
+    controls.onEyedropper?.let { toggle ->
+        StratumIconToggleButton(
+            checked = controls.eyedropperOn,
+            onCheckedChange = { toggle() },
+            modifier = Modifier.testTag(EditScreenTags.COLOR_EYEDROPPER)
+        ) {
+            Icon(painterResource(R.drawable.ic_colorize), contentDescription = stringResource(R.string.color_eyedropper))
+        }
     }
 }
 

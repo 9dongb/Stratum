@@ -82,10 +82,11 @@ class EffectToolsTest {
     private var blur by mutableStateOf(BlurOptions())
     private var mosaic by mutableStateOf(MosaicOptions())
 
-    private fun showBlurOptions(mode: SubTool, widthDp: Int = 411) {
+    /** 커버 한 줄 막대에 흐림의 칸을 놓는다(결정 기록 '커버 화면 개편') */
+    private fun showBlurOptions(mode: SubTool) {
         composeRule.setContent {
-            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                StratumTheme { BlurToolOptions(mode, BlurControls(blur) { blur = it }, onChoose = {}) }
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme { CoverToolBar(blurBar(mode, BlurControls(blur) { blur = it }, onChoose = {}), rememberCoverBarState()) }
             }
         }
     }
@@ -93,7 +94,7 @@ class EffectToolsTest {
     private fun showMosaicOptions() {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
-                StratumTheme { MosaicToolOptions(MosaicControls(mosaic) { mosaic = it }) }
+                StratumTheme { CoverToolBar(mosaicBar(MosaicControls(mosaic) { mosaic = it }), rememberCoverBarState()) }
             }
         }
     }
@@ -106,32 +107,36 @@ class EffectToolsTest {
     )
 
     @Test
-    fun blurOptions_haveSizeHardnessStrength_thenTheSubToolsAtTheBottom() {
+    fun blurBar_hasTheSubToolThenSizeHardnessStrength() {
         showBlurOptions(SubTool.EFFECT_SHARPEN)
 
+        // 칸은 하위 도구 → 크기 → 경도 → 강도(띠와 같은 규칙, 사용자 피드백 9·10차)
+        val lefts = composeRule.barChipLefts(listOf("subTool", "size", "hardness", "strength"))
+        assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
+        composeRule.expandBarChip("subTool")
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).assertIsSelected()
-        // 슬라이더는 크기 → 경도 → 강도(사용자 피드백 9차), 하위 도구 줄은 맨 아래(8차 1-1). 설명 줄은 없다(8차 1-7).
-        val tops = listOf(EditScreenTags.BLUR_SIZE, EditScreenTags.BLUR_HARDNESS, EditScreenTags.BLUR_STRENGTH).map {
-            composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
-        }
-        assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
-        val sharpen = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$sharpen should be below the sliders", sharpen.top >= tops.last())
     }
 
     @Test
     fun blurOptions_change_andStrengthNeverGoesToZero() {
         showBlurOptions(SubTool.EFFECT_BLUR)
 
+        composeRule.expandBarChip("strength")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0.3f) }
+        composeRule.collapseBar()
+        composeRule.expandBarChip("size")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(150f)) }
+        composeRule.collapseBar()
+        composeRule.expandBarChip("hardness")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_HARDNESS).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.collapseBar()
         composeRule.runOnIdle {
             assertEquals(0.3f, blur.strength, 0.001f)
             assertEquals(150f, blur.brush.size, 0f)
             assertEquals(0.7f, blur.brush.hardness, 0.001f)
         }
 
+        composeRule.expandBarChip("strength")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.runOnIdle { assertEquals(0.01f, blur.strength, 0.0001f) }
     }
@@ -140,14 +145,16 @@ class EffectToolsTest {
     fun blurOptions_offerSmudge() {
         showBlurOptions(SubTool.EFFECT_SMUDGE)
 
+        composeRule.onNodeWithTag(EditScreenTags.bar("strength")).assertIsDisplayed()
+        composeRule.expandBarChip("subTool")
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SMUDGE)).assertIsSelected()
-        composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertIsDisplayed()
     }
 
     @Test
     fun mosaicOptions_changeTheCellOnALogScale() {
         showMosaicOptions()
 
+        composeRule.expandBarChip("cell")
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_CELL).performSemanticsAction(SemanticsActions.SetProgress) { it(cellToFraction(40)) }
         composeRule.runOnIdle { assertEquals(40, mosaic.cell) }
         // 양 끝은 2px·512px
@@ -221,12 +228,13 @@ class EffectToolsTest {
             }
         }
 
+        // 한 줄 막대에 그 도구의 칸이 보인다(결정 기록 '커버 화면 개편')
         composeRule.chooseCoverTool(EditTool.Blur)
-        composeRule.onNodeWithTag(EditScreenTags.BLUR_OPTIONS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("strength")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.BLUR_OVERLAY).assertExists()
 
         composeRule.chooseCoverTool(EditTool.Mosaic)
-        composeRule.onNodeWithTag(EditScreenTags.MOSAIC_OPTIONS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("cell")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_OVERLAY).assertExists()
     }
 

@@ -124,3 +124,20 @@ fun Modifier.scrollFadeEdges(state: ScrollState, color: Color, length: Dp = 24.d
         drawRect(Brush.verticalGradient(listOf(clear, color), startY = top, endY = size.height), Offset(0f, top), Size(size.width, fade))
     }
 }
+
+/**
+ * 가로로 밀어 보는 줄의 끝을 흐리게 그린다([scrollFadeEdges]의 가로판). 더 볼 것이 있는 쪽 끝만 [length]만큼 바탕색 [color]로 흐려진다.
+ * 커버 화면 한 줄 막대처럼 칩이 넘쳐 옆으로 밀어 보는 줄에 쓴다(결정 기록 '커버 화면 개편').
+ */
+fun Modifier.horizontalScrollFadeEdges(state: ScrollState, color: Color, length: Dp = 24.dp): Modifier = drawWithContent {
+    drawContent()
+    val fade = length.toPx().coerceAtMost(size.width / 2)
+    val clear = color.copy(alpha = 0f)
+    if (state.canScrollBackward) {
+        drawRect(Brush.horizontalGradient(listOf(color, clear), startX = 0f, endX = fade), Offset.Zero, Size(fade, size.height))
+    }
+    if (state.canScrollForward) {
+        val left = size.width - fade
+        drawRect(Brush.horizontalGradient(listOf(clear, color), startX = left, endX = size.width), Offset(left, 0f), Size(fade, size.height))
+    }
+}

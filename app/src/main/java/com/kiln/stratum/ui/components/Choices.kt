@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -78,6 +80,46 @@ fun StratumFilterChip(
             disabledSelectedBorderColor = colors.divider,
             borderWidth = StratumDimens.Divider,
             selectedBorderWidth = StratumDimens.Divider
+        )
+    )
+}
+
+/**
+ * 누르면 무언가를 여는 칩(커버 한 줄 막대의 값·고르기·동작 칩, 결정 기록 '커버 화면 개편'). 모양은 고르지 않은 [StratumFilterChip]과 같고
+ * (테두리형 모서리 8dp, 높이 32dp, 누르는 영역 48dp), 고르는 칩이 아니라 화면 읽기 기능이 버튼으로 읽는다.
+ */
+@Composable
+fun StratumActionChip(
+    onClick: () -> Unit,
+    label: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null
+) {
+    val colors = StratumTheme.colors
+    AssistChip(
+        onClick = onClick,
+        label = label,
+        modifier = modifier,
+        enabled = enabled,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        shape = StratumShapes.Control,
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = Color.Transparent,
+            labelColor = colors.textSecondary,
+            leadingIconContentColor = colors.textSecondary,
+            trailingIconContentColor = colors.textSecondary,
+            disabledLabelColor = colors.textDisabled,
+            disabledLeadingIconContentColor = colors.textDisabled,
+            disabledTrailingIconContentColor = colors.textDisabled
+        ),
+        border = AssistChipDefaults.assistChipBorder(
+            enabled = enabled,
+            borderColor = colors.fieldBorder,
+            disabledBorderColor = colors.divider,
+            borderWidth = StratumDimens.Divider
         )
     )
 }

@@ -96,6 +96,21 @@ object EditScreenTags {
     /** 커버 화면 더보기 줄의 [tool] 칸 */
     fun moreTool(tool: EditTool): String = "moreTool_${tool.name}"
 
+    /** 커버 화면 한 줄 막대(결정 기록 '커버 화면 개편') */
+    const val COVER_TOOL_BAR = "coverToolBar"
+
+    /** 한 줄 막대의 [key] 칩 */
+    fun bar(key: String): String = "bar_$key"
+
+    /** 한 줄 막대의 안내 글(도구를 고르지 않음)·도구 이름(옵션이 없는 이동 도구) */
+    const val BAR_HINT = "barHint"
+
+    /** 한 줄 막대 오른쪽 끝의 ✕(도구 닫기) */
+    const val BAR_CLOSE = "barClose"
+
+    /** 펼친 칩을 접는 ✓ */
+    const val BAR_DONE = "barDone"
+
     /** 메인 화면의 떠 있는 레이어·조정 패널 */
     const val FLOATING_PANEL = "floatingPanel"
 

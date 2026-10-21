@@ -113,21 +113,31 @@ class BrushToolsTest {
     }
 
     @Test
-    fun compactBrush_showsOptions_andChangesTheSettings() {
+    fun compactBrush_showsTheBar_andChangesTheSettings() {
         show(411, 800)
         composeRule.chooseCoverTool(EditTool.Brush)
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
+        // 한 줄 막대(결정 기록 '커버 화면 개편'): 색 버튼들, 크기·경도·불투명도 칩, 오른쪽 끝 ✕. 넘치는 칩은 옆으로 밀어 본다.
+        composeRule.onNodeWithTag(EditScreenTags.bar("colors")).assertIsDisplayed()
+        val lefts = composeRule.barChipLefts(listOf("colors", "size", "hardness", "opacity"))
+        assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
+        composeRule.onNodeWithTag(EditScreenTags.BAR_CLOSE).assertIsDisplayed()
 
-        // 색 줄에는 전경색·배경색과 바꾸기 버튼이 있다(맞바꾸는 것은 ViewModel이 한다)
+        // 전경색·배경색과 바꾸기 버튼이 막대에 바로 있다(사용자 피드백 7차, 맞바꾸는 것은 ViewModel이 한다)
         composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.FOREGROUND)).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.BACKGROUND)).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_SWAP).performClick()
+        // 크기 칩을 펼치면 같은 줄이 크기 슬라이더가 된다
+        composeRule.expandBarChip("size")
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(100f)) }
 
         composeRule.runOnIdle {
             assertEquals(1, swaps)
             assertEquals(100f, brush.size, 0f)
         }
+        // ✓를 누르면 칩 줄로 돌아온다
+        composeRule.collapseBar()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
     }
 
     @Test
@@ -135,8 +145,8 @@ class BrushToolsTest {
         show(411, 800)
         composeRule.chooseCoverTool(EditTool.Eraser)
 
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_COLORS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("colors")).assertDoesNotExist()
     }
 
     @Test
@@ -177,9 +187,9 @@ class BrushToolsTest {
     @Test
     fun text_tapThenType_addsAtTheTappedPoint() {
         show(411, 800)
-        // 탭이 커버 폭보다 많아(12개) 글자 탭은 옆으로 밀어야 보인다
+        // 텍스트는 더보기 줄에서 고르고, 그 칸(색·크기)은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편')
         composeRule.chooseCoverTool(EditTool.Text)
-        composeRule.onNodeWithTag(EditScreenTags.TEXT_OPTIONS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("textSize")).assertExists()
 
         composeRule.onNodeWithTag(EditScreenTags.TEXT_OVERLAY).performTouchInput { click(center) }
         composeRule.onNodeWithTag(EditScreenTags.TEXT_FIELD).performTextInput("Hi")

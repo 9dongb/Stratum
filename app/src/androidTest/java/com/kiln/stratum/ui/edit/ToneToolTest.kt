@@ -79,37 +79,47 @@ class ToneToolTest {
     private val document = PixelSize(1000, 1000)
     private var options by mutableStateOf(ToneOptions())
 
-    private fun showOptions(mode: SubTool, widthDp: Int = 411) {
+    /** 커버 한 줄 막대에 명암의 칸을 놓는다(결정 기록 '커버 화면 개편') */
+    private fun showBar(mode: SubTool, onChoose: (SubTool) -> Unit = {}) {
         composeRule.setContent {
-            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                StratumTheme { ToneToolOptions(mode, ToneControls(options) { options = it }, onChoose = {}) }
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme { CoverToolBar(toneBar(mode, ToneControls(options) { options = it }, onChoose), rememberCoverBarState()) }
             }
         }
     }
 
     @Test
-    fun options_haveRangeSizeHardnessExposure_andTheHelpFollowsTheMode() {
-        showOptions(SubTool.TONE_BURN)
+    fun bar_hasSubToolRangeSizeHardnessExposure_inOrder_withoutAHelpLine() {
+        val chosen = mutableListOf<SubTool>()
+        showBar(SubTool.TONE_BURN) { chosen += it }
 
-        composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.MIDTONES)).assertIsSelected()
-        // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차)
-        val tops = listOf(EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS, EditScreenTags.TONE_EXPOSURE).map {
-            composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
-        }
-        assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
-        // 하위 도구 줄은 맨 아래이고(사용자 피드백 8차 1-1), 설명 줄도 물음표도 없다(10차 5: 안내는 처음 고를 때 편집 화면의 알림)
-        val burn = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$burn should be below the sliders", burn.top >= tops.last())
+        // 칸은 하위 도구 → 범위 → 크기 → 경도 → 노출(강도 자리) 순서다(띠와 같은 규칙, 사용자 피드백 9·10차)
+        val lefts = composeRule.barChipLefts(listOf("subTool", "range", "size", "hardness", "exposure"))
+        assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
+        // 설명 줄이 없다(10차 5: 안내는 처음 고를 때 편집 화면의 알림)
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.tone_hint_burn)).assertDoesNotExist()
+        // 하위 도구 칩을 펼치면 닷지·번이 보이고 지금 하위 도구가 골라져 있다. 고르면 알리고 칩 줄로 돌아온다.
+        composeRule.expandBarChip("subTool")
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_DODGE)).performClick()
+        composeRule.runOnIdle { assertEquals(listOf(SubTool.TONE_DODGE), chosen) }
+        composeRule.onNodeWithTag(EditScreenTags.bar("range")).assertExists()
     }
 
     @Test
-    fun options_change() {
-        showOptions(SubTool.TONE_DODGE)
+    fun bar_changesTheOptions() {
+        showBar(SubTool.TONE_DODGE)
 
+        composeRule.expandBarChip("range")
+        composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.MIDTONES)).assertIsSelected()
         composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.SHADOWS)).performClick()
+        composeRule.expandBarChip("exposure")
         composeRule.onNodeWithTag(EditScreenTags.TONE_EXPOSURE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.3f) }
+        composeRule.collapseBar()
+        composeRule.expandBarChip("size")
         composeRule.onNodeWithTag(EditScreenTags.TONE_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(150f)) }
+        composeRule.collapseBar()
+        composeRule.expandBarChip("hardness")
         composeRule.onNodeWithTag(EditScreenTags.TONE_HARDNESS).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
 
         composeRule.runOnIdle {
@@ -122,8 +132,9 @@ class ToneToolTest {
 
     @Test
     fun exposure_neverGoesToZero() {
-        showOptions(SubTool.TONE_DODGE)
+        showBar(SubTool.TONE_DODGE)
 
+        composeRule.expandBarChip("exposure")
         composeRule.onNodeWithTag(EditScreenTags.TONE_EXPOSURE).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
 
         composeRule.runOnIdle { assertEquals(0.01f, options.exposure, 0.0001f) }
@@ -176,7 +187,8 @@ class ToneToolTest {
 
         composeRule.chooseCoverTool(EditTool.Tone)
 
-        composeRule.onNodeWithTag(EditScreenTags.TONE_OPTIONS).assertIsDisplayed()
+        // 한 줄 막대에 명암의 칸이 보인다(결정 기록 '커버 화면 개편')
+        composeRule.onNodeWithTag(EditScreenTags.bar("range")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.TONE_OVERLAY).assertExists()
         // 처음 고르면 안내 글이 알림으로 뜬다(사용자 피드백 10차 5)
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_dodge))

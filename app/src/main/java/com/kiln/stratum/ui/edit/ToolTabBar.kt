@@ -58,9 +58,6 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 커버 화면 탭 줄·더보기 줄의 높이(아래 시스템 바는 따로). 칸의 누르는 영역은 48dp 이상이다. */
-internal val CoverTabBarHeight = 56.dp
-
 /**
  * 커버 화면(Compact) 아래 도구 탭 줄(결정 기록 '커버 화면 개편'): [자르기][선택][브러시][리터칭][유동화][더보기]
  * (사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요"). 여섯 칸이 폭을 똑같이 나누고 밀어 보지 않는다.
@@ -91,7 +88,7 @@ fun ToolTabBar(
         Row(
             Modifier
                 .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .height(CoverTabBarHeight)
+                .height(coverRowHeight())
                 .testTag(EditScreenTags.TOOL_TAB_ROW)
         ) {
             for (tool in EditTool.coverTabs) {
@@ -247,7 +244,7 @@ fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool
         Row(
             Modifier
                 .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal))
-                .height(CoverTabBarHeight)
+                .height(coverRowHeight())
         ) {
             for (tool in EditTool.coverMoreTools) {
                 key(tool) {
