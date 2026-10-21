@@ -34,8 +34,11 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 떠 있는 패널의 폭(지금까지의 오른쪽 패널과 같다) */
-internal val FloatingPanelWidth = 320.dp
+/**
+ * 떠 있는 패널의 폭. 글자 크기는 그대로 두고 320dp에서 줄였다(2026-10-21 사용자 요청).
+ * 레이어 이름 칸 약 108dp, 슬라이더 약 120dp가 남고, 제목 줄(제목 + 버튼 넷)도 들어간다.
+ */
+internal val FloatingPanelWidth = 280.dp
 
 /** 떠 있는 패널이 차지할 수 있는 가장 큰 높이. 태블릿처럼 큰 화면에서도 캔버스를 다 덮지 않게 한다. */
 private val FloatingPanelMaxHeight = 640.dp
