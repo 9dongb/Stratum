@@ -1,4 +1,4 @@
-<!-- Material Icons 'join_full' (Apache License 2.0). Android Studio 'Vector Asset'의 Material Icons 파일을 그대로 옮겼다(tint 줄 없음). 선택의 합치는 방법 '더하기'. -->
+<!-- 선택의 합치는 방법 '더하기': 겹친 두 사각형을 합친 모양(사용자 피드백 11차 2). Material 아이콘에 이 모양이 없어 직접 그렸다(축에 맞춘 사각형만, 점선은 짧은 막대). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -6,11 +6,5 @@
     android:viewportHeight="24">
   <path
       android:fillColor="@android:color/white"
-      android:pathData="M9,12a3,5.74 0,1 0,6 0a3,5.74 0,1 0,-6 0z"/>
-  <path
-      android:fillColor="@android:color/white"
-      android:pathData="M7.5,12c0,-0.97 0.23,-4.16 3.03,-6.5C9.75,5.19 8.9,5 8,5c-3.86,0 -7,3.14 -7,7s3.14,7 7,7c0.9,0 1.75,-0.19 2.53,-0.5C7.73,16.16 7.5,12.97 7.5,12z"/>
-  <path
-      android:fillColor="@android:color/white"
-      android:pathData="M16,5c-0.9,0 -1.75,0.19 -2.53,0.5c2.8,2.34 3.03,5.53 3.03,6.5c0,0.97 -0.23,4.16 -3.03,6.5C14.25,18.81 15.1,19 16,19c3.86,0 7,-3.14 7,-7S19.86,5 16,5z"/>
+      android:pathData="M3,3H15V15H3ZM9,9H21V21H9Z"/>
 </vector>

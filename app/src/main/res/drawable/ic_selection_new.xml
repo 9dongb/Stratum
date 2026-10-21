@@ -1,4 +1,4 @@
-<!-- Material Icons 'circle' (Apache License 2.0). Android Studio 'Vector Asset'의 Material Icons 파일을 그대로 옮겼다(tint 줄 없음). 선택의 합치는 방법 '새로'. -->
+<!-- 선택의 합치는 방법 '새로': 점선 사각형 하나(사용자 피드백 11차 2). Material 아이콘에 이 모양이 없어 직접 그렸다(축에 맞춘 사각형만, 점선은 짧은 막대). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -6,5 +6,5 @@
     android:viewportHeight="24">
   <path
       android:fillColor="@android:color/white"
-      android:pathData="M12,2C6.47,2 2,6.47 2,12s4.47,10 10,10 10,-4.47 10,-10S17.53,2 12,2z"/>
+      android:pathData="M4,4H7V5.5H4ZM4,18.5H7V20H4ZM17,4H20V5.5H17ZM17,18.5H20V20H17ZM9,4H11V5.5H9ZM9,18.5H11V20H9ZM13,4H15V5.5H13ZM13,18.5H15V20H13ZM4,4H5.5V7H4ZM18.5,4H20V7H18.5ZM4,17H5.5V20H4ZM18.5,17H20V20H18.5ZM4,9H5.5V11H4ZM18.5,9H20V11H18.5ZM4,13H5.5V15H4ZM18.5,13H20V15H18.5Z"/>
 </vector>

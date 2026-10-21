@@ -168,7 +168,7 @@ internal fun selectionModeLabel(mode: SelectionMode): Int =
         SelectionMode.INTERSECT -> R.string.selection_mode_intersect
     }
 
-/** 합치는 방법의 아이콘(메인 화면 띠, 사용자 피드백 10차 1). 빼기는 Material에 없어 'join_left'에서 겹친 곳을 뺀 모양이다. */
+/** 합치는 방법의 아이콘(메인 화면 띠, 사용자 피드백 10차 1). 포토샵처럼 사각형 모양이고, Material에 없는 모양이라 직접 그렸다(11차 2). */
 internal fun selectionModeIcon(mode: SelectionMode): Int =
     when (mode) {
         SelectionMode.REPLACE -> R.drawable.ic_selection_new
