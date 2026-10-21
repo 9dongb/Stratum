@@ -9,11 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,14 +45,10 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.platform.MAX_FEATHER
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionPoint
 import com.kiln.stratum.engine.selection.SelectionShape
-import com.kiln.stratum.ui.components.StratumSegment
-import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSwitch
-import com.kiln.stratum.ui.components.ToolActionButton
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -76,88 +68,6 @@ class SelectionControls(
     val busy: Boolean,
     val actions: SelectionActions
 )
-
-/**
- * 선택 도구 옵션: 합치는 방법(새로·더하기·빼기·교차), 페더(모양) 또는 허용치·이어진 곳만(자동 선택),
- * 동작 버튼(모두·해제·반전·지우기·복사·잘라내기·AI 채우기), 맨 아래 하위 도구(사각형·원형·올가미·자동 선택·AI 선택).
- * AI 선택은 경계가 이미 부드러워 페더가 없다. 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
- * 설정은 바꾸면 다음 선택부터 쓴다(기록하지 않는다). 동작은 누르면 바로 하고 실행 취소 한 단계로 남는다.
- */
-@Composable
-fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
-    val options = controls.options
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.SELECTION_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        SelectionModeRow(options.mode) { controls.onOptions(options.copy(mode = it)) }
-        if (mode == SubTool.SELECT_WAND) {
-            OptionSlider(
-                label = stringResource(R.string.selection_tolerance),
-                shown = options.tolerance.toString(),
-                fraction = options.tolerance / ColorRegion.MAX_TOLERANCE.toFloat(),
-                onFraction = { controls.onOptions(options.copy(tolerance = (it * ColorRegion.MAX_TOLERANCE).roundToInt())) },
-                tag = EditScreenTags.SELECTION_TOLERANCE
-            )
-            ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) }
-        } else if (mode != SubTool.SELECT_AI) {
-            OptionSlider(
-                label = stringResource(R.string.selection_feather),
-                shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt()),
-                fraction = featherToFraction(options.feather),
-                onFraction = { controls.onOptions(options.copy(feather = fractionToFeather(it))) },
-                tag = EditScreenTags.SELECTION_FEATHER
-            )
-        }
-        SelectionActionRow(controls)
-        // 하위 도구 줄은 옵션 칸 맨 아래(탭 줄 바로 위)다(커버 공통 규칙, 사용자 피드백 8차 1-1)
-        SubToolSegments(EditTool.Select.subTools, mode, onChoose)
-    }
-}
-
-/**
- * 커버 옵션 칸 맨 아래의 하위 도구 줄(모두 옵션이 이어지는 하위 도구일 때). 길게 누르는 메뉴(CLAUDE.md 6장)를 모르는 사람도 찾을 수 있게 둔다.
- * 맨 아래(탭 줄 바로 위)인 까닭은 커버 공통 규칙이다(사용자 피드백 8차 1-1: "선택 탭은 하단에 공통적으로 배치"). 엄지가 가장 쉽게 닿는다.
- */
-@Composable
-fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit) {
-    StratumSegmentedRow {
-        subTools.forEachIndexed { index, subTool ->
-            StratumSegment(
-                selected = subTool == mode,
-                onClick = { onChoose(subTool) },
-                index = index,
-                count = subTools.size,
-                modifier = Modifier.testTag(EditScreenTags.subToolOption(subTool))
-            ) {
-                // 한국어는 글자마다 줄을 바꿀 수 있어, 이름 전체 폭(최대 고유 폭)을 쓰게 한다(자르기·변형 하위 도구 줄과 같다)
-                Text(stringResource(subTool.shortLabel), modifier = Modifier.width(IntrinsicSize.Max), maxLines = 1, softWrap = false)
-            }
-        }
-    }
-}
-
-/** 새로 그린 모양을 앞 선택 영역과 합치는 방법 */
-@Composable
-private fun SelectionModeRow(mode: SelectionMode, onMode: (SelectionMode) -> Unit) {
-    val modes = SelectionMode.entries
-    StratumSegmentedRow {
-        modes.forEachIndexed { index, entry ->
-            StratumSegment(
-                selected = entry == mode,
-                onClick = { onMode(entry) },
-                index = index,
-                count = modes.size,
-                modifier = Modifier.testTag(EditScreenTags.selectionMode(entry))
-            ) {
-                Text(
-                    stringResource(selectionModeLabel(entry)),
-                    modifier = Modifier.width(IntrinsicSize.Max),
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-        }
-    }
-}
 
 /** 합치는 방법의 이름 */
 internal fun selectionModeLabel(mode: SelectionMode): Int =
@@ -197,40 +107,6 @@ internal fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {
         Spacer(Modifier.width(16.dp))
         StratumSwitch(checked = contiguous, onCheckedChange = null)
     }
-}
-
-/** 동작 버튼: 모두 선택은 늘, 나머지는 고른 곳이 있을 때만 켠다. 폭이 모자라면 다음 줄로 내려간다. */
-@Composable
-private fun SelectionActionRow(controls: SelectionControls) {
-    val ready = !controls.busy
-    val selected = ready && controls.hasSelection
-    val actions = controls.actions
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        ActionButton(R.drawable.ic_select_all, R.string.selection_all, R.string.selection_all_description, ready, EditScreenTags.SELECTION_ALL, actions::all)
-        ActionButton(R.drawable.ic_deselect, R.string.selection_none, null, selected, EditScreenTags.SELECTION_NONE, actions::none)
-        ActionButton(R.drawable.ic_flip_to_front, R.string.selection_invert, null, selected, EditScreenTags.SELECTION_INVERT, actions::invert)
-        ActionButton(R.drawable.ic_delete, R.string.selection_delete, R.string.selection_delete_description, selected, EditScreenTags.SELECTION_DELETE, actions::delete)
-        ActionButton(R.drawable.ic_content_copy, R.string.selection_copy, R.string.selection_copy_description, selected, EditScreenTags.SELECTION_COPY) {
-            actions.copyToLayer(cut = false)
-        }
-        ActionButton(R.drawable.ic_content_cut, R.string.selection_cut, R.string.selection_cut_description, selected, EditScreenTags.SELECTION_CUT) {
-            actions.copyToLayer(cut = true)
-        }
-        ActionButton(R.drawable.ic_auto_awesome, R.string.selection_ai_fill, R.string.selection_ai_fill_description, selected, EditScreenTags.SELECTION_AI_FILL, actions::aiFill)
-    }
-}
-
-/** 아이콘 아래에 짧은 이름이 있는 버튼. [description]이 있으면 화면 읽기 기능은 그 긴 이름으로 읽는다. 누르는 영역은 48dp 이상이다. */
-@Composable
-private fun ActionButton(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    ToolActionButton(
-        icon = icon,
-        label = stringResource(label),
-        onClick = onClick,
-        modifier = Modifier.testTag(tag),
-        enabled = enabled,
-        description = description?.let { stringResource(it) }
-    )
 }
 
 /** 페더 슬라이더 자리(0..1)와 픽셀. 작은 값을 세밀하게 고르게 제곱 눈금이다. */

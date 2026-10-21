@@ -1,15 +1,6 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectMath
 import kotlin.math.exp
@@ -31,26 +22,6 @@ data class MosaicOptions(
  */
 @Stable
 class MosaicControls(val options: MosaicOptions, val sizePreview: SizePreviewState? = null, val onChange: (MosaicOptions) -> Unit)
-
-/** 모자이크 옵션(커버): 크기, 경도, 셀 크기. 바꾸면 다음 획부터 쓴다(기록하지 않는다). 설명 줄은 두지 않는다(사용자 피드백 8차 1-7). */
-@Composable
-fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
-    val options = controls.options
-    val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.MOSAIC_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // 슬라이더는 크기 → 경도 → 셀 크기(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.MOSAIC_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.mosaic_cell),
-            shown = stringResource(R.string.brush_size_value, options.cell),
-            fraction = cellToFraction(options.cell),
-            onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
-            tag = EditScreenTags.MOSAIC_CELL
-        )
-    }
-}
 
 /** 셀 크기 슬라이더의 눈금(0..1)을 셀 크기(px)로. 크기 슬라이더처럼 로그 눈금이라 작은 칸도 세밀하게 고른다. */
 internal fun fractionToCell(fraction: Float): Int {

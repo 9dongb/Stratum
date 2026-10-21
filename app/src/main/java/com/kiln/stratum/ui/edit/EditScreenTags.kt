@@ -55,7 +55,6 @@ object EditScreenTags {
     const val REDO = "redo"
     /** 상단 바 맨 오른쪽 설정 버튼(사용자 피드백 11차 4) */
     const val SETTINGS = "editSettings"
-    const val TOOL_OPTIONS = "toolOptions"
     /** 닫힌 화면 새 창(자르기 등)의 위 줄 */
     const val COVER_WINDOW_TOP_BAR = "coverWindowTopBar"
     /** 닫힌 화면 자르기 창의 옵션(하위 도구·비율) */
@@ -129,16 +128,13 @@ object EditScreenTags {
     const val CURVE_RESET = "curveReset"
     const val CURVE_DELETE_POINT = "curveDeletePoint"
     const val LAYER_PANEL = "layerPanel"
-    const val BRUSH_OPTIONS = "brushOptions"
     const val BRUSH_SIZE = "brushSize"
     const val BRUSH_HARDNESS = "brushHardness"
     const val BRUSH_OPACITY = "brushOpacity"
-    const val BRUSH_COLORS = "brushColors"
     const val STROKE_OVERLAY = "strokeOverlay"
 
     /** 크기 슬라이더를 끄는 동안 캔버스에 보이는 브러시 크기 원 */
     const val SIZE_PREVIEW = "sizePreview"
-    const val TEXT_OPTIONS = "textOptions"
     const val TEXT_SIZE = "textSize"
     const val TEXT_OVERLAY = "textOverlay"
     const val TEXT_FIELD = "textField"
@@ -178,8 +174,6 @@ object EditScreenTags {
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
 
-    /** 선택 도구 옵션 */
-    const val SELECTION_OPTIONS = "selectionOptions"
     const val SELECTION_FEATHER = "selectionFeather"
     const val SELECTION_TOLERANCE = "selectionTolerance"
     const val SELECTION_CONTIGUOUS = "selectionContiguous"
@@ -213,8 +207,6 @@ object EditScreenTags {
     const val LIQUIFY_SIZE = "liquifySize"
     const val LIQUIFY_STRENGTH = "liquifyStrength"
 
-    /** 리터칭(스팟 복구·복구 브러시·복제 도장) 옵션과 캔버스 터치 자리 */
-    const val RETOUCH_OPTIONS = "retouchOptions"
     const val RETOUCH_OVERLAY = "retouchOverlay"
     const val RETOUCH_SIZE = "retouchSize"
     const val RETOUCH_HARDNESS = "retouchHardness"
@@ -222,18 +214,14 @@ object EditScreenTags {
     const val RETOUCH_REMOVE_PICKED = "retouchRemovePicked"
     const val RETOUCH_SOURCE_MARKER = "retouchSourceMarker"
 
-    /** 명암(닷지·번) 옵션과 캔버스 터치 자리 */
-    const val TONE_OPTIONS = "toneOptions"
     const val TONE_OVERLAY = "toneOverlay"
     const val TONE_EXPOSURE = "toneExposure"
     const val TONE_SIZE = "toneSize"
     const val TONE_HARDNESS = "toneHardness"
-    const val BLUR_OPTIONS = "blurOptions"
     const val BLUR_OVERLAY = "blurOverlay"
     const val BLUR_STRENGTH = "blurStrength"
     const val BLUR_SIZE = "blurSize"
     const val BLUR_HARDNESS = "blurHardness"
-    const val MOSAIC_OPTIONS = "mosaicOptions"
     /** 이동 도구의 캔버스 손가락 */
     const val MOVE_OVERLAY = "moveOverlay"
     const val MOSAIC_OVERLAY = "mosaicOverlay"

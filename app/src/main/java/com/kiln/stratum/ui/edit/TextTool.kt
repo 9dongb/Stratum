@@ -56,32 +56,6 @@ import kotlinx.coroutines.launch
 class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit, val colors: ColorControls? = null)
 
 /**
- * 글자 옵션: 색, 크기. 캔버스를 누르면 그 자리에 글자를 넣는 창이 뜬다(편집 화면).
- * 크기는 8~2000px을 고르게 고를 수 있게 로그 눈금이다. 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
- */
-@Composable
-fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.TEXT_OPTIONS), horizontalAlignment = Alignment.CenterHorizontally) {
-        controls.colors?.let { ColorRow(it) }
-        TextSizeSlider(controls)
-    }
-}
-
-/** 글자 크기 슬라이더(8~2000px, 로그 눈금, 커버 옵션). 펼친 화면 띠는 세로 슬라이더(`textStrip`)다. */
-@Composable
-internal fun TextSizeSlider(controls: TextControls) {
-    val style = controls.style
-    OptionSlider(
-        label = stringResource(R.string.brush_size),
-        shown = stringResource(R.string.brush_size_value, style.size.roundToInt()),
-        fraction = textSizeToFraction(style.size),
-        onFraction = { controls.onChange(style.copy(size = fractionToTextSize(it))) },
-        tag = EditScreenTags.TEXT_SIZE
-    )
-}
-
-/**
  * 글자 도구를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 톡 누르면 그 자리(문서 좌표)를 [onTap]으로 알린다.
  * 두 손가락 확대·이동은 그대로 된다(부모가 먼저 읽는다).
  */

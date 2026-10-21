@@ -386,7 +386,7 @@ class SelectionToolTest {
     fun mainPortrait_stripChangesTheSettings() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
 
         // 합치는 방법: 띠에 아이콘 넷이 늘 보이고, 누르면 바로 바뀐다(사용자 피드백 10차 1)
         for (mode in SelectionMode.entries) composeRule.onNodeWithTag(EditScreenTags.selectionMode(mode)).assertIsDisplayed()

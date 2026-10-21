@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -13,14 +12,12 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -43,69 +40,6 @@ class BrushControls(
     val sizePreview: SizePreviewState? = null,
     val colors: ColorControls? = null
 )
-
-/**
- * 브러시·지우개 옵션: (브러시만) 색, 크기, 단단함, 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
- * 크기는 1~1000px을 고르게 고를 수 있게 로그 눈금이다(작은 크기를 세밀하게).
- */
-@Composable
-fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
-    val settings = controls.settings
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (!controls.erase) controls.colors?.let { ColorRow(it) }
-        SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.BRUSH_SIZE, controls.sizePreview)
-        HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.layer_opacity),
-            shown = stringResource(R.string.layer_percent, (settings.opacity * 100).roundToInt()),
-            fraction = settings.opacity,
-            // 0%면 아무것도 그려지지 않으니 1%에서 멈춘다
-            onFraction = { controls.onChange(settings.copy(opacity = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
-            tag = EditScreenTags.BRUSH_OPACITY
-        )
-    }
-}
-
-/**
- * 크기 슬라이더(1~1000px, 로그 눈금). 끄는 동안 [preview]가 캔버스에 그 크기를 보인다(손을 떼면 사라짐).
- * 브러시·지우개·리터칭·명암·유동화의 가로 슬라이더(커버 옵션·유동화)가 쓴다. 펼친 화면 띠는 세로 슬라이더(`sizeCell`)다.
- */
-@Composable
-internal fun SizeSlider(size: Float, onSize: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
-    EndPreviewOnDispose(preview)
-    OptionSlider(
-        label = stringResource(R.string.brush_size),
-        shown = stringResource(R.string.brush_size_value, size.roundToInt()),
-        fraction = sizeToFraction(size),
-        onFraction = {
-            preview?.onChange()
-            onSize(fractionToSize(it))
-        },
-        tag = tag,
-        onFinished = { preview?.onFinished() }
-    )
-}
-
-/**
- * 경도(단단함) 슬라이더(0~100%). 끄는 동안 [preview]가 캔버스에 브러시 크기와 경도 자리를 보인다(손을 떼면 사라짐).
- * 브러시·지우개·리터칭·명암의 가로 슬라이더가 쓴다. 펼친 화면 띠는 세로 슬라이더(`hardnessCell`)다.
- */
-@Composable
-internal fun HardnessSlider(hardness: Float, onHardness: (Float) -> Unit, tag: String, preview: SizePreviewState?) {
-    EndPreviewOnDispose(preview)
-    OptionSlider(
-        label = stringResource(R.string.brush_hardness),
-        shown = stringResource(R.string.layer_percent, (hardness * 100).roundToInt()),
-        fraction = hardness,
-        onFraction = {
-            preview?.onChange()
-            onHardness((it * 100).roundToInt() / 100f)
-        },
-        tag = tag,
-        onFinished = { preview?.onFinished() }
-    )
-}
 
 /**
  * 끄는 도중에 슬라이더가 사라지면(옵션 창이 닫힘, 접기·펼치기) 손을 뗐다는 알림이 오지 않는다.

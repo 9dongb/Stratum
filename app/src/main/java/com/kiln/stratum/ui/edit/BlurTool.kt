@@ -1,15 +1,8 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.raster.PixelSize
@@ -66,31 +59,6 @@ val SubTool.effectKind: EffectKind?
  */
 @Stable
 class BlurControls(val options: BlurOptions, val sizePreview: SizePreviewState? = null, val onChange: (BlurOptions) -> Unit)
-
-/**
- * 흐림 옵션(커버): 크기, 경도, 강도, 맨 아래 하위 도구(흐림·선명·스머지). 바꾸면 다음 획부터 쓴다(기록하지 않는다).
- * 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
- */
-@Composable
-fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
-    val options = controls.options
-    val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.BLUR_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // 슬라이더는 크기 → 경도 → 강도 순서다(사용자 피드백 9차, 띠와 같다)
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.BLUR_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.BLUR_HARDNESS, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.effect_strength),
-            shown = stringResource(R.string.layer_percent, (options.strength * 100).roundToInt()),
-            fraction = options.strength,
-            onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
-            tag = EditScreenTags.BLUR_STRENGTH
-        )
-        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
-        SubToolSegments(EditTool.Blur.subTools, mode, onChoose)
-    }
-}
 
 /** 강도 슬라이더 눈금(0..1)을 강도로: 1% 단위, 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(명암의 노출과 같다) */
 internal fun strengthOf(fraction: Float): Float = ((fraction * 100).roundToInt() / 100f).coerceIn(0.01f, 1f)

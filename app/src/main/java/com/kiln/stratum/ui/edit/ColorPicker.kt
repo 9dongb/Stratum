@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -106,36 +105,6 @@ private const val OPAQUE = 0xFF000000.toInt()
 
 /** 색상 띠의 색(빨강에서 시작해 한 바퀴) */
 
-/**
- * 색 줄: 전경색·배경색(누르면 그 색의 팔레트), 바꾸기 버튼(두 색을 맞바꿈), 스포이드 버튼. 폭이 모자라면 옆으로 밀어 본다.
- * 두 색만 정한다(사용자 피드백 7차, 전에 있던 최근 색은 없앴다). 누르는 영역은 모두 48dp다.
- */
-@Composable
-fun ColorRow(controls: ColorControls, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(EditScreenTags.BRUSH_COLORS),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ColorSlotButton(controls, ColorSlot.FOREGROUND)
-        ColorSlotButton(controls, ColorSlot.BACKGROUND)
-        // 바꾸기: 전경색과 배경색을 맞바꾼다
-        StratumIconButton(onClick = controls.onSwap, modifier = Modifier.testTag(EditScreenTags.COLOR_SWAP)) {
-            Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.color_swap))
-        }
-        controls.onEyedropper?.let { toggle ->
-            // 스포이드: 켜면 다음에 캔버스를 누르거나 끈 자리의 색을 고른다(고른 도구가 칠하던 손가락 대신)
-            // 켜지면 도구 막대의 고른 도구처럼 모서리 8dp 사각형(선택 배경)으로 보인다
-            StratumIconToggleButton(
-                checked = controls.eyedropperOn,
-                onCheckedChange = { toggle() },
-                modifier = Modifier.testTag(EditScreenTags.COLOR_EYEDROPPER)
-            ) {
-                Icon(painterResource(R.drawable.ic_colorize), contentDescription = stringResource(R.string.color_eyedropper))
-            }
-        }
-    }
-}
-
 /** 전경색·배경색의 이름(색 줄의 이름, 화면 읽기 기능의 '전경색, #000000') */
 @StringRes
 internal fun colorSlotLabel(slot: ColorSlot): Int = when (slot) {
@@ -147,19 +116,6 @@ internal fun colorSlotLabel(slot: ColorSlot): Int = when (slot) {
 internal fun colorSlotDescription(slot: ColorSlot): Int = when (slot) {
     ColorSlot.FOREGROUND -> R.string.color_foreground_value
     ColorSlot.BACKGROUND -> R.string.color_background_value
-}
-
-/** 색 줄의 전경색·배경색 칸: 무지개 테두리 동그라미('색 고르기'를 알림)와 이름. 누르면 그 색의 팔레트를 연다. */
-@Composable
-private fun ColorSlotButton(controls: ColorControls, slot: ColorSlot) {
-    val color = controls.colors[slot]
-    ColorSwatchButton(
-        color = color,
-        label = stringResource(colorSlotLabel(slot)),
-        description = stringResource(colorSlotDescription(slot), colorHex(color)),
-        tag = EditScreenTags.colorSlot(slot),
-        onClick = { controls.onOpenPalette(slot) }
-    )
 }
 
 /**

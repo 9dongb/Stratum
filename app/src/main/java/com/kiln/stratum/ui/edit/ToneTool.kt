@@ -1,24 +1,12 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
-import com.kiln.stratum.ui.components.StratumSegment
-import com.kiln.stratum.ui.components.StratumSegmentedRow
-import kotlin.math.roundToInt
 
 /**
  * 명암 도구(닷지·번) 설정. 브러시 모양(크기·단단함), 바꿀 밝기 범위, 노출(0..1). 닷지·번 모두 같이 쓴다(포토샵의 범위·노출과 같다).
@@ -60,53 +48,6 @@ interface ToneActions {
  */
 @Stable
 class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? = null, val onChange: (ToneOptions) -> Unit)
-
-/**
- * 명암 옵션: 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 맨 아래 하위 도구(닷지·번).
- * 바꾸면 다음 획부터 쓴다(기록하지 않는다). 안내 글은 하위 도구를 처음 고를 때 편집 화면이 알림으로 보인다(사용자 피드백 10차 5).
- */
-@Composable
-fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
-    val options = controls.options
-    val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.TONE_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        ToneRangeRow(options.range) { controls.onChange(options.copy(range = it)) }
-        // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.TONE_HARDNESS, controls.sizePreview)
-        OptionSlider(
-            label = stringResource(R.string.tone_exposure),
-            shown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt()),
-            fraction = options.exposure,
-            // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다
-            onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
-            tag = EditScreenTags.TONE_EXPOSURE
-        )
-        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
-        SubToolSegments(EditTool.Tone.subTools, mode, onChoose)
-    }
-}
-
-/** 바꿀 밝기 범위 고르기 */
-@Composable
-private fun ToneRangeRow(range: ToneRange, onRange: (ToneRange) -> Unit) {
-    val ranges = ToneRange.entries
-    StratumSegmentedRow {
-        ranges.forEachIndexed { index, entry ->
-            StratumSegment(
-                selected = entry == range,
-                onClick = { onRange(entry) },
-                index = index,
-                count = ranges.size,
-                modifier = Modifier.testTag(EditScreenTags.toneRange(entry))
-            ) {
-                // 한국어는 글자마다 줄을 바꿀 수 있어, 이름 전체 폭(최대 고유 폭)을 쓰게 한다(하위 도구 줄과 같다)
-                Text(stringResource(toneRangeLabel(entry)), modifier = Modifier.width(IntrinsicSize.Max), maxLines = 1, softWrap = false)
-            }
-        }
-    }
-}
 
 internal fun toneRangeLabel(range: ToneRange): Int =
     when (range) {

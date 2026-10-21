@@ -4,12 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -18,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ColorFilter
@@ -33,7 +27,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -50,7 +43,6 @@ import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
-import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
@@ -176,48 +168,6 @@ class RetouchControls(
     val busy: Boolean = false,
     val onRemovePicked: () -> Unit = {}
 )
-
-/**
- * 리터칭 옵션: (AI 제거) 톡 눌러 고른 물체를 지우는 [지우기] 버튼, 크기,
- * (AI 제거가 아니면) 경도, (복제 도장만) 불투명도, 맨 아래 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거).
- * 바꾸면 다음 획부터 쓴다(기록하지 않는다). AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
- * 복구 브러시·복제 도장의 가져올 곳은 버튼 없이 캔버스의 표시를 끌어 옮긴다(사용자 피드백 10차 4).
- * 안내 글은 하위 도구를 처음 고를 때 편집 화면이 알림으로 보인다(사용자 피드백 10차 5, [toolHelpText]).
- */
-@Composable
-fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
-    val settings = controls.settings
-    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
-    Column(modifier.testTag(EditScreenTags.RETOUCH_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (mode == SubTool.RETOUCH_REMOVE) {
-            // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
-            AccentButton(
-                onClick = controls.onRemovePicked,
-                enabled = controls.objectPicked && !controls.busy,
-                modifier = Modifier.testTag(EditScreenTags.RETOUCH_REMOVE_PICKED)
-            ) {
-                Icon(painterResource(R.drawable.ic_auto_awesome), contentDescription = null)
-                Text(stringResource(R.string.retouch_remove_picked), modifier = Modifier.padding(start = 8.dp))
-            }
-        }
-        SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.RETOUCH_SIZE, controls.sizePreview)
-        if (mode != SubTool.RETOUCH_REMOVE) {
-            HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview)
-        }
-        // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
-        if (mode == SubTool.RETOUCH_CLONE) {
-            OptionSlider(
-                label = stringResource(R.string.layer_opacity),
-                shown = stringResource(R.string.layer_percent, (settings.opacity * 100).roundToInt()),
-                fraction = settings.opacity,
-                onFraction = { controls.onChange(settings.copy(opacity = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
-                tag = EditScreenTags.RETOUCH_OPACITY
-            )
-        }
-        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
-        SubToolSegments(EditTool.Retouch.subTools, mode, onChoose)
-    }
-}
 
 /**
  * 리터칭 도구를 고르면 캔버스 위에 겹치는 터치 자리.

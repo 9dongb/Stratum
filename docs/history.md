@@ -14,6 +14,22 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-22 · 커버 화면 개편 6단계: 옛 옵션 칸 정리와 규칙 문서
+
+- 요청·의도·계획: 0단계 항목과 같다(계획 `docs/cover-redesign-plan.md`의 6번).
+- 커밋:
+  - "쓰지 않게 된 커버 옵션 칸 코드·이름표를 지우고 기획서·기록을 한 줄 막대에 맞춤"
+- 바꾼 것
+  - 지운 코드(커버 옵션 칸, 한 줄 막대로 바뀌어 아무 데서도 쓰지 않음, 511줄): `ToolOptions`, `BrushOptions`·`SizeSlider`·`HardnessSlider`, `TextOptions`·`TextSizeSlider`, `SelectionToolOptions`·`SubToolSegments`·`SelectionModeRow`·`SelectionActionRow`, `RetouchOptions`, `ToneToolOptions`·`ToneRangeRow`, `BlurToolOptions`, `MosaicToolOptions`, `ColorRow`. 그 때문에 쓰지 않게 된 import도 지웠다.
+  - 쓰지 않게 된 이름표 9개(`TOOL_OPTIONS`·`BRUSH_OPTIONS`·`BRUSH_COLORS`·`TEXT_OPTIONS`·`SELECTION_OPTIONS`·`RETOUCH_OPTIONS`·`TONE_OPTIONS`·`BLUR_OPTIONS`·`MOSAIC_OPTIONS`)를 지웠다. 그것이 '없음'을 보던 테스트 5곳은 뜻을 살려 한 줄 막대가 없음(메인 화면)·자르기 창이 닫히고 막대로 돌아옴·도구가 없어 안내 글을 보게 고쳤다.
+  - 문구는 새로 쓰지 않게 된 것이 없었다(막대가 띠·전 옵션과 같은 문구를 씀).
+  - 기획서(`docs/plan.md`): 커버 레이아웃과 화면 목록의 '옵션 시트'를 한 줄 막대로 고쳤다.
+  - progress.md: 진행표(화면 크기별 레이아웃·선택 도구·이동 도구), 결정 기록(크기 미리 보기·닫힌 화면 도구 옵션·도구 옵션 자리 높이), 설계 메모(색 고르기·선택 영역)의 지난 커버 옵션 칸 설명을 막대에 맞췄다(지난 방식은 '전에는'으로 남김). CLAUDE.md 6장·8장은 2단계에서 고쳤다.
+  - 계획 문서(`docs/cover-redesign-plan.md`): '진행하며 바꾼 것'(묻지 않고 정한 것과 그 까닭)을 더했다.
+- 확인한 것
+  - 빌드·단위 테스트 통과(`ThemeUsageGuardTest` 포함). 지운 이름표가 남은 곳이 없고, 쓰지 않는 문구는 전부터 있던 `home_recent_projects` 하나뿐이다(저장소 밖 검사 스크립트).
+  - 에뮬레이터(접은 화면): 고친 테스트 5개 통과. 전체는 7단계에서 돌린다.
+
 ## 2026-10-22 · 커버 화면 개편 5단계: 유동화 새 창 막대와 자르기 창 옵션 줄
 
 - 요청·의도·계획: 0단계 항목과 같다(계획 `docs/cover-redesign-plan.md`의 5번).

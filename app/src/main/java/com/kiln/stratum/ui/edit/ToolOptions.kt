@@ -55,55 +55,6 @@ enum class CropTab(@get:StringRes val label: Int) {
 }
 
 /**
- * 고른 도구의 옵션. 커버 화면은 캔버스와 탭 줄 사이에 놓인다(메인 화면은 도구 옵션 띠).
- *
- * 조정·레이어는 도구가 아니라 상단 바 버튼으로 여는 패널이다(커버 화면 개편, 편집 화면이 옵션 칸에 보인다).
- * 자르기·변형은 옵션 칸이 아니라 자르기·회전 창이다(편집 화면의 [CoverCropOptions]).
- *
- * @param brush 고른 도구(브러시·지우개)의 설정과 바꾸기
- * @param text 글자 도구의 모양과 바꾸기
- * @param select 선택 도구의 설정과 할 일
- * @param retouch 리터칭 도구의 설정과 가져올 곳
- * @param tone 명암 도구의 설정과 바꾸기
- * @param blur 흐림 도구(흐림·선명)의 설정과 바꾸기
- * @param mosaic 모자이크 도구의 설정과 바꾸기
- */
-@Composable
-fun ToolOptions(
-    selection: ToolSelection,
-    onChoose: (SubTool) -> Unit,
-    modifier: Modifier = Modifier,
-    brush: BrushControls? = null,
-    text: TextControls? = null,
-    select: SelectionControls? = null,
-    retouch: RetouchControls? = null,
-    tone: ToneControls? = null,
-    blur: BlurControls? = null,
-    mosaic: MosaicControls? = null
-) {
-    when (selection.active) {
-        EditTool.Brush, EditTool.Eraser -> if (brush != null) BrushOptions(brush, modifier)
-        EditTool.Text -> if (text != null) TextOptions(text, modifier)
-        EditTool.Select -> if (select != null) {
-            SelectionToolOptions(checkNotNull(selection.modeOf(EditTool.Select)), select, onChoose, modifier)
-        }
-        EditTool.Retouch -> if (retouch != null) {
-            RetouchOptions(checkNotNull(selection.modeOf(EditTool.Retouch)), retouch, onChoose, modifier)
-        }
-        EditTool.Tone -> if (tone != null) {
-            ToneToolOptions(checkNotNull(selection.modeOf(EditTool.Tone)), tone, onChoose, modifier)
-        }
-        EditTool.Blur -> if (blur != null) {
-            BlurToolOptions(checkNotNull(selection.modeOf(EditTool.Blur)), blur, onChoose, modifier)
-        }
-        EditTool.Mosaic -> if (mosaic != null) MosaicToolOptions(mosaic, modifier)
-        // 이동 도구는 고를 옵션이 없어 옵션 칸을 띄우지 않는다(편집 화면, 사용자 피드백 8차 1-7).
-        // 자르기·변형은 자르기·회전 창이 옵션을 보인다.
-        else -> Unit
-    }
-}
-
-/**
  * 닫힌 화면 자르기·회전 창(결정 기록 '닫힌 화면 새 창')의 옵션: 고른 탭([CropTab])이 자르기면 비율 칩 줄(옆으로 밀어 봄)·가로세로 바꾸기,
  * 회전이면 왼쪽·오른쪽 90°와 좌우·상하 뒤집기다(사용자 피드백 8차 1). 탭과 크기 변경, 취소·적용은 창 맨 아래 줄([CoverCropTabs]·[CoverWorkBar])이다.
  * 높이는 편집 화면의 한 줄 막대와 같고(편집 화면이 정함, 결정 기록 '커버 화면 개편'), 두 탭 모두 한 줄이라 탭을 바꿔도 사진 크기가 그대로다.

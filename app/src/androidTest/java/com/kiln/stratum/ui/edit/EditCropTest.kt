@@ -107,7 +107,9 @@ class EditCropTest {
         composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsEnabled().performClick()
 
         composeRule.runOnIdle { assertEquals(listOf(CropImage(PixelRect(50, 0, 350, 300), document)), commands) }
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_OPTIONS).assertDoesNotExist()
+        // 자르기·회전 창이 닫히고 편집 화면(한 줄 막대)으로 돌아온다
+        composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.CROP_OVERLAY).assertDoesNotExist()
     }
 

@@ -210,7 +210,7 @@ class BrushToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
         composeRule.onNode(hasTestTag(EditScreenTags.strip("size")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
     }
 
     @Test

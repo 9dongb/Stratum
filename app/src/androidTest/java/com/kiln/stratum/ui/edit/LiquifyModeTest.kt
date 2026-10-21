@@ -654,14 +654,14 @@ class LiquifyModeTest {
             }
         }
 
-        // 탭 줄 뒤쪽에 있어 커버 폭에서는 밀어야 다 보인다
+        // 커버는 탭 줄의 유동화 칸으로 연다
         composeRule.chooseCoverTool(EditTool.Liquify)
 
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(1, started) }
-        // 작업 모드를 닫으면 편집 화면에는 고른 도구가 없다(옵션이 보이지 않음)
+        // 작업 모드를 닫으면 편집 화면에는 고른 도구가 없다(한 줄 막대는 안내 글)
         composeRule.runOnIdle { open = null }
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_OPTIONS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
     }
 }

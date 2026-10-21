@@ -222,8 +222,8 @@ class OptionStripTest {
         for (key in listOf("foreground", "background", "size", "hardness", "opacity")) cell(key).assertIsDisplayed()
         composeRule.onNode(hasTestTag(EditScreenTags.COLOR_SWAP) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).assertIsDisplayed()
-        // 커버의 옵션(색 줄·슬라이더 목록)은 없다
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_OPTIONS).assertDoesNotExist()
+        // 커버의 한 줄 막대는 없다
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
     }
 
