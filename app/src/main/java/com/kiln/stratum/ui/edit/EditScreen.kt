@@ -98,7 +98,6 @@ import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
-import com.kiln.stratum.ui.components.TopBarAccentButton
 import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.TopBarIconToggleButton
 import com.kiln.stratum.ui.components.edgeDivider
@@ -1131,7 +1130,7 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, mod
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
 
 /**
- * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
+ * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기(공유 아이콘).
  * 작업 공간을 넓게 쓰려고 상태 표시줄 높이([workTopBarHeight])로 낮게 두고, 바 높이에 맞춘 버튼([TopBarIconButton] 등)을 쓴다.
  * 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
  */
@@ -1164,7 +1163,7 @@ private fun EditTopBar(
         },
         actions = {
             // 버튼 줄은 보이는 부분(양 끝 버튼 여백 안쪽)만 알린다: 커버 위 가운데 카메라 구멍에 실행 취소 버튼의 여백만 걸릴 때
-            // (한국어 '내보내기'처럼 줄이 넓을 때) 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차)
+            // 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차)
             Row(Modifier.topBarItem(barInsets, "actions", BarButtonContentInset), verticalAlignment = Alignment.CenterVertically) {
                 TopBarIconButton(onClick = onUndo, height = barHeight, enabled = canUndo, modifier = Modifier.testTag(EditScreenTags.UNDO)) {
                     Icon(
@@ -1195,14 +1194,12 @@ private fun EditTopBar(
                         }
                     }
                 }
-                // 내보내기는 시안처럼 파란 글자 버튼이다(사용자 결정, 자리는 그대로)
-                TopBarAccentButton(
-                    onClick = onExport,
-                    height = barHeight,
-                    enabled = canExport,
-                    modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.EXPORT)
-                ) {
-                    Text(stringResource(R.string.action_export))
+                // 내보내기는 다른 바 아이콘과 같은 색의 공유 아이콘이다(사용자 피드백 11차 3, 전에는 파란 '내보내기' 글자 버튼)
+                TopBarIconButton(onClick = onExport, height = barHeight, enabled = canExport, modifier = Modifier.testTag(EditScreenTags.EXPORT)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_ios_share),
+                        contentDescription = stringResource(R.string.action_export)
+                    )
                 }
             }
         },
