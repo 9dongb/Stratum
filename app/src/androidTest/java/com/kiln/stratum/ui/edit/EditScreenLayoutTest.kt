@@ -124,23 +124,19 @@ class EditScreenLayoutTest {
     }
 
     @Test
-    fun toolRail_movesButtonsOffHorizontalHinge() {
+    fun toolRail_aHorizontalHinge_doesNotMoveTheButtons() {
+        // 사용자 피드백 11차 1: 접히는 선 자리를 비우지 않는다(전에는 선에 걸린 버튼부터 아래로 비켜 놓았다)
         showEditScreen(700, 900)
         val railTags = EditTool.railTools.map { EditScreenTags.railTool(it) }
+        val before = railTags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() }
 
         // 브러시 버튼 한가운데를 화면 끝에서 끝까지 가로로 지나가는 힌지(두께 0인 선, 완전히 펼친 폴더블)
         val brushCenter = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush))
             .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
         val screenWidth = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow().right.roundToInt()
-        val hinge = Hinge(left = 0, top = brushCenter, right = screenWidth, bottom = brushCenter, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = brushCenter, right = screenWidth, bottom = brushCenter, isVertical = false)) }
 
-        composeRule.assertClickablesAvoid(hinge)
-        // 비켜 놓아도 도구 순서는 그대로이고, 마지막 도구도 막대 안에 있다
-        val bounds = railTags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() }
-        assertEquals(bounds.map { it.top }.sorted(), bounds.map { it.top })
-        val rail = composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("${bounds.last()} is outside the rail $rail", bounds.last().bottom <= rail.bottom)
+        assertEquals(before, railTags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() })
     }
 
     @Test

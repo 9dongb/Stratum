@@ -24,7 +24,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -46,10 +45,8 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.SLIDER_THUMB_TAG
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -316,13 +313,8 @@ class AdjustPanelTest {
     }
 
     @Test
-    fun medium_adjustPanelShowsAllSliders_andAvoidsTheHinge() {
-        // 폴드8 메인 세로처럼 화면 가운데를 가로로 지나가는 힌지: 떠 있는 패널은 그 위에 있다
+    fun medium_adjustPanelShowsAllSliders() {
         show(700, 900)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val middle = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         composeRule.onNode(hasTestTag(EditScreenTags.ADJUST_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
@@ -330,8 +322,6 @@ class AdjustPanelTest {
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.SATURATION)).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).performScrollTo().assertIsDisplayed()
-
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test
@@ -347,17 +337,10 @@ class AdjustPanelTest {
     }
 
     @Test
-    fun expanded_adjustPanelAvoidsTheHinge_andCropHidesIt() {
+    fun expanded_cropHidesTheAdjustPanel() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
         slider(AdjustItem.EXPOSURE).assertIsEnabled()
-
-        // 폴드8 메인 가로처럼 가운데를 세로로 지나가는 힌지: 패널은 오른쪽 조각에 있다
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-        composeRule.assertClickablesAvoid(hinge)
 
         // 자르기 중에는 보정을 막는다(기록하면 자르기 테두리가 처음으로 돌아가므로): 패널을 숨기고 버튼을 끈다
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()

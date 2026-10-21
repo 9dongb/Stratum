@@ -24,7 +24,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -42,12 +41,10 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.LongPressTimes
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -432,19 +429,13 @@ class LayerPanelTest {
     }
 
     @Test
-    fun medium_layersPanel_hasTheToolbarInTheHeader_andAvoidsTheHinge() {
+    fun medium_layersPanel_hasTheToolbarInTheHeader() {
         val fake = FakeLayers(2)
         show(fake, 700, 900)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val middle = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
         composeRule.onNode(hasTestTag(EditScreenTags.LAYER_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
             .assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).assertIsDisplayed()
-
-        composeRule.assertClickablesAvoid(hinge)
     }
 }

@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -57,7 +56,6 @@ import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -803,18 +801,6 @@ class RetouchToolTest {
         composeRule.onNode(hasText(hint(R.string.subtool_spot_heal_short)) and hasAnyAncestor(hasTestTag(EditScreenTags.MESSAGE_BAR))).performClick()
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).assertIsSelected()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertExists()
-    }
-
-    @Test
-    fun mainPortrait_optionsAvoidTheHorizontalHinge() {
-        showOptions(SubTool.RETOUCH_CLONE, source = CloneSource(1f, 1f), widthDp = 700)
-        val opacity = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).fetchSemanticsNode().layoutBoundsInWindow()
-        val y = opacity.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     private companion object {

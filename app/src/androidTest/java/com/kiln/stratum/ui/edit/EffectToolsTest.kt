@@ -15,7 +15,6 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -25,7 +24,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
@@ -34,11 +32,9 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -256,15 +252,4 @@ class EffectToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.strip("cell")).assertIsDisplayed()
     }
 
-    @Test
-    fun mainPortrait_blurOptionsAvoidTheHorizontalHinge() {
-        showBlurOptions(SubTool.EFFECT_BLUR, widthDp = 700)
-        val strength = composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).fetchSemanticsNode().layoutBoundsInWindow()
-        val y = strength.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-    }
 }

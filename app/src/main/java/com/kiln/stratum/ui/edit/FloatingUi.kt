@@ -25,8 +25,6 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.Span
 import com.kiln.stratum.ui.layout.flyoutOnLeft
@@ -145,8 +143,8 @@ private class FlyoutArea {
  * 띠 칸의 옵션 창을 그 칸 옆에 띄우는 자리. 받은 영역을 다 차지하지만 터치는 옵션 창만 받는다(빈 곳은 아래 캔버스로 간다).
  * 칸 오른쪽에 띄우고, 띠를 오른쪽 끝에 옮겨 놓아 자리가 모자라면 왼쪽에 띄운다([flyoutOnLeft], 사용자 피드백 9차).
  * 어느 쪽인지는 그리기 전에 정해, 세로 슬라이더 창의 값 표시를 칸 반대쪽에 두고 삼각형이 칸을 가리키게 한다.
- * 자리는 배치하는 순간 칸 자리(창 좌표)와 자기 위치, 힌지를 읽어 정한다. 접히는 선을 넘지 않게 칸이 있는 쪽 조각 안에 둔다([flyoutSides]).
- * 옵션 창이 그 조각보다 크면 조각 크기로 줄여 잰다(내용이 길면 스스로 밀어 본다).
+ * 자리는 배치하는 순간 칸 자리(창 좌표)와 자기 위치를 읽어 정한다([flyoutSides]). 접히는 선은 보지 않는다(사용자 피드백 11차 1).
+ * 옵션 창이 그 자리보다 크면 자리 크기로 줄여 잰다(내용이 길면 스스로 밀어 본다).
  */
 @Composable
 fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier = Modifier) {
@@ -154,7 +152,6 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
     val anchor = item?.let { state.anchors[it.key] }
     // 슬라이더 칸은 얇은 세로 슬라이더 창(칸 가운데에 맞추고 칸을 가리키는 삼각형), 나머지는 칸 위 끝에 맞춘 카드 창이다
     val slider = item as? SliderCell
-    val hinges = LocalHinges.current
     val density = LocalDensity.current
     val area = remember { FlyoutArea() }
     // 세로 슬라이더 창은 삼각형이 들어갈 만큼 칸에서 더 띄운다
@@ -166,14 +163,7 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             false
         } else {
             val gap = gapDp.roundToPx()
-            val hingeMargin = HingeMargin.roundToPx()
-            val (right, left) = flyoutSides(
-                anchor = cell,
-                area = region,
-                verticalBands = hinges.filter { it.isVertical }.map { it.band(hingeMargin) },
-                horizontalBands = hinges.filter { !it.isVertical }.map { it.band(hingeMargin) },
-                gap = gap
-            )
+            val (right, left) = flyoutSides(anchor = cell, area = region, gap = gap)
             flyoutOnLeft(FlyoutDecisionWidth.roundToPx(), cell, right, left, gap)
         }
     }
@@ -203,14 +193,7 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             val measurable = measurables.firstOrNull() ?: return@layout
             val cell = anchor ?: return@layout
             val gap = gapDp.roundToPx()
-            val hingeMargin = HingeMargin.roundToPx()
-            val (rightSide, leftSide) = flyoutSides(
-                anchor = cell,
-                area = region,
-                verticalBands = hinges.filter { it.isVertical }.map { it.band(hingeMargin) },
-                horizontalBands = hinges.filter { !it.isVertical }.map { it.band(hingeMargin) },
-                gap = gap
-            )
+            val (rightSide, leftSide) = flyoutSides(anchor = cell, area = region, gap = gap)
             val side = if (onLeft) leftSide else rightSide
             val placeable = measurable.measure(
                 Constraints(maxWidth = side.width.coerceAtLeast(0), maxHeight = side.height.coerceAtLeast(0))

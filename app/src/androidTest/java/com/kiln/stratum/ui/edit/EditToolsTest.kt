@@ -20,7 +20,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -36,10 +35,8 @@ import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -304,36 +301,14 @@ class EditToolsTest {
     }
 
     @Test
-    fun medium_optionsMoveOffHorizontalHinge() {
-        show(700, 900)
-        transformRail.performClick()
-        // 회전 버튼 한가운데를 가로로 지나가는 힌지
-        val rowCenter = composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT)
-            .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
-        val screenWidth = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow().right.roundToInt()
-        val hinge = Hinge(left = 0, top = rowCenter, right = screenWidth, bottom = rowCenter, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-    }
-
-    @Test
-    fun expanded_stripAndSubToolList_avoidVerticalHinge() {
+    fun expanded_subToolMenuChoosesCrop_andTheStripShowsTheRotateCells() {
         show(930, 700)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
         transformRail.performClick()
         transformRail.performClick()
-        composeRule.assertClickablesAvoid(hinge)
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).performClick()
 
         composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test

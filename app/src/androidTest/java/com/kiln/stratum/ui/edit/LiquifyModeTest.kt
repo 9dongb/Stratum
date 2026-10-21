@@ -41,9 +41,7 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.workBarContentPx
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -591,20 +589,16 @@ class LiquifyModeTest {
     }
 
     @Test
-    fun mainPortrait_theStripStaysOffAHorizontalHinge() {
+    fun mainPortrait_aHorizontalHinge_doesNotMoveTheStrip() {
+        // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 띠를 선 위 조각 안에서 끝냈다)
         show(700, 900)
         val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
-        // 띠 바로 아래를 지나는 가로 힌지: 띠는 힌지 위 조각 안에서 끝난다(넘치는 칸은 띠 안에서 밀어 봄)
-        val y = strip.bottom.roundToInt() + 40
+        val y = strip.center.y.roundToInt()
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val hinge = Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)) }
         composeRule.waitForIdle()
 
-        val node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} should end above $band", node.layoutBoundsInWindow().bottom <= band.start + 1f)
-        composeRule.assertClickablesAvoid(hinge)
+        assertEquals(strip, composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow())
     }
 
     @Test

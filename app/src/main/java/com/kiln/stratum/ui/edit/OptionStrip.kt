@@ -78,11 +78,8 @@ import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.components.StratumVerticalSlider
 import com.kiln.stratum.ui.components.scrollFadeEdges
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.placeInside
-import com.kiln.stratum.ui.layout.stripPiece
 import com.kiln.stratum.ui.theme.ColorPickerColors
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -214,9 +211,9 @@ private val DefaultStripY = OptionStripMargin
  * 도구 옵션 띠를 캔버스 위에 띄우는 자리(사용자 피드백 9차: "도구를 눌렀을 때 나오는 옵션은 이제 좌측 상단에 따로 해당 부분을 고정으로 띄워두세요").
  * 처음에는 캔버스 왼쪽 위이고, 띠 맨 위 손잡이를 끌면 캔버스 안에서 따라온다(사진 3, 태블릿 포토샵). 놓은 자리([position],
  * 캔버스 영역 왼쪽 위에서의 dp)는 [onPosition]으로 알려 설정에 남는다. 그래서 도구를 바꿔도·앱을 다시 켜도 그 자리다.
- * 접히는 선(힌지)에는 걸치지 않는다: 띠 가운데·위 끝이 든 조각 안에 놓고([stripPiece]), 조각보다 길면 띠 안에서 밀어 본다.
- * 화면 크기가 바뀌면(접기·돌리기) 같은 규칙으로 영역 안에 맞춘다. 받은 영역(캔버스)을 다 차지하지만 터치는 띠만 받는다.
- * 자리는 배치하는 순간 자기 위치와 힌지를 읽어 정한다(한 프레임 늦지 않음).
+ * 캔버스 영역 안 어디든 놓고(접히는 선에 걸쳐도 됨, 사용자 피드백 11차 1), 영역보다 길면 띠 안에서 밀어 본다.
+ * 화면 크기가 바뀌면(접기·돌리기) 영역 안으로 맞춘다. 받은 영역(캔버스)을 다 차지하지만 터치는 띠만 받는다.
+ * 자리는 배치하는 순간 자기 위치를 읽어 정한다(한 프레임 늦지 않음).
  */
 @Composable
 fun OptionStripHost(
@@ -226,7 +223,6 @@ fun OptionStripHost(
     onPosition: (StripPosition) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val hinges = LocalHinges.current
     val density = LocalDensity.current
     val placed = remember { PlacedStrip() }
     // 저장된 자리. 손을 뗀 자리를 바로 쓰고(설정 값이 돌아오기 전 한 프레임 튀지 않게), 설정이 바뀌면 따른다.
@@ -238,7 +234,6 @@ fun OptionStripHost(
     // 놓인 자리는 배율 표시가 피한다([FloatingState.stripRegion]). 띠가 사라지면 지운다.
     DisposableEffect(state) { onDispose { state.stripRegion = null } }
     // 손을 뗀 자리는 끈 만큼 옮긴 자리다(배치를 기다리지 않는다: 빠르게 끌고 떼면 그사이 배치가 없을 수 있다).
-    // 접히는 선에 걸친 자리여도 그대로 남기고, 놓을 때마다 선 밖으로 맞춰 놓는다.
     val finish = {
         dragging?.let { end ->
             val spot = with(density) { StripPosition(end.x.toDp().value, end.y.toDp().value) }
@@ -289,17 +284,8 @@ fun OptionStripHost(
             val stripWidth = OptionStripWidth.roundToPx()
             val wanted = dragging ?: saved?.let { Offset(it.x.dp.toPx(), it.y.dp.toPx()) } ?: Offset(DefaultStripX.toPx(), DefaultStripY.toPx())
             val area = Region(left + gap, top + margin, left + width - gap, top + height - margin)
-            val hingeMargin = HingeMargin.roundToPx()
-            val piece = stripPiece(
-                x = left + wanted.x.roundToInt(),
-                y = top + wanted.y.roundToInt(),
-                width = stripWidth,
-                area = area,
-                verticalBands = hinges.filter { it.isVertical }.map { it.band(hingeMargin) },
-                horizontalBands = hinges.filter { !it.isVertical }.map { it.band(hingeMargin) }
-            )
-            val placeable = measurable.measure(Constraints(maxWidth = width, maxHeight = piece.height.coerceAtLeast(0)))
-            val (x, y) = placeInside(left + wanted.x.roundToInt(), top + wanted.y.roundToInt(), placeable.width, placeable.height, piece)
+            val placeable = measurable.measure(Constraints(maxWidth = width, maxHeight = area.height.coerceAtLeast(0)))
+            val (x, y) = placeInside(left + wanted.x.roundToInt(), top + wanted.y.roundToInt(), placeable.width, placeable.height, area)
             placed.x = x - left
             placed.y = y - top
             placed.maxX = (width - placeable.width).coerceAtLeast(0)

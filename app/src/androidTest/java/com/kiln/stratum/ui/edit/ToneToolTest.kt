@@ -1,9 +1,6 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasAnyAncestor
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -39,11 +36,9 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -193,15 +188,4 @@ class ToneToolTest {
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_dodge))
     }
 
-    @Test
-    fun mainPortrait_optionsAvoidTheHorizontalHinge() {
-        showOptions(SubTool.TONE_DODGE, widthDp = 700)
-        val exposure = composeRule.onNodeWithTag(EditScreenTags.TONE_EXPOSURE).fetchSemanticsNode().layoutBoundsInWindow()
-        val y = exposure.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-    }
 }

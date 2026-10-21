@@ -167,41 +167,6 @@ class HingePlacementTest {
     }
 
     @Test
-    fun pieceAt_findsThePieceHoldingThePoint() {
-        val bands = listOf(Span(40, 60))
-        assertEquals(Span(0, 40), pieceAt(Span(0, 100), bands, 10))
-        assertEquals(Span(60, 100), pieceAt(Span(0, 100), bands, 70))
-    }
-
-    @Test
-    fun pieceAt_onABand_takesThePieceAfterIt() {
-        assertEquals(Span(60, 100), pieceAt(Span(0, 100), listOf(Span(40, 60)), 50))
-        // 띠 뒤에 조각이 없으면 마지막 조각
-        assertEquals(Span(0, 40), pieceAt(Span(0, 100), listOf(Span(40, 100)), 50))
-    }
-
-    @Test
-    fun flyoutRegion_staysOnTheSideOfTheCell() {
-        // 왼쪽 띠의 칸(0..72), 가운데 세로 힌지 띠(400..440)
-        val region = flyoutRegion(
-            anchor = Region(0, 100, 72, 156),
-            area = Region(0, 0, 840, 700),
-            verticalBands = listOf(Span(400, 440)),
-            horizontalBands = emptyList(),
-            gap = 4
-        )
-        assertEquals(Region(0, 0, 400, 700), region)
-    }
-
-    @Test
-    fun flyoutRegion_usesTheRowOfTheCellAcrossAHorizontalHinge() {
-        val area = Region(0, 0, 700, 840)
-        val bands = listOf(Span(400, 440))
-        assertEquals(Region(0, 0, 700, 400), flyoutRegion(Region(0, 300, 72, 356), area, emptyList(), bands, gap = 4))
-        assertEquals(Region(0, 440, 700, 840), flyoutRegion(Region(0, 450, 72, 506), area, emptyList(), bands, gap = 4))
-    }
-
-    @Test
     fun flyoutOffset_sitsRightOfTheCell_andIsPushedInside() {
         val region = Region(0, 0, 400, 400)
         // 칸 오른쪽에 붙고 위 끝을 맞춘다
@@ -212,16 +177,12 @@ class HingePlacementTest {
     }
 
     @Test
-    fun flyoutSides_areBesideTheCell_andInsideItsPiece() {
+    fun flyoutSides_areBesideTheCell() {
         val area = Region(0, 0, 1000, 600)
-        // 띠 칸 200~256: 오른쪽은 260부터 끝까지, 왼쪽은 처음부터 196까지
-        val (right, left) = flyoutSides(Region(200, 100, 256, 156), area, emptyList(), emptyList(), gap = 4)
+        // 띠 칸 200~256: 오른쪽은 260부터 끝까지, 왼쪽은 처음부터 196까지(접히는 선은 보지 않는다)
+        val (right, left) = flyoutSides(Region(200, 100, 256, 156), area, gap = 4)
         assertEquals(Region(260, 0, 1000, 600), right)
         assertEquals(Region(0, 0, 196, 600), left)
-        // 세로 힌지(480~520)가 있으면 칸 쪽 조각까지만이다
-        val (rightOfHinge, leftOfHinge) = flyoutSides(Region(600, 100, 656, 156), area, listOf(Span(480, 520)), emptyList(), gap = 4)
-        assertEquals(Region(660, 0, 1000, 600), rightOfHinge)
-        assertEquals(Region(520, 0, 596, 600), leftOfHinge)
     }
 
     @Test
@@ -229,35 +190,14 @@ class HingePlacementTest {
         val area = Region(0, 0, 1000, 600)
         // 왼쪽 끝 띠: 오른쪽에 들어간다
         val nearLeft = Region(4, 100, 60, 156)
-        flyoutSides(nearLeft, area, emptyList(), emptyList(), gap = 4).let { (right, left) ->
+        flyoutSides(nearLeft, area, gap = 4).let { (right, left) ->
             assertEquals(false, flyoutOnLeft(240, nearLeft, right, left, gap = 4))
         }
         // 오른쪽 끝 띠: 오른쪽 자리가 모자라 왼쪽에 띄운다
         val nearRight = Region(900, 100, 956, 156)
-        flyoutSides(nearRight, area, emptyList(), emptyList(), gap = 4).let { (right, left) ->
+        flyoutSides(nearRight, area, gap = 4).let { (right, left) ->
             assertEquals(true, flyoutOnLeft(240, nearRight, right, left, gap = 4))
         }
-        // 세로 힌지 바로 왼쪽 띠: 오른쪽은 힌지 너머라 칸 옆이 아니므로, 왼쪽에 들어가면 왼쪽에 띄운다
-        val nextToHinge = Region(420, 100, 476, 156)
-        flyoutSides(nextToHinge, area, listOf(Span(478, 520)), emptyList(), gap = 4).let { (right, left) ->
-            assertEquals(true, flyoutOnLeft(240, nextToHinge, right, left, gap = 4))
-        }
-    }
-
-    @Test
-    fun stripPiece_keepsTheStripOffTheHinges() {
-        val area = Region(60, 60, 1000, 700)
-        // 힌지가 없으면 영역 전체
-        assertEquals(area, stripPiece(100, 100, 56, area, emptyList(), emptyList()))
-        // 세로 힌지(500~540): 띠 가운데가 든 쪽 조각. 가운데가 선을 넘으면 너머 조각이다.
-        assertEquals(Region(60, 60, 500, 700), stripPiece(440, 100, 56, area, listOf(Span(500, 540)), emptyList()))
-        assertEquals(Region(540, 60, 1000, 700), stripPiece(530, 100, 56, area, listOf(Span(500, 540)), emptyList()))
-        // 띠 가운데가 힌지 띠 위면 접히는 선(520)에서 가까운 쪽 조각이다
-        assertEquals(Region(60, 60, 500, 700), stripPiece(482, 100, 56, area, listOf(Span(500, 540)), emptyList()))
-        assertEquals(Region(540, 60, 1000, 700), stripPiece(496, 100, 56, area, listOf(Span(500, 540)), emptyList()))
-        // 가로 힌지(380~420): 띠 위 끝이 든 쪽 조각
-        assertEquals(Region(60, 60, 1000, 380), stripPiece(100, 300, 56, area, emptyList(), listOf(Span(380, 420))))
-        assertEquals(Region(60, 420, 1000, 700), stripPiece(100, 450, 56, area, emptyList(), listOf(Span(380, 420))))
     }
 
     @Test
@@ -297,16 +237,6 @@ class HingePlacementTest {
         assertEquals(56, stripTop(Span(300, 348), height = 800, piece = Span(56, 700)))
         // 가로 힌지 아래 조각(440~800)에 있는 도구: 조각 위로 나가지 않는다
         assertEquals(452, stripTop(Span(452, 500), height = 300, piece = Span(440, 800)))
-    }
-
-    @Test
-    fun panelRegion_isTheTopRightPiece() {
-        val area = Region(100, 50, 900, 700)
-        // 힌지가 없으면 영역 전체
-        assertEquals(area, panelRegion(area, emptyList(), emptyList()))
-        // 세로 힌지면 오른쪽 조각, 가로 힌지면 위 조각
-        assertEquals(Region(440, 50, 900, 700), panelRegion(area, listOf(Span(400, 440)), emptyList()))
-        assertEquals(Region(100, 50, 900, 380), panelRegion(area, emptyList(), listOf(Span(380, 420))))
     }
 
     @Test

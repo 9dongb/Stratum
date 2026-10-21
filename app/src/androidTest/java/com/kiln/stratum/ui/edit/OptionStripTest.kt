@@ -17,8 +17,6 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
@@ -50,11 +48,8 @@ import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PaintColors
 import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
-import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.channels.Channel
@@ -584,53 +579,41 @@ class OptionStripTest {
     }
 
     @Test
-    fun mainPortrait_stripDraggedBelowAHorizontalHinge_staysOffTheHinge() {
+    fun mainPortrait_aHorizontalHinge_doesNotMoveOrShortenTheStripAndItsFlyout() {
+        // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 띠를 선 위 조각 높이로 줄이고, 옵션 창도 그 조각 안에 두었다)
         show(MAIN_PORTRAIT)
         pick(EditTool.Retouch)
-        val strip = stripBounds()
-        // 띠 바로 아래를 지나는 가로 힌지
-        val y = strip.bottom.roundToInt() + 40
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val hinge = Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-        composeRule.waitForIdle()
-        var node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} should end above $band", node.layoutBoundsInWindow().bottom <= band.start + 1f)
-        composeRule.assertClickablesAvoid(hinge)
-
-        // 위 끝을 힌지 아래로 끌면 힌지 아래 조각에 놓인다
-        dragHandle(0f, (band.end - strip.top) + 20f)
-        node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
-        assertTrue("${node.layoutBoundsInWindow()} should start below $band", node.layoutBoundsInWindow().top >= band.end - 1f)
-        composeRule.assertClickablesAvoid(hinge)
-        // 힌지 아래 띠의 옵션 창도 힌지 아래 조각에 뜬다
         cell("size").performClick()
-        val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode()
-        assertTrue("${flyout.layoutBoundsInWindow()} should be below $band", flyout.layoutBoundsInWindow().top >= band.end - 1f)
+        val strip = stripBounds()
+        val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
+        // 띠 한가운데를 지나는 가로 힌지
+        val y = strip.center.y.roundToInt()
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)) }
+        composeRule.waitForIdle()
+
+        assertEquals(strip, stripBounds())
+        assertEquals(flyout, composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow())
     }
 
     @Test
-    fun mainLandscape_stripDroppedOnAVerticalHinge_movesOffIt() {
+    fun mainLandscape_theStripCanSitOnAVerticalHinge_andItsFlyoutOpensBesideIt() {
+        // 사용자 피드백 11차 1: 띠를 접히는 선 위에 놓으면 그 자리에 남는다(전에는 선 한쪽으로 밀었다)
         show(MAIN_LANDSCAPE)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
         pick(EditTool.Brush)
         val strip = stripBounds()
 
-        // 띠 가운데가 힌지 바로 왼쪽에 오게 끌어 놓는다: 힌지에 걸치지 않고 왼쪽 조각 끝에 놓인다
-        dragHandle(centerX - strip.center.x - 4f, 0f)
+        dragHandle(centerX - strip.center.x, 0f)
 
-        val node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} crosses $band", node.layoutBoundsInWindow().right <= band.start + 1f)
-        composeRule.assertClickablesAvoid(hinge)
-        // 칸 옆 오른쪽은 힌지라, 옵션 창은 띠 왼쪽에 뜬다(힌지를 건너뛰지 않음)
+        val moved = stripBounds()
+        assertEquals(centerX.toFloat(), moved.center.x, 4f)
+        // 옵션 창은 칸 바로 오른쪽에 뜬다(선을 건너 왼쪽으로 가지 않음)
         cell("size").performClick()
         val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$flyout should be left of ${node.layoutBoundsInWindow()}", flyout.right <= node.layoutBoundsInWindow().left + 1f)
+        assertTrue("$flyout should be right of $moved", flyout.left >= moved.right - 1f)
     }
 
     @Test
@@ -648,23 +631,6 @@ class OptionStripTest {
         val value = composeRule.onNodeWithTag(EditScreenTags.STRIP_SLIDER_VALUE).fetchSemanticsNode().layoutBoundsInWindow()
         val slider = composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$value should be left of $slider", value.right <= slider.left + 1f)
-    }
-
-    @Test
-    fun mainLandscape_flyoutStaysLeftOfAVerticalHinge() {
-        show(MAIN_LANDSCAPE)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-        pick(EditTool.Brush)
-
-        cell("size").performClick()
-
-        val node = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} crosses $band", node.layoutBoundsInWindow().right <= band.start + 1f)
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test

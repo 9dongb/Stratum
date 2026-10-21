@@ -22,7 +22,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -39,10 +38,8 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
-import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -362,19 +359,10 @@ class EditCropTest {
     }
 
     @Test
-    fun medium_cropButtonsAvoidHorizontalHinge() {
+    fun medium_theCropStripShowsTheApplyButton() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
         composeRule.onNode(hasTestTag(EditScreenTags.CROP_APPLY) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
-        // 적용 버튼 한가운데를 가로로 지나가는 힌지
-        val applyCenter = composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY)
-            .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
-        val screenWidth = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow().right.roundToInt()
-        val hinge = Hinge(left = 0, top = applyCenter, right = screenWidth, bottom = applyCenter, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test

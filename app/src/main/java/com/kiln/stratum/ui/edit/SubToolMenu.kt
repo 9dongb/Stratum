@@ -44,11 +44,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.flyoutOffset
-import com.kiln.stratum.ui.layout.flyoutRegion
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -127,7 +124,7 @@ private val MenuMargin = 8.dp
 
 /**
  * 열린 하위 도구 메뉴. 편집 화면 맨 위(Box의 마지막 자식 쪽)에 화면 전체 크기로 둔다.
- * 메뉴 밖을 누르면 닫는 바탕(그 터치는 아래로 가지 않음)과 버튼 옆의 메뉴 카드: 메인 화면은 버튼 오른쪽(접히는 선을 넘지 않게 버튼이 있는 조각 안),
+ * 메뉴 밖을 누르면 닫는 바탕(그 터치는 아래로 가지 않음)과 버튼 옆의 메뉴 카드: 메인 화면은 버튼 오른쪽(접히는 선은 보지 않음, 사용자 피드백 11차 1),
  * 커버는 탭 위. 항목을 누르면 [onChoose]로 고른다. 뒤로 가기로도 닫는다. [current]는 그 도구의 지금 하위 도구다(고른 것으로 보임).
  */
 @Composable
@@ -135,7 +132,6 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
     val tool = state.tool ?: return
     val anchor = state.anchor ?: return
     BackHandler { state.close() }
-    val hinges = LocalHinges.current
     Box(modifier.fillMaxSize()) {
         // 메뉴 밖을 누르면 닫기만 한다(손을 뗄 때까지 그 터치를 가진다)
         Box(
@@ -164,19 +160,9 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
                 val gap = MenuGap.roundToPx()
                 val area = Region(left + margin, top + margin, left + width - margin, top + height - margin)
                 val (region, place) = when (state.side) {
-                    MenuSide.END -> {
-                        val hingeMargin = HingeMargin.roundToPx()
-                        val region = flyoutRegion(
-                            anchor = anchor,
-                            area = area,
-                            verticalBands = hinges.filter { it.isVertical }.map { it.band(hingeMargin) },
-                            horizontalBands = hinges.filter { !it.isVertical }.map { it.band(hingeMargin) },
-                            gap = gap
-                        )
-                        region to { w: Int, h: Int -> flyoutOffset(anchor, w, h, region, gap) }
-                    }
+                    MenuSide.END -> area to { w: Int, h: Int -> flyoutOffset(anchor, w, h, area, gap) }
                     MenuSide.ABOVE -> {
-                        // 탭 위, 탭 가운데에 맞추고 화면 안으로 민다(커버에는 접히는 선이 없다)
+                        // 탭 위, 탭 가운데에 맞추고 화면 안으로 민다
                         val region = Region(area.left, area.top, area.right, anchor.top - gap)
                         region to { w: Int, h: Int ->
                             val x = ((anchor.left + anchor.right) / 2 - w / 2).coerceIn(area.left, (area.right - w).coerceAtLeast(area.left))

@@ -33,9 +33,7 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -295,35 +293,32 @@ class FloatingPanelTest {
     }
 
     @Test
-    fun mainPortrait_panelStaysAboveAHorizontalHinge() {
+    fun mainPortrait_aHorizontalHinge_doesNotShortenThePanel() {
+        // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 메인 세로에서 선 위쪽 절반까지만 썼다)
         show(MAIN_PORTRAIT)
+        toggle(MainPanel.ADJUST).performClick()
+        val before = composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode().layoutBoundsInWindow()
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val middle = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
-        toggle(MainPanel.ADJUST).performClick()
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = middle, right = screen.right.roundToInt(), bottom = middle, isVertical = false)) }
 
-        val node = composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} should end above $band", node.layoutBoundsInWindow().bottom <= band.start)
-        composeRule.assertClickablesAvoid(hinge)
+        val after = composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(before, after)
+        assertTrue("$after should reach past the middle $middle", after.bottom > middle)
     }
 
     @Test
-    fun mainLandscape_panelStaysRightOfAVerticalHinge() {
+    fun mainLandscape_aVerticalHinge_doesNotMoveThePanel() {
         show(MAIN_LANDSCAPE)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
         toggle(MainPanel.LAYERS).performClick()
+        val before = composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode().layoutBoundsInWindow()
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        val x = before.center.x.roundToInt()
 
-        val node = composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        assertTrue("${node.layoutBoundsInWindow()} should be right of $band", node.layoutBoundsInWindow().left >= band.end)
-        composeRule.assertClickablesAvoid(hinge)
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = x, top = 0, right = x, bottom = screen.bottom.roundToInt(), isVertical = true)) }
+
+        assertEquals(before, composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).fetchSemanticsNode().layoutBoundsInWindow())
     }
 
     @Test

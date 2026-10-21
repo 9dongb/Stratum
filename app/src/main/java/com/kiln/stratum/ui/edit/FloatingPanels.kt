@@ -25,10 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Region
-import com.kiln.stratum.ui.layout.panelRegion
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -47,19 +44,13 @@ private val FloatingPanelMaxHeight = 640.dp
 private val FloatingPanelMargin = 8.dp
 
 /**
- * 떠 있는 패널과 힌지 띠 사이에 더 두는 간격. 패널 끝에서 반쯤 밀려 보이는 슬라이더도 누르는 영역(48dp)이 띠에 닿지 않게 한다.
- */
-private val FloatingPanelHingeGap = 24.dp
-
-/**
  * 메인 화면 캔버스 오른쪽 위에 떠 있는 레이어·조정 패널의 자리(사진 2, 프로크리에이트, 결정 기록 '떠 있는 레이어·조정 패널').
  * 상단 바의 [조정][레이어] 버튼으로 열고 닫는다. 받은 영역을 다 차지하지만 터치는 패널만 받는다.
- * 자리는 배치하는 순간 자기 위치와 힌지를 읽어 정한다: 세로 힌지가 있으면 오른쪽 조각, 가로 힌지가 있으면 위 조각 안([panelRegion]).
- * 패널 높이는 내용만큼이고, 그 조각 높이(태블릿은 [FloatingPanelMaxHeight])를 넘으면 안에서 밀어 본다.
+ * 자리는 배치하는 순간 자기 위치를 읽어 정한다(캔버스 오른쪽 위, 접히는 선은 보지 않음, 사용자 피드백 11차 1).
+ * 패널 높이는 내용만큼이고, 캔버스 높이(태블릿은 [FloatingPanelMaxHeight])를 넘으면 안에서 밀어 본다.
  */
 @Composable
 fun FloatingPanelHost(state: FloatingState, adjust: AdjustControls?, layers: LayerControls?, modifier: Modifier = Modifier) {
-    val hinges = LocalHinges.current
     val panel = state.panel
     Layout(
         content = {
@@ -88,12 +79,7 @@ fun FloatingPanelHost(state: FloatingState, adjust: AdjustControls?, layers: Lay
             val left = origin.x.roundToInt()
             val top = origin.y.roundToInt()
             val margin = FloatingPanelMargin.roundToPx()
-            val bandMargin = (HingeMargin + FloatingPanelHingeGap).roundToPx()
-            val region = panelRegion(
-                area = Region(left + margin, top + margin, left + width - margin, top + height - margin),
-                verticalBands = hinges.filter { it.isVertical }.map { it.band(bandMargin) },
-                horizontalBands = hinges.filter { !it.isVertical }.map { it.band(bandMargin) }
-            )
+            val region = Region(left + margin, top + margin, left + width - margin, top + height - margin)
             val placeable = measurable.measure(
                 Constraints(
                     maxWidth = minOf(region.width, FloatingPanelWidth.roundToPx()).coerceAtLeast(0),

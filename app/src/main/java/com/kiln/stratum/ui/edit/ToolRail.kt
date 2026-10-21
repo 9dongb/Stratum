@@ -1,6 +1,8 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -9,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -29,7 +33,6 @@ import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
-import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -39,8 +42,7 @@ import kotlin.math.roundToInt
  * 누르면 그 도구를 고르고, 다시 누르면 내려놓는다. 하위 도구가 있는 도구는 길게 누르거나(메뉴 묶음 0.3초) 고른 뒤 다시 누르면
  * 하위 도구 메뉴([menu])가 버튼 오른쪽에 뜨고, 꾹 누른 채 끌어 항목 위에서 떼면 고른다(사용자 피드백 7차).
  * 작업 공간을 넓게 쓰려고 폭은 버튼(48dp)에 양쪽 4dp만 더한 [ToolRailWidth]다(결정 기록 '화면 공간').
- * 배경은 아래 끝까지 칠하고, 버튼만 시스템 바·카메라 구멍을 피한다.
- * 가로로 지나가는 힌지가 막대를 지나면, 그 자리의 버튼을 힌지 띠 아래로 비켜 놓는다(CLAUDE.md 6장).
+ * 배경은 아래 끝까지 칠하고, 버튼만 시스템 바·카메라 구멍을 피한다. 접히는 선은 보지 않는다(사용자 피드백 11차 1).
  *
  * @param enabled 문서가 열려 있어 도구를 쓸 수 있는지
  * @param menu 하위 도구 메뉴(편집 화면 맨 위에 하나, [SubToolMenuHost]가 그린다)
@@ -61,12 +63,13 @@ fun ToolRail(
         color = StratumTheme.colors.background
     ) {
         // 도구가 막대 높이보다 많으면(가로로 눕힌 폰처럼 낮은 화면) 위아래로 밀어 본다
-        HingeAvoidingScrollColumn(
+        Column(
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                 .width(ToolRailWidth)
-                .padding(vertical = 8.dp),
-            gap = 4.dp
+                .padding(vertical = 8.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (tool in EditTool.railTools) {
                 Box(Modifier.width(ToolRailWidth), contentAlignment = Alignment.Center) {

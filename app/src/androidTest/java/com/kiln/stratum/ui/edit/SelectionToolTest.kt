@@ -42,7 +42,6 @@ import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
@@ -371,7 +370,7 @@ class SelectionToolTest {
     }
 
     @Test
-    fun mainPortrait_stripChangesTheSettings_andAvoidsTheHorizontalHinge() {
+    fun mainPortrait_stripChangesTheSettings() {
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertDoesNotExist()
@@ -401,13 +400,6 @@ class SelectionToolTest {
             assertEquals(128, options.tolerance)
             assertEquals(false, options.contiguous)
         }
-
-        // 합치는 방법 첫 칸 한가운데를 가로로 지나는 힌지
-        val y = composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.REPLACE)).fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test
