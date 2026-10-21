@@ -207,10 +207,10 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
     }
-    return numbersLast(numbers, rest) + helpCells(EditTool.Retouch, mode)
+    return numbersLast(numbers, rest)
 }
 
-/** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 구분선 아래 크기, 경도, 노출(강도 자리), 맨 아래 물음표 도움말 */
+/** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 구분선 아래 크기, 경도, 노출(강도 자리) */
 @Composable
 internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
@@ -253,7 +253,7 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit)
                 }
             }
         )
-    ) + helpCells(EditTool.Tone, mode)
+    )
 }
 
 /** 흐림의 띠: 크기, 경도, 강도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
@@ -474,9 +474,19 @@ private fun <T> ChoiceList(
 }
 
 /**
- * 물음표 도움말의 안내 글(사용자 피드백 8차 1-7: 설명 줄을 빼고 조작이 모호한 도구에만 물음표, 사용자 결정 'AI 제거·리터칭·명암').
- * [mode]는 고른 하위 도구다. 물음표가 없는 도구는 null이다.
- * 커버는 옵션 칸 맨 아래 하위 도구 줄 끝([HelpButton]), 메인 화면은 띠 맨 아래 칸([HelpCell])에서 쓴다.
+ * 이번 실행에서 안내 글을 이미 보인 하위 도구(사용자 피드백 10차 5: 하위 도구마다 처음 고를 때 한 번, 사용자 결정).
+ * 편집 상태(ViewModel)가 들어 접기·펼치기로 화면을 다시 만들어도 남고, 앱을 다시 켜면 다시 보인다.
+ */
+class ToolHelpSeen {
+    private val seen = mutableSetOf<SubTool>()
+
+    /** [mode]의 안내를 처음 보이면 참이고, 본 것으로 적는다 */
+    fun firstTime(mode: SubTool): Boolean = seen.add(mode)
+}
+
+/**
+ * 조작이 모호한 도구(리터칭·명암, 사용자 결정 'AI 제거·리터칭·명암')의 안내 글. [mode]는 고른 하위 도구다. 안내가 없는 도구는 null이다.
+ * 편집 화면이 하위 도구마다 이번 실행에서 처음 고를 때 알림으로 보인다(사용자 피드백 10차 5: "각 도구의 도움말 버튼 제거하세요. 토스트로 보여주세요.").
  */
 @Composable
 internal fun toolHelpText(tool: EditTool?, mode: SubTool?): String? {
@@ -492,8 +502,3 @@ internal fun toolHelpText(tool: EditTool?, mode: SubTool?): String? {
     }
     return hint?.let { stringResource(it) }
 }
-
-/** 띠 맨 아래의 물음표 칸(누르면 옆에 안내 글 창). 안내 글이 없는 도구는 빈 목록이다. */
-@Composable
-private fun helpCells(tool: EditTool, mode: SubTool): List<StripItem> =
-    toolHelpText(tool, mode)?.let { listOf(StripDivider("beforeHelp"), HelpCell("help", stringResource(R.string.tool_help), it)) }.orEmpty()

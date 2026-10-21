@@ -116,23 +116,10 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
 /**
  * 커버 옵션 칸 맨 아래의 하위 도구 줄(모두 옵션이 이어지는 하위 도구일 때). 길게 누르는 메뉴(CLAUDE.md 6장)를 모르는 사람도 찾을 수 있게 둔다.
  * 맨 아래(탭 줄 바로 위)인 까닭은 커버 공통 규칙이다(사용자 피드백 8차 1-1: "선택 탭은 하단에 공통적으로 배치"). 엄지가 가장 쉽게 닿는다.
- * [help]가 있으면 줄 오른쪽 끝에 둔다(물음표 도움말, 사용자 피드백 8차 1-7).
  */
 @Composable
-fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit, help: (@Composable () -> Unit)? = null) {
-    if (help == null) {
-        SubToolRowSegments(subTools, mode, onChoose, Modifier)
-    } else {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SubToolRowSegments(subTools, mode, onChoose, Modifier.weight(1f))
-            help()
-        }
-    }
-}
-
-@Composable
-private fun SubToolRowSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit, modifier: Modifier) {
-    StratumSegmentedRow(modifier) {
+fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit) {
+    StratumSegmentedRow {
         subTools.forEachIndexed { index, subTool ->
             StratumSegment(
                 selected = subTool == mode,

@@ -120,14 +120,13 @@ class EffectToolsTest {
         showBlurOptions(SubTool.EFFECT_SHARPEN)
 
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).assertIsSelected()
-        // 슬라이더는 크기 → 경도 → 강도(사용자 피드백 9차), 하위 도구 줄은 맨 아래(8차 1-1). 설명 줄·물음표는 없다(8차 1-7).
+        // 슬라이더는 크기 → 경도 → 강도(사용자 피드백 9차), 하위 도구 줄은 맨 아래(8차 1-1). 설명 줄은 없다(8차 1-7).
         val tops = listOf(EditScreenTags.BLUR_SIZE, EditScreenTags.BLUR_HARDNESS, EditScreenTags.BLUR_STRENGTH).map {
             composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
         }
         assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
         val sharpen = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$sharpen should be below the sliders", sharpen.top >= tops.last())
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertDoesNotExist()
     }
 
     @Test

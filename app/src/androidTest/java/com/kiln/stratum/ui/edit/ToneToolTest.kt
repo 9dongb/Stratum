@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import com.kiln.stratum.ui.components.HELP_TOOLTIP_TAG
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTestTag
@@ -109,13 +108,10 @@ class ToneToolTest {
             composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
         }
         assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
-        // 하위 도구 줄은 맨 아래이고, 설명 줄 대신 물음표를 누르면 안내가 뜬다(사용자 피드백 8차 1-1·1-7)
+        // 하위 도구 줄은 맨 아래이고(사용자 피드백 8차 1-1), 설명 줄도 물음표도 없다(10차 5: 안내는 처음 고를 때 편집 화면의 알림)
         val burn = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$burn should be below the sliders", burn.top >= tops.last())
-        val hint = composeRule.activity.getString(R.string.tone_hint_burn)
-        composeRule.onNodeWithText(hint).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).performClick()
-        composeRule.onNode(hasText(hint) and hasAnyAncestor(hasTestTag(HELP_TOOLTIP_TAG))).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.tone_hint_burn)).assertDoesNotExist()
     }
 
     @Test
@@ -193,7 +189,8 @@ class ToneToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.TONE_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.TONE_OVERLAY).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertIsDisplayed()
+        // 처음 고르면 안내 글이 알림으로 뜬다(사용자 피드백 10차 5)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_dodge))
     }
 
     @Test

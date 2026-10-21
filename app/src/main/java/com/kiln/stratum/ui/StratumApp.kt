@@ -165,7 +165,9 @@ fun StratumApp(editor: EditorViewModel) {
                 eyedropperActions = editor.eyedropperActions,
                 // 메인 화면 도구 옵션 띠를 손잡이로 옮겨 놓은 자리는 설정에 남는다(사용자 피드백 9차)
                 stripPosition = settingsValues.stripPosition,
-                onStripPosition = { spot -> settings.update { it.copy(stripPosition = spot) } }
+                onStripPosition = { spot -> settings.update { it.copy(stripPosition = spot) } },
+                // 리터칭·명암의 안내 알림은 하위 도구마다 이번 실행에서 한 번(사용자 피드백 10차 5)
+                toolHelpSeen = editor.toolHelpSeen
             )
         }
     }

@@ -172,6 +172,7 @@ import kotlinx.coroutines.flow.first
  * @param eyedropper 스포이드로 고르는 중인 자리와 색(없으면 null). 손가락 둘레 고리만 읽도록 함수로 받는다.
  * @param eyedropperActions 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일
  * @param stripPosition 메인 화면 도구 옵션 띠를 옮겨 놓은 자리(없으면 캔버스 왼쪽 위), [onStripPosition]으로 바꾼다(손잡이를 놓을 때)
+ * @param toolHelpSeen 이번 실행에서 안내 글을 이미 보인 하위 도구(리터칭·명암을 처음 고를 때 알림, 편집 상태가 들어 접기·펼치기에도 남는다)
  */
 @Composable
 fun EditScreen(
@@ -232,7 +233,8 @@ fun EditScreen(
     eyedropperActions: EyedropperActions = EyedropperActions.None,
     moveActions: MoveActions = MoveActions.None,
     stripPosition: StripPosition? = null,
-    onStripPosition: (StripPosition) -> Unit = {}
+    onStripPosition: (StripPosition) -> Unit = {},
+    toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() }
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -531,6 +533,13 @@ fun EditScreen(
             sourceSpot(viewState.view, area, document, hiddenBottom = if (widthClass == WidthClass.Compact) coverSheetPx else 0, current = cloneSource)
                 ?.let { (x, y) -> retouchActions.setSource(x, y) }
         }
+        // 조작이 모호한 도구(리터칭·명암)는 하위 도구마다 이번 실행에서 처음 고를 때 안내 글을 알림으로 3초 보인다
+        // (사용자 피드백 10차 5: "각 도구의 도움말 버튼 제거하세요. 토스트로 보여주세요.")
+        val helpMode = activeTool?.let { selection.modeOf(it) }
+        val helpText = toolHelpText(activeTool, helpMode)
+        LaunchedEffect(helpMode, helpText) {
+            if (helpMode != null && helpText != null && toolHelpSeen.firstTime(helpMode)) gestureToast.show(helpText, TOOL_HELP_TOAST_MILLIS)
+        }
         // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
         LaunchedEffect(removeChosen) { if (removeChosen) retouchActions.prepareRemove() }
@@ -643,7 +652,6 @@ fun EditScreen(
                 }
             }
         }
-        // 도구를 고를 때 띄우던 안내 알림은 없앴다(사용자 피드백 8차 1-7: 리터칭·명암만 띠 맨 아래 물음표 칸으로 안내)
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
         // 선택 도구의 동작(모두·해제·반전·지우기·복사·잘라내기·AI 채우기)은 메인 화면에서 화면 아래 가운데 작업 표시줄이다(사용자 피드백 10차 1)
         val selectionBar = selectionControls?.takeIf { widthClass != WidthClass.Compact }

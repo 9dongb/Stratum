@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.layout.HingeAvoidingTop
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -86,12 +88,15 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
             Text(
                 text = state.last,
                 modifier = Modifier
+                    // 긴 도구 안내가 화면 폭으로 넓게 퍼지지 않게 한다(여러 줄로 가운데 맞춤)
+                    .widthIn(max = GestureToastMaxWidth)
                     .shadow(3.dp, StratumShapes.Card)
                     .background(StratumTheme.colors.inverseBackground, StratumShapes.Card)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
                     .semantics { liveRegion = LiveRegionMode.Polite }
                     .testTag(EditScreenTags.GESTURE_TOAST),
                 color = StratumTheme.colors.inverseText,
+                textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelLarge
             )
         }
@@ -100,6 +105,12 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
 
 /** 제스처 알림이 보이는 시간(밀리초). 마지막으로 띄운 때부터 잰다. */
 const val GESTURE_TOAST_MILLIS = 1_000L
+
+/** 도구 안내 알림이 보이는 시간(밀리초, 사용자 피드백 10차 5). 글이 길어 제스처 알림보다 길다. 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다. */
+const val TOOL_HELP_TOAST_MILLIS = 3_000L
+
+/** 알림의 가장 큰 폭(긴 도구 안내는 여러 줄) */
+private val GestureToastMaxWidth = 360.dp
 
 /** 제스처 알림의 캔버스 위쪽 여백. 왼쪽 위 배율 표시(누르는 자리 48dp)보다 아래다. */
 private val GESTURE_TOAST_TOP = 64.dp

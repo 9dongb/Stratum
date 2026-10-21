@@ -33,7 +33,7 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
- * 칩(커버 조정 항목·자르기 비율·가져올 곳 정하기): 테두리형, 모서리 8dp, 높이 32dp(M3 그대로).
+ * 칩(커버 조정 항목·자르기 비율): 테두리형, 모서리 8dp, 높이 32dp(M3 그대로).
  * 고르면 선택 배경과 선택 칩 테두리, 선택 색 글자다(결정 기록 '디자인(시안)').
  */
 @Composable

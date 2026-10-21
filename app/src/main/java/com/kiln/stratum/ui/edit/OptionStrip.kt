@@ -206,24 +206,6 @@ class StripSlider(
 /** 칸 묶음 사이의 가는 구분선 */
 class StripDivider(override val key: String) : StripItem
 
-/**
- * 물음표 도움말 칸(사용자 피드백 8차 1-7, 띠 맨 아래): 물음표 아이콘. 누르면 칸 옆에 안내 글([text]) 창이 뜨고, 다시 누르거나 캔버스를 누르면 닫힌다.
- * 화면 읽기 기능은 [description]('도움말')으로 읽는다.
- */
-class HelpCell(override val key: String, val description: String, val text: String) : StripItem {
-    override val title: String
-        get() = description
-
-    override val flyout: @Composable () -> Unit
-        get() = {
-            Text(
-                text = text,
-                modifier = Modifier.width(FlyoutSliderWidth).testTag(EditScreenTags.STRIP_HELP_TEXT),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-}
-
 /** 띠를 처음 띄우는 자리: 캔버스 영역 왼쪽 위에서 가로 [OptionStripGap](도구 막대 옆), 세로 [OptionStripMargin] */
 private val DefaultStripX = OptionStripGap
 private val DefaultStripY = OptionStripMargin
@@ -426,7 +408,6 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
                 state.closeFlyout()
                 item.onClick()
             }
-            is HelpCell -> HelpCellView(item, open) { state.toggleFlyout(item.key) }
             is StripDivider -> HorizontalDivider(Modifier.width(32.dp).padding(vertical = 4.dp), color = StratumTheme.colors.divider)
         }
     }
@@ -568,20 +549,6 @@ private fun ChoiceCellView(cell: ChoiceCell, open: Boolean, onClick: () -> Unit)
             }
         }
         CompactLabel(cell.caption, if (cell.enabled) colors.textDescription else colors.textDisabled)
-    }
-}
-
-/** 물음표 칸의 모양: 작은 물음표 원(20dp). 안내 글 창이 열려 있으면 선택 배경·선택 색이다. */
-@Composable
-private fun HelpCellView(cell: HelpCell, open: Boolean, onClick: () -> Unit) {
-    val colors = StratumTheme.colors
-    CellBox(EditScreenTags.strip(cell.key), cell.description, null, open, enabled = true, onClick = onClick) {
-        Icon(
-            painter = painterResource(R.drawable.ic_help_outline),
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (open) colors.selectedContent else colors.textSecondary
-        )
     }
 }
 

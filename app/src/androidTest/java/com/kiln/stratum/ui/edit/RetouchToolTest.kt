@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import com.kiln.stratum.ui.components.HELP_TOOLTIP_TAG
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
@@ -220,12 +219,6 @@ class RetouchToolTest {
 
     private fun hint(id: Int) = composeRule.activity.getString(id)
 
-    /** 하위 도구 줄 끝의 물음표를 누르면 [id] 안내가 말풍선으로 뜬다(설명 줄 대신, 사용자 피드백 8차 1-7) */
-    private fun assertHelp(id: Int) {
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertContentDescriptionEquals(hint(R.string.tool_help)).performClick()
-        composeRule.onNode(hasText(hint(id)) and hasAnyAncestor(hasTestTag(HELP_TOOLTIP_TAG))).assertIsDisplayed()
-    }
-
     @Test
     fun spotHeal_hasNoOpacity() {
         showOptions(SubTool.RETOUCH_SPOT)
@@ -233,21 +226,17 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertIsDisplayed()
         assertTrue(!exists(EditScreenTags.RETOUCH_OPACITY))
-        assertHelp(R.string.retouch_hint_spot)
     }
 
     @Test
-    fun subToolRow_isAtTheBottom_withTheHelpAtItsEnd() {
-        // 커버 공통 규칙(사용자 피드백 8차 1-1): 하위 도구 줄은 옵션 칸 맨 아래, 물음표는 그 줄 오른쪽 끝(1-7)
+    fun subToolRow_isAtTheBottom_withoutHelpOrHints() {
+        // 커버 공통 규칙(사용자 피드백 8차 1-1): 하위 도구 줄은 옵션 칸 맨 아래다
         showOptions(SubTool.RETOUCH_CLONE, source = CloneSource(100f, 100f))
 
         val opacity = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).fetchSemanticsNode().layoutBoundsInWindow()
         val spot = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).fetchSemanticsNode().layoutBoundsInWindow()
-        val remove = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).fetchSemanticsNode().layoutBoundsInWindow()
-        val help = composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$spot should be below $opacity", spot.top >= opacity.bottom)
-        assertTrue("$help should be right of $remove", help.left >= remove.right - 1f)
-        // 설명 줄은 없다(물음표를 눌러야 보인다)
+        // 설명 줄도 물음표도 없다(안내는 처음 고를 때 편집 화면의 알림, 사용자 피드백 10차 5)
         composeRule.onNodeWithText(hint(R.string.retouch_hint_clone)).assertDoesNotExist()
     }
 
@@ -261,7 +250,6 @@ class RetouchToolTest {
         // 옵션 칸에는 크기·경도와 하위 도구 줄(과 물음표)뿐이다
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertIsDisplayed()
-        assertHelp(R.string.retouch_hint_heal)
     }
 
     @Test
@@ -271,7 +259,6 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).performSemanticsAction(SemanticsActions.SetProgress) { it(0.4f) }
 
         composeRule.runOnIdle { assertEquals(0.4f, settings.opacity, 0.001f) }
-        assertHelp(R.string.retouch_hint_clone)
     }
 
     @Test
@@ -281,7 +268,6 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         assertTrue(!exists(EditScreenTags.RETOUCH_HARDNESS) && !exists(EditScreenTags.RETOUCH_OPACITY))
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).assertIsSelected()
-        assertHelp(R.string.retouch_hint_remove)
     }
 
     @Test
@@ -650,6 +636,24 @@ class RetouchToolTest {
             }
         }
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performScrollTo().performClick()
+    }
+
+    @Test
+    fun editScreen_eachSubToolHint_showsOnceAsAToast() {
+        // 사용자 피드백 10차 5: "각 도구의 도움말 버튼 제거하세요. 토스트로 보여주세요." 하위 도구마다 이번 실행에서 처음 고를 때 한 번(사용자 결정)
+        openRetouchOnTheCover()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(hint(R.string.retouch_hint_spot))
+        // 3초 보이고 사라진다
+        composeRule.mainClock.advanceTimeBy(TOOL_HELP_TOAST_MILLIS + 1_000)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_HEAL)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(hint(R.string.retouch_hint_heal))
+        composeRule.mainClock.advanceTimeBy(TOOL_HELP_TOAST_MILLIS + 1_000)
+
+        // 이미 본 스팟 복구로 돌아가면 다시 뜨지 않는다
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
     }
 
     @Test

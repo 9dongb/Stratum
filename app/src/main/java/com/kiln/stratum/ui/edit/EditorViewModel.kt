@@ -427,6 +427,9 @@ class EditorViewModel internal constructor(
     /** 복제 도장·복구 브러시가 가져올 곳. 다른 문서를 열거나 문서 크기가 바뀌면(자르기·회전·크기 변경) 지운다. */
     val cloneSource: StateFlow<CloneSource?> = _cloneSource.asStateFlow()
 
+    /** 이번 실행에서 안내 글을 보인 하위 도구(리터칭·명암을 처음 고를 때 알림, 사용자 피드백 10차 5). 접기·펼치기에도 남는다. */
+    val toolHelpSeen = ToolHelpSeen()
+
     private val _tone = MutableStateFlow(ToneOptions())
 
     /** 명암 도구(닷지·번) 설정. 둘이 함께 쓰고, 앱을 끌 때까지 남는다(브러시와 같다). */
@@ -579,7 +582,7 @@ class EditorViewModel internal constructor(
         override fun cancel() = cancelStroke()
     }
 
-    /** 캔버스의 리터칭 손가락이 보내는 일(가져올 곳 정하기와 획) */
+    /** 리터칭이 보내는 일(가져올 곳 두기·옮기기와 획) */
     val retouchActions: RetouchActions = object : RetouchActions {
         override fun setSource(x: Float, y: Float) = setCloneSource(x, y)
         override fun begin(x: Float, y: Float, mode: RetouchMode) = beginRetouch(StrokePoint(x, y), mode)

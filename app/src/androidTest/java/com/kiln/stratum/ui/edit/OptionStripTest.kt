@@ -463,7 +463,7 @@ class OptionStripTest {
         cell("foreground").assertExists()
         cell("background").assertExists()
         cell("textSize").assertExists()
-        // 도구를 고를 때 뜨던 안내 알림은 없앴다(사용자 피드백 8차 1-7), 글자는 물음표도 없다
+        // 글자는 안내 알림이 없다(리터칭·명암만 처음 고를 때 알림, 사용자 피드백 10차 5)
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
         cell("help").assertDoesNotExist()
         composeRule.mainClock.autoAdvance = true
@@ -511,8 +511,8 @@ class OptionStripTest {
         val handle = composeRule.onNodeWithTag(EditScreenTags.STRIP_HANDLE).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(strip.top, handle.top, 2 * dp)
         assertEquals(48 * dp, handle.height, 2 * dp)
-        // 명암의 마지막 칸은 물음표 도움말이다(사용자 피드백 8차 1-7)
-        val last = cell("help").fetchSemanticsNode().layoutBoundsInWindow()
+        // 명암의 마지막 칸은 노출이다(수치 칸이 아래, 사용자 피드백 10차 9)
+        val last = cell("exposure").fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$strip should hug down to $last", strip.bottom - last.bottom <= 8 * dp)
         assertTrue("$strip should be shorter than $canvasBounds", strip.height < canvasBounds.height)
 
@@ -706,16 +706,9 @@ class OptionStripTest {
         cell("size").assertIsDisplayed()
         for (key in listOf("hardness", "opacity", "source")) cell(key).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsDisplayed().assertIsNotEnabled()
-        // 안내는 알림 대신 띠 맨 아래 물음표 칸을 누르면 옆에 뜬다(사용자 피드백 8차 1-7)
-        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
-        val picked = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).fetchSemanticsNode().layoutBoundsInWindow()
-        val help = cell("help").assertContentDescriptionContains(composeRule.activity.getString(R.string.tool_help)).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$help should be the last cell, below $picked", help.top >= picked.bottom)
-        cell("help").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.STRIP_HELP_TEXT).assertTextEquals(composeRule.activity.getString(R.string.retouch_hint_remove))
-        // 다시 누르면 닫힌다
-        cell("help").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.STRIP_HELP_TEXT).assertDoesNotExist()
+        // 물음표 칸은 없고(사용자 피드백 10차 5), 처음 고르면 안내 글이 알림으로 뜬다
+        cell("help").assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.retouch_hint_remove))
     }
 
     @Test

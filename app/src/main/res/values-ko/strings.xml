@@ -203,7 +203,6 @@
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_handle_description">옵션 띠 옮기기</string>
-    <string name="tool_help">도움말</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_tone_range">범위</string>
     <string name="strip_crop_ratio">비율</string>

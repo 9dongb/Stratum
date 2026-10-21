@@ -17,12 +17,6 @@ object EditScreenTags {
     /** 도구 옵션 띠 맨 위의 손잡이(끌어 띠를 옮김, 사용자 피드백 9차) */
     const val STRIP_HANDLE = "stripHandle"
 
-    /** 커버 옵션 칸 하위 도구 줄 끝의 물음표 도움말(리터칭·명암, 사용자 피드백 8차 1-7) */
-    const val TOOL_HELP = "toolHelp"
-
-    /** 띠 맨 아래 물음표 칸의 안내 글(옵션 창 안) */
-    const val STRIP_HELP_TEXT = "stripHelpText"
-
     /** 세로 슬라이더 창의 값 표시('경도 82%') */
     const val STRIP_SLIDER_VALUE = "stripSliderValue"
     const val OPTION_FLYOUT = "optionFlyout"

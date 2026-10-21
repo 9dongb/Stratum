@@ -48,8 +48,6 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.components.AccentButton
-import com.kiln.stratum.ui.components.HelpButton
-import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
@@ -168,10 +166,10 @@ class RetouchControls(
 
 /**
  * 리터칭 옵션: (AI 제거) 톡 눌러 고른 물체를 지우는 [지우기] 버튼, 크기,
- * (AI 제거가 아니면) 경도, (복제 도장만) 불투명도, 맨 아래 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거)와 그 오른쪽 끝의 물음표 도움말.
+ * (AI 제거가 아니면) 경도, (복제 도장만) 불투명도, 맨 아래 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거).
  * 바꾸면 다음 획부터 쓴다(기록하지 않는다). AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
  * 복구 브러시·복제 도장의 가져올 곳은 버튼 없이 캔버스의 표시를 끌어 옮긴다(사용자 피드백 10차 4).
- * 설명 줄 대신 물음표를 누르면 지금 하위 도구의 안내가 말풍선으로 뜬다(사용자 피드백 8차 1-7: 작업 공간 확보, AI 제거·리터칭·명암에만).
+ * 안내 글은 하위 도구를 처음 고를 때 편집 화면이 알림으로 보인다(사용자 피드백 10차 5, [toolHelpText]).
  */
 @Composable
 fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -203,11 +201,8 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
                 tag = EditScreenTags.RETOUCH_OPACITY
             )
         }
-        // 하위 도구 줄은 맨 아래(커버 공통 규칙), 그 오른쪽 끝에 물음표 도움말
-        val help = checkNotNull(toolHelpText(EditTool.Retouch, mode))
-        SubToolSegments(EditTool.Retouch.subTools, mode, onChoose) {
-            HelpButton(help, stringResource(R.string.tool_help), Modifier.testTag(EditScreenTags.TOOL_HELP))
-        }
+        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
+        SubToolSegments(EditTool.Retouch.subTools, mode, onChoose)
     }
 }
 

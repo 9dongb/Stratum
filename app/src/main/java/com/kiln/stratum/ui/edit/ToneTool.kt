@@ -13,7 +13,6 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
-import com.kiln.stratum.ui.components.HelpButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
@@ -61,8 +60,8 @@ interface ToneActions {
 class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? = null, val onChange: (ToneOptions) -> Unit)
 
 /**
- * 명암 옵션: 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 맨 아래 하위 도구(닷지·번)와 그 오른쪽 끝의 물음표 도움말.
- * 바꾸면 다음 획부터 쓴다(기록하지 않는다). 설명 줄 대신 물음표를 누르면 안내가 말풍선으로 뜬다(사용자 피드백 8차 1-7).
+ * 명암 옵션: 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 맨 아래 하위 도구(닷지·번).
+ * 바꾸면 다음 획부터 쓴다(기록하지 않는다). 안내 글은 하위 도구를 처음 고를 때 편집 화면이 알림으로 보인다(사용자 피드백 10차 5).
  */
 @Composable
 fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -82,11 +81,8 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
             tag = EditScreenTags.TONE_EXPOSURE
         )
-        // 하위 도구 줄은 맨 아래(커버 공통 규칙), 그 오른쪽 끝에 물음표 도움말
-        val help = checkNotNull(toolHelpText(EditTool.Tone, mode))
-        SubToolSegments(EditTool.Tone.subTools, mode, onChoose) {
-            HelpButton(help, stringResource(R.string.tool_help), Modifier.testTag(EditScreenTags.TOOL_HELP))
-        }
+        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
+        SubToolSegments(EditTool.Tone.subTools, mode, onChoose)
     }
 }
 
