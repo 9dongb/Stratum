@@ -1,8 +1,5 @@
 package com.kiln.stratum.ui.layout
 
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
@@ -53,94 +50,6 @@ fun HingeAvoidingColumn(
             placeables.forEachIndexed { index, placeable ->
                 placeable.place((width - placeable.width) / 2, tops[index])
             }
-        }
-    }
-}
-
-/**
- * 세로로 스크롤하는 목록. 스크롤하지 않았을 때 가로 힌지의 띠(양쪽 [HingeMargin])에 걸리는 항목은 띠 아래로 비켜 놓는다.
- *
- * 비켜 놓은 자리는 내용에 붙어 있어, 스크롤하면 내용과 함께 움직이고 띠를 지나갈 수 있다(결정 기록 '홈 최근 프로젝트'와 같은 까닭).
- * 그래서 내용이 다 들어가 스크롤하지 않는 화면(폴드 메인 세로)에서는 항목이 띠에 놓이지 않는다.
- * 높이는 쌓은 높이에, 가로 힌지가 있으면 비켜 놓을 만큼(띠 높이 + 가장 큰 항목 높이)을 더한다. 끝에 남는 자리는 비어 있다.
- *
- * 스크롤하지 않았을 때의 위치는 스크롤 바깥(스크롤이 옮기기 전)의 좌표로 잰다. 배치하는 순간 읽어 한 프레임 늦지 않는다.
- */
-@Composable
-fun HingeAvoidingScrollColumn(
-    modifier: Modifier = Modifier,
-    gap: Dp = 0.dp,
-    scrollState: ScrollState = rememberScrollState(),
-    content: @Composable () -> Unit
-) {
-    val hinges = LocalHinges.current.filter { !it.isVertical }
-    Layout(content = content, modifier = modifier.verticalScroll(scrollState)) { measurables, constraints ->
-        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
-        val gapPx = gap.roundToPx()
-        val marginPx = HingeMargin.roundToPx()
-        val width = (placeables.maxOfOrNull { it.width } ?: 0).coerceIn(constraints.minWidth, constraints.maxWidth)
-        val stackedHeight = placeables.sumOf { it.height } + gapPx * (placeables.size - 1).coerceAtLeast(0)
-        val tallest = placeables.maxOfOrNull { it.height } ?: 0
-        val room = hinges.sumOf { hinge -> hinge.band(marginPx).let { it.end - it.start } + tallest }
-        val height = (stackedHeight + room).coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) {
-            // 정렬선을 재는 단계에서는 위치를 몰라(null) 띠 없이 놓고, 곧 이어지는 배치에서 다시 놓는다.
-            // 바로 바깥 좌표는 스크롤이 옮기기 전의 자리라서, 스크롤해도 비켜 놓은 자리가 바뀌지 않는다.
-            val origin = coordinates?.let { it.parentCoordinates ?: it }?.positionInWindow()
-            val bands =
-                if (origin == null) {
-                    emptyList()
-                } else {
-                    hinges
-                        .filter { it.left < origin.x + width && it.right > origin.x }
-                        .map { it.band(marginPx).shiftedBy(-origin.y.roundToInt()) }
-                }
-            val tops = stackAvoiding(placeables.map { it.height }, gapPx, bands)
-            placeables.forEachIndexed { index, placeable -> placeable.place(0, tops[index]) }
-        }
-    }
-}
-
-/**
- * [first]와 [second]를 같은 폭으로 가로로 나란히 놓는다. 세로로 지나가는 힌지의 띠가 줄을 지나면 띠 양쪽에 하나씩 놓는다.
- * 두 개는 세로 가운데에 맞추고, [alignTop]이면 위에 맞춘다(새 캔버스 창의 두 칸).
- *
- * 두 개의 폭은 힌지의 위치와 상관없이 띠의 너비로만 정하고, 자리는 배치하는 순간 자기 위치를 읽어 정한다(한 프레임 늦지 않음).
- * 그래서 세로 힌지가 있으면 줄을 지나지 않아도 간격이 띠의 너비만큼 벌어진다. 힌지가 없으면 [gap]만큼 띄운다.
- * 받은 폭이 정해져 있어야 한다.
- */
-@Composable
-fun HingeSplitRow(
-    first: @Composable () -> Unit,
-    second: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    gap: Dp = 0.dp,
-    alignTop: Boolean = false
-) {
-    val verticalHinges = LocalHinges.current.filter { it.isVertical }
-    Layout(contents = listOf(first, second), modifier = modifier) { (firstMeasurables, secondMeasurables), constraints ->
-        val width = constraints.maxWidth
-        val marginPx = HingeMargin.roundToPx()
-        val bandWidth = verticalHinges.maxOfOrNull { it.band(marginPx).let { band -> band.end - band.start } } ?: 0
-        val childWidth = ((width - maxOf(gap.roundToPx(), bandWidth)) / 2).coerceAtLeast(0)
-        val childConstraints = constraints.copy(minWidth = childWidth, maxWidth = childWidth, minHeight = 0)
-        val firstPlaceable = firstMeasurables.single().measure(childConstraints)
-        val secondPlaceable = secondMeasurables.single().measure(childConstraints)
-        val height = maxOf(firstPlaceable.height, secondPlaceable.height)
-            .coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) {
-            val originX = coordinates?.positionInWindow()?.x?.roundToInt()
-            val band =
-                if (originX == null) {
-                    null
-                } else {
-                    verticalHinges
-                        .map { it.band(marginPx).shiftedBy(-originX) }
-                        .firstOrNull { it.end > 0 && it.start < width }
-                }
-            val (firstX, secondX) = splitAround(width, childWidth, band)
-            firstPlaceable.place(firstX, if (alignTop) 0 else (height - firstPlaceable.height) / 2)
-            secondPlaceable.place(secondX, if (alignTop) 0 else (height - secondPlaceable.height) / 2)
         }
     }
 }

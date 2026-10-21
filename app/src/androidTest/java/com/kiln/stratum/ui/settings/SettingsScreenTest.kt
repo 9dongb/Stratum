@@ -32,11 +32,8 @@ import com.kiln.stratum.settings.SettingsValues
 import com.kiln.stratum.settings.ThemeMode
 import com.kiln.stratum.ui.home.HomeScreen
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
-import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
@@ -46,7 +43,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 설정 화면: 커버의 한 줄 목록, 메인의 2단, 값 바꾸기, 힌지 피하기, 홈의 설정 버튼을 확인한다. */
+/** 설정 화면: 커버의 한 줄 목록, 메인의 2단(분류 칸 폭, 접히는 선과 상관없음), 값 바꾸기, 홈의 설정 버튼을 확인한다. */
 @RunWith(AndroidJUnit4::class)
 class SettingsScreenTest {
 
@@ -157,55 +154,36 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun mainLandscape_splitsAroundTheVerticalHinge() {
+    fun mainLandscape_theCategoryPaneHasItsOwnWidth_andAHingeChangesNothing() {
+        // 사용자 피드백 11차 1: 전에는 2단을 접히는 선 양쪽에 반씩 놓아 가운데가 비었다
         show(MAIN_LANDSCAPE)
+        val list = composeRule.onNodeWithTag(SettingsTags.LIST).fetchSemanticsNode()
+        val detail = composeRule.onNodeWithTag(SettingsTags.DETAIL).fetchSemanticsNode().layoutBoundsInWindow()
+        val dp = with(list.layoutInfo.density) { 1.dp.toPx() }
+        // 분류 칸은 280dp(이름표는 안쪽 여백 8dp씩을 뺀 줄에 있어 264dp), 항목 칸이 나머지를 쓴다
+        assertEquals(264 * dp, list.layoutBoundsInWindow().width, 2 * dp)
+        assertTrue("detail $detail should be wider than the list", detail.width > list.layoutBoundsInWindow().width)
+        val quality = composeRule.onNodeWithTag(SettingsTags.QUALITY).fetchSemanticsNode().layoutBoundsInWindow()
+
         val screen = composeRule.onNodeWithTag(SCREEN).fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = screen.top.roundToInt(), right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = screen.top.roundToInt(), right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
-        for (category in SettingsCategory.entries) {
-            composeRule.onNodeWithTag(SettingsTags.category(category)).performClick()
-            composeRule.assertClickablesAvoid(hinge)
-        }
-        composeRule.onNodeWithTag(SettingsTags.category(SettingsCategory.EXPORT)).performClick()
-        assertAvoids(SettingsTags.QUALITY, hinge)
+        assertEquals(quality, composeRule.onNodeWithTag(SettingsTags.QUALITY).fetchSemanticsNode().layoutBoundsInWindow())
     }
 
     @Test
-    fun mainPortrait_movesItemsBelowTheHorizontalHinge() {
+    fun mainPortrait_aHorizontalHinge_doesNotMoveTheItems() {
+        // 사용자 피드백 11차 1: 전에는 선에 걸리는 줄을 띠 아래로 비켜 놓아 줄 사이가 벌어졌다
         show(MAIN_PORTRAIT)
-        // 힌지 없이 크기 버튼 줄이 놓인 높이에 가로 힌지를 둔다. 비켜 놓지 않으면 그 줄이 띠에 걸린다.
-        val row = composeRule.onNodeWithTag(SettingsTags.size(ExportSize.Original)).fetchSemanticsNode().layoutBoundsInWindow()
+        val tags = listOf(SettingsTags.QUALITY, SettingsTags.size(ExportSize.Original), SettingsTags.category(SettingsCategory.PREVIEW))
+        val before = tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() }
         val screen = composeRule.onNodeWithTag(SCREEN).fetchSemanticsNode().layoutBoundsInWindow()
-        val y = row.center.y.roundToInt()
-        val hinge = Hinge(left = screen.left.roundToInt(), top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        val y = before[1].center.y.roundToInt()
 
-        composeRule.assertClickablesAvoid(hinge)
-        assertAvoids(SettingsTags.QUALITY, hinge)
-        // 비켜 놓은 줄은 띠 아래에 있고, 스크롤하지 않아도 보인다
-        val moved = composeRule.onNodeWithTag(SettingsTags.size(ExportSize.Original)).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$moved should be below $y", moved.top > y)
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = screen.left.roundToInt(), top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)) }
 
-        for (category in SettingsCategory.entries) {
-            composeRule.onNodeWithTag(SettingsTags.category(category)).performClick()
-            composeRule.assertClickablesAvoid(hinge)
-        }
-    }
-
-    @Test
-    fun mainPortrait_categoryRowsAvoidTheHorizontalHinge() {
-        show(MAIN_PORTRAIT)
-        val row = composeRule.onNodeWithTag(SettingsTags.category(SettingsCategory.PREVIEW)).fetchSemanticsNode().layoutBoundsInWindow()
-        val screen = composeRule.onNodeWithTag(SCREEN).fetchSemanticsNode().layoutBoundsInWindow()
-        val y = row.center.y.roundToInt()
-        val hinge = Hinge(left = screen.left.roundToInt(), top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-        composeRule.onNodeWithTag(SettingsTags.category(SettingsCategory.ABOUT)).performClick()
-        composeRule.onNodeWithText("1.2.3").assertIsDisplayed()
+        assertEquals(before, tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() })
     }
 
     @Test
@@ -218,15 +196,6 @@ class SettingsScreenTest {
         composeRule.onNodeWithContentDescription(string(R.string.action_settings)).performClick()
 
         composeRule.runOnIdle { assertEquals(1, opened) }
-    }
-
-    /** [tag] 노드(슬라이더처럼 누르기 동작이 없는 것)의 터치 영역이 [hinge]의 띠 밖에 있는지 */
-    private fun assertAvoids(tag: String, hinge: Hinge) {
-        val node = composeRule.onNodeWithTag(tag).fetchSemanticsNode()
-        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
-        val bounds = node.touchBoundsInWindow()
-        val (start, end) = if (hinge.isVertical) bounds.left to bounds.right else bounds.top to bounds.bottom
-        assertTrue("$bounds overlaps hinge band $band", end <= band.start + 1 || start >= band.end - 1)
     }
 
     private companion object {

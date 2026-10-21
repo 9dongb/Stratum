@@ -28,7 +28,6 @@ import com.kiln.stratum.project.ProjectInfo
 import com.kiln.stratum.ui.components.LongPressTimes
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import java.io.File
@@ -170,16 +169,19 @@ class HomeProjectsTest {
     }
 
     @Test
-    fun expanded_cardsAvoidTheVerticalHinge() {
+    fun expanded_aVerticalHinge_doesNotChangeTheCards() {
+        // 사용자 피드백 11차 1: 전에는 선에 걸리는 카드만 안쪽 여백을 줘 크기가 달랐다
         show(projects(8), widthDp = 930, heightDp = 700)
+        val tags = (0 until 8).map { HomeTags.projectName("p$it") }
+        val before = tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() }
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
-        // 버튼과 카드 모두 띠를 피한다
-        composeRule.assertClickablesAvoid(hinge)
+        assertEquals(before, tags.map { composeRule.onNodeWithTag(it).fetchSemanticsNode().layoutBoundsInWindow() })
+        // 칸은 모두 같은 폭이다
+        assertTrue("${before.map { it.width }}", before.maxOf { it.width } - before.minOf { it.width } < 2f)
     }
 
     @Test

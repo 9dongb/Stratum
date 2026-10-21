@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -71,9 +72,6 @@ import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.components.StratumSwitch
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
-import com.kiln.stratum.ui.layout.HingeAvoidingScrollColumn
-import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
@@ -93,6 +91,9 @@ enum class SettingsCategory(@get:StringRes val label: Int) {
 
 /** 항목 사이 간격 */
 private val ItemGap = 12.dp
+
+/** 메인 2단의 분류 칸 폭. 분류 이름이 짧아 반반은 너무 넓다(사용자 피드백 11차 1, Claude 판단). */
+private val CategoryPaneWidth = 280.dp
 
 /** 화면 테스트가 설정 화면의 부분을 찾을 때 쓰는 이름표 */
 object SettingsTags {
@@ -115,8 +116,8 @@ object SettingsTags {
 
 /**
  * 설정 화면(홈의 설정 버튼). 기획서대로 커버(좁은 화면)는 한 줄 목록, 메인은 2단(왼쪽 분류 · 오른쪽 항목)이다.
- * 2단은 세로 힌지가 가운데를 지나면 힌지 양쪽에 하나씩 놓인다([HingeSplitRow]).
- * 가로 힌지(메인 세로)가 지나면 분류 줄과 항목을 띠 아래로 비켜 놓는다. 커버(한 줄 목록)는 힌지를 보지 않는다.
+ * 2단의 왼쪽 분류 칸은 내용에 맞는 폭([CategoryPaneWidth])이고 나머지가 항목이다. 접히는 선은 보지 않는다(사용자 피드백 11차 1,
+ * 전에는 2단을 선 양쪽에 반씩 놓고 메인 세로에서 선에 걸린 줄을 띠 아래로 비켜 놓았다).
  * 바꾸는 즉시 저장된다(저장 버튼 없음).
  *
  * @param onChange 설정을 바꾸는 함수를 받는다(앞 값에 걸어 새 값을 만든다)
@@ -169,31 +170,25 @@ fun SettingsScreen(
                     }
                 }
             } else {
-                // 2단: 왼쪽 분류, 오른쪽 그 분류의 항목. 메인 세로에서는 가로 힌지의 띠에 걸리는 줄·항목을 띠 아래로 비켜 놓는다.
-                HingeSplitRow(
-                    first = {
-                        HingeAvoidingColumn(Modifier.fillMaxSize().padding(8.dp).testTag(SettingsTags.LIST)) {
-                            for (entry in SettingsCategory.entries) {
-                                CategoryRow(entry, selected = entry == category) { category = entry }
-                            }
+                // 2단: 왼쪽 분류(내용에 맞는 폭), 오른쪽 그 분류의 항목. 접히는 선은 보지 않는다(사용자 피드백 11차 1).
+                Row(body, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.width(CategoryPaneWidth).fillMaxHeight().padding(8.dp).testTag(SettingsTags.LIST)) {
+                        for (entry in SettingsCategory.entries) {
+                            CategoryRow(entry, selected = entry == category) { category = entry }
                         }
-                    },
-                    second = {
-                        // 분류를 바꾸면 맨 위부터 보인다
-                        key(category) {
-                            HingeAvoidingScrollColumn(
-                                Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag(SettingsTags.DETAIL),
-                                gap = ItemGap
-                            ) {
-                                SectionTitle(category.label)
-                                CategoryItems(category, values, onChange, versionName)
-                                Spacer(Modifier.height(4.dp))
-                            }
+                    }
+                    // 분류를 바꾸면 맨 위부터 보인다
+                    key(category) {
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).testTag(SettingsTags.DETAIL),
+                            verticalArrangement = Arrangement.spacedBy(ItemGap)
+                        ) {
+                            SectionTitle(category.label)
+                            CategoryItems(category, values, onChange, versionName)
+                            Spacer(Modifier.height(4.dp))
                         }
-                    },
-                    modifier = body,
-                    gap = 16.dp
-                )
+                    }
+                }
             }
         }
     }
@@ -251,7 +246,7 @@ private fun CategoryItems(
 
 /**
  * 내보내기 기본값: 형식, 품질(JPEG·WebP), 크기.
- * 항목마다 하나의 덩어리(이름 + 내용)로 내보낸다. 부모가 간격을 두고 쌓는다(2단에서는 가로 힌지를 피해).
+ * 항목마다 하나의 덩어리(이름 + 내용)로 내보낸다. 부모가 간격을 두고 쌓는다.
  */
 @Composable
 private fun ExportItems(values: SettingsValues, onChange: ((SettingsValues) -> SettingsValues) -> Unit) {

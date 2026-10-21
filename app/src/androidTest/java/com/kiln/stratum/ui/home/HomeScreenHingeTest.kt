@@ -15,16 +15,15 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 홈 화면의 두 버튼이 펼친 화면 가운데의 접히는 부분(힌지)을 피해 양쪽으로 갈라지는지 확인한다. */
+/** 홈 화면 빈 안내의 두 버튼이 접히는 선이 지나도 갈라지지 않고 가운데에 나란히 있는지 확인한다(사용자 피드백 11차 1). */
 @RunWith(AndroidJUnit4::class)
 class HomeScreenHingeTest {
 
@@ -37,7 +36,7 @@ class HomeScreenHingeTest {
     private fun SemanticsNodeInteraction.bounds(): Rect = fetchSemanticsNode().layoutBoundsInWindow()
 
     @Test
-    fun buttons_splitAroundVerticalHinge() {
+    fun buttons_stayTogether_evenAcrossAVerticalHinge() {
         // Pixel_Fold 안쪽 화면 크기
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(841.dp, 701.dp))) {
@@ -49,16 +48,16 @@ class HomeScreenHingeTest {
         // 프로젝트가 없을 때 가운데에 보이는 두 버튼
         val openPhoto = composeRule.onNodeWithTag(HomeTags.EMPTY_OPEN_PHOTO)
         val newCanvas = composeRule.onNodeWithTag(HomeTags.EMPTY_NEW_CANVAS)
+        val before = openPhoto.bounds() to newCanvas.bounds()
 
-        // 두 버튼 사이 한가운데를 화면 위에서 아래까지 세로로 지나가는 힌지(두께 0인 선).
-        // 힌지가 없을 때의 간격(12dp)은 띠(양쪽 16dp)보다 좁아서, 갈라 놓지 않으면 두 버튼 모두 띠에 걸린다.
-        val centerX = ((openPhoto.bounds().right + newCanvas.bounds().left) / 2).roundToInt()
-        val screenHeight = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow().bottom.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screenHeight, isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        // 두 버튼 사이 한가운데를 화면 위에서 아래까지 세로로 지나가는 힌지(두께 0인 선). 전에는 두 버튼을 선 양쪽으로 갈라 놓았다.
+        val centerX = ((before.first.right + before.second.left) / 2).roundToInt()
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
-        composeRule.assertClickablesAvoid(hinge)
-        assertTrue(openPhoto.bounds().right <= centerX)
-        assertTrue(newCanvas.bounds().left >= centerX)
+        assertEquals(before, openPhoto.bounds() to newCanvas.bounds())
+        // 같은 폭으로 나란히 화면 가운데에 있다
+        assertEquals(before.first.width, before.second.width, 2f)
+        assertEquals(screen.center.x, (before.first.left + before.second.right) / 2, 2f)
     }
 }

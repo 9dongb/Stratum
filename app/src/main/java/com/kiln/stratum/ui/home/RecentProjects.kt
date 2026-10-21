@@ -54,10 +54,7 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -80,15 +77,10 @@ import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.StratumDialog
-import com.kiln.stratum.ui.layout.HingeMargin
-import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.Span
 import com.kiln.stratum.ui.layout.WidthClass
-import com.kiln.stratum.ui.layout.insetsAvoiding
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -131,9 +123,7 @@ private val ThumbnailChecker = 6.dp
 /**
  * 프로젝트 격자(홈 갤러리). 칸마다 작은 그림(그림 비율대로, 칸 아래쪽에 맞춤), 이름, 크기를 보인다.
  * 그림을 누르면 열고([selecting]이면 고르고 푼다), 이름·크기 칸을 누르면 이름 바꾸기, 길게 누르면 메뉴(이름 바꾸기·지우기)를 띄운다.
- *
- * 세로 힌지(메인 가로)가 지나면 그 띠에 걸리는 칸을 띠 바깥으로 줄여 놓는다(칸 자리는 스크롤해도 그대로다).
- * 가로 힌지(메인 세로)는 줄이 스크롤되며 지나가므로 피하지 않는다(결정 기록 '홈 최근 프로젝트').
+ * 칸은 모두 같은 크기다(접히는 선은 보지 않는다, 사용자 피드백 11차 1).
  */
 @Composable
 fun RecentProjectsGrid(
@@ -147,8 +137,6 @@ fun RecentProjectsGrid(
     selected: List<String> = emptyList(),
     onToggle: (String) -> Unit = {}
 ) {
-    val density = LocalDensity.current
-    val bands = LocalHinges.current.filter { it.isVertical }.map { it.band(with(density) { HingeMargin.roundToPx() }) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = modifier
@@ -159,26 +147,16 @@ fun RecentProjectsGrid(
         verticalArrangement = Arrangement.spacedBy(GridRowSpacing)
     ) {
         items(projects, key = { it.id }) { info ->
-            // 칸의 실제 창 x 구간을 재서, 세로 힌지 띠와 겹치면 카드를 그쪽에서 줄인다(칸 안쪽 여백이라 칸 자리는 그대로다)
-            var cell by remember { mutableStateOf<Span?>(null) }
-            val (start, end) = cell?.takeIf { bands.isNotEmpty() }?.let { insetsAvoiding(it, bands) } ?: (0 to 0)
-            Box(
-                Modifier.onGloballyPositioned {
-                    val left = it.positionInWindow().x.roundToInt()
-                    cell = Span(left, left + it.size.width)
-                }
-            ) {
-                ProjectCard(
-                    info = info,
-                    selecting = selecting,
-                    isSelected = info.id in selected,
-                    onOpen = { onOpen(info.id) },
-                    onToggle = { onToggle(info.id) },
-                    onRename = { onRename(info.id) },
-                    onDelete = { onDelete(info.id) },
-                    modifier = Modifier.padding(start = with(density) { start.toDp() }, end = with(density) { end.toDp() })
-                )
-            }
+            ProjectCard(
+                info = info,
+                selecting = selecting,
+                isSelected = info.id in selected,
+                onOpen = { onOpen(info.id) },
+                onToggle = { onToggle(info.id) },
+                onRename = { onRename(info.id) },
+                onDelete = { onDelete(info.id) },
+                modifier = Modifier
+            )
         }
     }
 }

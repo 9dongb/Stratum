@@ -49,42 +49,8 @@ class HingePlacementTest {
         )
     }
 
-    @Test
-    fun splitAround_putsChildrenAtBothEndsWithoutBand() {
-        assertEquals(0 to 306, splitAround(width = 600, childWidth = 294, band = null))
-    }
-
-    @Test
-    fun splitAround_putsOneChildOnEachSideOfBand() {
-        // 띠 280~320: 왼쪽 것은 띠 앞(280)에서 끝나고, 오른쪽 것은 띠 뒤(320)에서 시작한다
-        assertEquals(0 to 320, splitAround(width = 600, childWidth = 280, band = Span(280, 320)))
-    }
-
-    @Test
-    fun splitAround_keepsChildrenInsideRow() {
-        // 띠가 오른쪽으로 치우쳐도 줄 밖으로 나가지 않는다
-        assertEquals(170 to 320, splitAround(width = 600, childWidth = 280, band = Span(450, 490)))
-    }
-
-    @Test
-    fun splitAround_ignoresBandOutsideRow() {
-        assertEquals(0 to 320, splitAround(width = 600, childWidth = 280, band = Span(700, 740)))
-    }
-
     // 창 고르기: 2000×1600 화면, 카드 최대 폭 600
     private val screen = Region(0, 0, 2000, 1600)
-
-    @Test
-    fun insetsAvoiding_shrinksTheSideNextToTheBand() {
-        val band = Span(990, 1022)
-
-        // 띠가 칸의 끝 쪽에 걸치면 끝을 줄이고, 시작 쪽에 걸치면 시작을 줄인다
-        assertEquals(0 to 20, insetsAvoiding(Span(800, 1010), listOf(band)))
-        assertEquals(12 to 0, insetsAvoiding(Span(1010, 1200), listOf(band)))
-        // 겹치지 않으면 그대로
-        assertEquals(0 to 0, insetsAvoiding(Span(1022, 1200), listOf(band)))
-        assertEquals(0 to 0, insetsAvoiding(Span(800, 1010), emptyList()))
-    }
 
     @Test
     fun flyoutOffset_sitsRightOfTheCell_andIsPushedInside() {

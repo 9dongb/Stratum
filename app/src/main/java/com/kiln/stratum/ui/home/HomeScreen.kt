@@ -46,11 +46,9 @@ import com.kiln.stratum.ui.components.SecondaryButton
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.HingeSplitRow
 import com.kiln.stratum.ui.layout.HoleAvoidingBarRow
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
-import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.AppTitleTextStyle
@@ -275,8 +273,8 @@ private fun HomeTopBar(
 }
 
 /**
- * 프로젝트가 없을 때: 가운데에 안내와 사진 열기(주요)·새 캔버스(보조) 버튼.
- * 펼친 화면 가운데의 접히는 부분(힌지)이 버튼 줄을 지나면, 두 버튼을 힌지 양쪽에 하나씩 놓는다.
+ * 프로젝트가 없을 때: 가운데에 안내와 사진 열기(주요)·새 캔버스(보조) 버튼(같은 폭, 사이 12dp).
+ * 접히는 선은 보지 않는다(사용자 피드백 11차 1, 전에는 선이 버튼 줄을 지나면 두 버튼을 선 양쪽에 하나씩 놓았다).
  */
 @Composable
 private fun EmptyGallery(onOpenPhoto: () -> Unit, onNewCanvas: () -> Unit, modifier: Modifier = Modifier) {
@@ -294,24 +292,18 @@ private fun EmptyGallery(onOpenPhoto: () -> Unit, onNewCanvas: () -> Unit, modif
         )
         Spacer(Modifier.height(24.dp))
         // 버튼 안 아이콘은 글자가 버튼 이름을 말해 주므로 따로 이름(contentDescription)을 붙이지 않는다
-        HingeSplitRow(
-            first = {
-                AccentButton(onClick = onOpenPhoto, modifier = Modifier.testTag(HomeTags.EMPTY_OPEN_PHOTO)) {
-                    Icon(painter = painterResource(R.drawable.ic_photo_library), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text(stringResource(R.string.home_open_photo))
-                }
-            },
-            second = {
-                SecondaryButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.EMPTY_NEW_CANVAS)) {
-                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text(stringResource(R.string.home_new_canvas))
-                }
-            },
-            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-            gap = 12.dp
-        )
+        Row(Modifier.widthIn(max = 480.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AccentButton(onClick = onOpenPhoto, modifier = Modifier.weight(1f).testTag(HomeTags.EMPTY_OPEN_PHOTO)) {
+                Icon(painter = painterResource(R.drawable.ic_photo_library), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.home_open_photo))
+            }
+            SecondaryButton(onClick = onNewCanvas, modifier = Modifier.weight(1f).testTag(HomeTags.EMPTY_NEW_CANVAS)) {
+                Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.home_new_canvas))
+            }
+        }
     }
 }
 
