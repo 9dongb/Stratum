@@ -193,7 +193,6 @@ object EditScreenTags {
     const val RETOUCH_SIZE = "retouchSize"
     const val RETOUCH_HARDNESS = "retouchHardness"
     const val RETOUCH_OPACITY = "retouchOpacity"
-    const val RETOUCH_SOURCE = "retouchSource"
     const val RETOUCH_REMOVE_PICKED = "retouchRemovePicked"
     const val RETOUCH_SOURCE_MARKER = "retouchSourceMarker"
 

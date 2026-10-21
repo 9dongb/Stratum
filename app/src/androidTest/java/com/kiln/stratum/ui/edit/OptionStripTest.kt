@@ -678,13 +678,13 @@ class OptionStripTest {
     }
 
     @Test
-    fun retouch_healWithoutASource_isPicking_andHasNoOpacity_cloneHasOpacity() {
+    fun retouch_healHasNoSourceCellOrOpacity_cloneHasOpacity() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Retouch)
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_HEAL)
 
-        // 가져올 곳이 없으면 정하는 중(켜진 모양)이다
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsOn()
+        // '가져올 곳 정하기' 칸은 없다(사용자 피드백 10차 4: 표시가 늘 보이고 끌어 옮긴다)
+        cell("source").assertDoesNotExist()
         cell("opacity").assertDoesNotExist()
         cell("size").performClick()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
@@ -692,7 +692,7 @@ class OptionStripTest {
 
         composeRule.runOnIdle { cloneSource = CloneSource(10f, 10f) }
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_CLONE)
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsOff()
+        cell("source").assertDoesNotExist()
         cell("opacity").assertIsDisplayed()
     }
 

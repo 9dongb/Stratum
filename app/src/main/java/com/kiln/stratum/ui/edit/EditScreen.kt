@@ -54,6 +54,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -118,6 +120,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 
 /**
  * 편집 화면. 상단 바 아래를 화면 폭에 따라 세 가지로 배치한다(CLAUDE.md 6장).
@@ -245,8 +248,6 @@ fun EditScreen(
     val viewFlip = ViewFlip.fromBits(viewFlipBits)
     // 커버 화면 조정 옵션에서 고른 항목
     var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
-    // 리터칭의 '가져올 곳 정하기'를 켰는지(가져올 곳이 아직 없으면 이것과 상관없이 정한다)
-    var retouchPicking by rememberSaveable { mutableStateOf(false) }
     // 크기·단단함 슬라이더를 끄거나 세 손가락으로 미는 동안 캔버스 가운데에 브러시 크기를 보인다(브러시·지우개·리터칭·명암)
     val sizePreview = rememberSizePreviewState()
     // 두 손가락·세 손가락 톡의 짧은 알림(결정 기록 '제스처 알림')
@@ -515,11 +516,21 @@ fun EditScreen(
         // AI 선택을 고르면(고른 채 그림이 바뀌어도) 보이는 그림을 미리 읽어 둔다(처음 누를 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val objectChosen = ready != null && activeTool == EditTool.Select && selection.modeOf(EditTool.Select) == SubTool.SELECT_AI
         LaunchedEffect(objectChosen, ready?.revision) { if (objectChosen) selectionActions.prepareObjects() }
-        // 리터칭: 고른 하위 도구의 획 종류와, 캔버스를 누르면 가져올 곳을 정하는지(복제·복구는 가져올 곳이 없으면 늘 정한다).
-        // AI 제거는 가져올 곳이 없는 획이라 스팟 복구처럼 다루고, 손가락은 AI 제거 획을 보낸다(retouchRemoving).
+        // 리터칭: 고른 하위 도구의 획 종류. AI 제거는 가져올 곳이 없는 획이라 스팟 복구처럼 다루고, 손가락은 AI 제거 획을 보낸다(retouchRemoving).
         val retouchRemoving = selection.modeOf(EditTool.Retouch) == SubTool.RETOUCH_REMOVE
         val retouchMode = selection.modeOf(EditTool.Retouch)?.retouchMode ?: RetouchMode.SPOT_HEAL
-        val retouchPicks = retouchMode != RetouchMode.SPOT_HEAL && (retouchPicking || cloneSource == null)
+        // 복구 브러시·복제 도장을 고르면 가져올 곳 표시가 늘 보인다(사용자 피드백 10차 4: "버튼 없어도 기본적으로 화면에 가져올 곳이 보여지고
+        // 사용자가 이를 옮기기만하면 됩니다"). 가져올 곳이 없거나(처음, 문서 크기가 바뀌어 지워짐) 보이는 곳 밖이면 보이는 캔버스 가운데에 둔다.
+        val sourceToolChosen = ready != null && activeTool == EditTool.Retouch && retouchMode != RetouchMode.SPOT_HEAL && !retouchRemoving
+        LaunchedEffect(sourceToolChosen, cloneSource == null) {
+            if (!sourceToolChosen) return@LaunchedEffect
+            // 캔버스 크기를 알고, 닫힌 화면의 옵션 칸이 놓일 때까지 기다린다(편집 화면을 막 열었거나 도구를 막 골랐을 때)
+            val area = snapshotFlow { viewState.area }.first { it.width > 0 && it.height > 0 }
+            withFrameNanos { }
+            val document = (state as? EditorState.Ready)?.documentSize ?: return@LaunchedEffect
+            sourceSpot(viewState.view, area, document, hiddenBottom = if (widthClass == WidthClass.Compact) coverSheetPx else 0, current = cloneSource)
+                ?.let { (x, y) -> retouchActions.setSource(x, y) }
+        }
         // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
         LaunchedEffect(removeChosen) { if (removeChosen) retouchActions.prepareRemove() }
@@ -534,8 +545,6 @@ fun EditScreen(
             settings = retouch,
             onChange = onRetouch,
             source = cloneSource,
-            picking = retouchPicks,
-            onPick = { if (cloneSource != null) retouchPicking = !retouchPicking },
             sizePreview = sizePreview,
             objectPicked = shownPick != null,
             busy = ready?.busy == true,
@@ -691,11 +700,9 @@ fun EditScreen(
                     view = { viewState.view },
                     document = ready.documentSize,
                     mode = retouchMode,
-                    picking = retouchPicks,
                     source = cloneSource,
                     radius = retouch.radius,
                     actions = retouchActions,
-                    onPicked = { retouchPicking = false },
                     modifier = Modifier.fillMaxSize(),
                     removing = retouchRemoving,
                     pick = shownPick,

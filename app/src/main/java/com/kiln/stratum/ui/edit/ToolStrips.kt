@@ -175,9 +175,8 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls): List<St
 }
 
 /**
- * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), (AI 제거) 고른 물체 지우기,
- * 구분선 아래 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
- * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
+ * 리터칭의 띠: (AI 제거) 고른 물체 지우기, 구분선 아래 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
+ * 복구·복제의 가져올 곳은 버튼 없이 캔버스의 표시를 끌어 옮긴다(사용자 피드백 10차 4).
  */
 @Composable
 internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripItem> {
@@ -194,18 +193,6 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
         }
     }
     val rest = buildList {
-        if (mode == SubTool.RETOUCH_HEAL || mode == SubTool.RETOUCH_CLONE) {
-            add(
-                IconCell(
-                    key = "source",
-                    icon = R.drawable.ic_gps_fixed,
-                    description = stringResource(R.string.retouch_source),
-                    onClick = controls.onPick,
-                    checked = controls.picking,
-                    tag = EditScreenTags.RETOUCH_SOURCE
-                )
-            )
-        }
         if (mode == SubTool.RETOUCH_REMOVE) {
             // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
             add(
@@ -220,7 +207,7 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
     }
-    return numbersLast(numbers, rest) + helpCells(EditTool.Retouch, mode, controls.picking)
+    return numbersLast(numbers, rest) + helpCells(EditTool.Retouch, mode)
 }
 
 /** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 구분선 아래 크기, 경도, 노출(강도 자리), 맨 아래 물음표 도움말 */
@@ -266,7 +253,7 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit)
                 }
             }
         )
-    ) + helpCells(EditTool.Tone, mode, retouchPicking = false)
+    ) + helpCells(EditTool.Tone, mode)
 }
 
 /** 흐림의 띠: 크기, 경도, 강도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
@@ -488,16 +475,15 @@ private fun <T> ChoiceList(
 
 /**
  * 물음표 도움말의 안내 글(사용자 피드백 8차 1-7: 설명 줄을 빼고 조작이 모호한 도구에만 물음표, 사용자 결정 'AI 제거·리터칭·명암').
- * [mode]는 고른 하위 도구, [retouchPicking]은 리터칭이 가져올 곳을 정하는 중인지다. 물음표가 없는 도구는 null이다.
+ * [mode]는 고른 하위 도구다. 물음표가 없는 도구는 null이다.
  * 커버는 옵션 칸 맨 아래 하위 도구 줄 끝([HelpButton]), 메인 화면은 띠 맨 아래 칸([HelpCell])에서 쓴다.
  */
 @Composable
-internal fun toolHelpText(tool: EditTool?, mode: SubTool?, retouchPicking: Boolean): String? {
+internal fun toolHelpText(tool: EditTool?, mode: SubTool?): String? {
     val hint = when (tool) {
         EditTool.Retouch -> when {
             mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
             mode == SubTool.RETOUCH_REMOVE -> R.string.retouch_hint_remove
-            retouchPicking -> R.string.retouch_hint_pick
             mode == SubTool.RETOUCH_HEAL -> R.string.retouch_hint_heal
             else -> R.string.retouch_hint_clone
         }
@@ -509,5 +495,5 @@ internal fun toolHelpText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
 
 /** 띠 맨 아래의 물음표 칸(누르면 옆에 안내 글 창). 안내 글이 없는 도구는 빈 목록이다. */
 @Composable
-private fun helpCells(tool: EditTool, mode: SubTool, retouchPicking: Boolean): List<StripItem> =
-    toolHelpText(tool, mode, retouchPicking)?.let { listOf(StripDivider("beforeHelp"), HelpCell("help", stringResource(R.string.tool_help), it)) }.orEmpty()
+private fun helpCells(tool: EditTool, mode: SubTool): List<StripItem> =
+    toolHelpText(tool, mode)?.let { listOf(StripDivider("beforeHelp"), HelpCell("help", stringResource(R.string.tool_help), it)) }.orEmpty()

@@ -312,9 +312,7 @@
     <string name="subtool_heal_short">Heal</string>
     <string name="subtool_clone">Clone stamp</string>
     <string name="subtool_clone_short">Clone</string>
-    <string name="retouch_source">Set source</string>
     <string name="retouch_hint_spot">Paint over a spot. It is filled from a similar place nearby.</string>
-    <string name="retouch_hint_pick">Touch where to take pixels from, then paint where to fix.</string>
     <string name="retouch_hint_heal">Paint to bring the texture from the source. When you lift your finger, it blends with the brightness and color around. Drag the marker to move it, or hold it to lock it.</string>
     <string name="retouch_hint_clone">Paint to copy the source as it is. Drag the marker to move it, or hold it to lock it.</string>
     <string name="retouch_marker">Source marker</string>

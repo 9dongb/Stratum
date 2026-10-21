@@ -83,7 +83,7 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
             tag = EditScreenTags.TONE_EXPOSURE
         )
         // 하위 도구 줄은 맨 아래(커버 공통 규칙), 그 오른쪽 끝에 물음표 도움말
-        val help = checkNotNull(toolHelpText(EditTool.Tone, mode, retouchPicking = false))
+        val help = checkNotNull(toolHelpText(EditTool.Tone, mode))
         SubToolSegments(EditTool.Tone.subTools, mode, onChoose) {
             HelpButton(help, stringResource(R.string.tool_help), Modifier.testTag(EditScreenTags.TOOL_HELP))
         }
