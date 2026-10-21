@@ -47,11 +47,13 @@ import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HingeSplitRow
+import com.kiln.stratum.ui.layout.HoleAvoidingBarRow
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.theme.AppTitleTextStyle
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -183,9 +185,9 @@ fun HomeScreen(
 }
 
 /**
- * 홈 위 줄: 왼쪽에 앱 이름(선택 중이면 고른 수), 오른쪽에 [선택] [사진 열기] [+] [설정](선택 중이면 [지우기] [완료]).
- * 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 카메라 구멍이 제목·버튼에 걸릴 때만 내린다(결정 기록 '전체 화면').
- * 오른쪽 버튼 묶음은 메인 가로의 세로 힌지 오른쪽에 들어가는 폭이다.
+ * 홈 위 줄: 왼쪽에 앱 이름(굵고 크게, 사용자 피드백 10차. 선택 중이면 고른 수), 오른쪽에 [선택] [사진 열기] [+] [설정](선택 중이면 [지우기] [완료]).
+ * 상태 표시줄을 숨겨 바가 맨 위에 붙는다. 위쪽 카메라 구멍에 걸리는 버튼은 구멍 왼쪽으로 비켜 놓고, 그래도 걸릴 때만 바를 내린다
+ * (결정 기록 '전체 화면', [HoleAvoidingBarRow]). 오른쪽 버튼 묶음은 메인 가로의 세로 힌지 오른쪽에 들어가는 폭이다.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,40 +208,67 @@ private fun HomeTopBar(
         selectedCount > 0 -> pluralStringResource(R.plurals.home_selected_count, selectedCount, selectedCount)
         else -> stringResource(R.string.home_select_title)
     }
-    TopAppBar(
-        title = { Text(title, Modifier.topBarItem(barInsets, "title"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(HomeTags.TOP_BAR),
-        actions = {
-            Row(Modifier.topBarItem(barInsets, "actions"), verticalAlignment = Alignment.CenterVertically) {
-                if (selecting) {
-                    // 되돌릴 수 없는 지우기는 오류 색 글자 버튼이다(한 번 더 묻는다)
-                    QuietButton(
-                        onClick = onDeleteSelected,
-                        enabled = selectedCount > 0,
-                        color = StratumTheme.colors.error,
-                        modifier = Modifier.testTag(HomeTags.DELETE_SELECTED)
-                    ) {
-                        Text(stringResource(R.string.action_delete))
-                    }
-                    QuietButton(onClick = onDone, modifier = Modifier.padding(end = 4.dp).testTag(HomeTags.DONE)) {
-                        Text(stringResource(R.string.home_done))
-                    }
-                } else {
-                    QuietButton(onClick = onSelect, enabled = canSelect, modifier = Modifier.testTag(HomeTags.SELECT)) {
-                        Text(stringResource(R.string.home_select))
-                    }
-                    QuietButton(onClick = onOpenPhoto, modifier = Modifier.testTag(HomeTags.OPEN_PHOTO)) {
-                        Text(stringResource(R.string.home_open_photo))
-                    }
-                    StratumIconButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.NEW_CANVAS)) {
-                        Icon(painter = painterResource(R.drawable.ic_add), contentDescription = stringResource(R.string.home_new_canvas))
-                    }
-                    StratumIconButton(onClick = onOpenSettings, modifier = Modifier.testTag(HomeTags.SETTINGS)) {
-                        Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
-                    }
+    // 버튼마다 따로 자리를 알려, 구멍이 버튼 사이에 있으면 바를 내리지 않는다
+    val actions: List<Pair<String, @Composable () -> Unit>> = if (selecting) {
+        listOf(
+            // 되돌릴 수 없는 지우기는 오류 색 글자 버튼이다(한 번 더 묻는다)
+            "delete" to {
+                QuietButton(
+                    onClick = onDeleteSelected,
+                    enabled = selectedCount > 0,
+                    color = StratumTheme.colors.error,
+                    modifier = Modifier.testTag(HomeTags.DELETE_SELECTED)
+                ) {
+                    Text(stringResource(R.string.action_delete))
+                }
+            },
+            "done" to {
+                QuietButton(onClick = onDone, modifier = Modifier.padding(end = 4.dp).testTag(HomeTags.DONE)) {
+                    Text(stringResource(R.string.home_done))
                 }
             }
+        )
+    } else {
+        listOf(
+            "select" to {
+                QuietButton(onClick = onSelect, enabled = canSelect, modifier = Modifier.testTag(HomeTags.SELECT)) {
+                    Text(stringResource(R.string.home_select))
+                }
+            },
+            "openPhoto" to {
+                QuietButton(onClick = onOpenPhoto, modifier = Modifier.testTag(HomeTags.OPEN_PHOTO)) {
+                    Text(stringResource(R.string.home_open_photo))
+                }
+            },
+            "newCanvas" to {
+                StratumIconButton(onClick = onNewCanvas, modifier = Modifier.testTag(HomeTags.NEW_CANVAS)) {
+                    Icon(painter = painterResource(R.drawable.ic_add), contentDescription = stringResource(R.string.home_new_canvas))
+                }
+            },
+            "settings" to {
+                StratumIconButton(onClick = onOpenSettings, modifier = Modifier.testTag(HomeTags.SETTINGS)) {
+                    Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
+                }
+            }
+        )
+    }
+    TopAppBar(
+        title = {
+            HoleAvoidingBarRow(
+                insets = barInsets,
+                title = {
+                    Text(
+                        title,
+                        modifier = Modifier.testTag(HomeTags.TITLE),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = if (selecting) MaterialTheme.typography.titleLarge else AppTitleTextStyle
+                    )
+                },
+                actions = actions
+            )
         },
+        modifier = Modifier.edgeDivider(DividerEdge.Bottom, StratumTheme.colors.divider).testTag(HomeTags.TOP_BAR),
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )

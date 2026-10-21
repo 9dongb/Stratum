@@ -33,6 +33,41 @@ class TopBarInsetsTest {
         assertTrue(cutoutBlocks(listOf(145f..200f), listOf(back), margin = 10f))
     }
 
+    // 폭 1000px 바의 오른쪽 버튼 넷(폭 100·200·120·120), 틈 없이 오른쪽 끝(1000)에 붙는다
+    private val widths = listOf(100, 200, 120, 120)
+
+    @Test
+    fun holeAvoiding_withoutAHole_hugsTheEnd() {
+        assertEquals(listOf(460, 560, 760, 880), holeAvoidingStarts(widths, end = 1000, holes = emptyList(), margin = 10f, minStart = 200))
+    }
+
+    @Test
+    fun holeAvoiding_buttonOverAHole_movesLeftOfIt_withTheButtonsBeforeIt() {
+        // 사용자 피드백 10차 7: 구멍(500~560)이 둘째 버튼(560~760)에 걸린다 → 둘째는 구멍 왼쪽(490에서 끝), 첫째는 그 앞
+        assertEquals(listOf(190, 290, 760, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(500f..560f), margin = 10f, minStart = 150))
+    }
+
+    @Test
+    fun holeAvoiding_holeAwayFromTheButtons_movesNothing() {
+        // 버튼 묶음(460~1000) 앞의 구멍은 걸리지 않는다
+        assertEquals(listOf(460, 560, 760, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(300f..350f), margin = 10f, minStart = 150))
+    }
+
+    @Test
+    fun holeAvoiding_onlyTheShownPartCounts() {
+        // 버튼 양옆 여백(30)은 구멍에 걸려도 된다: 셋째 버튼(760~880)의 보이는 부분은 790~850, 구멍 850~860은 여유 10보다 가깝다 → 옮김
+        // 구멍 865~880은 보이는 부분(850에서 끝)과 여유(10)보다 멀다 → 그대로
+        assertEquals(listOf(460, 560, 760, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(865f..880f), margin = 10f, minStart = 150, inset = 30))
+        // 옮기면 보이는 부분이 구멍 앞(840)에서 끝난다: 셋째 750~870(보이는 부분 780~840), 그 앞 버튼들도 이어서
+        assertEquals(listOf(450, 550, 750, 880), holeAvoidingStarts(widths, end = 1000, holes = listOf(850f..860f), margin = 10f, minStart = 150, inset = 30))
+    }
+
+    @Test
+    fun holeAvoiding_withoutRoomBesideTheTitle_givesUp() {
+        // 구멍 왼쪽으로 옮기면 제목(끝 300)과 겹친다 → null(바를 내린다)
+        assertEquals(null, holeAvoidingStarts(widths, end = 1000, holes = listOf(500f..560f), margin = 10f, minStart = 300))
+    }
+
     @Test
     fun noHoleOrNoItems_keepsTheBarAtTheTop() {
         assertFalse(cutoutBlocks(emptyList(), listOf(back, actions), margin = 10f))

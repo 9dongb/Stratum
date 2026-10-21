@@ -26,6 +26,9 @@ val StratumTypography = Typography(
     )
 )
 
+/** 홈 위 줄의 앱 이름(사용자 피드백 10차: "앱 이름 글자를 굵게 해주고, 글자크기를 좀 키워주세요"). 바 제목(18sp)보다 크고 굵다. */
+val AppTitleTextStyle: TextStyle = MaterialDefaults.titleLarge.copy(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold)
+
 /** 좁은 칸(도구 옵션 띠)에서 한 줄에 다 들어가지 않는 글자를 줄일 수 있는 가장 작은 크기 */
 private val CompactTextMinSize = 8.sp
 

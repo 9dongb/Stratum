@@ -97,6 +97,9 @@ object HomeTags {
     const val PROJECT_GRID = "projectGrid"
     const val DELETE_CONFIRM = "deleteProjectConfirm"
     const val TOP_BAR = "homeTopBar"
+
+    /** 위 줄의 제목(앱 이름, 선택 중이면 고른 수) */
+    const val TITLE = "homeTitle"
     const val SELECT = "homeSelect"
     const val DONE = "homeSelectDone"
     const val DELETE_SELECTED = "homeDeleteSelected"
