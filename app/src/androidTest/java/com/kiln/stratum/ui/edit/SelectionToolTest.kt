@@ -422,6 +422,15 @@ class SelectionToolTest {
         }
         composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).assertDoesNotExist()
+        // 수치 칸이 없어 띠 맨 끝에 구분선이 남지 않는다(검토에서 찾음): 마지막 칸 아래는 칸 바탕 둘레와 띠의 아래 여백(약 9dp)뿐이고,
+        // 구분선이 남으면 간격·구분선만큼(11dp) 더 내려간다
+        val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
+        val lastCell = SelectionMode.entries.maxOf { mode ->
+            composeRule.onNode(hasTestTag(EditScreenTags.selectionMode(mode)) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
+                .fetchSemanticsNode().layoutBoundsInWindow().bottom
+        }
+        val dp = with(strip.layoutInfo.density) { 1.dp.toPx() }
+        assertTrue("strip ends ${(strip.layoutBoundsInWindow().bottom - lastCell) / dp}dp below its last cell", strip.layoutBoundsInWindow().bottom - lastCell < 14 * dp)
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).assertIsEnabled()
         composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }

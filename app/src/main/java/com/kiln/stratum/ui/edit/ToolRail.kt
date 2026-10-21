@@ -44,7 +44,6 @@ import kotlin.math.roundToInt
  *
  * @param enabled 문서가 열려 있어 도구를 쓸 수 있는지
  * @param menu 하위 도구 메뉴(편집 화면 맨 위에 하나, [SubToolMenuHost]가 그린다)
- * @param onToolBounds 버튼 자리(창 좌표)가 바뀌면 알린다. 도구 옵션 띠를 고른 도구 옆에 띄우는 데 쓴다.
  */
 @Composable
 fun ToolRail(
@@ -52,8 +51,7 @@ fun ToolRail(
     enabled: Boolean,
     onChoose: (SubTool) -> Unit,
     modifier: Modifier = Modifier,
-    menu: SubToolMenuState = remember { SubToolMenuState() },
-    onToolBounds: (EditTool, Region) -> Unit = { _, _ -> }
+    menu: SubToolMenuState = remember { SubToolMenuState() }
 ) {
     Surface(
         modifier = modifier
@@ -72,20 +70,7 @@ fun ToolRail(
         ) {
             for (tool in EditTool.railTools) {
                 Box(Modifier.width(ToolRailWidth), contentAlignment = Alignment.Center) {
-                    RailToolButton(
-                        tool,
-                        selection,
-                        enabled && tool.available,
-                        menu,
-                        onChoose,
-                        // 스크롤로 반쯤 가려져도 버튼 가운데가 바뀌지 않게 잘리지 않은 자리를 쓴다
-                        Modifier.onGloballyPositioned { coordinates ->
-                            val position = coordinates.positionInWindow()
-                            val left = position.x.roundToInt()
-                            val top = position.y.roundToInt()
-                            onToolBounds(tool, Region(left, top, left + coordinates.size.width, top + coordinates.size.height))
-                        }
-                    )
+                    RailToolButton(tool, selection, enabled && tool.available, menu, onChoose)
                 }
             }
         }

@@ -192,17 +192,28 @@ class CanvasViewTest {
     @Test
     fun zoomChanges_countOnlyRealZooms() {
         val state = CanvasViewState(CanvasView.Fit)
-        // 두 손가락으로 옮길 때의 작은 떨림은 쌓여도 1%를 넘지 않으면 세지 않는다
-        repeat(5) { state.noteZoom(1.001) }
-        state.noteZoom(1 / 1.004)
+        // 두 손가락으로 옮길 때의 작은 떨림은 쌓여도 3%를 넘지 않으면 세지 않는다
+        repeat(5) { state.noteZoom(1.004) }
+        state.noteZoom(1 / 1.01)
         assertEquals(0, state.zoomChanges)
-        // 1%를 넘게 바꾸면 한 번 세고, 그때부터 다시 잰다
+        // 3%를 넘게 바꾸면 한 번 세고, 그때부터 다시 잰다
+        state.noteZoom(1.05)
+        assertEquals(1, state.zoomChanges)
         state.noteZoom(1.02)
         assertEquals(1, state.zoomChanges)
-        state.noteZoom(1.005)
-        assertEquals(1, state.zoomChanges)
-        state.noteZoom(0.98)
+        state.noteZoom(0.94)
         assertEquals(2, state.zoomChanges)
+    }
+
+    @Test
+    fun zoomJitter_doesNotAddUpAcrossGestures() {
+        // 옮기기만 한 조작마다 2%씩 떨려도 조작이 끝나면 처음부터 다시 잰다(검토에서 찾음: 조작을 거듭하면 쌓여 배율 표시가 떴다)
+        val state = CanvasViewState(CanvasView.Fit)
+        repeat(5) {
+            state.noteZoom(1.02)
+            state.gestureEnded()
+        }
+        assertEquals(0, state.zoomChanges)
     }
 
     @Test

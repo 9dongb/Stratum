@@ -72,7 +72,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 리터칭 도구의 옵션·캔버스 터치(가져올 곳 정하기·칠하기)와, 커버 탭 줄을 밀어 보는 것을 확인한다(엔진 대신 받은 일만 적는 가짜). */
+/** 리터칭 도구의 옵션·캔버스 터치(가져올 곳 표시 옮기기·고정, 칠하기)와, 커버 탭 줄을 밀어 보는 것을 확인한다(엔진 대신 받은 일만 적는 가짜). */
 @RunWith(AndroidJUnit4::class)
 class RetouchToolTest {
 
@@ -247,7 +247,7 @@ class RetouchToolTest {
 
         composeRule.onNodeWithText(hint(R.string.retouch_hint_heal)).assertDoesNotExist()
         assertTrue(!exists(EditScreenTags.RETOUCH_OPACITY))
-        // 옵션 칸에는 크기·경도와 하위 도구 줄(과 물음표)뿐이다
+        // 옵션 칸에는 크기·경도와 하위 도구 줄뿐이다
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertIsDisplayed()
     }
@@ -642,18 +642,38 @@ class RetouchToolTest {
     fun editScreen_eachSubToolHint_showsOnceAsAToast() {
         // 사용자 피드백 10차 5: "각 도구의 도움말 버튼 제거하세요. 토스트로 보여주세요." 하위 도구마다 이번 실행에서 처음 고를 때 한 번(사용자 결정)
         openRetouchOnTheCover()
-        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(hint(R.string.retouch_hint_spot))
-        // 3초 보이고 사라진다
-        composeRule.mainClock.advanceTimeBy(TOOL_HELP_TOAST_MILLIS + 1_000)
+        val spot = hint(R.string.retouch_hint_spot)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(spot)
+        // 글 길이만큼(3~10초) 보이고 사라진다
+        composeRule.mainClock.advanceTimeBy(toolHelpToastMillis(spot) - 500)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertExists()
+        composeRule.mainClock.advanceTimeBy(1_500)
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
 
+        val heal = hint(R.string.retouch_hint_heal)
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_HEAL)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(hint(R.string.retouch_hint_heal))
-        composeRule.mainClock.advanceTimeBy(TOOL_HELP_TOAST_MILLIS + 1_000)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(heal)
+        composeRule.mainClock.advanceTimeBy(toolHelpToastMillis(heal) + 1_000)
 
         // 이미 본 스팟 복구로 돌아가면 다시 뜨지 않는다
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+    }
+
+    @Test
+    fun editScreen_aHintLeftAtOnce_showsAgainNextTime() {
+        // 다 읽기 전에(2초 안에) 하위 도구를 바꾸면 본 것으로 적지 않아, 다음에 고를 때 다시 보인다(검토에서 찾음)
+        openRetouchOnTheCover()
+        val spot = hint(R.string.retouch_hint_spot)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(spot)
+
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_CLONE)).performClick()
+        val clone = hint(R.string.retouch_hint_clone)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(clone)
+        composeRule.mainClock.advanceTimeBy(toolHelpToastMillis(clone) + 1_000)
+
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(spot)
     }
 
     @Test

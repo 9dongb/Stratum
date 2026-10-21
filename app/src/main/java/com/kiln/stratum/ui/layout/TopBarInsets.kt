@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 /**
  * 편집 화면·유동화 작업 모드·커버 새 창의 상단 바 높이: 상태 표시줄 높이다(사용자 피드백 10차 6: "헤더 줄여달라는 크기는 상태표시줄 위아래 폭 만큼").
  * 상태 표시줄을 숨겨도 그 자리 높이를 읽는다. 상태 표시줄이 없는 창(여러 창 등)은 32dp이고, 버튼이 들어가게 24~48dp 안이다.
+ * 글자를 크게 쓰는 기기에서는 바 제목(한 줄)이 잘리지 않게 그 줄 높이까지 높인다(휴대폰 설정의 글자 크기를 따름).
  * 바의 버튼은 이 높이에 맞춘 것([com.kiln.stratum.ui.components.TopBarIconButton] 등)이다.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -46,7 +48,10 @@ import androidx.compose.ui.unit.dp
 fun workTopBarHeight(): Dp {
     val density = LocalDensity.current
     val status = with(density) { WindowInsets.statusBarsIgnoringVisibility.getTop(density).toDp() }
-    return (if (status > 0.dp) status else FallbackWorkTopBarHeight).coerceIn(MinWorkTopBarHeight, MaxWorkTopBarHeight)
+    val bar = (if (status > 0.dp) status else FallbackWorkTopBarHeight).coerceIn(MinWorkTopBarHeight, MaxWorkTopBarHeight)
+    // 바 제목은 TopAppBar의 제목 글자(titleLarge)다
+    val title = with(density) { MaterialTheme.typography.titleLarge.lineHeight.toDp() }
+    return maxOf(bar, title)
 }
 
 private val FallbackWorkTopBarHeight = 32.dp
@@ -145,6 +150,7 @@ val BarButtonContentInset = 12.dp
  * 상단 바 한 줄: 왼쪽에 [title], 오른쪽 끝부터 [actions](이름, 버튼). 위쪽 카메라 구멍([insets]의 구멍)에 걸리는 버튼은
  * 그 버튼부터 왼쪽 버튼들을 구멍 왼쪽으로 비켜 놓아, 바를 구멍 아래로 내리지 않는다(사용자 피드백 10차 7: 커버 홈 헤더가 구멍만큼 높아졌다).
  * 비키면 제목과 겹칠 만큼 자리가 모자라면 그대로 둔다(그때는 지금처럼 바가 구멍 아래로 내려간다).
+ * 제목은 버튼을 오른쪽 끝에 붙였을 때 남는 폭까지만 쓴다(넘치면 제목 글자가 정한 대로 줄인다, 홈은 '…').
  * 제목과 버튼마다 [topBarItem]으로 자리를 알린다(버튼 키는 [actions]의 이름). 바의 제목 자리에 바 폭으로 둔다.
  */
 @Composable
@@ -166,11 +172,14 @@ fun HoleAvoidingBarRow(
         modifier = modifier.fillMaxWidth().onGloballyPositioned { rowLeft = it.positionInWindow().x }
     ) { measurables, constraints ->
         val loose = Constraints(maxWidth = constraints.maxWidth, maxHeight = constraints.maxHeight)
-        val placeables = measurables.map { it.measure(loose) }
-        val titlePlaceable = placeables.first()
-        val actionPlaceables = placeables.drop(1)
         val width = constraints.maxWidth
-        val height = placeables.maxOfOrNull { it.height }?.coerceIn(constraints.minHeight, constraints.maxHeight) ?: constraints.minHeight
+        // 버튼을 먼저 재고, 제목에는 버튼을 오른쪽 끝에 붙였을 때 남는 폭까지만 준다(글자를 크게 쓰거나 줄이 좁으면 제목이 '…'로 줄어
+        // 버튼 밑에 깔리지 않는다. TopAppBar의 제목과 같다)
+        val actionPlaceables = measurables.drop(1).map { it.measure(loose) }
+        val titleWidth = (width - actionPlaceables.sumOf { it.width } - with(density) { TitleGap.roundToPx() }).coerceAtLeast(0)
+        val titlePlaceable = measurables.first().measure(loose.copy(maxWidth = titleWidth))
+        val placeables = listOf(titlePlaceable) + actionPlaceables
+        val height = placeables.maxOf { it.height }.coerceIn(constraints.minHeight, constraints.maxHeight)
         layout(width, height) {
             val widths = actionPlaceables.map { it.width }
             // 구멍은 창 좌표라 이 줄의 창 위치를 빼서 견준다

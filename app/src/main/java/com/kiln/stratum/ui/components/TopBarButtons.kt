@@ -4,13 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -128,8 +136,8 @@ private fun TopBarButtonBox(
 }
 
 /**
- * 상단 바의 주요 버튼(내보내기·적용, 파란 채움). 바 높이([height])보다 4dp 낮게 보이고(앱 버튼의 30dp를 넘지 않음), 글자 크기는 그대로다.
- * 바 안에서는 48dp 자리를 차지하지 않는다(누르는 높이는 버튼 높이).
+ * 상단 바의 주요 버튼(내보내기·적용, 파란 채움). 누르는 자리는 바 높이([height]) 전체이고(다른 바 버튼과 같다), 파란 칸은 바보다 4dp 낮게
+ * (앱 버튼의 30dp를 넘지 않게) 가운데에 보인다. 글자를 크게 써서 글자가 더 높으면 파란 칸이 바 높이까지 늘어난다. 글자는 앱 버튼과 같다.
  */
 @Composable
 fun TopBarAccentButton(
@@ -139,19 +147,33 @@ fun TopBarAccentButton(
     enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-        AccentButton(
-            onClick = onClick,
-            modifier = modifier,
-            enabled = enabled,
-            minHeight = minOf(TopBarAccentMaxHeight, height - TopBarHighlightInset * 2),
-            contentPadding = TopBarAccentPadding,
-            content = content
-        )
+    val colors = StratumTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier
+            .height(height)
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            Modifier
+                .defaultMinSize(minWidth = ButtonDefaults.MinWidth)
+                .heightIn(min = minOf(TopBarAccentMaxHeight, height - TopBarHighlightInset * 2), max = height)
+                .clip(StratumShapes.Control)
+                .background(if (enabled) colors.accent else colors.divider)
+                .indication(interaction, ripple())
+                .padding(TopBarAccentPadding),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CompositionLocalProvider(LocalContentColor provides if (enabled) colors.onAccent else colors.textDisabled) {
+                ProvideTextStyle(MaterialTheme.typography.labelLarge) { content() }
+            }
+        }
     }
 }
 
-/** 주요 버튼의 가장 큰 높이(앱 버튼과 같은 30dp) */
+/** 주요 버튼의 파란 칸 높이 한도(앱 버튼과 같은 30dp, 글자가 더 높을 때만 넘는다) */
 private val TopBarAccentMaxHeight = 30.dp
 
 /** 낮은 바의 주요 버튼 안쪽 여백: 좌우는 앱 버튼과 같고, 위아래는 없앤다(글자 높이만큼) */

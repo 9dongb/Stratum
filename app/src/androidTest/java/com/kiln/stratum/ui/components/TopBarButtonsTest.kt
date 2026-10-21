@@ -107,18 +107,25 @@ class TopBarButtonsTest {
     }
 
     @Test
-    fun accentButton_isFourDpLowerThanTheBar_andDoesNotTakeA48dpRow() {
+    fun accentButton_isTouchableOverTheWholeBar_butLooksFourDpLower() {
+        var clicks by mutableIntStateOf(0)
         composeRule.setContent {
             StratumTheme {
                 Row(Modifier.testTag(ROW)) {
-                    TopBarAccentButton(onClick = {}, height = 28.dp, modifier = Modifier.testTag(TAG)) { Text("Export") }
+                    TopBarAccentButton(onClick = { clicks++ }, height = 28.dp, modifier = Modifier.testTag(TAG)) { Text("Export") }
                 }
             }
         }
 
-        // 바 높이 28dp에서 보이는 칸·누르는 높이는 24dp이고, 줄도 48dp로 늘어나지 않는다
-        composeRule.onNodeWithTag(TAG).assertHeightIsEqualTo(24.dp)
-        composeRule.onNodeWithTag(ROW).assertHeightIsEqualTo(24.dp)
+        // 누르는 자리는 바 높이(28dp)이고, 줄도 48dp로 늘어나지 않는다(검토에서 찾음: 전에는 누르는 높이가 파란 칸 높이였다)
+        composeRule.onNodeWithTag(TAG).assertHeightIsEqualTo(28.dp)
+        composeRule.onNodeWithTag(ROW).assertHeightIsEqualTo(28.dp)
+        // 보이는 파란 칸은 바보다 4dp 낮다(위아래 2dp씩 빔)
+        val rows = accentRows()
+        assertEquals("blue rows ${rows.first()}..${rows.last()}", px(24.dp), rows.size.toFloat(), 2f)
+        assertTrue("top gap ${rows.first()}", rows.first() >= px(2.dp) - 1)
+        composeRule.onNodeWithTag(TAG).performClick()
+        composeRule.runOnIdle { assertEquals(1, clicks) }
     }
 
     @Test
@@ -127,7 +134,17 @@ class TopBarButtonsTest {
             StratumTheme { TopBarAccentButton(onClick = {}, height = 42.dp, modifier = Modifier.testTag(TAG)) { Text("Export") } }
         }
 
-        composeRule.onNodeWithTag(TAG).assertHeightIsEqualTo(30.dp)
+        composeRule.onNodeWithTag(TAG).assertHeightIsEqualTo(42.dp)
+        assertEquals(px(30.dp), accentRows().size.toFloat(), 2f)
+    }
+
+    /** 파란 칸 왼쪽 여백(글자가 없는 곳)의 세로줄에서 파란 칸(주요 버튼 색)인 줄 번호 */
+    private fun accentRows(): List<Int> {
+        composeRule.waitForIdle()
+        val image = composeRule.onNodeWithTag(TAG).captureToImage().asAndroidBitmap()
+        val accent = colors.accent.toArgb()
+        val x = px(6.dp).toInt()
+        return (0 until image.height).filter { image.getPixel(x, it) == accent }.also { assertTrue("no blue square", it.isNotEmpty()) }
     }
 
     private companion object {

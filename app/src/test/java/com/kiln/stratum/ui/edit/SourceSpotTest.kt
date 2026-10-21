@@ -46,4 +46,15 @@ class SourceSpotTest {
         assertEquals(500f, x)
         assertEquals(0f, y)
     }
+
+    @Test
+    fun anUpsideDownView_mirrorsTheVisibleArea() {
+        // 상하 반전(검토에서 찾음): 화면의 보이는 곳(옵션 칸 위 0~600, 가운데 300)은 문서의 아래쪽(가운데 1000 − 300 = 700)이다
+        val upsideDown = ViewFlip(vertical = true)
+        assertEquals(500f to 700f, sourceSpot(CanvasView.Fit, area, document, hiddenBottom = 400, current = null, flip = upsideDown))
+        // 문서 아래쪽(900)은 화면 위쪽(100)이라 보여 그대로 둔다
+        assertNull(sourceSpot(CanvasView.Fit, area, document, hiddenBottom = 400, current = CloneSource(500f, 900f), flip = upsideDown))
+        // 문서 위쪽(100)은 화면 아래쪽(900), 옵션 칸 밑이라 보이는 가운데로 옮긴다
+        assertEquals(500f to 700f, sourceSpot(CanvasView.Fit, area, document, hiddenBottom = 400, current = CloneSource(500f, 100f), flip = upsideDown))
+    }
 }

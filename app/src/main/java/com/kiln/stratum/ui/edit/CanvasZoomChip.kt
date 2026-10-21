@@ -48,7 +48,9 @@ fun CanvasZoomChip(viewState: CanvasViewState, documentSize: PixelSize, modifier
     val changes = viewState.zoomChanges
     val alpha = remember(viewState) { Animatable(0f) }
     LaunchedEffect(viewState, changes) {
-        if (changes == 0) return@LaunchedEffect
+        // 이미 보인 바뀜은 다시 보이지 않는다(배율 표시가 화면에서 빠졌다 다시 들어올 때, 닫힌 화면의 자르기 창을 열고 닫음)
+        if (changes <= viewState.zoomChipShown) return@LaunchedEffect
+        viewState.zoomChipShown = changes
         alpha.snapTo(1f)
         delay(ZOOM_CHIP_HOLD_MILLIS)
         alpha.animateTo(0f, tween(ZOOM_CHIP_FADE_MILLIS, easing = LinearEasing))

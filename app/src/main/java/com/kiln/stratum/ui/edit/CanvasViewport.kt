@@ -20,8 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
 import kotlin.math.abs
@@ -53,7 +59,16 @@ class CanvasViewState(initial: CanvasView) {
     var zoomChanges: Int by mutableIntStateOf(0)
         private set
 
-    /** 마지막으로 센 뒤 손으로 곱한 배율. [ZOOM_CHANGE_STEP]보다 많이 바뀌면 한 번 센다(두 손가락으로 옮길 때의 작은 떨림은 세지 않게). */
+    /**
+     * 배율 표시가 마지막으로 보인 [zoomChanges]. 배율 표시가 화면에서 빠졌다 다시 들어올 때(닫힌 화면의 자르기 창을 열고 닫음) 지난 바뀜을
+     * 다시 보이지 않게 한다([CanvasZoomChip]).
+     */
+    internal var zoomChipShown = 0
+
+    /**
+     * 이번 두 손가락 조작에서 마지막으로 센 뒤 손으로 곱한 배율. [ZOOM_CHANGE_STEP]보다 많이 바뀌면 한 번 센다
+     * (두 손가락으로 옮길 때 손가락 사이가 조금 달라지는 떨림은 세지 않게). 조작이 끝나면 처음으로 돌린다([gestureEnded]).
+     */
     private var zoomDrift = 1.0
 
     /** 두 손가락 조작이 배율을 [factor]배 했다 */
@@ -63,6 +78,11 @@ class CanvasViewState(initial: CanvasView) {
             zoomDrift = 1.0
             zoomChanges++
         }
+    }
+
+    /** 두 손가락 조작이 끝났다. 떨림이 조작마다 쌓여 옮기기만 한 조작에서 배율 표시가 뜨지 않게 한다. */
+    fun gestureEnded() {
+        zoomDrift = 1.0
     }
 
     /** 화면에 맞추고, 맞춘 배율을 배율 표시로 잠깐 보인다(배율 표시 누르기, 화면 읽기 기능의 '화면에 맞추기') */
@@ -137,6 +157,8 @@ fun CanvasViewport(
     val threeEnabled = threeFinger != null
     // 캔버스 영역의 크기(픽셀). 그리는 쪽이 쓰는 크기와 같다.
     var area by remember { mutableStateOf(IntSize.Zero) }
+    val zoomFormat = stringResource(R.string.canvas_zoom_description)
+    val fitLabel = stringResource(R.string.canvas_fit)
     LaunchedEffect(viewState) {
         // 두 손가락으로 움직이는 동안에는 매 프레임 알린다. 엔진 쪽이 움직임이 멈춘 뒤에만 그린다.
         snapshotFlow { ViewportInputs(area, viewState.view, documentSize, shownOrientation, originalSize) }.collect { inputs ->
@@ -173,6 +195,7 @@ fun CanvasViewport(
                             if (zoom != 1f) viewState.noteZoom(zoom.toDouble())
                         }
                     },
+                    onEnd = viewState::gestureEnded,
                     onTwoFingerTap = if (tapEnabled) ({ twoFingerTap?.invoke() }) else null,
                     // 화면이 다시 그려지며 넘긴 것이 바뀌어도 지금 것에 보낸다
                     threeFinger = if (threeEnabled) {
@@ -201,7 +224,24 @@ fun CanvasViewport(
             }
     ) {
         CompositionLocalProvider(LocalViewFlip provides flip) {
-            CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize(), orientation = orientation)
+            // 화면 읽기 기능은 캔버스 그림에 머문다. 그래서 지금 배율(예: '배율 250%')과, 확대·이동한 상태면 화면에 맞추는 동작을 여기에 둔다
+            // (배율 표시는 배율을 바꿀 때만 잠깐 보인다, 사용자 피드백 10차 8)
+            CanvasImage(
+                state = state,
+                view = { viewState.view },
+                modifier = Modifier.fillMaxSize().semantics {
+                    viewState.scaleFor(documentSize)?.let { stateDescription = zoomFormat.format(zoomPercentText(it)) }
+                    if (viewState.view is CanvasView.Free) {
+                        customActions = listOf(
+                            CustomAccessibilityAction(fitLabel) {
+                                viewState.fit()
+                                true
+                            }
+                        )
+                    }
+                },
+                orientation = orientation
+            )
             // 선택 영역 윤곽선은 어떤 도구를 골라도 보인다(도구 화면 아래)
             SelectionAnts(
                 state.selection,
@@ -216,8 +256,11 @@ fun CanvasViewport(
     }
 }
 
-/** 손으로 바꾼 배율이 이만큼(1%) 넘게 쌓이면 배율 표시를 보인다([CanvasViewState.noteZoom]) */
-private const val ZOOM_CHANGE_STEP = 0.01
+/**
+ * 한 번의 두 손가락 조작에서 손으로 바꾼 배율이 이만큼(3%) 넘게 쌓이면 배율 표시를 보인다([CanvasViewState.noteZoom]).
+ * 두 손가락으로 옮길 때 손가락 사이가 조금 달라지는 떨림은 넘지 않게 정했다(Claude 판단, 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다).
+ */
+private const val ZOOM_CHANGE_STEP = 0.03
 
 /** 엔진 쪽에 알릴 보기를 정하는 것들: 캔버스 크기, 보기, 보이는(돌린) 문서 크기, 돌린 방향, 원래 문서 크기 */
 private data class ViewportInputs(

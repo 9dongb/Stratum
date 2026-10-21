@@ -60,9 +60,6 @@ class FloatingState(panel: MainPanel? = null) {
     /** 띠 칸의 자리(창 좌표). 옵션 창을 그 칸 옆에 띄운다. */
     internal val anchors = mutableStateMapOf<String, Region>()
 
-    /** 도구 막대 버튼의 자리(창 좌표). 도구 옵션 띠를 고른 도구 옆에 띄운다([OptionStripHost]). */
-    internal val toolAnchors = mutableStateMapOf<EditTool, Region>()
-
     /** 놓인 도구 옵션 띠의 자리(창 좌표, [OptionStripHost]가 놓을 때 알림). 띠가 없으면 null. 배율 표시가 띠를 피한다([CanvasZoomChip]). */
     internal var stripRegion: Region? by mutableStateOf(null)
 

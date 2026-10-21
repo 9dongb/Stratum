@@ -106,8 +106,18 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
 /** 제스처 알림이 보이는 시간(밀리초). 마지막으로 띄운 때부터 잰다. */
 const val GESTURE_TOAST_MILLIS = 1_000L
 
-/** 도구 안내 알림이 보이는 시간(밀리초, 사용자 피드백 10차 5). 글이 길어 제스처 알림보다 길다. 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다. */
-const val TOOL_HELP_TOAST_MILLIS = 3_000L
+/**
+ * 도구 안내 알림이 보이는 시간(밀리초, 사용자 피드백 10차 5). 글이 길수록 길다: 글자마다 [TOOL_HELP_MILLIS_PER_CHAR],
+ * [TOOL_HELP_TOAST_MIN_MILLIS]~[TOOL_HELP_TOAST_MAX_MILLIS] 안(한국어 안내 30~87자는 3~8.7초). 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다.
+ */
+fun toolHelpToastMillis(text: String): Long = (text.length * TOOL_HELP_MILLIS_PER_CHAR).coerceIn(TOOL_HELP_TOAST_MIN_MILLIS, TOOL_HELP_TOAST_MAX_MILLIS)
+
+const val TOOL_HELP_TOAST_MIN_MILLIS = 3_000L
+const val TOOL_HELP_TOAST_MAX_MILLIS = 10_000L
+private const val TOOL_HELP_MILLIS_PER_CHAR = 100L
+
+/** 도구 안내가 이만큼 넘게 보이면 본 것으로 적는다([ToolHelpSeen]) */
+const val TOOL_HELP_SEEN_MILLIS = 2_000L
 
 /** 알림의 가장 큰 폭(긴 도구 안내는 여러 줄) */
 private val GestureToastMaxWidth = 360.dp

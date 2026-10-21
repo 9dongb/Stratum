@@ -120,18 +120,29 @@ interface RetouchActions {
 /**
  * 복구 브러시·복제 도장을 고를 때 가져올 곳 표시를 둘 자리(문서 좌표, 사용자 피드백 10차 4). 지금 가져올 곳([current])이 보이는 곳
  * (캔버스 [area]에서 아래 [hiddenBottom] px를 뺀 곳, 닫힌 화면은 옵션 칸이 덮는다) 안에 있으면 null(그대로 둠)이고,
- * 없거나 밖이면 보이는 곳 가운데의 문서 자리다(문서 안으로 맞춤).
+ * 없거나 밖이면 보이는 곳 가운데의 문서 자리다(문서 안으로 맞춤). 화면 반전([flip])은 캔버스 가운데를 기준으로 그림만 뒤집으므로,
+ * 화면 자리를 뒤집어 문서 자리와 오간다.
  */
-internal fun sourceSpot(view: CanvasView, area: IntSize, document: PixelSize, hiddenBottom: Int, current: CloneSource?): Pair<Float, Float>? {
+internal fun sourceSpot(
+    view: CanvasView,
+    area: IntSize,
+    document: PixelSize,
+    hiddenBottom: Int,
+    current: CloneSource?,
+    flip: ViewFlip = ViewFlip.None
+): Pair<Float, Float>? {
     val transform = view.transform(PixelSize(area.width, area.height), document)
     val visibleBottom = (area.height - hiddenBottom).coerceAtLeast(1)
+    // 뒤집기 전 자리 ↔ 화면 자리(뒤집기는 제 거꾸로다)
+    fun flipX(x: Double) = if (flip.horizontal) area.width - x else x
+    fun flipY(y: Double) = if (flip.vertical) area.height - y else y
     if (current != null) {
-        val x = transform.toScreenX(current.x.toDouble())
-        val y = transform.toScreenY(current.y.toDouble())
+        val x = flipX(transform.toScreenX(current.x.toDouble()))
+        val y = flipY(transform.toScreenY(current.y.toDouble()))
         if (x >= 0 && x <= area.width && y >= 0 && y <= visibleBottom) return null
     }
-    val x = transform.toDocumentX(area.width / 2.0).toFloat().coerceIn(0f, document.width - 1f)
-    val y = transform.toDocumentY(visibleBottom / 2.0).toFloat().coerceIn(0f, document.height - 1f)
+    val x = transform.toDocumentX(flipX(area.width / 2.0)).toFloat().coerceIn(0f, document.width - 1f)
+    val y = transform.toDocumentY(flipY(visibleBottom / 2.0)).toFloat().coerceIn(0f, document.height - 1f)
     return x to y
 }
 

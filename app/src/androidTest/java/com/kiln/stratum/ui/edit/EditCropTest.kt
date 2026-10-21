@@ -265,7 +265,7 @@ class EditCropTest {
     private fun assertZoomFits(size: PixelSize) {
         val canvas = bounds(EditScreenTags.CANVAS)
         val expected = minOf(canvas.width / size.width, canvas.height / size.height).toDouble() * 100
-        val description = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        val description = composeRule.canvasImage().fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         val percent = checkNotNull(Regex("""(\d+(?:\.\d+)?)%""").find(description)) { description }.groupValues[1].toDouble()
         assertEquals("$description should be the fit zoom of $size", expected, percent, 1.5)
     }
@@ -309,7 +309,7 @@ class EditCropTest {
 
         assertZoomFits(document)
         // 맞춤이면 화면에 맞추는 동작이 없다
-        val actions = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+        val actions = composeRule.canvasImage().fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
         assertTrue("$actions", actions.none { it.label == composeRule.activity.getString(R.string.canvas_fit) })
     }
 

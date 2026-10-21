@@ -1,8 +1,14 @@
 package com.kiln.stratum.ui.home
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.FontScale
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.then
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -14,8 +20,9 @@ import org.junit.runner.RunWith
 
 /**
  * 홈 위 줄과 카메라 구멍(사용자 피드백 10차 7: 커버 홈 헤더가 구멍만큼 높아졌다).
- * 위쪽 카메라 구멍이 있는 기기(Pixel_Fold 접은 화면)에서만 돈다: 구멍에 걸리던 버튼이 구멍 왼쪽으로 비켜, 어느 버튼의 글자·아이콘도
- * 구멍 아래에 있지 않다. 그래서 바를 구멍 아래로 내리지 않는다. 화면 크기는 기기 그대로다(구멍 자리가 창 좌표라).
+ * 구멍 테스트는 위쪽 카메라 구멍이 있는 기기(Pixel_Fold 접은 화면)에서만 돈다: 구멍에 걸리던 버튼이 구멍 왼쪽으로 비켜, 어느 버튼의
+ * 글자·아이콘도 구멍 아래에 있지 않다. 그래서 바를 구멍 아래로 내리지 않는다. 화면 크기는 기기 그대로다(구멍 자리가 창 좌표라).
+ * 좁은 줄의 큰 글자 테스트는 어느 기기에서나 돈다.
  */
 @RunWith(AndroidJUnit4::class)
 class HomeTopBarTest {
@@ -48,5 +55,22 @@ class HomeTopBarTest {
         // 제목도 구멍에 걸리지 않는다
         val title = composeRule.onNodeWithTag(HomeTags.TITLE).fetchSemanticsNode().layoutBoundsInWindow()
         for (hole in holes) assertTrue("title $title sits under $hole", title.right <= hole.left || title.left >= hole.right)
+    }
+
+    @Test
+    fun bigTextInANarrowBar_shortensTheTitle_insteadOfDrawingItUnderTheButtons() {
+        // 검토에서 찾음: 글자를 크게 쓰거나 줄이 좁으면 굵은 앱 이름이 '선택' 버튼 밑에 깔렸다. 이제 남는 폭까지만 쓰고 '…'로 줄인다.
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(360.dp, 640.dp)) then DeviceConfigurationOverride.FontScale(1.3f)) {
+                StratumTheme { HomeScreen(onOpenPhoto = {}, onCreateCanvas = { _, _, _, _ -> }) }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val title = composeRule.onNodeWithTag(HomeTags.TITLE).fetchSemanticsNode().layoutBoundsInWindow()
+        val select = composeRule.onNodeWithTag(HomeTags.SELECT).fetchSemanticsNode().layoutBoundsInWindow()
+        // 버튼은 누르는 자리(48dp) 기준이라, 보이는 글자(양옆 12dp 안쪽)와 견준다
+        val density = composeRule.onNodeWithTag(HomeTags.TOP_BAR).fetchSemanticsNode().layoutInfo.density.density
+        assertTrue("title $title runs under select $select", title.right <= select.left + 12 * density)
     }
 }

@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +45,7 @@ import org.junit.runner.RunWith
 /**
  * 캔버스 왼쪽 위의 배율 표시(사용자 피드백 10차 8): 처음에는 없고, 손으로 배율을 바꿀 때만 왼쪽 위에 보였다가 1초 뒤 0.5초 동안
  * 서서히 사라지며, 보이는 동안 누르면 화면에 맞춘다. 옮기기만 하면 보이지 않고, 도구 옵션 띠와 접히는 선을 피한다.
- * 숨은 동안의 화면 읽기 기능(캔버스의 배율·'화면에 맞추기')도 본다. 자리 계산은 `HingePlacementTest`가 본다.
+ * 숨은 동안의 화면 읽기 기능(캔버스 그림의 배율·'화면에 맞추기')도 본다. 자리 계산은 `HingePlacementTest`가 본다.
  */
 @RunWith(AndroidJUnit4::class)
 class CanvasZoomChipTest {
@@ -115,10 +116,10 @@ class CanvasZoomChipTest {
     }
 
     private fun canvasZoomDescription(): String? =
-        composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+        composeRule.canvasImage().fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
 
     private fun canvasFitAction() =
-        composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions)
+        composeRule.canvasImage().fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions)
             ?.singleOrNull { it.label == composeRule.activity.getString(R.string.canvas_fit) }
 
     @Test
@@ -184,6 +185,46 @@ class CanvasZoomChipTest {
         composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertDoesNotExist()
         // 옮긴 보기라 화면 읽기 기능으로는 맞출 수 있다
         assertTrue(canvasFitAction() != null)
+    }
+
+    @Test
+    fun theScreenReaderStopsOnTheCanvasImage_whichCarriesTheZoom() {
+        // 화면 읽기 기능은 내용이 있는 잎 노드에 머문다. 배율과 '화면에 맞추기'가 캔버스 그림에 있어야 들을 수 있다(검토에서 찾음).
+        show(DpSize(930.dp, 700.dp))
+        pinchOut()
+
+        val image = composeRule.canvasImage().fetchSemanticsNode()
+        assertTrue("${image.children}", image.children.isEmpty())
+        assertEquals(listOf(composeRule.activity.getString(R.string.edit_canvas_description)), image.config[SemanticsProperties.ContentDescription])
+        assertTrue(canvasZoomDescription() != null)
+        assertTrue(canvasFitAction() != null)
+    }
+
+    @Test
+    fun comingBackOnScreen_doesNotShowAnOldZoomAgain() {
+        // 닫힌 화면에서 자르기 창을 열고 닫으면 배율 표시가 다른 자리에서 다시 그려진다. 지난 바뀜을 다시 보이지 않는다(검토에서 찾음).
+        val viewState = CanvasViewState(CanvasView.Free(scale = 2.5, centerX = 100.0, centerY = 100.0))
+        val first = mutableStateOf(true)
+        composeRule.setContent {
+            StratumTheme {
+                if (first.value) {
+                    Box(Modifier.fillMaxSize()) { CanvasZoomChip(viewState, document, Modifier.fillMaxSize()) }
+                } else {
+                    Column(Modifier.fillMaxSize()) { CanvasZoomChip(viewState, document, Modifier.fillMaxSize()) }
+                }
+            }
+        }
+        composeRule.runOnIdle { viewState.noteZoom(2.5) }
+        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertExists()
+        composeRule.mainClock.advanceTimeBy(ZOOM_CHIP_HOLD_MILLIS + ZOOM_CHIP_FADE_MILLIS + 500)
+        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertDoesNotExist()
+
+        composeRule.runOnIdle { first.value = false }
+
+        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertDoesNotExist()
+        // 다시 배율을 바꾸면 보인다
+        composeRule.runOnIdle { viewState.noteZoom(0.5) }
+        composeRule.onNodeWithTag(EditScreenTags.ZOOM_CHIP).assertExists()
     }
 
     @Test

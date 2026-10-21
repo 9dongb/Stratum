@@ -43,9 +43,9 @@ import kotlin.math.roundToInt
  * 수치 칸은 크기 → 경도 → 불투명도 → 강도(명암의 노출·모자이크의 셀 크기도 강도 자리) 순서다(9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)").
  */
 
-/** 수치 칸 밖의 칸 [rest]가 있으면 그 칸들과 구분선을 먼저 두고, 그 아래에 수치 칸 [numbers]를 둔다 */
+/** 수치 칸 밖의 칸 [rest]를 먼저 두고, 그 아래에 수치 칸 [numbers]를 둔다. 구분선은 둘 다 있을 때만 그 사이에 둔다(개체 선택은 수치 칸이 없다). */
 private fun numbersLast(numbers: List<StripItem>, rest: List<StripItem>): List<StripItem> =
-    if (rest.isEmpty()) numbers else rest + StripDivider("beforeNumbers") + numbers
+    if (rest.isEmpty() || numbers.isEmpty()) rest + numbers else rest + StripDivider("beforeNumbers") + numbers
 
 /** 브러시·지우개의 띠: (브러시만) 색·바꾸기·스포이드, 구분선 아래 크기, 경도, 불투명도 */
 @Composable
@@ -476,12 +476,19 @@ private fun <T> ChoiceList(
 /**
  * 이번 실행에서 안내 글을 이미 보인 하위 도구(사용자 피드백 10차 5: 하위 도구마다 처음 고를 때 한 번, 사용자 결정).
  * 편집 상태(ViewModel)가 들어 접기·펼치기로 화면을 다시 만들어도 남고, 앱을 다시 켜면 다시 보인다.
+ * 안내가 [TOOL_HELP_SEEN_MILLIS] 넘게 보였을 때만 본 것으로 적는다(편집 화면). 그 전에 다른 알림에 가렸거나 하위 도구를 바꿨으면
+ * 다음에 고를 때 다시 보인다.
  */
 class ToolHelpSeen {
     private val seen = mutableSetOf<SubTool>()
 
-    /** [mode]의 안내를 처음 보이면 참이고, 본 것으로 적는다 */
-    fun firstTime(mode: SubTool): Boolean = seen.add(mode)
+    /** [mode]의 안내를 이미 보였다 */
+    fun hasSeen(mode: SubTool): Boolean = mode in seen
+
+    /** [mode]의 안내를 본 것으로 적는다 */
+    fun markSeen(mode: SubTool) {
+        seen += mode
+    }
 }
 
 /**

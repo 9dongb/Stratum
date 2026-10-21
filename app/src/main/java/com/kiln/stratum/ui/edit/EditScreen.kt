@@ -67,11 +67,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -370,7 +367,7 @@ fun EditScreen(
         canvasArea = IntSize(width, height)
         onCanvasSize(width, height)
     }
-    // 자르기를 시작할 때 바꾼 보기. 그대로인 채 자르기가 끝나면 맞춤으로 돌린다(배율 표시가 남지 않게).
+    // 자르기를 시작할 때 바꾼 보기. 그대로인 채 자르기가 끝나면 맞춤으로 돌린다(자르기를 위해 바꾼 보기가 남지 않게).
     var cropStartView by remember { mutableStateOf<CanvasView?>(null) }
     // 닫힌 화면에서 캔버스 위에 겹쳐 뜬 옵션 칸의 높이(픽셀). 알림 막대·크기 원을 그 위 보이는 자리에 놓는다.
     var coverSheetPx by remember { mutableStateOf(0) }
@@ -523,22 +520,27 @@ fun EditScreen(
         val retouchMode = selection.modeOf(EditTool.Retouch)?.retouchMode ?: RetouchMode.SPOT_HEAL
         // 복구 브러시·복제 도장을 고르면 가져올 곳 표시가 늘 보인다(사용자 피드백 10차 4: "버튼 없어도 기본적으로 화면에 가져올 곳이 보여지고
         // 사용자가 이를 옮기기만하면 됩니다"). 가져올 곳이 없거나(처음, 문서 크기가 바뀌어 지워짐) 보이는 곳 밖이면 보이는 캔버스 가운데에 둔다.
+        // 복구 브러시와 복제 도장을 오가거나 화면을 반전할 때도 다시 본다(보이는 곳에 있으면 그대로).
         val sourceToolChosen = ready != null && activeTool == EditTool.Retouch && retouchMode != RetouchMode.SPOT_HEAL && !retouchRemoving
-        LaunchedEffect(sourceToolChosen, cloneSource == null) {
+        LaunchedEffect(sourceToolChosen, retouchMode, viewFlip, cloneSource == null) {
             if (!sourceToolChosen) return@LaunchedEffect
             // 캔버스 크기를 알고, 닫힌 화면의 옵션 칸이 놓일 때까지 기다린다(편집 화면을 막 열었거나 도구를 막 골랐을 때)
             val area = snapshotFlow { viewState.area }.first { it.width > 0 && it.height > 0 }
             withFrameNanos { }
             val document = (state as? EditorState.Ready)?.documentSize ?: return@LaunchedEffect
-            sourceSpot(viewState.view, area, document, hiddenBottom = if (widthClass == WidthClass.Compact) coverSheetPx else 0, current = cloneSource)
-                ?.let { (x, y) -> retouchActions.setSource(x, y) }
+            val hiddenBottom = if (widthClass == WidthClass.Compact) coverSheetPx else 0
+            sourceSpot(viewState.view, area, document, hiddenBottom, current = cloneSource, flip = viewFlip)?.let { (x, y) -> retouchActions.setSource(x, y) }
         }
-        // 조작이 모호한 도구(리터칭·명암)는 하위 도구마다 이번 실행에서 처음 고를 때 안내 글을 알림으로 3초 보인다
+        // 조작이 모호한 도구(리터칭·명암)는 하위 도구마다 이번 실행에서 처음 고를 때 안내 글을 알림으로 보인다(글 길이에 따라 3~10초)
         // (사용자 피드백 10차 5: "각 도구의 도움말 버튼 제거하세요. 토스트로 보여주세요.")
         val helpMode = activeTool?.let { selection.modeOf(it) }
         val helpText = toolHelpText(activeTool, helpMode)
         LaunchedEffect(helpMode, helpText) {
-            if (helpMode != null && helpText != null && toolHelpSeen.firstTime(helpMode)) gestureToast.show(helpText, TOOL_HELP_TOAST_MILLIS)
+            if (helpMode == null || helpText == null || toolHelpSeen.hasSeen(helpMode)) return@LaunchedEffect
+            gestureToast.show(helpText, toolHelpToastMillis(helpText))
+            // 다른 알림(두 손가락 톡 등)에 곧 가렸거나 하위 도구를 곧 바꿨으면 본 것으로 적지 않아, 다음에 고를 때 다시 보인다
+            delay(TOOL_HELP_SEEN_MILLIS)
+            if (gestureToast.text == helpText) toolHelpSeen.markSeen(helpMode)
         }
         // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
@@ -981,8 +983,7 @@ fun EditScreen(
                         selection,
                         enabled = toolsEnabled,
                         onChoose = chooseSubTool,
-                        menu = subToolMenu,
-                        onToolBounds = { tool, bounds -> if (floating.toolAnchors[tool] != bounds) floating.toolAnchors[tool] = bounds }
+                        menu = subToolMenu
                     )
                     EditCanvas(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay,
@@ -1266,9 +1267,7 @@ private fun EditCanvas(
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
     val pickUnavailable = stringResource(R.string.edit_pick_unavailable)
     val magicWand = stringResource(R.string.subtool_select_wand)
-    val zoomFormat = stringResource(R.string.canvas_zoom_description)
-    val fitLabel = stringResource(R.string.canvas_fit)
-    // 보이는(돌린) 문서 크기. 배율 표시와 화면 읽기 기능의 배율이 쓴다.
+    // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
     // 편집 버튼은 바쁨(busy)이 켜지는 순간 막힌다.
@@ -1329,26 +1328,16 @@ private fun EditCanvas(
                 .fillMaxSize()
                 .windowInsetsPadding(insets)
                 .onSizeChanged { onCanvasSize(it.width, it.height) }
-                .testTag(EditScreenTags.CANVAS)
-                .semantics {
-                    // 지금 배율(예: '배율 250%'). 확대·이동한 상태면 화면에 맞추는 동작을 준다.
-                    shownSize?.let { size -> viewState.scaleFor(size) }?.let { stateDescription = zoomFormat.format(zoomPercentText(it)) }
-                    if (viewState.view is CanvasView.Free) {
-                        customActions = listOf(
-                            CustomAccessibilityAction(fitLabel) {
-                                viewState.fit()
-                                true
-                            }
-                        )
-                    }
-                },
+                .testTag(EditScreenTags.CANVAS),
             contentAlignment = Alignment.Center
         ) {
+            // 화면 읽기 기능의 배율·'화면에 맞추기'는 캔버스 그림에 있다([CanvasViewport])
             CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip, orientation)
         }
-        floating(insets)
-        // 배율을 바꿀 때만 왼쪽 위에 잠깐 보이는 배율 표시(사용자 피드백 10차 8). 띠·옵션 창 위에 그린다(띠는 피해 놓는다).
+        // 배율을 바꿀 때만 왼쪽 위에 잠깐 보이는 배율 표시(사용자 피드백 10차 8). 띠는 피해 놓고, 띠·옵션 창 아래에 그린다
+        // (배율을 바꾼 직후 연 옵션 창이 배율 표시 밑에 깔려 누른 것이 화면 맞춤이 되지 않게)
         shownSize?.let { CanvasZoomChip(viewState, it, Modifier.fillMaxSize().windowInsetsPadding(insets), avoid) }
+        floating(insets)
         // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우되(도구 막대 폭만큼 오른쪽을 비움) 펼친 화면의 접히는 선과
         // 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
         val railWidth = with(LocalDensity.current) { (canvasStart - screenStart).coerceAtLeast(0f).toDp() }
