@@ -6,16 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import kotlinx.coroutines.flow.map
 
-/** 힌지 양쪽으로 버튼을 두지 않는 너비. CLAUDE.md 6장: 힌지에는 버튼·슬라이더를 두지 않는다. */
-val HingeMargin = 16.dp
-
-/** 지금 창을 지나는 힌지들(창 좌표). MainActivity가 넣는다. 세 번 접는 기기는 둘이고, 접힌 폰·커버 화면은 비어 있다. */
+/**
+ * 지금 창을 지나는 힌지들(창 좌표). MainActivity가 넣는다. 세 번 접는 기기는 둘이고, 접힌 폰·커버 화면은 비어 있다.
+ * 화면 배치는 이것을 보지 않는다(사용자 피드백 11차 1: 접히는 선을 피하지 않고 펼친 화면을 평평한 한 화면으로 쓴다).
+ * 반쯤 접어 세우는 테이블탑 배치(맨 마지막 작업)에 쓰려고 남겨 둔다.
+ */
 val LocalHinges = compositionLocalOf<List<Hinge>> { emptyList() }
 
 /**

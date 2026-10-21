@@ -4,7 +4,9 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -16,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ColorFilter
@@ -49,7 +52,6 @@ import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.editLongPressMillis
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
@@ -185,8 +187,8 @@ class RetouchControls(
 @Composable
 fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val settings = controls.settings
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.RETOUCH_OPTIONS), gap = 8.dp, fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.RETOUCH_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         if (mode == SubTool.RETOUCH_REMOVE) {
             // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
             AccentButton(

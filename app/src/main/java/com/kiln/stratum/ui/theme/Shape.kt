@@ -37,7 +37,7 @@ object StratumShapes {
     /** 배율 표시·제스처 알림·홈 카드·색 비교 칸 */
     val Card = RoundedCornerShape(StratumRadius.Control)
 
-    /** 창(힌지를 피하는 창) */
+    /** 창(`StratumDialog`) */
     val Dialog = RoundedCornerShape(StratumRadius.Large)
 
     /** 아래 시트의 위쪽 모서리 */

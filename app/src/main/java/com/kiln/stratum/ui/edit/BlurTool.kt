@@ -1,7 +1,10 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -10,7 +13,6 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import kotlin.math.roundToInt
 
 /**
@@ -73,8 +75,8 @@ class BlurControls(val options: BlurOptions, val sizePreview: SizePreviewState? 
 fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val options = controls.options
     val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.BLUR_OPTIONS), gap = 8.dp, fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.BLUR_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // 슬라이더는 크기 → 경도 → 강도 순서다(사용자 피드백 9차, 띠와 같다)
         SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.BLUR_SIZE, controls.sizePreview)
         HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.BLUR_HARDNESS, controls.sizePreview)

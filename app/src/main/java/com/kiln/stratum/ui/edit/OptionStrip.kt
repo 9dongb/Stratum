@@ -102,7 +102,7 @@ private val OptionStripMargin = 8.dp
 /** 값·고르기·색 칸의 높이(누르는 영역 48dp 이상) */
 private val CellHeight = 56.dp
 
-/** 옵션 창 안 내용의 폭(자르기 비율 칸 등). 옵션 창(여백 포함 240dp)이 메인 가로에서 접히는 선 왼쪽에 들어간다. */
+/** 옵션 창 안 내용의 폭(자르기 비율 칸 등). 옵션 창은 여백 포함 240dp다. */
 internal val FlyoutSliderWidth = 216.dp
 
 /**
@@ -349,7 +349,7 @@ private fun OptionStrip(items: List<StripItem>, state: FloatingState, handle: Mo
     ) {
         Column {
             StripHandle(handle)
-            // 받은 높이보다 칸이 많으면(메인 세로에서 접히는 선 위에 다 들어가지 않는 선택 도구 등) 밀어 보고, 더 있는 쪽 끝을 흐리게 알린다
+            // 받은 높이보다 칸이 많으면(낮은 화면의 긴 띠 등) 밀어 보고, 더 있는 쪽 끝을 흐리게 알린다
             val scroll = rememberScrollState()
             Column(
                 modifier = Modifier
@@ -632,7 +632,7 @@ internal fun VerticalSliderFlyout(cell: SliderCell, valueOnLeft: Boolean = false
     }
     val valueColumn: @Composable () -> Unit = {
         // 폭은 내용만큼이다('이어진 곳만'처럼 폭을 채우는 칸이 창 영역 끝까지 늘어나지 않게).
-        // 접히는 선 가까이처럼 창 영역이 낮으면 아래로 넘치지 않고 그 안에서 밀어 본다(아래 여백은 카드 그림자 자리).
+        // 창 영역이 낮으면 아래로 넘치지 않고 그 안에서 밀어 본다(아래 여백은 카드 그림자 자리).
         Column(
             modifier = Modifier
                 .width(IntrinsicSize.Max)

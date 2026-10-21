@@ -41,7 +41,6 @@ import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import kotlin.math.exp
@@ -62,8 +61,8 @@ class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit, val 
  */
 @Composable
 fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
-    // 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.TEXT_OPTIONS), fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.TEXT_OPTIONS), horizontalAlignment = Alignment.CenterHorizontally) {
         controls.colors?.let { ColorRow(it) }
         TextSizeSlider(controls)
     }

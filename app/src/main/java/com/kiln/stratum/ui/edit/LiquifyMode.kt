@@ -5,6 +5,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -58,7 +59,6 @@ import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.BarButtonContentInset
 import com.kiln.stratum.ui.layout.workTopBarHeight
@@ -455,7 +455,7 @@ fun LiquifyOverlay(
 /** 닫힌 화면의 옵션 칸: 크기(끄는 동안 [sizePreview]가 캔버스에 크기를 보임)와 압력. 도구 탭은 맨 아래 줄이고, 설명 줄은 두지 않는다(사용자 피드백 8차 1-7). */
 @Composable
 private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState, modifier: Modifier) {
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.LIQUIFY_OPTIONS), gap = 8.dp, fillHeight = false) {
+    Column(modifier.testTag(EditScreenTags.LIQUIFY_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         SizeSlider(state.size, actions::setSize, EditScreenTags.LIQUIFY_SIZE, sizePreview)
         OptionSlider(
             label = stringResource(R.string.liquify_strength),

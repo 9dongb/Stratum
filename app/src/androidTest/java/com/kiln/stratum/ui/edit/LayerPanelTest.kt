@@ -2,7 +2,6 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -39,8 +38,6 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.LongPressTimes
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import com.kiln.stratum.engine.text.TextSpec
@@ -61,8 +58,6 @@ class LayerPanelTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    /** 가짜 힌지. 테스트 중에 바꾸면 화면이 다시 배치된다. */
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** ViewModel처럼 레이어 목록·고른 레이어·끄는 불투명도를 들고, 받은 일을 적는다 */
     private class FakeLayers(count: Int) : LayerActions {
@@ -141,23 +136,21 @@ class LayerPanelTest {
     private fun show(fake: FakeLayers, widthDp: Int, heightDp: Int) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme {
-                        EditScreen(
-                            state = EditorState.Ready(
-                                PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)),
-                                document,
-                                layers = fake.layers,
-                                activeLayer = fake.active
-                            ),
-                            onBack = {},
-                            onCanvasSize = { _, _ -> },
-                            onViewport = {},
-                            onChooseSize = {},
-                            liveOpacity = { fake.liveOpacity },
-                            layerActions = fake
-                        )
-                    }
+                StratumTheme {
+                    EditScreen(
+                        state = EditorState.Ready(
+                            PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)),
+                            document,
+                            layers = fake.layers,
+                            activeLayer = fake.active
+                        ),
+                        onBack = {},
+                        onCanvasSize = { _, _ -> },
+                        onViewport = {},
+                        onChooseSize = {},
+                        liveOpacity = { fake.liveOpacity },
+                        layerActions = fake
+                    )
                 }
             }
         }

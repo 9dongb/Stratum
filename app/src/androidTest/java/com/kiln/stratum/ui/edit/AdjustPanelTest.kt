@@ -2,7 +2,6 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -43,8 +42,6 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.SLIDER_THUMB_TAG
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import org.junit.Assert.assertEquals
@@ -64,8 +61,6 @@ class AdjustPanelTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    /** 가짜 힌지. 테스트 중에 바꾸면 화면이 다시 배치된다. */
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** ViewModel처럼 끄는 값과 기록된 값을 들고, 받은 일을 센다 */
     private class FakeAdjust : AdjustActions {
@@ -109,18 +104,16 @@ class AdjustPanelTest {
     private fun show(widthDp: Int, heightDp: Int) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme {
-                        EditScreen(
-                            state = ready(fake.committed),
-                            onBack = {},
-                            onCanvasSize = { _, _ -> },
-                            onViewport = {},
-                            onChooseSize = {},
-                            liveAdjustments = { fake.live },
-                            adjust = fake
-                        )
-                    }
+                StratumTheme {
+                    EditScreen(
+                        state = ready(fake.committed),
+                        onBack = {},
+                        onCanvasSize = { _, _ -> },
+                        onViewport = {},
+                        onChooseSize = {},
+                        liveAdjustments = { fake.live },
+                        adjust = fake
+                    )
                 }
             }
         }

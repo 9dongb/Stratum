@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -56,7 +57,6 @@ import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSwitch
 import com.kiln.stratum.ui.components.ToolActionButton
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -86,8 +86,8 @@ class SelectionControls(
 @Composable
 fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val options = controls.options
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.SELECTION_OPTIONS), gap = 8.dp, fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.SELECTION_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         SelectionModeRow(options.mode) { controls.onOptions(options.copy(mode = it)) }
         if (mode == SubTool.SELECT_WAND) {
             OptionSlider(

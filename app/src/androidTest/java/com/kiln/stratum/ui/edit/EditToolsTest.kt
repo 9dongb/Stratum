@@ -2,8 +2,6 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
@@ -33,8 +31,6 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.raster.PixelRect
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import org.junit.Assert.assertEquals
@@ -53,8 +49,6 @@ class EditToolsTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    /** 가짜 힌지. 테스트 중에 바꾸면 화면이 다시 배치된다. */
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** 받은 편집 명령 */
     private val commands = mutableListOf<EditCommand>()
@@ -68,17 +62,15 @@ class EditToolsTest {
     private fun show(widthDp: Int, heightDp: Int, state: EditorState = ready()) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme {
-                        EditScreen(
-                            state = state,
-                            onBack = {},
-                            onCanvasSize = { _, _ -> },
-                            onViewport = {},
-                            onChooseSize = {},
-                            onEdit = { commands += it }
-                        )
-                    }
+                StratumTheme {
+                    EditScreen(
+                        state = state,
+                        onBack = {},
+                        onCanvasSize = { _, _ -> },
+                        onViewport = {},
+                        onChooseSize = {},
+                        onEdit = { commands += it }
+                    )
                 }
             }
         }

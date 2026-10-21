@@ -3,54 +3,8 @@ package com.kiln.stratum.ui.layout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class HingePlacementTest {
-
-    @Test
-    fun band_widensAcrossTheHinge() {
-        // 폭이 0인 세로 선(완전히 펼친 폴더블)
-        val vertical = Hinge(left = 1080, top = 0, right = 1080, bottom = 1840, isVertical = true)
-        val horizontal = Hinge(left = 0, top = 1104, right = 1840, bottom = 1104, isVertical = false)
-
-        assertEquals(Span(1038, 1122), vertical.band(marginPx = 42))
-        assertEquals(Span(1062, 1146), horizontal.band(marginPx = 42))
-    }
-
-    @Test
-    fun stackAvoiding_stacksInOrderWithoutBands() {
-        assertEquals(listOf(0, 58, 116), stackAvoiding(listOf(48, 48, 48), gap = 10, bands = emptyList()))
-    }
-
-    @Test
-    fun stackAvoiding_movesItemPastBandAndKeepsStackingAfterIt() {
-        // 두 번째 것(58~106)이 띠(80~120)에 걸려 띠 뒤(120)로 가고, 세 번째는 그 뒤에 쌓인다
-        assertEquals(
-            listOf(0, 120, 178),
-            stackAvoiding(listOf(48, 48, 48), gap = 10, bands = listOf(Span(80, 120)))
-        )
-    }
-
-    @Test
-    fun stackAvoiding_movesFirstItemWhenBandIsAtStart() {
-        assertEquals(listOf(30, 88), stackAvoiding(listOf(48, 48), gap = 10, bands = listOf(Span(-10, 30))))
-    }
-
-    @Test
-    fun stackAvoiding_ignoresBandThatOnlyTouches() {
-        // 띠가 첫 번째 것의 끝(48)에서 시작하면 겹치지 않는다
-        assertEquals(listOf(0, 58), stackAvoiding(listOf(48, 48), gap = 10, bands = listOf(Span(48, 58))))
-    }
-
-    @Test
-    fun stackAvoiding_checksAgainAfterMovingIntoAnotherBand() {
-        // 첫 띠 뒤(50)로 옮기면 둘째 띠(60~90)에 걸려 다시 그 뒤(90)로 간다
-        assertEquals(
-            listOf(90),
-            stackAvoiding(listOf(48), gap = 10, bands = listOf(Span(60, 90), Span(0, 50)))
-        )
-    }
-
-    // 창 고르기: 2000×1600 화면, 카드 최대 폭 600
-    private val screen = Region(0, 0, 2000, 1600)
+/** 떠 있는 것(옵션 창·띠·배율 표시·작업 표시줄)의 자리 계산 */
+class PlacementTest {
 
     @Test
     fun flyoutOffset_sitsRightOfTheCell_andIsPushedInside() {

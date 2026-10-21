@@ -3,7 +3,6 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,8 +27,6 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.LongPressTimes
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -49,7 +46,6 @@ class EyedropperTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** 받은 획·스포이드 일 */
     private val calls = mutableListOf<String>()
@@ -100,26 +96,24 @@ class EyedropperTest {
     private fun show(tool: EditTool) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme {
-                        EditScreen(
-                            state = EditorState.Ready(
-                                PreviewImage(preview, PreviewLevels.wholeRegion(document, 1)),
-                                document,
-                                layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
-                                activeLayer = LayerId(0)
-                            ),
-                            onBack = {},
-                            onCanvasSize = { _, _ -> },
-                            onViewport = {},
-                            onChooseSize = {},
-                            brush = brush,
-                            onBrush = { brush = it },
-                            strokeActions = strokes,
-                            eyedropper = { eyedropper },
-                            eyedropperActions = eyedropperActions
-                        )
-                    }
+                StratumTheme {
+                    EditScreen(
+                        state = EditorState.Ready(
+                            PreviewImage(preview, PreviewLevels.wholeRegion(document, 1)),
+                            document,
+                            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+                            activeLayer = LayerId(0)
+                        ),
+                        onBack = {},
+                        onCanvasSize = { _, _ -> },
+                        onViewport = {},
+                        onChooseSize = {},
+                        brush = brush,
+                        onBrush = { brush = it },
+                        strokeActions = strokes,
+                        eyedropper = { eyedropper },
+                        eyedropperActions = eyedropperActions
+                    )
                 }
             }
         }

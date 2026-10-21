@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -30,8 +29,6 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
@@ -48,7 +45,6 @@ class EffectToolsTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** 받은 일 */
     private class FakeEffect : EffectActions {
@@ -89,9 +85,7 @@ class EffectToolsTest {
     private fun showBlurOptions(mode: SubTool, widthDp: Int = 411) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { BlurToolOptions(mode, BlurControls(blur) { blur = it }, onChoose = {}) }
-                }
+                StratumTheme { BlurToolOptions(mode, BlurControls(blur) { blur = it }, onChoose = {}) }
             }
         }
     }

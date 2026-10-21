@@ -2,7 +2,6 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,8 +32,6 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.settings.ColorSlot
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -50,7 +47,6 @@ class BrushToolsTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** 받은 획 일 */
     private class FakeStrokes : StrokeActions {
@@ -91,28 +87,26 @@ class BrushToolsTest {
     private fun show(widthDp: Int, heightDp: Int) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme {
-                        EditScreen(
-                            state = EditorState.Ready(
-                                PreviewImage(preview, PreviewLevels.wholeRegion(document, 1)),
-                                document,
-                                layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
-                                activeLayer = LayerId(0)
-                            ),
-                            onBack = {},
-                            onCanvasSize = { _, _ -> },
-                            onViewport = {},
-                            onChooseSize = {},
-                            brush = brush,
-                            onBrush = { brush = it },
-                            strokeActions = strokes,
-                            textStyle = textStyle,
-                            onTextStyle = { textStyle = it },
-                            onAddText = { text, x, y, _ -> added += Triple(text, x, y) },
-                            onSwapColors = { swaps++ }
-                        )
-                    }
+                StratumTheme {
+                    EditScreen(
+                        state = EditorState.Ready(
+                            PreviewImage(preview, PreviewLevels.wholeRegion(document, 1)),
+                            document,
+                            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+                            activeLayer = LayerId(0)
+                        ),
+                        onBack = {},
+                        onCanvasSize = { _, _ -> },
+                        onViewport = {},
+                        onChooseSize = {},
+                        brush = brush,
+                        onBrush = { brush = it },
+                        strokeActions = strokes,
+                        textStyle = textStyle,
+                        onTextStyle = { textStyle = it },
+                        onAddText = { text, x, y, _ -> added += Triple(text, x, y) },
+                        onSwapColors = { swaps++ }
+                    )
                 }
             }
         }

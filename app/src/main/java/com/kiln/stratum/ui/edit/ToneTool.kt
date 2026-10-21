@@ -1,10 +1,13 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -15,7 +18,6 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import kotlin.math.roundToInt
 
 /**
@@ -67,8 +69,8 @@ class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? 
 fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val options = controls.options
     val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.TONE_OPTIONS), gap = 8.dp, fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.TONE_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ToneRangeRow(options.range) { controls.onChange(options.copy(range = it)) }
         // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
         SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)

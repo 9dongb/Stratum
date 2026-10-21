@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.ui.components.StratumSlider
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.exp
 import kotlin.math.ln
@@ -52,8 +51,8 @@ class BrushControls(
 @Composable
 fun BrushOptions(controls: BrushControls, modifier: Modifier = Modifier) {
     val settings = controls.settings
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.BRUSH_OPTIONS), horizontalAlignment = Alignment.CenterHorizontally) {
         if (!controls.erase) controls.colors?.let { ColorRow(it) }
         SizeSlider(settings.size, { controls.onChange(settings.copy(size = it)) }, EditScreenTags.BRUSH_SIZE, controls.sizePreview)
         HardnessSlider(settings.hardness, { controls.onChange(settings.copy(hardness = it)) }, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview)

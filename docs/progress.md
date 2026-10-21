@@ -26,6 +26,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 2단계: 도구 옵션 띠는 캔버스 어디든(선에 걸쳐도 됨, 높이는 캔버스까지), 옵션 창·하위 도구 메뉴는 칸·도구 바로 옆, 레이어·조정 패널은 캔버스 오른쪽 위에 캔버스 높이까지, 도구 막대는 틈 없이(유동화 새 창도 같다).
     - 3단계: 모든 창은 화면 가운데(`HingeAwareDialog` → `StratumDialog`), 새 캔버스 창은 같은 폭 두 칸, 색 팔레트는 늘 같은 높이, 좁은 화면은 늘 아래 시트.
     - 4단계: 홈 빈 화면 두 버튼은 가운데에 같은 폭으로 나란히, 프로젝트 카드는 모두 같은 크기, 설정 2단은 분류 칸 280dp + 항목(줄 사이 늘 같음).
+    - 5단계: 커버 옵션 줄도 보통의 세로 줄로 바꾸고, 남은 힌지 피하기 부품·계산·테스트 도우미를 지웠다. CLAUDE.md 6장 규칙을 "접히는 선은 피하지 않는다"로, 기획서도 고쳤다.
 
 - **사용자 피드백 10차(사용자 요청)** (시작·계획 끝: 2026-10-21)
   - 요청(사용자): 선택 띠 아이콘 넷·아래 가운데 작업 표시줄, '개체 선택', 자르기 비율 4:3 빼고 세로 기본, 가져올 곳 정하기 버튼 빼기, 도움말 버튼 대신 토스트, 작업 화면 헤더를 상태 표시줄 높이로, 커버 홈 헤더 높이, 배율 표시는 배율을 바꿀 때만 왼쪽 위, 띠 수치 칸을 아래로, 홈 앱 이름 굵고 크게. 원문·답은 `docs/history.md`의 '사용자 피드백 10차' 단계 항목(1~10단계)에 있다.
@@ -98,7 +99,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 홈·빈 편집 화면, 화면 이동 | 완료 | 홈은 갤러리(위 줄 선택·사진 열기·+·설정, 아래 프로젝트 격자 커버 2열·메인 4열) |
 | 사진 열기 | 완료 | 사진 선택기 → 원본 해상도 타일(힙 밖) → GPU 축소본. 50MP 초과는 선택 창. API 37에서는 약 134MP(회전 사진은 약 67MP)를 넘는 원본은 줄여서만 열린다. 넓은 색 사진은 P3 문서(진한 색 그대로), HDR 사진은 게인맵을 지님(안드로이드 14 이상) |
 | 새 캔버스(크기 프리셋) | 완료 | 이름·프리셋 8개(묶음·비율 그림)·직접 입력(각 변 1~16383px, 50MP 이하)·방향·배경 3가지. 커버는 시트, 메인은 화면 가운데의 두 칸 창(11차, 전에는 메인 가로에서 두 칸을 접히는 선 양쪽에). 한 가지 색은 타일 한 장을 함께 씀 |
-| 화면 크기별 레이아웃·힌지 피하기 | 완료 | 편집 화면은 커버(아래 탭 줄, 옵션 칸은 캔버스 위에 겹쳐 뜸)와 메인(도구 막대 + 캔버스, 도구 옵션 띠·떠 있는 패널) 두 배치. 띠·옵션 창·패널·도구 막대·작업 표시줄·창은 접히는 선을 보지 않는다(11차). 테이블탑은 나중에 |
+| 화면 크기별 레이아웃(접히는 선은 피하지 않음) | 완료 | 편집 화면은 커버(아래 탭 줄, 옵션 칸은 캔버스 위에 겹쳐 뜸)와 메인(도구 막대 + 캔버스, 도구 옵션 띠·떠 있는 패널) 두 배치. 띠·옵션 창·패널·도구 막대·작업 표시줄·창은 접히는 선을 보지 않는다(11차). 테이블탑은 나중에 |
 | 닫힌 화면 공통 규칙(사용자 피드백 6차·8차) | 완료 | 도구를 골라도 이미지 크기·자리 그대로(옵션 칸이 캔버스 위에 겹쳐 뜸). 새 창(자르기·유동화)은 맨 아래 왼쪽 X·오른쪽 ✓, 뒤로 가기는 X(고르는 탭은 그 사이, 8차). 자르기·회전은 새 창(탭 줄 숨김). 옵션 칸의 하위 도구 줄은 맨 아래, 설명 줄 없음, 리터칭·명암은 처음 고를 때 안내 알림(10차, 8차의 물음표 도움말을 대신함) |
 | 캔버스 확대·이동 | 완료 | 두 손가락으로 확대(맞춤의 절반~3200%)·이동. 배율 표시는 손으로 배율을 바꿀 때만 캔버스 왼쪽 위에 보였다가 1초 뒤 서서히 사라지고(10차), 보이는 동안 누르면 맞춤(화면 읽기 기능은 캔버스 그림의 배율·'화면에 맞추기'). 보기가 멈추면 보이는 곳을 선명하게 다시 그린다. 화면 회전은 나중에 |
 | 프로젝트 자동 저장 | 완료 | 앱 내부 저장소에 프로젝트로 저장(편집이 1.5초 멈추면, 홈으로 나갈 때, 앱이 화면에서 사라질 때). 바뀐 타일만 새로 쓴다. 홈 최근 프로젝트(열기·지우기), 백그라운드 종료 뒤 되살림. 실행 취소 기록은 남기지 않는다 |
@@ -453,7 +454,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 되살리기 저장은 순서 번호 대신 비율마다 바뀌지 않는 번호(`CropRatio.code`, 앞 판의 순서 번호와 같음)다. 없어진 비율은 자유로 되살린다.
     - 3:4를 맨 끝에 더했다(2026-10-21 사용자: "자르기 비율에 3:4도 추가하고, 자르기에 있는 <-> 버튼 제거하세요.(불필요함)"). ↔를 빼면 2:3·5:4를 만들 수 없다고 알렸고, 사용자가 "3:4 추가하고, <-> 유지하세요."라고 답해 ↔는 그대로다. 저장은 순서 번호라 맨 끝에 둔다.
   - 크기 변경은 픽셀이나 퍼센트로 넣고, 비율 고정은 기본으로 켠다. 보간 방식은 앱이 고른다.
-  - 자르기 손잡이는 사진의 일부로 보고 접히는 선을 피하지 않는다. 적용·취소 같은 버튼은 피한다. 이유: 손잡이는 사진과 함께 움직이고, 걸리면 두 손가락으로 사진을 옮기면 된다(접히는 선이 무엇인지 설명한 뒤 정했다).
+  - 자르기 손잡이는 사진의 일부로 보고 접히는 선을 피하지 않는다. 이유: 손잡이는 사진과 함께 움직이고, 걸리면 두 손가락으로 사진을 옮기면 된다(접히는 선이 무엇인지 설명한 뒤 정했다). 적용·취소 같은 버튼도 11차부터 피하지 않는다(결정 기록 '접히는 선은 피하지 않는다').
   - 자르기·회전 한 화면(사용자 요청, ✓ 한 번은 사용자 결정, 나머지 Claude 판단, 2026-10-21): 회전·뒤집기를 자르기와 같은 화면에 둔다.
     - 사용자: "현재 자르기는 새로운 창에서 동작하지만, 회전 뒤집기 탭은 그렇지 않습니다. 회전 뒤집기도 새창에 보이든, 자르기와 같은 화면에 보이든(모바일은 그게 더 자연스러울 것 같은데, 똑같은 새 창이면 어차피 보여지는 연결성은 동일하니 상관없나요? 실무적으로 적합한 방법을 알아서 말해주세요.)" 같은 화면이 실무에 맞다고 답했다(구글 포토·스냅시드·라이트룸 모바일이 자르기 화면에 회전을 둔다). 질문에서 "✓ 누를 때 한 번에 (추천)"을 골랐다.
     - 하위 도구는 자르기·회전 / 크기 변경…이다(회전·뒤집기 하위 도구를 없앰). 앞 판이 저장한 '회전·뒤집기'는 되살릴 때 건너뛴다.
@@ -830,6 +831,11 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 선택: [선택]을 누르면 카드에 동그라미가 생기고, 누를 때마다 고르고 푼다(열지 않음, 고른 카드는 파란 테두리와 체크). 위 줄은 'N개 선택됨'·[지우기](빨간 글자, 고른 것이 있을 때만)·[완료]. 지우기는 한 번 더 묻고(프로젝트 N개를 지울까요?), 지우면 선택을 끝낸다. 뒤로 가기는 선택을 끝낸다. 고른 것은 접기·펼치기에도 남는다.
 - **저장 알림의 '보기'(Claude 판단):** 갤러리에 저장하면 알림 막대에 '보기'를 두어 저장한 사본을 사진 앱으로 바로 연다.
   - 이유: 사용자가 저장이 원본을 덮는 것처럼 보인다고 했다. 실제로는 사본이지만(테스트로 확인), 사본을 바로 열어 볼 수 있으면 헷갈리지 않는다. 저장 뒤 '보기'는 흔한 방식이다.
+- **접히는 선(힌지)은 피하지 않는다(사용자 요청, 2026-10-21 11차 1):** 펼친 화면은 평평한 한 화면으로 쓰고, 버튼·띠·패널·창·작업 표시줄도 선과 상관없이 놓는다(CLAUDE.md 6장 규칙을 바꿈, 기획서도 고침).
+  - 사용자: "폴더블 가운데 주름은 비켜간다는 규칙이 있나요? 해당규칙을 제거하려고하고 이 규칙 때문에 주름 부분을 비워둔 부분을 정상화하려 합니다. 우선적으로 내가 발견한건 선택도구 선택시 중앙하단에 뜨는 액션들이 비워진 것 입니다. 이 외에도 이 규칙에 얽힌게 있는 지 찾아주세요."
+  - 규칙이 있다고 답하고 얽힌 곳(편집 화면 10곳·창 4곳·홈과 설정 3곳·기록·테스트)을 찾아 알린 뒤, 승인된 계획대로 모두 정상화했다(history.md 11차 1~5단계).
+  - 남긴 것(Claude 판단): 힌지 위치를 읽는 부분(`WindowHinges`·`LocalHinges`, MainActivity가 넣음)은 반쯤 접어 세우는 테이블탑 배치(맨 마지막 작업)에 쓰려고 남겼다. 지금은 아무 화면도 보지 않는다.
+  - 전에는(2026-10-17부터) "화면 접힘 부분(힌지)에는 버튼·슬라이더를 두지 않는다"가 CLAUDE.md 6장 규칙이었다(기획서 '다른 기기 대응 원칙').
 - **창(대화상자) 자리:** 메인 화면의 창은 시스템 바·키보드를 뺀 화면 가운데에 뜬다(`StratumDialog`, 2026-10-21 사용자 피드백 11차 1에 이름을 `HingeAwareDialog`에서 바꿈). 큰 사진 선택 창도 같은 창이다.
   - 사용자: "폴더블 가운데 주름은 비켜간다는 규칙이 있나요? 해당규칙을 제거하려고하고 이 규칙 때문에 주름 부분을 비워둔 부분을 정상화하려 합니다."
   - (전에는) 힌지가 있으면 힌지 한쪽(넓은 쪽, 같으면 오른쪽·위쪽)에 띄웠다. 큰 사진 선택 창을 같이 고친 것은 사용자 결정(추천 수용), 창 위치는 계획 승인(기획서의 '가운데 대화상자'와 CLAUDE.md 6장 '힌지에 버튼 금지'를 함께 지키는 방법)이었다.
@@ -918,12 +924,12 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - `Ready.revision`은 보이는 문서가 바뀔 때마다 는다. 화면의 도구 상태(자르기 테두리 등)는 이것을 열쇠로 새로 시작한다.
 - **도구 옵션:** 고른 도구는 `ToolSelection`(편집 화면 맨 위, `rememberSaveable`)이 든다. 하위 도구는 도구마다 따로 기억한다(`modeOf`).
 - **도구 옵션 띠(메인 화면):** 칸 목록은 `ToolStrips.kt`의 `brushStrip`·`transformStrip` 등이 도구의 `…Controls`로 만든다(`StripItem`: `ValueCell`·`ChoiceCell`·`ColorCell`·`IconCell`·`StripDivider`). `OptionStrip`이 띠(칸만큼 높이의 카드)를 그리고 `OptionStripHost`가 캔버스 왼쪽 위(옮겨 놓은 자리)에 놓는다. 열린 칸의 옵션 창은 `FlyoutHost`가 칸 옆에 띄운다(`OptionStrip.kt`·`FloatingUi.kt`).
-  - 띠의 자리: `OptionStripHost`가 저장된 자리(`StripPosition`, 설정 → `StratumApp` → `EditScreen`의 `stripPosition`)나 끄는 자리를 배치하는 순간 캔버스 영역 안으로 맞춰 놓는다(`placeInside`, HingePlacement.kt, JVM 테스트). 손잡이(`StripHandle`)를 놓으면 `onStripPosition`으로 알린다. 놓은 자리는 배치 때 `PlacedStrip`에 적어 끌기가 읽는다(다시 그리지 않음). 띠 안(손잡이 아래)은 스크롤하고 넘치면 끝을 흐린다(`scrollFadeEdges`, ui/components).
+  - 띠의 자리: `OptionStripHost`가 저장된 자리(`StripPosition`, 설정 → `StratumApp` → `EditScreen`의 `stripPosition`)나 끄는 자리를 배치하는 순간 캔버스 영역 안으로 맞춰 놓는다(`placeInside`, Placement.kt, JVM 테스트). 손잡이(`StripHandle`)를 놓으면 `onStripPosition`으로 알린다. 놓은 자리는 배치 때 `PlacedStrip`에 적어 끌기가 읽는다(다시 그리지 않음). 띠 안(손잡이 아래)은 스크롤하고 넘치면 끝을 흐린다(`scrollFadeEdges`, ui/components).
   - 좁은 칸의 글자는 `compactTextAutoSize`(ui/theme)로 넘치면 줄인다. 새 칸 종류도 같게 한다.
   - 떠 있는 것의 상태는 `FloatingState`(옵션 창이 열린 칸·패널, 칸 자리 `anchors`)이고 편집 화면 맨 위에 하나다. 옵션 창은 잠깐 쓰는 것이라 여러 곳에서 `closeFlyout`으로 닫고, 패널은 `togglePanel`(상단 바 버튼)·`closePanel`(화면 읽기 '닫기'·커버 탭으로 넘김)로만 닫는다.
   - 캔버스를 누르면 옵션 창을 닫는 바탕(`FloatingDismissLayer`)은 캔버스 도구 화면(overlay)의 맨 위 자식이고, 옵션 창이 떠 있을 때만 있다.
   - 옵션 창을 닫는 뒤로 가기는 도구의 `BackHandler` 바로 뒤에 늘 둔다. Scaffold 안에 두면 다시 만들어질 때 창보다 나중에 등록돼 창보다 먼저 받는다. 패널은 뒤로 가기로 닫지 않는다.
-  - 옵션 창 자리 계산은 `flyoutSides`·`flyoutOnLeft`(HingePlacement.kt, JVM 테스트)이고, 배치하는 순간 칸 자리를 읽는다. 어느 쪽에 띄울지는 그리기 전에 정한다(지난 배치 때 적어 둔 영역 `FlyoutArea`로). 하위 도구 메뉴는 `flyoutOffset`이다.
+  - 옵션 창 자리 계산은 `flyoutSides`·`flyoutOnLeft`(Placement.kt, JVM 테스트)이고, 배치하는 순간 칸 자리를 읽는다. 어느 쪽에 띄울지는 그리기 전에 정한다(지난 배치 때 적어 둔 영역 `FlyoutArea`로). 하위 도구 메뉴는 `flyoutOffset`이다.
   - 새 도구를 만들면 커버 옵션과 함께 띠 칸 목록도 만든다. 슬라이더는 `SliderCell`(`StripSlider`: 비율·바꾸기·이름표·크기 원), 고르기는 `ChoiceList`다. 이름표는 커버 옵션과 같게 둔다.
   - 슬라이더 칸의 창은 `VerticalSliderFlyout`(세로 슬라이더 `StratumVerticalSlider`(ui/components)·값 표시)과 칸을 가리키는 `FlyoutArrow`이고, `FlyoutHost`가 칸 가운데에 맞춰 놓는다. 크기 원은 손을 떼거나 창이 사라질 때 끈다(`EndPreviewOnDispose`).
   - 크기·단단함 슬라이더는 사라질 때 크기 미리 보기를 끈다(`EndPreviewOnDispose`). 끄는 도중 옵션 창이 닫혀도 캔버스에 원이 남지 않는다.
@@ -932,7 +938,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 스포이드: 화면은 `EyedropperActions`(시작·움직임·끝·그만둠)만 보내고, ViewModel이 `ColorSampler`로 읽어 `eyedropper`(자리·색)로 알린다. 읽는 중이면 끝난 뒤 그때의 마지막 자리를 이어 읽고(사이 자리는 건너뜀), 손을 뗀 뒤에 읽기가 끝나면 그 색을 쓴다.
   - 버튼을 켠 곳은 편집 화면이 든다(`eyedropperTarget`). 켜져 있으면 브러시·글자 손가락 대신 `EyedropperOverlay`를 겹친다. 꾹 누르기는 `PaintGestureOverlay`의 `hold`(`HoldActions`)로, 길게 누르기 시간 안에 움직이지 않으면 획을 버리고(`onCancel`) 손가락을 넘긴다.
 - **선택 영역:** 원본은 `Document.selection`(엔진)이고, 화면은 윤곽선(`Ready.selection`, 확대하면 `Ready.selectionDetail`)만 받아 그린다(`SelectionAnts`).
-  - 메인 화면의 동작 버튼은 `SelectionActionBar`(자리 계산 `actionBarStarts`, HingePlacement.kt)다. 차지하는 높이를 `onInset`으로 알려 편집 화면(`selectionBarPx`)이 알림 막대(`overlayBottom`)·떠 있는 패널의 아래 여백으로 쓴다.
+  - 메인 화면의 동작 버튼은 `SelectionActionBar`(자리 계산 `actionBarStarts`, Placement.kt)다. 차지하는 높이를 `onInset`으로 알려 편집 화면(`selectionBarPx`)이 알림 막대(`overlayBottom`)·떠 있는 패널의 아래 여백으로 쓴다.
   - 선택 영역만 바꾼 편집은 레이어 목록을 그대로 함께 쓴다. 그래서 ViewModel은 축소본과 부분 그림을 다시 그리지 않고 윤곽선만 다시 찾는다(`samePixels`).
   - 끄는 획은 시작할 때의 선택 영역을 들고 있어(`LiveStroke.selection`) 미리 보기도 그 안으로 자른다. 기록(`PaintStroke`)은 그때 문서의 선택 영역을 쓴다.
   - 새 도구가 선택 영역을 따라야 하면(리터칭·명암 등) 타일마다 `selection.tiles[key]`로 자르고(`BrushPainter.drawStroke`의 `clip`), 없는 자리는 건너뛴다. 옵션 자리는 커버는 캔버스와 탭 줄 사이, 메인 화면은 도구 옵션 띠다(칸 목록은 `ToolStrips.kt`).
@@ -994,7 +1000,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 미리 보기: ViewModel의 `moveActions` → `moving`(끄는 중)·`committingShift`(기록을 기다림) → `liveShift()`를 `LayerPreviewCache.render(shift = LayerShift)`에 넘겨 그 레이어 축소본을 옮겨 합친다(`showMove`). 기록하는 순간(`onCommitted`) 지운다. 옮기는 동안 부분 그림은 그리지 않는다(`updateDetail`).
   - 화면은 `MoveOverlay`(브러시와 같은 `PaintGestureOverlay`)가 문서 좌표로 보낸다.
 - **제스처 알림 자리:** `GestureToast`는 편집 화면 맨 위 상자(`BoxWithConstraints`, Scaffold 뒤)와 유동화 작업 모드 맨 위 상자에 화면 전체 크기로 둔다. 캔버스 영역이 위쪽 끝(창 루트 기준)을 알리면(`EditCanvas`의 `onCanvasTop`, `LiquifyCanvas`) 그만큼 위를 비운다. 그래서 가로는 늘 화면 정중앙이다.
-- **배율 표시·알림 막대 자리:** 배율 표시(`CanvasZoomChip`)는 `EditCanvas`가 띠 위에 캔버스 영역 크기로 두고, 손으로 바꾼 배율(`CanvasViewState.zoomChanges`: `CanvasViewport`의 두 손가락 확대가 `noteZoom`, 누르기·캔버스의 화면 읽기 동작이 `fit`)이 늘 때 보인다. 자리는 배치하는 순간 `zoomChipSpot`(HingePlacement.kt, JVM 테스트)으로 정하고, 피할 띠 자리는 `OptionStripHost`가 놓을 때 `FloatingState.stripRegion`으로 알린다. 맞춤 배율은 `CanvasViewState.scaleFor`(캔버스 크기 `area`는 `CanvasViewport`가 알림)다. 배율 알림·'화면에 맞추기' 동작은 `CanvasViewport`가 캔버스 그림(`CanvasImage`)에 단다(화면 읽기 기능이 머무는 잎 노드, 화면 테스트는 `canvasImage()`). 이미 보인 바뀜은 `CanvasViewState.zoomChipShown`으로 거르고, 두 손가락 조작이 끝나면 `gestureEnded`로 떨림을 지운다. 배율 표시는 `floating`(띠·옵션 창)보다 먼저(아래에) 그린다. 알림 막대는 `EditCanvas`가 캔버스 왼쪽 끝과 편집 화면 왼쪽 끝(`screenStart`)의 차이만큼 오른쪽을 비워 화면 가로 정중앙에 둔다.
+- **배율 표시·알림 막대 자리:** 배율 표시(`CanvasZoomChip`)는 `EditCanvas`가 띠 위에 캔버스 영역 크기로 두고, 손으로 바꾼 배율(`CanvasViewState.zoomChanges`: `CanvasViewport`의 두 손가락 확대가 `noteZoom`, 누르기·캔버스의 화면 읽기 동작이 `fit`)이 늘 때 보인다. 자리는 배치하는 순간 `zoomChipSpot`(Placement.kt, JVM 테스트)으로 정하고, 피할 띠 자리는 `OptionStripHost`가 놓을 때 `FloatingState.stripRegion`으로 알린다. 맞춤 배율은 `CanvasViewState.scaleFor`(캔버스 크기 `area`는 `CanvasViewport`가 알림)다. 배율 알림·'화면에 맞추기' 동작은 `CanvasViewport`가 캔버스 그림(`CanvasImage`)에 단다(화면 읽기 기능이 머무는 잎 노드, 화면 테스트는 `canvasImage()`). 이미 보인 바뀜은 `CanvasViewState.zoomChipShown`으로 거르고, 두 손가락 조작이 끝나면 `gestureEnded`로 떨림을 지운다. 배율 표시는 `floating`(띠·옵션 창)보다 먼저(아래에) 그린다. 알림 막대는 `EditCanvas`가 캔버스 왼쪽 끝과 편집 화면 왼쪽 끝(`screenStart`)의 차이만큼 오른쪽을 비워 화면 가로 정중앙에 둔다.
 - **떠 있는 레이어·조정 패널:** 열린 패널은 `FloatingState.panel`(저장됨)이고, `FloatingPanelHost`(FloatingPanels.kt)가 캔버스 오른쪽 위에 띄운다(캔버스 높이까지). 상단 바 버튼은 `PanelToggles`다. 내용은 `AdjustList`·`LayerColumn`과 제목 줄의 `ResetAllButton`·`LayerToolbar`다.
   - 자르기 중에는 `FloatingPanelHost`를 그리지 않는다(상태는 그대로라 끝나면 다시 보인다). 띠·옵션 창보다 먼저(아래에) 그리고, 제스처 알림은 그 위에 그린다(`EditCanvas`).
 - **레이어 패널:** 고른 레이어는 ViewModel이 든다(`activeLayer`). 실행 취소 등으로 없어지면 맨 위 레이어를 고른다(`activeLayerIn`).
@@ -1042,13 +1048,11 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 아래 시트(`ModalBottomSheet`)는 화면 전체를 덮는 따로 창이라, 시트가 앞에 오면 상태 표시줄이 다시 나온다. 시트 내용 맨 앞에 `HideStatusBarInSheet()`를 둔다(새 시트도). 메뉴(팝업)·`StratumDialog`(앱 창 안)는 그대로 숨어 있다(`SystemBarsTest`).
   - 상단 바는 `rememberTopBarInsets(바 높이)`, 버튼·제목마다 `Modifier.topBarItem(…, 이름)`, `windowInsets = barInsets.windowInsets()`를 쓴다(`TopBarInsets.kt`). 새 상단 바나 바 안의 버튼을 더할 때도 단다. 편집·유동화·커버 새 창 바 높이는 `workTopBarHeight()`(상태 표시줄 높이)이고, 그 안의 버튼은 `TopBarIconButton`·`TopBarIconToggleButton`·`TopBarAccentButton`(ui/components)이다.
 - **닫힌 화면 배치:** 옵션 칸은 `EditCanvas`의 `floating`으로 캔버스 아래쪽 위에 겹쳐 띄우고(`ToolOptionsSheet`), 그 높이를 재어 알림 막대(`overlayBottom`)와 크기 원(`SizePreviewOverlay`의 `bottomInset`)을 그 위에 놓는다. 자르기는 `coverCropWindow`일 때 새 창 배치(`CoverWindowTopBar`·`CoverCropOptions`·`CoverWorkBar`, 탭 줄 없음)다. 닫힌 화면 새 창의 X·✓는 `CoverWorkBar`(CoverWorkBar.kt)다.
-- **힌지 피하기:** 패널 내용(레이어 목록·슬라이더)이나 버튼을 새로 넣을 때도 힌지를 피한다.
+- **창·접히는 선:** 접히는 선(힌지)은 피하지 않는다(11차, CLAUDE.md 6장). 힌지 위치는 `LocalHinges`(WindowHinges.kt)로 읽을 수 있지만 지금은 아무 화면도 보지 않는다(테이블탑 배치에 쓸 것). 화면 테스트는 가짜 힌지를 넣어도 자리가 그대로인지 본다.
   - 창(대화상자)은 `AlertDialog`·`Dialog` 대신 `StratumDialog`(ui/layout, 화면 가운데)를 쓴다. 화면 전체를 덮는 자리(Box의 마지막 자식)에 둔다.
     - 두 칸 창(새 캔버스)은 `maxWidth`·`scrollContent = false`(칸이 스스로 밀어 봄)를 주고, 내용은 같은 폭 두 칸 `Row`다.
-  - 세로로 쌓으면 `HingeAvoidingColumn`, 두 개를 나란히 두면 `HingeSplitRow`, 구석에 하나를 두면 `HingeAvoidingTopStart`(`ui/layout/HingeAwareLayouts.kt`)를 쓰거나 같은 방식으로 만든다.
-  - Compact(커버) 배치는 힌지를 보지 않는다.
   - 창 내용은 짧게 하고, 칸에 대한 안내는 칸 바로 위에 둔다. 키보드가 열리면 창이 낮아지고 고치는 칸이 보이게 스크롤되기 때문이다(크기 변경 창).
-  - 폴드8 실기기(2026-10-17 사용자 기기에서 확인): 펼친 기본 방향은 2448×1848 창의 가운데(x=1224)를 지나는 세로선(메인 가로, Expanded), 돌리면 1848×2448 창의 가운데(y=1224)를 지나는 가로선(메인 세로, Medium)이다. 두께 0(FLAT)이고 Pixel_Fold 에뮬레이터와 방향이 같다. 접으면 없다.
+  - 폴드8 실기기의 힌지 위치(테이블탑 배치에 쓸 것, 2026-10-17 사용자 기기에서 확인): 펼친 기본 방향은 2448×1848 창의 가운데(x=1224)를 지나는 세로선(메인 가로, Expanded), 돌리면 1848×2448 창의 가운데(y=1224)를 지나는 가로선(메인 세로, Medium)이다. 두께 0(FLAT)이고 Pixel_Fold 에뮬레이터와 방향이 같다. 접으면 없다.
 - **타일 공유:** 한 가지 색 새 캔버스는 타일 한 장을 모든 자리(최대 약 800자리)가 함께 쓴다(`Raster.filled`).
   - 메모리 한도·타일 내보내기·저장 형식은 타일을 자리가 아니라 객체 기준으로 센다.
   - 끝 자리 타일의 캔버스 밖 부분은 읽지 않는다. 캔버스를 키우는 작업은 그 부분을 비우고 쓴다.
@@ -1144,7 +1148,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - 화면 읽기 기능(TalkBack)은 내용이 있는 잎 노드나 묶는 노드(`mergeDescendants`)에만 머문다. 자식 노드가 있는 상자에 단 상태 설명·동작은 들을 수 없으니, 내용이 있는 잎 노드(캔버스 그림 등)에 단다(2026-10-21, 배율·'화면에 맞추기').
 - 화면 테스트 안에서 한국어 문구로 보려면 `DeviceConfigurationOverride.Locales(LocaleList("ko-KR"))`로 감싼다(`stringResource`가 읽는 `LocalResources`는 `LocalContext`를 따른다, 2026-10-21 `EditTopBarTest`).
 - 화면 테스트의 창(ComponentActivity)은 상태 표시줄이 보인다. 커버(Pixel_Fold 접은 화면)는 상태 표시줄 높이와 카메라 구멍 높이가 같아(110px) 상단 바가 구멍 아래로 내려간 것을 바 높이로 알 수 없으니, 앱처럼 `hideStatusBar`로 숨기고 본다.
-- 화면 테스트에서 노드의 `layoutInfo.coordinates`는 모든 Modifier 안쪽, 곧 눈에 보이는 부분이다. Material 버튼의 48dp 최소 터치 영역은 그 바깥이므로, 힌지 검사는 `touchBoundsInWindow`로 48dp까지 넓혀 본다(`HingeAssertions.kt`).
+- 화면 테스트에서 노드의 `layoutInfo.coordinates`는 모든 Modifier 안쪽, 곧 눈에 보이는 부분이다. Material 버튼의 48dp 최소 터치 영역은 그 바깥이므로, 누르는 자리는 `touchBoundsInWindow`로 48dp까지 넓혀 본다(`NodeBounds.kt`).
 - 안드로이드는 앞에 온 창이 화면 전체를 덮으면(MATCH_PARENT, 아래 시트 등) 상태 표시줄을 그 창의 설정대로 보이고, 덮지 않는 창(팝업 메뉴)이면 아래 앱 창의 설정을 그대로 둔다. 그래서 상태 표시줄을 숨긴 앱에서 시트를 열면 시트 창에서도 숨겨야 한다.
 - 테마를 바꿀 때 `enableEdgeToEdge`를 다시 불러도 된다(막대 아이콘 색만 바뀌고 상태 표시줄 숨김은 그대로). 창 바탕은 `window.setBackgroundDrawable`로 바꾼다(`MainActivity.applyWindowTheme`).
 - 안드로이드 15 이상에서 targetSdk 35 이상이면 창이 카메라 구멍 자리까지 그린다. 상태 표시줄을 숨기면 위쪽 내용이 구멍과 겹칠 수 있다. 구멍 자리(`rootWindowInsets.displayCutout.boundingRects`)는 창 좌표다.
@@ -1156,7 +1160,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 - 화면은 에뮬레이터에서 아래를 확인한다. 에뮬레이터 만들기와 명령·요령은 `docs/emulator.md`에 있다.
   - 홈 → 편집 → 뒤로
   - 접기·펼치기(Pixel_Fold): 커버(Compact)·안쪽 기본 방향(Expanded)·안쪽 돌린 방향(Medium), 힌지 정보는 `adb logcat -s WindowHinges`
-  - 창·시트: 펼친 화면에서 힌지 한쪽에 뜨는지, 키보드를 열어도 버튼과 안내가 보이는지, 메인 세로에서 스크롤하지 않아도 다 보이는지
+  - 창·시트: 펼친 화면 가운데에 뜨는지(접히는 선과 상관없이), 키보드를 열어도 버튼과 안내가 보이는지, 메인 세로에서 스크롤하지 않아도 다 보이는지
   - 편집: 회전·뒤집기·자르기·크기 변경 뒤 실행 취소·다시 실행, 큰 사진의 처리 중 표시
   - 내보내기: 갤러리 '사진/Stratum'에 생긴 파일의 크기·형식(adb pull로 꺼내 확인한 뒤 지운다), 공유 창
   - 가로 화면

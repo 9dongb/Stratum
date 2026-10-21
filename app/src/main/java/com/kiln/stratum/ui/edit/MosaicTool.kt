@@ -1,7 +1,10 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -9,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectMath
-import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -35,8 +37,8 @@ class MosaicControls(val options: MosaicOptions, val sizePreview: SizePreviewSta
 fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
     val options = controls.options
     val brush = options.brush
-    // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
-    HingeAvoidingColumn(modifier.testTag(EditScreenTags.MOSAIC_OPTIONS), gap = 8.dp, fillHeight = false) {
+    // 패널 안에서 내용만큼만 차지하고 가운데에 맞춰 차례로 쌓는다(다른 도구 옵션과 같다)
+    Column(modifier.testTag(EditScreenTags.MOSAIC_OPTIONS), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // 슬라이더는 크기 → 경도 → 셀 크기(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
         SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.MOSAIC_SIZE, controls.sizePreview)
         HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview)

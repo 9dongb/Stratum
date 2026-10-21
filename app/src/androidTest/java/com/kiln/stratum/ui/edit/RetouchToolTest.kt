@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -54,8 +53,6 @@ import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
-import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.touchBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -77,7 +74,6 @@ class RetouchToolTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private val hinges = mutableStateOf(emptyList<Hinge>())
 
     /** 받은 일 */
     private class FakeRetouch : RetouchActions {
@@ -166,9 +162,7 @@ class RetouchToolTest {
     private fun showOptions(mode: SubTool, source: CloneSource? = null, widthDp: Int = 411, objectPicked: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                CompositionLocalProvider(LocalHinges provides hinges.value) {
-                    StratumTheme { RetouchOptions(mode, controls(source, objectPicked), onChoose = {}) }
-                }
+                StratumTheme { RetouchOptions(mode, controls(source, objectPicked), onChoose = {}) }
             }
         }
     }
