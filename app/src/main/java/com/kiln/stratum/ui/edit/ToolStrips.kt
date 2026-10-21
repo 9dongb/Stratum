@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
@@ -321,6 +322,39 @@ internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
         )
     )
 }
+
+/**
+ * 유동화 작업 모드의 띠(사용자 피드백 8차 1-5 정정: "도구 표시를 왼쪽 상단에 기존 도구들처럼", 새 창이라 도구 막대는 없다):
+ * 크기·압력(수치 칸, 끌어서 조절) | 뒤틀기·오목·볼록·재구성(고른 것이 켜진 칸, 누르면 바로 바꿈).
+ */
+@Composable
+internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<StripItem> =
+    numbersFirst(
+        numbers = listOf(
+            sizeCell(state.size, EditScreenTags.LIQUIFY_SIZE, sizePreview, actions::setSize),
+            SliderCell(
+                key = "strength",
+                caption = stringResource(R.string.liquify_strength),
+                value = stringResource(R.string.layer_percent, (state.strength * 100).roundToInt()),
+                slider = StripSlider(
+                    fraction = state.strength,
+                    onFraction = { actions.setStrength(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
+                    tag = EditScreenTags.LIQUIFY_STRENGTH
+                )
+            )
+        ),
+        rest = LiquifyTool.entries.map { tool ->
+            IconCell(
+                key = "liquify_${tool.name}",
+                icon = liquifyToolIcon(tool),
+                description = stringResource(liquifyToolLabel(tool)),
+                onClick = { actions.setTool(tool) },
+                enabled = !state.busy,
+                checked = state.tool == tool,
+                tag = EditScreenTags.liquifyTool(tool)
+            )
+        }
+    )
 
 /** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]), 손을 떼거나 슬라이더 창이 닫히면 사라진다 */
 @Composable

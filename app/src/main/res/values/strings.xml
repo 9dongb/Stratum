@@ -303,7 +303,6 @@
     <string name="liquify_undo">Undo last stroke</string>
     <string name="liquify_redo">Redo stroke</string>
     <string name="liquify_reset">Restore all</string>
-    <string name="liquify_hint">Drag with one finger to reshape the chosen layer. Pinch with two fingers to zoom. Apply records one undo step.</string>
 
     <!-- 리터칭 -->
     <string name="tool_retouch">Retouch</string>

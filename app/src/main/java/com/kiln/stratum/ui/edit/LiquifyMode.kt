@@ -1,34 +1,33 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +50,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.StratumIconButton
@@ -153,8 +153,10 @@ interface LiquifyActions {
  *   [twoFingerTapUndo](설정)면 두 손가락으로 톡 눌러 한 획 되돌린다(편집 화면과 같다, 결정 기록 '제스처 알림').
  *   [threeFingerGestures](설정)면 세 손가락으로 톡 눌러 한 획 다시 실행하고, 위아래로 밀어 크기, 좌우로 밀어 압력을 바꾼다
  *   (유동화에는 단단함이 없어 압력으로 대신한다, 결정 기록 '세 손가락 제스처').
- * - 옵션: 도구(뒤틀기·오목·볼록·재구성), 크기, 압력. 커버·메인 세로는 아래, 메인 가로는 오른쪽에 둔다(접히는 선을 피함).
- * - 시스템 뒤로는 취소와 같다.
+ * - 옵션: 크기, 압력, 도구(뒤틀기·오목·볼록·재구성)(사용자 피드백 8차 1-5 정정: "도구 표시를 왼쪽 상단에 기존 도구들처럼").
+ *   펼친 화면은 편집 화면과 같은 왼쪽 위 띠(손잡이로 옮기고 같은 자리 [stripPosition]을 기억)이고 캔버스가 창 전체를 쓴다.
+ *   닫힌 화면은 크기·압력을 아래 옵션 칸에, 도구 탭을 맨 아래 X와 ✓ 사이에 둔다(사용자 피드백 8차 1-1).
+ * - 시스템 뒤로는 띠의 옵션 창이 떠 있으면 그것부터 닫고, 아니면 취소와 같다.
  * - [flip]: 편집 화면의 화면 반전(보기만 뒤집음)을 캔버스에 그대로 건다.
  */
 @Composable
@@ -164,9 +166,14 @@ fun LiquifyMode(
     modifier: Modifier = Modifier,
     twoFingerTapUndo: Boolean = false,
     threeFingerGestures: Boolean = false,
-    flip: ViewFlip = ViewFlip.None
+    flip: ViewFlip = ViewFlip.None,
+    stripPosition: StripPosition? = null,
+    onStripPosition: (StripPosition) -> Unit = {}
 ) {
     BackHandler(enabled = !state.busy, onBack = actions::cancel)
+    // 띠의 옵션 창(세로 슬라이더)은 작업 모드 안에서만 쓴다. 떠 있으면 뒤로 가기는 그것부터 닫는다(취소보다 나중에 등록해 먼저 받는다).
+    val floating = rememberFloatingState()
+    BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
     val viewState = rememberCanvasViewState(state.documentSize)
     // 작업 모드와 캔버스의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다).
     var screenTop by remember { mutableFloatStateOf(0f) }
@@ -232,53 +239,46 @@ fun LiquifyMode(
             val maxOptionsHeight = maxHeight * 0.4f
             // 닫힌 화면(커버)은 새 창 공통 규칙대로 취소·적용을 맨 아래 X·✓ 줄에 둔다(결정 기록 '닫힌 화면 새 창')
             val coverWindow = widthClass == WidthClass.Compact
+            // 배치가 바뀌거나(접기·펼치기) 적용하기 시작하면 띠의 옵션 창을 닫는다
+            LaunchedEffect(widthClass, state.busy) { floating.closeFlyout() }
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
-                val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
-                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, canvasModifier)
-                }
-                if (widthClass == WidthClass.Expanded) {
-                    Row(Modifier.fillMaxSize()) {
-                        canvas(Modifier.weight(1f).fillMaxHeight())
-                        Surface(
-                            Modifier
-                                .width(320.dp)
-                                .fillMaxHeight()
-                                .edgeDivider(DividerEdge.Start, StratumTheme.colors.divider),
-                            color = StratumTheme.colors.panel
-                        ) {
-                            LiquifyOptions(
-                                state, actions, sizePreview,
-                                Modifier
-                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(12.dp)
-                            )
-                        }
-                    }
-                } else {
-                    canvas(Modifier.weight(1f).fillMaxWidth())
+                if (coverWindow) {
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.weight(1f).fillMaxWidth())
                     Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
-                        // 커버는 아래 시스템 바를 맨 아래 X·✓ 줄이 피한다
-                        val sides = if (coverWindow) WindowInsetsSides.Horizontal else WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+                        // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다
                         LiquifyOptions(
                             state, actions, sizePreview,
                             Modifier
                                 .heightIn(max = maxOptionsHeight)
-                                .windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
-                    if (coverWindow) {
-                        CoverWorkBar(
-                            onCancel = actions::cancel,
-                            onDone = actions::apply,
-                            doneEnabled = state.changed && !state.busy,
-                            cancelEnabled = !state.busy,
-                            cancelTag = EditScreenTags.LIQUIFY_CANCEL,
-                            doneTag = EditScreenTags.LIQUIFY_APPLY
+                    // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
+                    CoverWorkBar(
+                        onCancel = actions::cancel,
+                        onDone = actions::apply,
+                        doneEnabled = state.changed && !state.busy,
+                        cancelEnabled = !state.busy,
+                        cancelTag = EditScreenTags.LIQUIFY_CANCEL,
+                        doneTag = EditScreenTags.LIQUIFY_APPLY,
+                        middle = { LiquifyToolTabs(state.tool, enabled = !state.busy, onTool = actions::setTool) }
+                    )
+                } else {
+                    // 펼친 화면: 캔버스가 창 전체를 쓰고, 옵션은 편집 화면과 같은 왼쪽 위 띠(손잡이로 옮김)다.
+                    // 아래 시스템 바는 편집 화면의 캔버스처럼 피한다(맨 아래에서 시작한 획이 홈 제스처와 섞이지 않게)
+                    Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                        LiquifyCanvas(
+                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.fillMaxSize(),
+                            floating = floating
                         )
+                        // 띠와 옵션 창은 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다
+                        val items = liquifyStrip(state, actions, sizePreview)
+                        val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                        OptionStripHost(items, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                        FlyoutHost(floating, items, Modifier.fillMaxSize().windowInsetsPadding(insets))
                     }
                 }
             }
@@ -356,7 +356,8 @@ private fun LiquifyCanvas(
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
     flip: ViewFlip,
-    modifier: Modifier
+    modifier: Modifier,
+    floating: FloatingState? = null
 ) {
     val ready = remember(state.preview, state.documentSize, state.colorSpace) {
         EditorState.Ready(state.preview, state.documentSize, colorSpace = state.colorSpace)
@@ -373,6 +374,8 @@ private fun LiquifyCanvas(
             if (showSize) {
                 SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())
             }
+            // 띠의 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(편집 화면과 같다)
+            floating?.let { FloatingDismissLayer(it, Modifier.fillMaxSize()) }
         }
         if (state.busy) {
             LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -444,11 +447,10 @@ fun LiquifyOverlay(
     }
 }
 
-/** 옵션: 도구, 크기(끄는 동안 [sizePreview]가 캔버스에 크기를 보임), 압력, 안내 */
+/** 닫힌 화면의 옵션 칸: 크기(끄는 동안 [sizePreview]가 캔버스에 크기를 보임)와 압력. 도구 탭은 맨 아래 줄이고, 설명 줄은 두지 않는다(사용자 피드백 8차 1-7). */
 @Composable
 private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState, modifier: Modifier) {
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.LIQUIFY_OPTIONS), gap = 8.dp, fillHeight = false) {
-        LiquifyToolRow(state.tool, enabled = !state.busy, onTool = actions::setTool)
         SizeSlider(state.size, actions::setSize, EditScreenTags.LIQUIFY_SIZE, sizePreview)
         OptionSlider(
             label = stringResource(R.string.liquify_strength),
@@ -457,18 +459,14 @@ private fun LiquifyOptions(state: LiquifyState, actions: LiquifyActions, sizePre
             onFraction = { actions.setStrength(((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f)) },
             tag = EditScreenTags.LIQUIFY_STRENGTH
         )
-        Text(
-            stringResource(R.string.liquify_hint),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
     }
 }
 
-/** 도구 줄: 뒤틀기·오목·볼록·재구성 */
+/**
+ * 닫힌 화면 맨 아래 줄 가운데의 도구 탭: 뒤틀기·오목·볼록·재구성(아이콘, 화면 읽기는 이름). 커버 폭(411dp)에 네 칸이 들어가게 아이콘이다(띠의 칸과 같은 아이콘).
+ */
 @Composable
-private fun LiquifyToolRow(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
+private fun LiquifyToolTabs(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
     val tools = LiquifyTool.entries
     StratumSegmentedRow {
         tools.forEachIndexed { index, entry ->
@@ -480,20 +478,26 @@ private fun LiquifyToolRow(tool: LiquifyTool, enabled: Boolean, onTool: (Liquify
                 enabled = enabled,
                 modifier = Modifier.testTag(EditScreenTags.liquifyTool(entry))
             ) {
-                Text(
-                    stringResource(
-                        when (entry) {
-                            LiquifyTool.PUSH -> R.string.liquify_push
-                            LiquifyTool.PUCKER -> R.string.liquify_pucker
-                            LiquifyTool.BLOAT -> R.string.liquify_bloat
-                            LiquifyTool.RECONSTRUCT -> R.string.liquify_reconstruct
-                        }
-                    ),
-                    modifier = Modifier.width(IntrinsicSize.Max),
-                    maxLines = 1,
-                    softWrap = false
-                )
+                Icon(painterResource(liquifyToolIcon(entry)), contentDescription = stringResource(liquifyToolLabel(entry)))
             }
         }
     }
+}
+
+/** 유동화 도구의 아이콘(Material Icons: 뒤틀기 swipe, 오목 zoom_in_map, 볼록 zoom_out_map, 재구성 settings_backup_restore) */
+@DrawableRes
+internal fun liquifyToolIcon(tool: LiquifyTool): Int = when (tool) {
+    LiquifyTool.PUSH -> R.drawable.ic_swipe
+    LiquifyTool.PUCKER -> R.drawable.ic_zoom_in_map
+    LiquifyTool.BLOAT -> R.drawable.ic_zoom_out_map
+    LiquifyTool.RECONSTRUCT -> R.drawable.ic_settings_backup_restore
+}
+
+/** 유동화 도구의 이름 */
+@StringRes
+internal fun liquifyToolLabel(tool: LiquifyTool): Int = when (tool) {
+    LiquifyTool.PUSH -> R.string.liquify_push
+    LiquifyTool.PUCKER -> R.string.liquify_pucker
+    LiquifyTool.BLOAT -> R.string.liquify_bloat
+    LiquifyTool.RECONSTRUCT -> R.string.liquify_reconstruct
 }

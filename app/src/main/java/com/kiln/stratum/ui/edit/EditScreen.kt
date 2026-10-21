@@ -1050,7 +1050,15 @@ fun EditScreen(
         }
         // 픽셀 유동화 작업 모드는 편집 화면(창 포함) 전체를 덮는다(CLAUDE.md 6장)
         if (liquify != null) {
-            LiquifyMode(liquify, liquifyActions, twoFingerTapUndo = twoFingerTapUndo, threeFingerGestures = threeFingerGestures, flip = viewFlip)
+            LiquifyMode(
+                liquify, liquifyActions,
+                twoFingerTapUndo = twoFingerTapUndo,
+                threeFingerGestures = threeFingerGestures,
+                flip = viewFlip,
+                // 유동화 창의 띠도 편집 화면의 띠와 같은 자리를 기억한다(사용자 피드백 8차 1-5 정정)
+                stripPosition = stripPosition,
+                onStripPosition = onStripPosition
+            )
         }
     }
 }
