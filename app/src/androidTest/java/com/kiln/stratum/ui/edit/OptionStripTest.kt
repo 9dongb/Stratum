@@ -524,18 +524,19 @@ class OptionStripTest {
     }
 
     @Test
-    fun numberCellsComeFirst_sizeHardnessOpacityStrength_thenTheRest() {
-        // 사용자 피드백 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"
+    fun otherCellsComeFirst_thenTheNumbers_sizeHardnessOpacityStrength() {
+        // 사용자 피드백 10차 9: "수치 조절 외의 기능이 있을 시 ... 수치가 아래로 오도록 우선순위 변경해주세요.(공통 규칙)"
+        // 수치 칸 순서는 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"
         show(MAIN_LANDSCAPE)
         fun tops(vararg keys: String) = keys.map { cell(it).fetchSemanticsNode().layoutBoundsInWindow().top }
         fun assertDownward(values: List<Float>) = assertTrue("$values should go down", values.zipWithNext().all { (a, b) -> a < b })
 
         pick(EditTool.Brush)
         val brushColors = composeRule.onNodeWithTag(EditScreenTags.strip("foreground")).fetchSemanticsNode().layoutBoundsInWindow().top
-        assertDownward(tops("size", "hardness", "opacity") + brushColors)
+        assertDownward(listOf(brushColors) + tops("size", "hardness", "opacity"))
 
         pick(EditTool.Tone)
-        assertDownward(tops("size", "hardness", "exposure", "range"))
+        assertDownward(tops("range", "size", "hardness", "exposure"))
     }
 
     @Test

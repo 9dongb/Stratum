@@ -487,16 +487,17 @@ class LiquifyModeTest {
         assertEquals(mode.width, canvas.width, 2 * dp)
         assertEquals(canvas.left + 4 * dp, strip.left, 2 * dp)
         assertEquals(canvas.top + 8 * dp, strip.top, 2 * dp)
-        // 칸: 크기 → 압력, 구분선 아래 뒤틀기·오목·볼록·재구성(고른 것이 켜짐)
-        val size = composeRule.onNodeWithTag(EditScreenTags.strip("size")).fetchSemanticsNode().layoutBoundsInWindow()
-        val strength = composeRule.onNodeWithTag(EditScreenTags.strip("strength")).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("size $size should be above strength $strength", size.top < strength.top)
-        var above = strength.top
+        // 칸: 뒤틀기·오목·볼록·재구성(고른 것이 켜짐), 구분선 아래 크기 → 압력(사용자 피드백 10차 9: 수치 칸은 아래)
+        var above = Float.NEGATIVE_INFINITY
         for (tool in LiquifyTool.entries) {
             val cell = composeRule.onNodeWithTag(EditScreenTags.liquifyTool(tool)).fetchSemanticsNode().layoutBoundsInWindow()
             assertTrue("$tool $cell should be below $above", cell.top > above)
             above = cell.top
         }
+        val size = composeRule.onNodeWithTag(EditScreenTags.strip("size")).fetchSemanticsNode().layoutBoundsInWindow()
+        val strength = composeRule.onNodeWithTag(EditScreenTags.strip("strength")).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("size $size should be below the tools ($above)", size.top > above)
+        assertTrue("size $size should be above strength $strength", size.top < strength.top)
         composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsOn()
     }
 

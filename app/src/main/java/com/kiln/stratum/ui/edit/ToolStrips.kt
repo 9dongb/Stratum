@@ -38,20 +38,21 @@ import kotlin.math.roundToInt
  * 옵션 창의 슬라이더·고르기는 커버 옵션과 같은 부품·이름표다. 그래서 바꾸는 값과 기록은 커버와 똑같다.
  * 고르기 칸의 옵션 창은 고르면 닫는다([close]).
  * 하위 도구는 띠에 두지 않고 도구 막대의 하위 도구 메뉴(꾹 누르기·다시 누르기)에서 고른다(사용자 피드백 7차).
- * 칸 순서(사용자 피드백 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"): 수치 칸을 크기 → 경도 → 불투명도 → 강도
- * (명암의 노출·모자이크의 셀 크기도 강도 자리) 순서로 맨 위에 두고, 구분선 아래에 나머지 칸(색·가져올 곳·범위 등)을 둔다([numbersFirst]).
+ * 칸 순서(공통 규칙): 수치 칸 밖의 칸(색·모드·범위 등)을 위에 두고, 구분선 아래에 수치 칸을 둔다([numbersLast], 사용자 피드백 10차 9:
+ * "수치 조절 외의 기능이 있을 시 띠에서 현재는 수치 아래 하단 배치로 되어있는데, 수치가 아래로 오도록 우선순위 변경해주세요.(공통 규칙)").
+ * 수치 칸은 크기 → 경도 → 불투명도 → 강도(명암의 노출·모자이크의 셀 크기도 강도 자리) 순서다(9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)").
  */
 
-/** 수치 칸 [numbers] 다음에, 나머지 칸 [rest]가 있으면 구분선을 두고 그 칸들을 둔다 */
-private fun numbersFirst(numbers: List<StripItem>, rest: List<StripItem>): List<StripItem> =
-    if (rest.isEmpty()) numbers else numbers + StripDivider("afterNumbers") + rest
+/** 수치 칸 밖의 칸 [rest]가 있으면 그 칸들과 구분선을 먼저 두고, 그 아래에 수치 칸 [numbers]를 둔다 */
+private fun numbersLast(numbers: List<StripItem>, rest: List<StripItem>): List<StripItem> =
+    if (rest.isEmpty()) numbers else rest + StripDivider("beforeNumbers") + numbers
 
-/** 브러시·지우개의 띠: 크기, 경도, 불투명도, (브러시만) 구분선 아래 색·바꾸기·스포이드 */
+/** 브러시·지우개의 띠: (브러시만) 색·바꾸기·스포이드, 구분선 아래 크기, 경도, 불투명도 */
 @Composable
 internal fun brushStrip(controls: BrushControls): List<StripItem> {
     val settings = controls.settings
     val colors = controls.colors.takeIf { !controls.erase }
-    return numbersFirst(
+    return numbersLast(
         numbers = listOf(
             sizeCell(settings.size, EditScreenTags.BRUSH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) },
             hardnessCell(settings.hardness, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) },
@@ -61,11 +62,11 @@ internal fun brushStrip(controls: BrushControls): List<StripItem> {
     )
 }
 
-/** 글자의 띠: 크기, 구분선 아래 색·바꾸기·스포이드. 넣을 자리를 누르라는 안내는 고를 때 알림으로 보인다. */
+/** 글자의 띠: 색·바꾸기·스포이드, 구분선 아래 크기 */
 @Composable
 internal fun textStrip(controls: TextControls): List<StripItem> {
     val style = controls.style
-    return numbersFirst(
+    return numbersLast(
         numbers = listOf(
             SliderCell(
                 key = "textSize",
@@ -187,8 +188,8 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
 }
 
 /**
- * 리터칭의 띠: 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도, 구분선 아래 (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양,
- * 커버 옵션과 같은 이름표), (AI 제거) 고른 물체 지우기.
+ * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), (AI 제거) 고른 물체 지우기,
+ * 구분선 아래 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
  * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
  */
 @Composable
@@ -232,10 +233,10 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
     }
-    return numbersFirst(numbers, rest) + helpCells(EditTool.Retouch, mode, controls.picking)
+    return numbersLast(numbers, rest) + helpCells(EditTool.Retouch, mode, controls.picking)
 }
 
-/** 명암의 띠: 크기, 경도, 노출(강도 자리), 구분선 아래 범위(어두운·중간·밝은 영역, 아이콘), 맨 아래 물음표 도움말 */
+/** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 구분선 아래 크기, 경도, 노출(강도 자리), 맨 아래 물음표 도움말 */
 @Composable
 internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
@@ -243,7 +244,7 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit)
     val rangeCaption = stringResource(R.string.strip_tone_range)
     val exposureLabel = stringResource(R.string.tone_exposure)
     val exposureShown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt())
-    return numbersFirst(
+    return numbersLast(
         numbers = listOf(
             sizeCell(brush.size, EditScreenTags.TONE_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) },
             hardnessCell(brush.hardness, EditScreenTags.TONE_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) },
@@ -325,11 +326,11 @@ internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
 
 /**
  * 유동화 작업 모드의 띠(사용자 피드백 8차 1-5 정정: "도구 표시를 왼쪽 상단에 기존 도구들처럼", 새 창이라 도구 막대는 없다):
- * 크기·압력(수치 칸, 끌어서 조절) | 뒤틀기·오목·볼록·재구성(고른 것이 켜진 칸, 누르면 바로 바꿈).
+ * 뒤틀기·오목·볼록·재구성(고른 것이 켜진 칸, 누르면 바로 바꿈) | 크기·압력(수치 칸, 끌어서 조절).
  */
 @Composable
 internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<StripItem> =
-    numbersFirst(
+    numbersLast(
         numbers = listOf(
             sizeCell(state.size, EditScreenTags.LIQUIFY_SIZE, sizePreview, actions::setSize),
             SliderCell(
