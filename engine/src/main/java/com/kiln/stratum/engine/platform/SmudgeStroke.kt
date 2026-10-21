@@ -77,7 +77,7 @@ data class SmudgeStroke(
             throw NotEnoughMemoryException(e)
         }
         if (smudged.isEmpty()) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(raster.withTiles(smudged)))) }
+        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(raster.withTiles(smudged))) }
         return document.copy(layers = layers)
     }
 

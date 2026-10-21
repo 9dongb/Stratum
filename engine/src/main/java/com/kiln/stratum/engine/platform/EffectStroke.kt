@@ -68,7 +68,7 @@ data class EffectStroke(
                 throw NotEnoughMemoryException(e)
             }
         }
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(painted), gainmap = gainmap)) }
+        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(painted, gainmap)) }
         return document.copy(layers = layers)
     }
 

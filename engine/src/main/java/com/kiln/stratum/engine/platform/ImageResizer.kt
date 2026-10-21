@@ -39,7 +39,7 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val plan = ResizePlan(source, target)
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
-                is RasterContent -> layer.copy(content = RasterContent(ImageResizer.resize(content.raster, plan, checkCanceled)))
+                is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled))
             }
         }
         // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')

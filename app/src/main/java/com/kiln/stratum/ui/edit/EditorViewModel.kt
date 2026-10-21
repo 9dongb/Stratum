@@ -25,6 +25,7 @@ import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.EditSequence
 import com.kiln.stratum.engine.command.MoveLayer
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.command.RasterizeLayer
 import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
@@ -49,6 +50,7 @@ import com.kiln.stratum.engine.segment.SegmentUnavailableException
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.AddTextLayer
+import com.kiln.stratum.engine.platform.EditTextLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.ColorSampler
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
@@ -92,6 +94,7 @@ import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
+import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.tone.ToneFill
 import com.kiln.stratum.export.ExportStorage
@@ -188,6 +191,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  *
  * @property thumbnail 레이어 목록의 작은 그림(보정을 건 레이어 픽셀, 하드웨어 비트맵). 빈 레이어는 null이다.
  * @property visible 보이는지(레이어 줄의 눈). 불투명도와 따로다.
+ * @property text 다시 고칠 수 있는 글자 레이어의 글자(사용자 피드백 8차 1-6). 글자 도구로 그 상자 안을 누르면 고치고, 레이어 줄에 글자 표시를 단다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -196,7 +200,8 @@ data class LayerSummary(
     val blendMode: BlendMode,
     val adjustments: Adjustments,
     val thumbnail: Bitmap? = null,
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    val text: TextSpec? = null
 )
 
 /**
@@ -590,6 +595,17 @@ class EditorViewModel internal constructor(
         override fun clearPicked() = clearRemovePick()
     }
 
+    private val _rasterizeAsk = MutableStateFlow<LayerId?>(null)
+
+    /**
+     * 픽셀로 바꿀지 물어볼 글자 레이어(사용자 피드백 8차 1-6: 글자 레이어에 픽셀 도구를 쓰면 물어보고 픽셀로 바꾼다).
+     * 화면이 창을 띄우고, [confirmRasterize]·[dismissRasterize]로 답한다. 없으면 null이다.
+     */
+    val rasterizeAsk: StateFlow<LayerId?> = _rasterizeAsk.asStateFlow()
+
+    /** 글자 레이어에 시작한 픽셀 도구 획(칠하지 않음). 손을 떼면 묻고, 두 번째 손가락이 닿으면 묻지 않는다. 없으면 null이다. */
+    private var textStrokeLayer: LayerId? = null
+
     private val _removePick = MutableStateFlow<RemovePick?>(null)
 
     /** AI 제거에서 톡 눌러 고른 물체. 없으면 null이다. 문서가 바뀌면 버린다(그 그림에서 찾은 모양이라). */
@@ -689,6 +705,7 @@ class EditorViewModel internal constructor(
         override fun commitOpacity() = commitLive()
         override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
         override fun setVisible(id: LayerId, visible: Boolean) = setLayerVisible(id, visible)
+        override fun rasterize() = rasterizeActiveLayer()
     }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
@@ -904,6 +921,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || liquifySession != null || _state.value !is EditorState.Ready) return
         val layer = activeLayerIn(document)
         if (!document.layers[document.indexOfLayer(layer)].visible) return tellHiddenLayer()
+        if (document.layers[document.indexOfLayer(layer)].text != null) return askRasterize(layer)
         val level = levelFor(document)
         startEditing()
         editJob = viewModelScope.launch {
@@ -1161,7 +1179,9 @@ class EditorViewModel internal constructor(
     fun deleteSelected() {
         val document = history?.document ?: return
         if (document.selection == null) return
-        edit(DeleteSelected(activeLayerIn(document)))
+        val layer = activeLayerIn(document)
+        if (document.layers.getOrNull(document.indexOfLayer(layer))?.text != null) return askRasterize(layer)
+        edit(DeleteSelected(layer))
     }
 
     /**
@@ -1171,6 +1191,8 @@ class EditorViewModel internal constructor(
     fun copySelectionToLayer(cut: Boolean) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || document.selection == null) return
+        // 잘라내면 글자 레이어의 픽셀이 바뀐다(복사는 원래 레이어를 그대로 둔다)
+        if (cut && document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document)))?.text != null) return askRasterize(activeLayerIn(document))
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
         runEdit(CopySelectedToLayer(activeLayerIn(document), name, cut), select = LayerId(document.nextLayerId))
     }
@@ -1185,6 +1207,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || document.selection == null) return
         val layer = document.layers[document.indexOfLayer(activeLayerIn(document))]
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return askRasterize(layer.id)
         runEdit(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
     }
 
@@ -1376,18 +1399,34 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * [text]를 그린 새 레이어를 고른 레이어 바로 위에 더하고 그 레이어를 고른다(실행 취소 한 단계).
-     * 글자 상자의 왼쪽 위가 문서 좌표 ([x], [y])다. 레이어 이름은 글자의 첫 줄(앞 20자)이다. 다른 편집을 처리하는 중이면 무시한다.
+     * [text]를 그린 새 글자 레이어를 고른 레이어 바로 위에 더하고 그 레이어를 고른다(실행 취소 한 단계).
+     * 글자 상자의 왼쪽 위가 문서 좌표 ([x], [y])다. 모양은 [style](없으면 글자 옵션, 사용자 피드백 8차 1-6: 창에서 고른 색은 전경색을 바꾸지 않는다).
+     * 레이어 이름은 글자의 첫 줄(앞 20자)이다. 다른 편집을 처리하는 중이면 무시한다.
      */
-    fun addText(text: String, x: Float, y: Float) {
+    fun addText(text: String, x: Float, y: Float, style: TextStyle = _textStyle.value) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || drawing != null || text.isBlank()) return
-        val firstLine = text.trim().lineSequence().first().trim()
-        val name = if (firstLine.length > 20) firstLine.take(20) + "…" else firstLine
         runEdit(
-            AddTextLayer(text.take(TextStyle.MAX_LENGTH), x, y, _textStyle.value, name, activeIndexIn(document) + 1),
+            AddTextLayer(text.take(TextStyle.MAX_LENGTH), x, y, style, textLayerName(text), activeIndexIn(document) + 1),
             select = LayerId(document.nextLayerId)
         )
+    }
+
+    /**
+     * [layerId] 글자 레이어의 글자를 [text]·[style]로 고쳐 같은 자리에 다시 그리고 그 레이어를 고른다(실행 취소 한 단계, 사용자 피드백 8차 1-6).
+     * 레이어 이름도 새 글자의 첫 줄로 바꾼다. 다른 편집을 처리하는 중이거나 글자 레이어가 아니면 무시한다.
+     */
+    fun editText(layerId: LayerId, text: String, style: TextStyle) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || drawing != null || text.isBlank()) return
+        if (document.layers.getOrNull(document.indexOfLayer(layerId))?.text == null) return
+        runEdit(EditTextLayer(layerId, text.take(TextStyle.MAX_LENGTH), style, textLayerName(text)), select = layerId)
+    }
+
+    /** 글자 레이어의 이름: 글자의 첫 줄(앞 20자) */
+    private fun textLayerName(text: String): String {
+        val firstLine = text.trim().lineSequence().first().trim()
+        return if (firstLine.length > 20) firstLine.take(20) + "…" else firstLine
     }
 
     /** 글자 크기를 아직 고르지 않았으면 [document]에 알맞은 크기로 맞춘다(짧은 변의 6%) */
@@ -1420,6 +1459,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         val options = _tone.value
         val fill = ToneFill(dodge, options.range, options.exposure)
         startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, tone = fill), point)
@@ -1444,6 +1484,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         val (brush, fill) = if (kind == EffectKind.MOSAIC) {
             val options = _mosaic.value
             options.brush to EffectFill(kind, cell = options.cell)
@@ -1462,6 +1503,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         val options = _blur.value
         startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, smudge = options.strength), point)
     }
@@ -1514,6 +1556,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         startStroke(Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection), point)
     }
 
@@ -1526,6 +1569,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         retouchOffsetFixedByStroke = false
         val offset = if (mode == RetouchMode.SPOT_HEAL) {
             null
@@ -1562,6 +1606,7 @@ class EditorViewModel internal constructor(
         _removePick.value = null
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return holdTextStroke(layer.id)
         val settings = _retouch.value.copy(hardness = 1f, opacity = 1f)
         startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, inpaint = inpaintModel), point)
     }
@@ -1578,6 +1623,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return askRasterize(layer.id)
         val document = history.document
         val pickedAt = revision
         startEditing()
@@ -1629,12 +1675,47 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || pick.revision != revision) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return askRasterize(layer.id)
         runEdit(InpaintRegion(layer.id, pick.area, inpaintModel))
     }
 
     /** 톡 눌러 고른 물체를 버린다(뒤로 가기·하위 도구를 바꿈) */
     fun clearRemovePick() {
         _removePick.value = null
+    }
+
+    /**
+     * 글자 레이어 [layer]에 픽셀 도구 획을 시작하려 했다(사용자 피드백 8차 1-6). 칠하지 않고, 손을 뗄 때 픽셀로 바꿀지 묻는다.
+     * 손을 뗄 때 묻는 까닭: 두 손가락으로 확대하려고 댄 첫 손가락에 창이 뜨지 않게(두 번째 손가락이 닿으면 묻지 않는다).
+     */
+    private fun holdTextStroke(layer: LayerId) {
+        textStrokeLayer = layer
+    }
+
+    /** 픽셀로 바꿀지 바로 묻는다(선택 지우기·잘라내기·AI 채우기처럼 한 번에 하는 일, 유동화 열기) */
+    private fun askRasterize(layer: LayerId) {
+        _rasterizeAsk.value = layer
+    }
+
+    /** 물어본 글자 레이어를 픽셀 레이어로 바꾼다(실행 취소 한 단계). 바꾼 뒤 다시 칠하면 된다. */
+    fun confirmRasterize() {
+        val layer = _rasterizeAsk.value ?: return
+        _rasterizeAsk.value = null
+        if (editing || hasLiveValues) return
+        edit(RasterizeLayer(layer))
+    }
+
+    /** 픽셀로 바꾸지 않는다(글자 레이어 그대로) */
+    fun dismissRasterize() {
+        _rasterizeAsk.value = null
+    }
+
+    /** 레이어 메뉴의 '픽셀로 바꾸기': 고른 글자 레이어를 픽셀 레이어로 바꾼다(실행 취소 한 단계). 다른 편집을 처리하는 중이면 무시한다. */
+    fun rasterizeActiveLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val layer = document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document))) ?: return
+        if (layer.text != null) edit(RasterizeLayer(layer.id))
     }
 
     /**
@@ -1680,8 +1761,13 @@ class EditorViewModel internal constructor(
         if (stroke.dabs.add(point).isNotEmpty()) showStrokes()
     }
 
-    /** 손가락을 뗐다. 획을 기록할 차례에 넣는다(앞 획을 기록하는 중이면 그 뒤에). */
+    /** 손가락을 뗐다. 획을 기록할 차례에 넣는다(앞 획을 기록하는 중이면 그 뒤에). 글자 레이어에 시작한 획이면 픽셀로 바꿀지 묻는다. */
     fun endStroke() {
+        textStrokeLayer?.let { layer ->
+            textStrokeLayer = null
+            _rasterizeAsk.value = layer
+            return
+        }
         val stroke = drawing ?: return
         drawing = null
         retouchOffsetFixedByStroke = false
@@ -1786,8 +1872,9 @@ class EditorViewModel internal constructor(
         }
     }
 
-    /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. 리터칭 첫 획이 정한 간격도 되돌린다. */
+    /** 두 손가락 조작이 시작돼 끄던 획을 버린다. 기록하지 않는다. 리터칭 첫 획이 정한 간격도 되돌린다. 글자 레이어에 시작한 획이면 묻지 않는다. */
     fun cancelStroke() {
+        textStrokeLayer = null
         val stroke = drawing ?: return
         drawing = null
         if (retouchOffsetFixedByStroke) {
@@ -2441,7 +2528,7 @@ class EditorViewModel internal constructor(
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
                 busy = editing,
-                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible) },
+                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text) },
                 activeLayer = activeLayerIn(document),
                 selection = outline,
                 selectionDetail = selectionDetail,

@@ -54,7 +54,7 @@ class LiquifyLayer(val layerId: LayerId, val mesh: LiquifyMesh) : CancellableCom
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(warped), gainmap = gainmap)) }
+        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(warped, gainmap)) }
         return document.copy(layers = layers)
     }
 

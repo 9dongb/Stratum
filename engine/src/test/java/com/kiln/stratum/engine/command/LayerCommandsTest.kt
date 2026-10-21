@@ -7,10 +7,14 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.documentWithLayers
 import com.kiln.stratum.engine.layerIds
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.text.TextSpec
+import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.engine.document.Document
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import org.junit.Assert.assertNull
 
 class LayerCommandsTest {
 
@@ -235,5 +239,44 @@ class LayerCommandsTest {
         assertSame(adjusted, SetLayerAdjustments(LayerId(1), warm).applyTo(adjusted))
         assertSame(document, SetLayerAdjustments(LayerId(0), Adjustments(contrast = -0f)).applyTo(document))
         assertSame(document, SetLayerAdjustments(LayerId(9), warm).applyTo(document))
+    }
+
+    /** [document]의 [index] 레이어를 글자 레이어로 바꾼 문서(픽셀은 비어 있다) */
+    private fun withText(document: Document, index: Int, spec: TextSpec): Document =
+        document.copy(layers = document.layers.toMutableList().apply { set(index, this[index].copy(text = spec)) })
+
+    private val spec = TextSpec("Hello", x = 10f, y = 20f, style = TextStyle(size = 40f), width = 90f, height = 48f)
+
+    @Test
+    fun rasterizeLayer_dropsOnlyTheText_andKeepsOtherLayersAsTheyAre() {
+        val document = withText(documentWithLayers(2), 1, spec)
+
+        val result = RasterizeLayer(LayerId(1)).applyTo(document)
+
+        assertNull(result.layers[1].text)
+        assertSame((document.layers[1].content as RasterContent).raster, (result.layers[1].content as RasterContent).raster)
+        assertSame(document.layers[0], result.layers[0])
+        // 글자 레이어가 아니거나 없는 레이어면 그대로다
+        assertSame(result, RasterizeLayer(LayerId(1)).applyTo(result))
+        assertSame(document, RasterizeLayer(LayerId(9)).applyTo(document))
+    }
+
+    @Test
+    fun duplicateLayer_keepsTheText_soTheCopyCanBeEditedToo() {
+        val document = withText(documentWithLayers(1), 0, spec)
+
+        val result = DuplicateLayer(LayerId(0), "copy").applyTo(document)
+
+        assertEquals(spec, result.layers[1].text)
+    }
+
+    @Test
+    fun withPixels_dropsTheText_andWithTextKeepsIt() {
+        val layer = documentWithLayers(1).layers[0].copy(text = spec)
+
+        // 픽셀을 바꾸면 더 이상 그 글자를 그린 것이 아니다
+        assertNull(layer.withPixels(Raster.EMPTY).text)
+        val moved = spec.moved(5f, -5f)
+        assertEquals(moved, layer.withText(Raster.EMPTY, moved).text)
     }
 }

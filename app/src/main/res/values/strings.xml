@@ -157,6 +157,7 @@
     <string name="layer_new_name">Layer %1$d</string>
     <string name="layer_add">Add layer</string>
     <string name="layer_delete">Delete layer</string>
+    <string name="layer_rasterize">Convert to pixels</string>
     <string name="layer_move_up">Move layer up</string>
     <string name="layer_move_down">Move layer down</string>
     <string name="view_flip_horizontal">Flip view horizontally</string>
@@ -174,6 +175,9 @@
     <string name="layer_copy_name">%1$s copy</string>
     <string name="layer_visibility">Show layer</string>
     <string name="layer_hidden">Hidden</string>
+    <string name="layer_text_badge">Text layer</string>
+    <string name="rasterize_title">Convert the text to pixels?</string>
+    <string name="rasterize_message">To paint on it, the text needs to be pixels. After converting, you can\'t edit the text again.</string>
     <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>
     <string name="blend_normal">Normal</string>
     <string name="blend_multiply">Multiply</string>
@@ -219,6 +223,10 @@
     <!-- 글자 -->
     <string name="text_prompt_title">Add text</string>
     <string name="text_prompt_label">Text</string>
+    <string name="text_edit_title">Edit text</string>
+    <string name="text_color">Color</string>
+    <string name="text_color_value">Text color, %1$s</string>
+    <string name="text_color_title">Text color</string>
     <string name="action_add">Add</string>
 
     <!-- 설정 -->

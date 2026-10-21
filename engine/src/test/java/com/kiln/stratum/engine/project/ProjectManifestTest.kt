@@ -8,6 +8,8 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.GainRgb
 import com.kiln.stratum.engine.document.HdrInfo
 import com.kiln.stratum.engine.document.HdrPrimaries
+import com.kiln.stratum.engine.text.TextSpec
+import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -165,5 +167,15 @@ class ProjectManifestTest {
         assertEquals(DocumentColorSpace.SRGB, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).colorSpace)
         // 문서 덧붙임 하나(꼬리표·길이·코드)만큼 길다
         assertEquals(bytesOf(manifest).size + 12, bytesOf(wide).size)
+    }
+
+    @Test
+    fun textLayer_roundTrips_andPixelLayersWriteNothingExtra() {
+        // 다시 고칠 수 있는 글자(사용자 피드백 8차 1-6)는 레이어 덧붙임(꼬리표 4)이다. 픽셀은 늘 타일에 있어 앞 판 앱은 픽셀 레이어로 연다.
+        val spec = TextSpec("안녕\nStratum", x = 120.5f, y = -8f, style = TextStyle(size = 96f, color = 0xFF2F6FE4.toInt()), width = 410f, height = 230f)
+        val text = manifest.copy(layers = listOf(manifest.layers[0], manifest.layers[1].copy(text = spec)))
+
+        assertEquals(text, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(text))))
+        assertTrue(ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).layers.all { it.text == null })
     }
 }

@@ -155,6 +155,7 @@
     <string name="layer_new_name">레이어 %1$d</string>
     <string name="layer_add">레이어 추가</string>
     <string name="layer_delete">레이어 삭제</string>
+    <string name="layer_rasterize">픽셀로 바꾸기</string>
     <string name="layer_move_up">레이어를 위로</string>
     <string name="layer_move_down">레이어를 아래로</string>
     <string name="view_flip_horizontal">화면 좌우 반전</string>
@@ -172,6 +173,9 @@
     <string name="layer_copy_name">%1$s 복사</string>
     <string name="layer_visibility">레이어 보이기</string>
     <string name="layer_hidden">숨김</string>
+    <string name="layer_text_badge">글자 레이어</string>
+    <string name="rasterize_title">글자를 픽셀로 바꿀까요?</string>
+    <string name="rasterize_message">칠하려면 픽셀이어야 해요. 바꾸면 글자를 다시 고칠 수 없어요.</string>
     <string name="edit_hidden_layer">숨긴 레이어에는 그릴 수 없어요. 레이어 목록에서 눈을 켜 주세요.</string>
     <string name="blend_normal">표준</string>
     <string name="blend_multiply">곱하기</string>
@@ -217,6 +221,10 @@
     <!-- 글자 -->
     <string name="text_prompt_title">글자 넣기</string>
     <string name="text_prompt_label">글자</string>
+    <string name="text_edit_title">글자 고치기</string>
+    <string name="text_color">색</string>
+    <string name="text_color_value">글자 색, %1$s</string>
+    <string name="text_color_title">글자 색 고르기</string>
     <string name="action_add">넣기</string>
 
     <!-- 설정 -->

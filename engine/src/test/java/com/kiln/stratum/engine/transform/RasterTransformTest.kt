@@ -16,6 +16,8 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.text.TextSpec
+import com.kiln.stratum.engine.text.TextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -122,6 +124,19 @@ class RasterTransformTest {
             val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x, y, 150, 100)
             assertEquals(colorAt(from.x + 100, from.y), gainmap.pixelAt(x, y))
         }
+    }
+
+    @Test
+    fun textLayer_keepsItsTextWhenCropped_butBecomesPixelsWhenTurned() {
+        // 글자 레이어(사용자 피드백 8차 1-6): 자르기만 하면 글자 자리를 같이 옮겨 다시 고칠 수 있게 남긴다
+        val spec = TextSpec("Hi", x = 500f, y = 300f, style = TextStyle(size = 40f), width = 60f, height = 48f)
+        val source = photo(PixelSize(800, 600)).let { it.copy(layers = listOf(it.layers[0].copy(text = spec))) }
+
+        val cropped = RasterTransform.apply(source, TransformPlan.crop(PixelSize(800, 600), PixelRect(400, 200, 800, 600)), composer)
+        assertEquals(spec.moved(-400f, -200f), cropped.layers[0].text)
+
+        val turned = RasterTransform.apply(source, TransformPlan.cropThenOrient(PixelSize(800, 600), PixelRect(400, 200, 800, 600), Orientation.ROTATE_CLOCKWISE), composer)
+        assertEquals(null, turned.layers[0].text)
     }
 
     @Test

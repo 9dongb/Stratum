@@ -45,6 +45,8 @@ import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
+import com.kiln.stratum.engine.text.TextSpec
+import com.kiln.stratum.engine.text.TextStyle
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -124,6 +126,11 @@ class LayerPanelTest {
         override fun setVisible(id: LayerId, visible: Boolean) {
             calls += "visible ${id.value} $visible"
             layers = layers.map { if (it.id == id) it.copy(visible = visible) else it }
+        }
+
+        override fun rasterize() {
+            calls += "rasterize ${active.value}"
+            layers = layers.map { if (it.id == active) it.copy(text = null) else it }
         }
 
         companion object {
@@ -277,6 +284,35 @@ class LayerPanelTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(listOf("select 0", "duplicate 0"), fake.calls) }
+    }
+
+    @Test
+    fun textLayer_hasABadge_andTheMenuConvertsItToPixels() {
+        // 사용자 피드백 8차 1-6: 다시 고칠 수 있는 글자 레이어는 작은 그림 구석에 글자 표시, 메뉴에 '픽셀로 바꾸기'
+        val fake = FakeLayers(2)
+        val spec = TextSpec("Hi", x = 10f, y = 10f, style = TextStyle(size = 40f), width = 50f, height = 48f)
+        fake.layers = fake.layers.map { if (it.id == LayerId(1)) it.copy(text = spec) else it }
+        openCompactLayers(fake)
+
+        // 표시는 줄의 화면 읽기 정보에 합쳐져(줄이 '글자 레이어'로 읽힘) 합치기 전 노드에서 찾는다
+        composeRule.onNodeWithTag(EditScreenTags.layerTextBadge(LayerId(1)), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.layerTextBadge(LayerId(0)), useUnmergedTree = true).assertDoesNotExist()
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals("rasterize 1", fake.calls.last()) }
+        composeRule.onNodeWithTag(EditScreenTags.layerTextBadge(LayerId(1)), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun pixelLayer_hasNothingToConvert() {
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        row(0).performTouchInput { longClick() }
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertIsNotEnabled()
     }
 
     @Test

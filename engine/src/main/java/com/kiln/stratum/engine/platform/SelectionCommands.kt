@@ -203,7 +203,7 @@ data class DeleteSelected(val layerId: LayerId) : CancellableCommand {
         val raster = (layer.content as? RasterContent)?.raster ?: return document
         val cleared = SelectedPixels.cut(raster, selection, PixelSize(document.width, document.height), checkCanceled)
         if (cleared === raster) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(cleared))) }
+        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(cleared)) }
         return document.copy(layers = layers)
     }
 
@@ -236,7 +236,7 @@ data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: 
             gainmap = layer.gainmap
         )
         val layers = document.layers.toMutableList()
-        if (cut) layers[index] = layer.copy(content = RasterContent(SelectedPixels.cut(raster, selection, size, checkCanceled)))
+        if (cut) layers[index] = layer.withPixels(SelectedPixels.cut(raster, selection, size, checkCanceled))
         layers.add(index + 1, newLayer)
         return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1, selection = null)
     }

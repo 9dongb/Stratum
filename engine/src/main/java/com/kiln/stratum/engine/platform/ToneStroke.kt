@@ -53,7 +53,7 @@ data class ToneStroke(
             throw NotEnoughMemoryException(e)
         }
         if (toned === raster) return document
-        val layers = document.layers.toMutableList().apply { set(index, layer.copy(content = RasterContent(toned))) }
+        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(toned)) }
         return document.copy(layers = layers)
     }
 

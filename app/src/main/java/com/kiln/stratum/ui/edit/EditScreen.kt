@@ -79,6 +79,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.ResizeImage
@@ -136,7 +137,9 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param eraser 지우개 설정, [onEraser]로 바꾼다
  * @param strokeActions 브러시·지우개를 고른 채 캔버스를 끌 때 보내는 일
  * @param textStyle 글자 모양, [onTextStyle]로 바꾼다
- * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위)
+ * @param onAddText 글자 창에서 '넣기'를 눌렀다: 글자와, 캔버스에서 누른 자리(문서 좌표, 글자 상자의 왼쪽 위), 창에서 고른 크기·색
+ * @param onEditText 글자 레이어를 고치는 창에서 '적용'을 눌렀다: 그 레이어, 새 글자와 크기·색(사용자 피드백 8차 1-6)
+ * @param rasterizeAsk 픽셀로 바꿀지 물어볼 글자 레이어(글자 레이어에 픽셀 도구를 썼을 때). [onConfirmRasterize]·[onDismissRasterize]로 답한다.
  * @param twoFingerTapUndo 캔버스를 두 손가락으로 톡 누르면 실행 취소한다(설정). 상단 바의 실행 취소 버튼이 켜져 있을 때만 된다.
  * @param threeFingerGestures 세 손가락 제스처(설정): 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함을 바꾼다.
  * @param selectionOptions 선택 도구 설정, [onSelectionOptions]로 바꾼다
@@ -186,7 +189,11 @@ fun EditScreen(
     strokeActions: StrokeActions = StrokeActions.None,
     textStyle: TextStyle = TextStyle(),
     onTextStyle: (TextStyle) -> Unit = {},
-    onAddText: (text: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
+    onAddText: (text: String, x: Float, y: Float, style: TextStyle) -> Unit = { _, _, _, _ -> },
+    onEditText: (layer: LayerId, text: String, style: TextStyle) -> Unit = { _, _, _ -> },
+    rasterizeAsk: LayerId? = null,
+    onConfirmRasterize: () -> Unit = {},
+    onDismissRasterize: () -> Unit = {},
     twoFingerTapUndo: Boolean = false,
     threeFingerGestures: Boolean = false,
     selectionOptions: SelectionOptions = SelectionOptions(),
@@ -294,12 +301,11 @@ fun EditScreen(
     // AI 제거를 쓸 수 없다는 알림의 버튼: 리터칭을 스팟 복구 브러시로 바꾼다
     val useSpotHeal = { chooseSubTool(SubTool.RETOUCH_SPOT) }
     val useMagicWand = { chooseSubTool(SubTool.SELECT_WAND) }
-    // 글자를 넣을 자리(문서 좌표 x, y)와 그때의 문서 크기. 글자 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
-    var textAt by rememberSaveable { mutableStateOf<List<Float>?>(null) }
+    // 글자 창에서 고르는 것(새 글자를 넣을 자리, 또는 고칠 글자 레이어와 글자·크기·색). 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
+    var textDraft by rememberSaveable(stateSaver = TextDraft.Saver) { mutableStateOf<TextDraft?>(null) }
     // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다(누른 자리가 맞지 않는다)
     LaunchedEffect(ready?.documentSize) {
-        val size = ready?.documentSize
-        if (textAt?.let { it[2].toInt() != size?.width || it[3].toInt() != size.height } == true) textAt = null
+        if (textDraft?.let { it.documentSize != ready?.documentSize } == true) textDraft = null
     }
     // 내보내기 창에서 고르던 것. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
@@ -426,7 +432,8 @@ fun EditScreen(
         LaunchedEffect(activeTool, activeMode, widthClass, cropMode, ready?.documentSize, liquify != null) { floating.closeFlyout() }
         // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 옵션 창을 닫는다.
         // 패널은 그대로 둔다(창·작업 모드 아래에 남았다가, 닫히면 다시 보인다)
-        val dialogOpen = resizeInput != null || textAt != null || exportDraft != null || palette != null || state is EditorState.AskSize || liquify != null
+        val dialogOpen = resizeInput != null || textDraft != null || rasterizeAsk != null || exportDraft != null || palette != null ||
+            state is EditorState.AskSize || liquify != null
         LaunchedEffect(dialogOpen) { if (dialogOpen) floating.closeFlyout() }
         val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
             val document = checkNotNull(ready).documentSize
@@ -720,7 +727,18 @@ fun EditScreen(
                 TextOverlay(
                     view = { viewState.view },
                     document = ready.documentSize,
-                    onTap = { x, y -> textAt = listOf(x, y, ready.documentSize.width.toFloat(), ready.documentSize.height.toFloat()) },
+                    // 보이는 글자 레이어의 글자 상자 안을 누르면(맨 위 것) 그 레이어를 고르고 고치는 창을 연다(사용자 피드백 8차 1-6).
+                    // 그 밖을 누르면 그 자리에 새 글자를 넣는 창이다(글자 옵션의 크기·전경색으로 시작).
+                    onTap = { x, y ->
+                        val hit = ready.layers.lastOrNull { it.visible && it.text?.contains(x, y) == true }
+                        val spec = hit?.text
+                        textDraft = if (hit != null && spec != null) {
+                            layerActions.select(hit.id)
+                            TextDraft.edit(hit.id, spec, ready.documentSize)
+                        } else {
+                            TextDraft.add(x, y, ready.documentSize, textStyle)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -968,17 +986,38 @@ fun EditScreen(
                 }
             )
         }
-        val place = textAt
-        if (place != null && ready != null) {
+        val text = textDraft
+        if (text != null && ready != null) {
             TextPrompt(
+                draft = text,
                 widthClass = widthClass,
+                windowHeight = windowHeight,
                 busy = ready.busy,
-                onDismiss = { textAt = null },
-                onAdd = { text ->
-                    onAddText(text, place[0], place[1])
-                    textAt = null
+                onChange = { textDraft = it },
+                onDismiss = { textDraft = null },
+                onConfirm = {
+                    val layer = text.layer
+                    if (layer == null) onAddText(text.text, text.x, text.y, text.style) else onEditText(layer, text.text, text.style)
+                    textDraft = null
                 }
             )
+        }
+        // 글자 레이어에 픽셀 도구를 쓰면 픽셀로 바꿀지 묻는다(사용자 피드백 8차 1-6). 바꾸면 다시 칠하면 된다.
+        if (rasterizeAsk != null && ready != null) {
+            HingeAwareDialog(
+                onDismissRequest = onDismissRasterize,
+                title = stringResource(R.string.rasterize_title),
+                buttons = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuietButton(onClick = onDismissRasterize) { Text(stringResource(R.string.action_cancel)) }
+                        AccentButton(onClick = onConfirmRasterize, enabled = !ready.busy, modifier = Modifier.testTag(EditScreenTags.RASTERIZE_CONFIRM)) {
+                            Text(stringResource(R.string.layer_rasterize))
+                        }
+                    }
+                }
+            ) {
+                Text(stringResource(R.string.rasterize_message), style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
+            }
         }
         val draft = exportDraft
         if (draft != null && ready != null) {

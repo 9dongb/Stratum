@@ -68,6 +68,8 @@ data class CropImage(
  * 캔버스 밖으로 나간 부분은 버리며(놓을 때 잘림, 사용자 결정) 옮겨서 빈 자리는 투명이다.
  * 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사, 결정 기록 '회전·뒤집기·자르기는 안드로이드 내부 복사'와 같다). 타일 크기의 배수만큼 옮기면 타일을 그대로 쓴다.
  * 게인맵(HDR)도 같은 비율만큼 옮긴다. 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없으면 그대로 둔다.
+ * 글자 레이어(사용자 피드백 8차 1-6)는 픽셀을 옮기지 않고 글자를 새 자리에 다시 그린다. 그래서 고칠 수 있는 채로 남고,
+ * 캔버스 밖으로 나갔다가 돌아와도 글자가 남는다.
  */
 data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : CancellableCommand {
 
@@ -77,11 +79,18 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         if (index < 0) return document
         val target = document.layers[index]
         val raster = (target.content as? RasterContent)?.raster ?: return document
+        target.text?.let { text ->
+            val moved = text.moved(dx.toFloat(), dy.toFloat())
+            val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return document
+            val layers = document.layers.toMutableList()
+            layers[index] = target.withText(drawn.raster, drawn.spec)
+            return document.copy(layers = layers)
+        }
         return try {
             val moved = RasterTransform.transform(raster, TransformPlan.translate(document.size, dx, dy), CanvasTileComposer, checkCanceled)
             val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
             val layers = document.layers.toMutableList()
-            layers[index] = target.copy(content = RasterContent(moved), gainmap = gainmap)
+            layers[index] = target.withPixels(moved, gainmap)
             document.copy(layers = layers)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)

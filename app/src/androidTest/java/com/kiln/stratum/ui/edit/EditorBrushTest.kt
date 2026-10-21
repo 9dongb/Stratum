@@ -141,4 +141,88 @@ class EditorBrushTest {
         assertEquals(added.layers.last().id, added.activeLayer)
         assertTrue(added.revision > opened.revision)
     }
+
+    /** 흰 캔버스에 'Hi' 글자 레이어를 더하고(고른 레이어가 됨) 그 상태 */
+    private fun withText(): EditorState.Ready {
+        openWhite()
+        onMain {
+            viewModel.setTextStyle(TextStyle(size = 40f, color = Color.BLACK))
+            viewModel.addText("Hi", 20f, 20f)
+        }
+        return awaitReady { !it.busy && it.layers.size == 2 }
+    }
+
+    @Test
+    fun text_remembersItsText_andEditTextRedrawsIt_asOneStep() {
+        // 사용자 피드백 8차 1-6: 넣은 글자를 다시 고친다(내용·크기·색)
+        val added = withText()
+        val layer = added.layers.last()
+        assertEquals("Hi", layer.text?.text)
+
+        onMain { viewModel.editText(layer.id, "Hello", TextStyle(size = 60f, color = Color.RED)) }
+
+        val edited = awaitReady { !it.busy && it.revision > added.revision }
+        val spec = checkNotNull(edited.layers.last().text)
+        assertEquals("Hello", spec.text)
+        assertEquals(TextStyle(size = 60f, color = Color.RED), spec.style)
+        assertEquals("Hello", edited.layers.last().name)
+        onMain { viewModel.undo() }
+        val undone = awaitReady { !it.busy && it.revision > edited.revision }
+        assertEquals("Hi", undone.layers.last().text?.text)
+    }
+
+    @Test
+    fun brushOnATextLayer_doesNotPaint_andAsksToConvertWhenTheFingerLifts() {
+        val added = withText()
+        onMain { viewModel.setBrush(BrushSettings(size = 20f, hardness = 1f, color = Color.RED)) }
+
+        onMain {
+            viewModel.beginStroke(StrokePoint(50f, 100f), erase = false)
+            viewModel.extendStroke(StrokePoint(300f, 100f))
+        }
+        // 손을 떼기 전에는 묻지 않는다(두 손가락 확대를 하려고 댄 첫 손가락에 창이 뜨지 않게)
+        onMain { assertEquals(null, viewModel.rasterizeAsk.value) }
+        onMain { viewModel.endStroke() }
+        onMain { assertEquals(added.layers.last().id, viewModel.rasterizeAsk.value) }
+        // 칠하지 않았다
+        val ready = viewModel.state.value as EditorState.Ready
+        assertEquals(added.revision, ready.revision)
+
+        // 바꾸면 글자 정보만 지운다(실행 취소 한 단계), 그 뒤로는 칠할 수 있다
+        onMain { viewModel.confirmRasterize() }
+        val converted = awaitReady { !it.busy && it.revision > added.revision }
+        assertEquals(null, converted.layers.last().text)
+        assertEquals(null, viewModel.rasterizeAsk.value)
+        stroke(100f)
+        val painted = awaitReady { !it.busy && it.revision > converted.revision }
+        assertEquals(Color.RED, pixel(painted, 200, 100))
+    }
+
+    @Test
+    fun aSecondFingerOnATextLayer_doesNotAsk() {
+        withText()
+
+        onMain {
+            viewModel.beginStroke(StrokePoint(50f, 100f), erase = false)
+            viewModel.cancelStroke()
+            viewModel.endStroke()
+        }
+
+        onMain { assertEquals(null, viewModel.rasterizeAsk.value) }
+    }
+
+    @Test
+    fun dismissingTheQuestion_keepsTheTextLayer() {
+        val added = withText()
+        onMain {
+            viewModel.beginStroke(StrokePoint(50f, 100f), erase = true)
+            viewModel.endStroke()
+            viewModel.dismissRasterize()
+        }
+
+        onMain { assertEquals(null, viewModel.rasterizeAsk.value) }
+        val ready = viewModel.state.value as EditorState.Ready
+        assertEquals(added.revision, ready.revision)
+        assertEquals("Hi", ready.layers.last().text?.text)
+    }
 }

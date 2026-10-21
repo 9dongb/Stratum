@@ -39,6 +39,19 @@ data class DuplicateLayer(val layerId: LayerId, val name: String) : EditCommand 
     }
 }
 
+/**
+ * [layerId] 글자 레이어를 보통 픽셀 레이어로 바꾼다(글자 정보만 지우고 픽셀은 그대로, 사용자 피드백 8차 1-6).
+ * 픽셀 도구로 글자 레이어를 칠하려 할 때 물어본 뒤, 또는 레이어 메뉴의 '픽셀로 바꾸기'로 한다. 글자 레이어가 아니거나 없는 레이어면 그대로 둔다.
+ */
+data class RasterizeLayer(val layerId: LayerId) : EditCommand {
+    override fun applyTo(document: Document): Document {
+        val index = document.indexOfLayer(layerId)
+        if (index < 0 || document.layers[index].text == null) return document
+        val layers = document.layers.toMutableList().apply { set(index, document.layers[index].copy(text = null)) }
+        return document.copy(layers = layers)
+    }
+}
+
 /** [layerId] 레이어를 지운다. 없는 레이어이거나 마지막 남은 레이어면 그대로 둔다(포토샵과 같음). */
 data class DeleteLayer(val layerId: LayerId) : EditCommand {
     override fun applyTo(document: Document): Document {

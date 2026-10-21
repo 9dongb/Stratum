@@ -101,6 +101,7 @@ fun StratumApp(editor: EditorViewModel) {
             val retouch by editor.retouch.collectAsState()
             val cloneSource by editor.cloneSource.collectAsState()
             val removePick by editor.removePick.collectAsState()
+            val rasterizeAsk by editor.rasterizeAsk.collectAsState()
             val toneOptions by editor.tone.collectAsState()
             val blurOptions by editor.blur.collectAsState()
             val mosaicOptions by editor.mosaic.collectAsState()
@@ -131,6 +132,10 @@ fun StratumApp(editor: EditorViewModel) {
                 textStyle = textStyle,
                 onTextStyle = editor::setTextStyle,
                 onAddText = editor::addText,
+                onEditText = editor::editText,
+                rasterizeAsk = rasterizeAsk,
+                onConfirmRasterize = editor::confirmRasterize,
+                onDismissRasterize = editor::dismissRasterize,
                 twoFingerTapUndo = settingsValues.twoFingerTapUndo,
                 threeFingerGestures = settingsValues.threeFingerGestures,
                 selectionOptions = selectionOptions,

@@ -37,10 +37,15 @@ object RasterTransform {
         }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
-                is RasterContent -> layer.copy(
-                    content = RasterContent(transform(content.raster, plan, composer, checkCanceled)),
-                    gainmap = layer.gainmap?.let { transformGainmap(it, plan, composer, checkCanceled) }
-                )
+                is RasterContent -> {
+                    val moved = layer.withPixels(
+                        transform(content.raster, plan, composer, checkCanceled),
+                        layer.gainmap?.let { transformGainmap(it, plan, composer, checkCanceled) }
+                    )
+                    // 글자 레이어(사용자 피드백 8차 1-6): 자르기만 하면 글자 자리를 같이 옮겨 다시 고칠 수 있게 남기고, 돌리거나 뒤집으면 픽셀 레이어가 된다
+                    val text = layer.text?.takeIf { plan.orientation == Orientation.IDENTITY }?.moved(-plan.crop.left.toFloat(), -plan.crop.top.toFloat())
+                    if (text != null) moved.copy(text = text) else moved
+                }
             }
         }
         // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')

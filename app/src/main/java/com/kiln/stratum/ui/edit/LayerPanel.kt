@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -117,6 +118,9 @@ interface LayerActions {
     /** [id] 레이어를 보이거나 숨긴다(줄의 눈) */
     fun setVisible(id: LayerId, visible: Boolean)
 
+    /** 고른 글자 레이어를 픽셀 레이어로 바꾼다(레이어 메뉴의 '픽셀로 바꾸기', 사용자 피드백 8차 1-6) */
+    fun rasterize() {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : LayerActions {
         override fun select(id: LayerId) = Unit
@@ -178,6 +182,9 @@ private val RowHeight = 56.dp
 
 /** 작은 그림 칸의 크기와 그 바탕 체크 무늬 한 칸 */
 private val ThumbnailSize = 40.dp
+
+/** 작은 그림 구석의 글자 레이어 표시 크기 */
+private val TextBadgeSize = 16.dp
 private val ThumbnailChecker = 5.dp
 
 /** 커버 화면 레이어 목록의 최대 높이(줄 세 개). 캔버스를 너무 가리지 않게 한다. */
@@ -345,7 +352,9 @@ private fun LayerRow(
     val description = stringResource(R.string.layer_row_description, layer.name, mode, percent)
     val selectedLabel = stringResource(R.string.layer_selected)
     val hiddenLabel = stringResource(R.string.layer_hidden)
-    val rowState = listOfNotNull(selectedLabel.takeIf { selected }, hiddenLabel.takeIf { !layer.visible }).joinToString(", ")
+    val textLabel = stringResource(R.string.layer_text_badge)
+    val rowState = listOfNotNull(selectedLabel.takeIf { selected }, hiddenLabel.takeIf { !layer.visible }, textLabel.takeIf { layer.text != null })
+        .joinToString(", ")
     val upLabel = stringResource(R.string.layer_move_up)
     val downLabel = stringResource(R.string.layer_move_down)
     val menuLabel = stringResource(R.string.layer_menu)
@@ -420,7 +429,22 @@ private fun LayerRow(
                     Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenContentAlpha).longPressFirst(openMenu),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.size(ThumbnailSize))
+                    // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를 단다
+                    Box(Modifier.size(ThumbnailSize)) {
+                        LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
+                        if (layer.text != null) {
+                            Icon(
+                                painterResource(R.drawable.ic_text_fields),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(TextBadgeSize)
+                                    .background(colors.panel, StratumShapes.Thumbnail)
+                                    .testTag(EditScreenTags.layerTextBadge(layer.id)),
+                                tint = colors.textSecondary
+                            )
+                        }
+                    }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -481,6 +505,8 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
     StratumDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
         val layers = controls.layers
+        // 글자 레이어만: 픽셀로 바꾸기(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6)
+        LayerMenuItem(R.string.layer_rasterize, canEdit && layers[documentIndex].text != null, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
         val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible
         LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)

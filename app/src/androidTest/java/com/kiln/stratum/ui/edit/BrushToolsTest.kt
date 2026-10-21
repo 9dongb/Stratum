@@ -109,7 +109,7 @@ class BrushToolsTest {
                             strokeActions = strokes,
                             textStyle = textStyle,
                             onTextStyle = { textStyle = it },
-                            onAddText = { text, x, y -> added += Triple(text, x, y) },
+                            onAddText = { text, x, y, _ -> added += Triple(text, x, y) },
                             onSwapColors = { swaps++ }
                         )
                     }

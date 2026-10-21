@@ -16,6 +16,8 @@ import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
+import com.kiln.stratum.engine.platform.AddTextLayer
+import com.kiln.stratum.engine.text.TextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -109,5 +111,29 @@ class TranslateLayerTest {
         assertEquals(colorAt(0, 0), pixel(moved.raster, 25, 10))
         assertEquals(colorAt(60, 30), pixel(moved.raster, 85, 40))
         assertEquals(0, pixel(moved.raster, 10, 5))
+    }
+
+    @Test
+    fun textLayer_isRedrawnAtTheNewPlace_andComesBackWholeFromOutsideTheCanvas() {
+        // 글자 레이어(사용자 피드백 8차 1-6)는 픽셀을 옮기지 않고 글자를 새 자리에 다시 그린다
+        val blank = Document.create(600, 300, "Background", Raster.EMPTY)
+        val withText = AddTextLayer("Hello", x = 50f, y = 50f, style = TextStyle(size = 60f, color = android.graphics.Color.BLACK), name = "Hello", index = 1)
+            .applyTo(blank)
+        val spec = checkNotNull(withText.layers[1].text)
+
+        val moved = TranslateLayer(withText.layers[1].id, 100, 40).applyTo(withText)
+        assertEquals(spec.moved(100f, 40f), moved.layers[1].text)
+
+        // 캔버스 밖으로 거의 다 내보냈다가 되돌려도 글자가 잘리지 않고 그대로다(고칠 수 있는 채로 남음)
+        val out = TranslateLayer(withText.layers[1].id, 560, 0).applyTo(withText)
+        val back = TranslateLayer(withText.layers[1].id, -560, 0).applyTo(out)
+        assertEquals(spec, back.layers[1].text)
+        val original = withText.raster(1)
+        val restored = back.raster(1)
+        for (y in 50 until 50 + spec.height.toInt() step 3) {
+            for (x in 50 until 50 + spec.width.toInt() step 3) {
+                assertEquals("($x, $y)", pixel(original, x, y), pixel(restored, x, y))
+            }
+        }
     }
 }

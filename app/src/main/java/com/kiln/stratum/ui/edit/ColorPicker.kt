@@ -154,22 +154,35 @@ internal fun colorSlotDescription(slot: ColorSlot): Int = when (slot) {
 @Composable
 private fun ColorSlotButton(controls: ColorControls, slot: ColorSlot) {
     val color = controls.colors[slot]
-    val description = stringResource(colorSlotDescription(slot), colorHex(color))
+    ColorSwatchButton(
+        color = color,
+        label = stringResource(colorSlotLabel(slot)),
+        description = stringResource(colorSlotDescription(slot), colorHex(color)),
+        tag = EditScreenTags.colorSlot(slot),
+        onClick = { controls.onOpenPalette(slot) }
+    )
+}
+
+/**
+ * 색 칸: 무지개 테두리 동그라미('색 고르기'를 알림)와 이름([label]). 누르면 [onClick](팔레트를 연다). 누르는 영역은 48dp다.
+ * 색 줄의 전경색·배경색과 글자 창의 색(사용자 피드백 8차 1-6)이 같이 쓴다. 화면 읽기 기능은 [description]('전경색, #000000')을 한 번에 읽는다.
+ */
+@Composable
+internal fun ColorSwatchButton(color: Int, label: String, description: String, tag: String, onClick: () -> Unit) {
     val chooseLabel = stringResource(R.string.color_choose)
     Row(
         modifier = Modifier
             .heightIn(min = 48.dp)
-            .testTag(EditScreenTags.colorSlot(slot))
-            // 화면 읽기 기능은 이름과 색('전경색, #000000')을 한 번에 읽는다
+            .testTag(tag)
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button
                 onClick(chooseLabel) {
-                    controls.onOpenPalette(slot)
+                    onClick()
                     true
                 }
             }
-            .clickable(onClickLabel = chooseLabel, role = Role.Button) { controls.onOpenPalette(slot) }
+            .clickable(onClickLabel = chooseLabel, role = Role.Button, onClick = onClick)
             .padding(start = 4.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -178,10 +191,10 @@ private fun ColorSlotButton(controls: ColorControls, slot: ColorSlot) {
                 .size(32.dp)
                 .border(BorderStroke(3.dp, Brush.sweepGradient(ColorPickerColors.Hues)), StratumShapes.Dot)
                 .padding(4.dp)
-                .background(Color(color), StratumShapes.Dot)
+                .background(Color(color or OPAQUE), StratumShapes.Dot)
         )
         Spacer(Modifier.width(8.dp))
-        Text(stringResource(colorSlotLabel(slot)), style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
     }
 }
 
@@ -278,6 +291,16 @@ fun ColorPalettePrompt(
 private val MinSquare = 120.dp
 private val MaxSquare = 200.dp
 private val MaxSquareWidth = 260.dp
+
+/**
+ * 다른 창 안에 넣는 팔레트(글자 창의 색 고르기 쪽, 사용자 피드백 8차 1-6). 창이 들어갈 높이([windowHeight], 가로 힌지면 그 반)에 맞춰
+ * 네모 높이를 정한다([ColorPalettePrompt]와 같다).
+ */
+@Composable
+internal fun PaletteFormIn(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, windowHeight: Dp) {
+    val region = if (LocalHinges.current.any { !it.isVertical }) windowHeight / 2 else windowHeight
+    PaletteForm(draft, onChange, (region - PaletteChrome).coerceIn(MinSquare, MaxSquare))
+}
 
 /**
  * 채도·밝기 네모, 그 옆 세로 색상 띠, 오른쪽에 새 색·원래 색과 16진 코드.

@@ -116,6 +116,9 @@ object EditScreenTags {
     const val TEXT_OVERLAY = "textOverlay"
     const val TEXT_FIELD = "textField"
     const val TEXT_ADD = "textAdd"
+    const val TEXT_PROMPT_SIZE = "textPromptSize"
+    const val TEXT_PROMPT_COLOR = "textPromptColor"
+    const val RASTERIZE_CONFIRM = "rasterizeConfirm"
     const val LAYER_LIST = "layerList"
     const val LAYER_ADD = "layerAdd"
     const val LAYER_DELETE = "layerDelete"
@@ -130,6 +133,7 @@ object EditScreenTags {
     const val LAYER_MENU_MERGE_DOWN = "layerMenuMergeDown"
     const val LAYER_MENU_MERGE_VISIBLE = "layerMenuMergeVisible"
     const val LAYER_MENU_DELETE = "layerMenuDelete"
+    const val LAYER_MENU_RASTERIZE = "layerMenuRasterize"
 
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"
@@ -229,6 +233,9 @@ object EditScreenTags {
 
     /** 레이어 줄의 눈(보이기·숨기기) */
     fun layerVisibility(id: com.kiln.stratum.engine.document.LayerId): String = "layerVisibility_${id.value}"
+
+    /** 레이어 줄 작은 그림 구석의 글자 레이어 표시 */
+    fun layerTextBadge(id: com.kiln.stratum.engine.document.LayerId): String = "layerTextBadge_${id.value}"
 
     /** 색 줄의 전경색·배경색 칸 */
     fun colorSlot(slot: com.kiln.stratum.settings.ColorSlot): String = "colorSlot_${slot.name}"
