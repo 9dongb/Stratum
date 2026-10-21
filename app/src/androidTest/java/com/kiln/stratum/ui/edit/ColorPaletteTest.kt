@@ -38,10 +38,9 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PaintColors
-import com.kiln.stratum.ui.layout.HINGE_AWARE_DIALOG_CARD
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -192,26 +191,28 @@ class ColorPaletteTest {
     }
 
     @Test
-    fun mainPortrait_paletteFitsAboveTheHinge() {
-        // 폴드8 메인 세로처럼 가운데를 가로지르는 힌지가 있으면 창이 위쪽 절반에 들어간다
+    fun mainPortrait_paletteShowsEverything_andAHingeDoesNotMoveIt() {
+        // 사용자 피드백 11차 1: 전에는 가로 힌지가 있으면 창을 위쪽 절반에 넣고 네모를 낮췄다
         show(701, 841)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerY = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
         // 메인 화면은 띠의 전경색 칸을 누르면 바로 팔레트가 뜬다
         composeRule.onNodeWithTag(EditScreenTags.strip("foreground")).performClick()
 
-        composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).assertExists()
-        // 스크롤하지 않아도 네모·색상 띠·새 색·원래 색·16진 코드가 다 보이고, 누르는 것은 모두 힌지를 피한다
+        composeRule.onNodeWithTag(DIALOG_CARD).assertExists()
+        // 스크롤하지 않아도 네모·색상 띠·새 색·원래 색·16진 코드가 다 보인다
         for (tag in listOf(EditScreenTags.PALETTE_SQUARE, EditScreenTags.PALETTE_HUE, EditScreenTags.PALETTE_NEW, EditScreenTags.PALETTE_ORIGINAL, EditScreenTags.PALETTE_HEX)) {
             assertFullyVisible(composeRule.onNodeWithTag(tag))
         }
         composeRule.onNodeWithTag(EditScreenTags.PALETTE_OK).assertIsDisplayed()
-        composeRule.assertClickablesAvoid(hinge)
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
         val square = composeRule.onNodeWithTag(EditScreenTags.PALETTE_SQUARE).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$square crosses the hinge at $centerY", square.bottom <= centerY)
+
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        val centerY = screen.center.y.roundToInt()
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)) }
+
+        assertEquals(card, composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow())
+        assertEquals(square, composeRule.onNodeWithTag(EditScreenTags.PALETTE_SQUARE).fetchSemanticsNode().layoutBoundsInWindow())
     }
 
     private companion object {

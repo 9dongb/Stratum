@@ -8,7 +8,6 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -24,11 +23,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.canvas.MAX_CANVAS_SIDE
-import com.kiln.stratum.ui.layout.HINGE_AWARE_DIALOG_CARD
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
-import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -136,44 +133,38 @@ class NewCanvasTest {
     }
 
     @Test
-    fun expandedDialog_avoidsVerticalHinge() {
+    fun expandedDialog_isCentered_withTwoEqualColumns_evenAcrossAVerticalHinge() {
+        // 사용자 피드백 11차 1: 접히는 선을 비켜 두 칸 사이를 비우지 않는다(전에는 두 칸을 선 양쪽에 하나씩 놓았다)
         showHome(930, 700)
         openNewCanvas()
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
+        val before = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
-        // 넓은 창은 접히는 선 양쪽에 걸치고, 프리셋 목록은 왼쪽, 이름·크기는 오른쪽 칸에 있다(선 위에는 누르는 것이 없다)
-        composeRule.assertClickablesAvoid(hinge)
-        val margin = with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
-            HingeMargin.roundToPx()
-        }
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(before, card)
+        assertEquals(screen.center.x, card.center.x, 2f)
+        // 프리셋 목록은 왼쪽, 이름·크기는 오른쪽 칸이고 두 칸의 폭이 같다
         val presets = composeRule.onNodeWithTag(NewCanvasTags.PRESETS).fetchSemanticsNode().layoutBoundsInWindow()
         val name = composeRule.onNodeWithTag(NewCanvasTags.NAME).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("presets $presets should be left of the band", presets.right <= centerX - margin + 1f)
-        assertTrue("name $name should be right of the band", name.left >= centerX + margin - 1f)
+        assertTrue("presets $presets should be left of name $name", presets.right <= name.left)
+        assertEquals(presets.width, name.width, 4f)
     }
 
     @Test
-    fun mediumDialog_avoidsHorizontalHinge() {
+    fun mediumDialog_isCentered_evenAcrossAHorizontalHinge() {
+        // 사용자 피드백 11차 1: 전에는 메인 세로에서 선 위쪽 절반에 띄웠다
         showHome(700, 900)
         openNewCanvas()
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerY = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
+        val before = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)) }
 
-        composeRule.assertClickablesAvoid(hinge)
-        val card = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-        // 띠의 반쪽 폭은 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다
-        val margin = with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
-            HingeMargin.roundToPx()
-        }
-        assertTrue("card $card is not above the band", card.bottom <= centerY - margin)
-        // 창 높이가 화면 반쪽으로 줄어도 '만들기'는 보인다
+        assertEquals(before, composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow())
         composeRule.onNodeWithTag(NewCanvasTags.CREATE).assertExists()
     }
 }

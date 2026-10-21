@@ -24,7 +24,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.WindowInsetsRulers
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.dialog
 import androidx.compose.ui.semantics.paneTitle
@@ -37,7 +36,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 창 카드의 화면 테스트용 이름표. */
-const val HINGE_AWARE_DIALOG_CARD = "hingeAwareDialogCard"
+const val DIALOG_CARD = "dialogCard"
 
 /** 창 카드의 폭 범위와 영역 가장자리와의 간격. Material 대화상자와 같다. */
 private val DialogMinWidth = 280.dp
@@ -45,38 +44,33 @@ private val DialogMaxWidth = 560.dp
 private val DialogMargin = 24.dp
 
 /**
- * 접히는 부분(힌지)을 피해 띄우는 창. Material 대화상자(AlertDialog)와 같은 구성이고, 모양은 앱 테마(모서리 12dp, 패널 색)다.
+ * 앱의 창(대화상자). Material 대화상자(AlertDialog)와 같은 구성이고, 모양은 앱 테마(모서리 12dp, 패널 색)다.
  *
- * 힌지가 없으면 화면 가운데에 뜬다. 힌지가 있으면 시스템 바·키보드·힌지 띠를 뺀 영역 중 카드가 잘 들어가는 쪽
- * 가운데에 뜬다(같으면 오른쪽·위쪽, [dialogRegion]). 그래서 펼친 폴드에서도 버튼이 힌지에 놓이지 않는다(CLAUDE.md 6장).
+ * 시스템 바·키보드를 뺀 영역 가운데에 뜬다. 접히는 선은 보지 않는다(사용자 피드백 11차 1: 펼친 화면은 평평한 한 화면으로 쓴다).
  *
- * 별도 창(Window)이 아니라 같은 화면 위에 덮어 그린다. 힌지 좌표가 그대로 맞고, 화면 테스트의 크기 강제도 적용된다.
+ * 별도 창(Window)이 아니라 같은 화면 위에 덮어 그린다. 화면 테스트의 크기 강제가 그대로 적용되고, 상태 표시줄을 숨긴 앱 창의 설정도 그대로다.
  * 그래서 화면 전체를 덮는 자리(Box의 마지막 자식 등)에 놓아야 한다.
  * - 바깥(어두운 바탕)을 누르거나 뒤로 가기를 하면 [onDismissRequest]를 부른다. 카드 안을 눌러도 닫히지 않는다.
  * - 화면 읽기 기능은 창 안만 읽고([title]이 창 이름), 키보드 초점은 창 밖으로 나가지 않는다.
- * - 카드의 크기와 자리는 배치하는 순간 자기 위치와 시스템 바·키보드 영역을 읽어 정한다. 한 프레임 늦지 않고,
+ * - 카드의 크기와 자리는 배치하는 순간 시스템 바·키보드 영역을 읽어 정한다. 한 프레임 늦지 않고,
  *   키보드가 열리고 닫히면 다시 배치된다.
  *
  * [content]는 길면 스크롤되고, [buttons]는 카드 아래에 고정된다(오른쪽 정렬).
  *
  * 두 칸 창(새 캔버스)은 다음을 바꾼다:
  * - [maxWidth]: 카드의 최대 폭(기본은 Material 대화상자의 560dp)
- * - [spanVerticalHinge]: 세로 힌지 한쪽이 아니라 양쪽에 걸쳐 띄운다. 내용이 힌지 양쪽으로 나눠 놓아야 한다(HingeSplitRow).
- *   제목은 왼쪽 위, 버튼은 오른쪽 아래라 힌지에 놓이지 않는다. 가로 힌지는 그대로 한쪽에 띄운다.
  * - [scrollContent]: false면 내용 전체를 스크롤하지 않고 남는 높이만 준다. 내용의 칸이 스스로 밀어 본다.
  */
 @Composable
-fun HingeAwareDialog(
+fun StratumDialog(
     onDismissRequest: () -> Unit,
     title: String,
     buttons: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     maxWidth: Dp = DialogMaxWidth,
-    spanVerticalHinge: Boolean = false,
     scrollContent: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val hinges = LocalHinges.current
     BackHandler(onBack = onDismissRequest)
     val scrimColor = StratumTheme.colors.scrim
     Layout(
@@ -100,28 +94,15 @@ fun HingeAwareDialog(
         val marginPx = DialogMargin.roundToPx()
         val minCardPx = DialogMinWidth.roundToPx()
         val maxCardPx = maxWidth.roundToPx()
-        val hingeMarginPx = HingeMargin.roundToPx()
         layout(width, height) {
             scrim.place(0, 0)
-            // 정렬선을 재는 단계에서는 위치를 몰라(null) 카드를 놓지 않는다. 곧 이어지는 배치에서 놓는다.
-            val origin = coordinates?.positionInWindow() ?: return@layout
+            // 시스템 바·키보드를 뺀 영역(이 창의 좌표)
             val safe = WindowInsetsRulers.SafeDrawing.current
-            val area = Region(
+            val region = Region(
                 left = safe.left.current(0f).roundToInt(),
                 top = safe.top.current(0f).roundToInt(),
                 right = safe.right.current(width.toFloat()).roundToInt(),
                 bottom = safe.bottom.current(height.toFloat()).roundToInt()
-            )
-            val region = dialogRegion(
-                area = area,
-                verticalBands = if (spanVerticalHinge) {
-                    emptyList()
-                } else {
-                    hinges.filter { it.isVertical }.map { it.band(hingeMarginPx).shiftedBy(-origin.x.roundToInt()) }
-                },
-                horizontalBands = hinges.filter { !it.isVertical }
-                    .map { it.band(hingeMarginPx).shiftedBy(-origin.y.roundToInt()) },
-                maxCardWidth = maxCardPx + 2 * marginPx
             )
             val cardMaxWidth = minOf(maxCardPx, region.width - 2 * marginPx).coerceAtLeast(0)
             val maxHeight = (region.height - 2 * marginPx).coerceAtLeast(0)
@@ -141,7 +122,7 @@ fun HingeAwareDialog(
 private fun DialogCard(title: String, buttons: @Composable () -> Unit, scrollContent: Boolean, content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier
-            .testTag(HINGE_AWARE_DIALOG_CARD)
+            .testTag(DIALOG_CARD)
             .semantics { paneTitle = title }
             // 키보드 초점(Tab·방향키)이 창 밖 화면으로 나가지 않게 한다
             .focusProperties { onExit = { cancelFocusChange() } }

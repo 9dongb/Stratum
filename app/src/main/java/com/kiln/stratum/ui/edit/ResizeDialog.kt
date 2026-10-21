@@ -42,14 +42,13 @@ import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSwitch
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAwareDialog
-import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
- * 이미지 크기 변경 창. 새 캔버스 창과 같은 방식으로, 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트,
- * 그 밖에는 접히는 선을 피해 뜨는 창이다. 그래서 화면 전체를 덮는 자리에 놓아야 한다.
+ * 이미지 크기 변경 창. 새 캔버스 창과 같은 방식으로, 커버 화면(좁은 화면)은 아래에서 올라오는 시트,
+ * 그 밖에는 화면 가운데의 창이다. 그래서 화면 전체를 덮는 자리에 놓아야 한다.
  * 가로·세로를 픽셀이나 퍼센트로 넣고, 비율 유지는 기본으로 켜 둔다. 보간 방식은 앱이 고른다(결정 기록).
  * '적용'을 누르면 [onApply]에 새 가로·세로 픽셀을 넘긴다.
  */
@@ -69,7 +68,7 @@ fun ResizePrompt(
         val height = input.targetHeight()
         if (width != null && height != null && input.canApply) onApply(width, height)
     }
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         // 처음부터 끝까지 펼쳐야 '적용'이 가려지지 않는다
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -86,7 +85,7 @@ fun ResizePrompt(
             }
         }
     } else {
-        HingeAwareDialog(
+        StratumDialog(
             onDismissRequest = onDismiss,
             title = title,
             buttons = { ResizeButtons(input, busy, onCancel = onDismiss, onApply = apply) }
@@ -100,8 +99,7 @@ fun ResizePrompt(
 @Composable
 private fun ResizeForm(input: ResizeInput) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // 단위와 비율 유지를 한 줄에 둔다. 펼친 화면을 세로로 들면 창이 접히는 선 위쪽 절반에 들어가 높이가 모자라서다.
-        // 폭이 좁으면(커버 화면, 메인 가로의 오른쪽 절반) 비율 유지가 다음 줄로 내려간다.
+        // 단위와 비율 유지를 한 줄에 둔다(키보드가 열려 창이 낮아져도 칸이 보이게). 폭이 좁으면(커버 화면) 비율 유지가 다음 줄로 내려간다.
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

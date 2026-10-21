@@ -29,9 +29,9 @@ import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -155,38 +155,32 @@ class ResizeDialogTest {
     }
 
     @Test
-    fun expanded_dialogAvoidsVerticalHinge() {
+    fun expanded_dialogIsCentered_evenAcrossAVerticalHinge() {
+        // 사용자 피드백 11차 1: 전에는 세로 힌지가 있으면 선 오른쪽에 띄웠다
         show(930, 700)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
         openFromOptions()
 
         widthField.assertExists()
-        composeRule.assertClickablesAvoid(hinge)
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(screen.center.x, card.center.x, 2f)
     }
 
     @Test
-    fun medium_statusAndControlsStayInViewAboveHorizontalHinge() {
-        // 폴드8 메인 세로처럼 가운데를 가로지르는 힌지가 있으면 창이 위쪽 절반에 들어간다
+    fun medium_statusAndControlsStayInView() {
         show(701, 841)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerY = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
         openFromOptions()
 
         // 비율 유지로 9000×6750(약 61MP)이 되어 50MP를 넘는다
         widthField.performTextReplacement("9000")
 
         // 스크롤하지 않아도 까닭과 고치는 칸이 다 보인다. 위의 단위·비율 유지 줄도 화면에 남는다
-        // (테스트 화면은 실제보다 몇 픽셀 낮아서, 고치는 칸을 보이려고 내용이 조금 올라갈 수 있다).
         assertFullyVisible(composeRule.onNodeWithText(composeRule.activity.getString(R.string.resize_error_too_large, 50)))
         assertFullyVisible(widthField)
         composeRule.onNodeWithTag(EditScreenTags.RESIZE_LOCK).assertIsDisplayed()
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     /** 노드 내용이 스크롤 영역 등 부모에 잘리지 않고 다 보이는지. 잘린 창 좌표의 높이와 원래 높이를 비교한다. */

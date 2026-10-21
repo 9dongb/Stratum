@@ -103,7 +103,7 @@ import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.TopBarIconToggleButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.HingeAwareDialog
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.BarButtonContentInset
 import com.kiln.stratum.ui.layout.Region
@@ -1047,7 +1047,7 @@ fun EditScreen(
         }
         // 글자 레이어에 픽셀 도구를 쓰면 픽셀로 바꿀지 묻는다(사용자 피드백 8차 1-6). 바꾸면 다시 칠하면 된다.
         if (rasterizeAsk != null && ready != null) {
-            HingeAwareDialog(
+            StratumDialog(
                 onDismissRequest = onDismissRasterize,
                 title = stringResource(R.string.rasterize_title),
                 buttons = {
@@ -1109,7 +1109,7 @@ fun EditScreen(
 /**
  * 커버 화면(Compact)의 도구 옵션 자리. 탭 줄 바로 위에서 캔버스 아래쪽 위에 겹쳐 뜬다(캔버스를 줄이지 않아 이미지 크기·자리가 그대로,
  * 결정 기록 '닫힌 화면 도구 옵션'). 자르기는 새 창이라 캔버스 아래에 따로 놓는다.
- * 커버 화면에는 접히는 부분이 없고, 옆쪽 시스템 바·카메라 구멍만 피한다.
+ * 옆쪽 시스템 바·카메라 구멍만 피한다.
  * 옵션이 길면(선택 도구 등) [maxHeight]까지만 차지하고 그 안에서 위아래로 밀어 본다. 작은 폰에서도 캔버스가 보인다.
  */
 @Composable
@@ -1456,8 +1456,7 @@ private fun ProgressIndicator(message: String) {
 
 /**
  * 큰 사진을 원본 크기로 열지 줄여서 열지 고르는 창. 취소하면 홈으로 돌아간다.
- * 기기 메모리로 원본 크기가 무리면 '원본 크기'를 누를 수 없게 하고 까닭을 알려 준다.
- * 펼친 화면 가운데의 힌지를 피해 뜬다.
+ * 기기 메모리로 원본 크기가 무리면 '원본 크기'를 누를 수 없게 하고 까닭을 알려 준다. 화면 가운데에 뜬다.
  */
 @Composable
 private fun LargePhotoDialog(
@@ -1465,7 +1464,7 @@ private fun LargePhotoDialog(
     onChooseSize: (original: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
-    HingeAwareDialog(
+    StratumDialog(
         onDismissRequest = onCancel,
         title = stringResource(R.string.large_photo_title),
         // 버튼 세 개가 한 줄에 다 들어가지 않으면 순서가 뒤섞여 줄바꿈되므로, 처음부터 세로로 쌓는다.

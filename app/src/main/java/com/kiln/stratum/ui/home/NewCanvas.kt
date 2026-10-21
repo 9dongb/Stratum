@@ -62,9 +62,7 @@ import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAwareDialog
-import com.kiln.stratum.ui.layout.HingeSplitRow
-import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.theme.StratumRadius
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -157,9 +155,9 @@ private val WideDialogMaxWidth = 760.dp
 /**
  * 새 캔버스 창(결정 기록 '새 캔버스 화면'). 프로크리에이트의 프리셋 목록과 포토샵의 세부 설정을 합쳤다(사용자 요청).
  *
- * - 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트에 한 줄로: 이름 → 프리셋 → 크기 → 방향 → 배경.
- * - 메인 화면은 넓은 창에 두 칸: 왼쪽 프리셋 목록, 오른쪽 이름·크기·방향·배경. 메인 가로는 창이 접히는 선 양쪽에 걸치고
- *   두 칸을 선 양쪽에 하나씩 놓는다(선 위에는 아무것도 없다). 메인 세로는 접히는 선 위에 두 칸이다.
+ * - 커버 화면(좁은 화면)은 아래에서 올라오는 시트에 한 줄로: 이름 → 프리셋 → 크기 → 방향 → 배경.
+ * - 메인 화면은 화면 가운데의 넓은 창에 같은 폭의 두 칸: 왼쪽 프리셋 목록, 오른쪽 이름·크기·방향·배경.
+ *   접히는 선은 보지 않는다(사용자 피드백 11차 1, 전에는 두 칸을 선 양쪽에 하나씩 놓아 가운데가 비었다).
  * - 칸마다 따로 밀어 본다. '만들기'를 누르면 [onCreate]에 가로·세로·배경·이름을 넘긴다. 크기는 한도 안일 때만 누를 수 있다.
  */
 // ModalBottomSheet가 아직 실험 기능이라 opt-in이 필요하다
@@ -173,7 +171,7 @@ fun NewCanvasPrompt(
 ) {
     val title = stringResource(R.string.new_canvas_title)
     val create = { onCreate(input.width.toInt(), input.height.toInt(), input.background.fill, ProjectNames.clean(input.name)) }
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         // 처음부터 끝까지 펼쳐야 '만들기'가 가려지지 않는다
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -194,27 +192,22 @@ fun NewCanvasPrompt(
             }
         }
     } else {
-        HingeAwareDialog(
+        StratumDialog(
             onDismissRequest = onDismiss,
             title = title,
             buttons = { NewCanvasButtons(input, onCancel = onDismiss, onCreate = create) },
             maxWidth = WideDialogMaxWidth,
-            spanVerticalHinge = true,
             scrollContent = false
         ) {
-            HingeSplitRow(
-                first = { PresetList(input, Modifier.verticalScroll(rememberScrollState())) },
-                second = {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
-                        NameField(input)
-                        Spacer(Modifier.height(8.dp))
-                        CanvasDetails(input)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                gap = 24.dp,
-                alignTop = true
-            )
+            // 두 칸은 같은 폭이고 칸마다 따로 밀어 본다
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                PresetList(input, Modifier.weight(1f).verticalScroll(rememberScrollState()))
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    NameField(input)
+                    Spacer(Modifier.height(8.dp))
+                    CanvasDetails(input)
+                }
+            }
         }
     }
 }

@@ -70,8 +70,7 @@ import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAwareDialog
-import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.ColorPickerColors
@@ -233,13 +232,13 @@ private val HueStripWidth = 48.dp
 private val CompareWidth = 88.dp
 
 /**
- * 창이 들어갈 높이에서 팔레트 네모 말고 쓰는 높이의 어림값: 창 바깥 여백, 제목·버튼·안쪽 여백, 힌지 띠와 시스템 바.
- * Pixel_Fold 에뮬레이터 메인 세로(841dp, 위쪽 절반)에서 스크롤 없이 들어가게 맞췄다.
+ * 창이 들어갈 높이에서 팔레트 네모 말고 쓰는 높이의 어림값: 창 바깥 여백, 제목·버튼·안쪽 여백과 시스템 바.
+ * 낮은 화면에서도 스크롤 없이 들어가게 어림했다(처음에는 Pixel_Fold 메인 세로의 위쪽 절반에 맞췄다).
  */
 private val PaletteChrome = 280.dp
 
 /**
- * 색 팔레트(결정 기록 '색 팔레트·최근 색'). 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 접히는 선을 피해 뜨는 창이다.
+ * 색 팔레트(결정 기록 '색 팔레트·최근 색'). 커버 화면(좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 화면 가운데의 창이다.
  * 그래서 화면 전체를 덮는 자리에 놓아야 한다(내보내기 창과 같다). 고르는 동안은 [onChange]로 [draft]를 바꾸고,
  * '확인'을 누르면 [onConfirm](그 색을 쓰고 최근 색에 더함), '취소'·바깥·뒤로는 [onDismiss]다.
  */
@@ -256,16 +255,15 @@ fun ColorPalettePrompt(
 ) {
     // 어느 색을 고르는지 제목으로 알린다(전경색 고르기·배경색 고르기)
     val title = stringResource(if (draft.slot == ColorSlot.FOREGROUND) R.string.color_choose_foreground else R.string.color_choose_background)
-    // 가로 힌지가 있으면(메인 세로) 창이 그 위쪽 절반에 들어가므로, 네모를 남는 높이에 맞춰 낮춘다
-    val region = if (LocalHinges.current.any { !it.isVertical }) windowHeight / 2 else windowHeight
-    val maxHeight = (region - PaletteChrome).coerceIn(MinSquare, MaxSquare)
+    // 낮은 화면이면 네모를 남는 높이에 맞춰 낮춘다
+    val maxHeight = (windowHeight - PaletteChrome).coerceIn(MinSquare, MaxSquare)
     val buttons: @Composable (Modifier) -> Unit = { modifier ->
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             QuietButton(onClick = onDismiss, modifier = Modifier.testTag(EditScreenTags.PALETTE_CANCEL)) { Text(stringResource(R.string.action_cancel)) }
             AccentButton(onClick = onConfirm, modifier = Modifier.testTag(EditScreenTags.PALETTE_OK)) { Text(stringResource(R.string.action_ok)) }
         }
     }
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         // 처음부터 끝까지 펼쳐야 버튼이 가려지지 않는다
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -281,7 +279,7 @@ fun ColorPalettePrompt(
             }
         }
     } else {
-        HingeAwareDialog(onDismissRequest = onDismiss, title = title, buttons = { buttons(Modifier) }) {
+        StratumDialog(onDismissRequest = onDismiss, title = title, buttons = { buttons(Modifier) }) {
             PaletteForm(draft, onChange, maxHeight)
         }
     }
@@ -293,18 +291,17 @@ private val MaxSquare = 200.dp
 private val MaxSquareWidth = 260.dp
 
 /**
- * 다른 창 안에 넣는 팔레트(글자 창의 색 고르기 쪽, 사용자 피드백 8차 1-6). 창이 들어갈 높이([windowHeight], 가로 힌지면 그 반)에 맞춰
+ * 다른 창 안에 넣는 팔레트(글자 창의 색 고르기 쪽, 사용자 피드백 8차 1-6). 창이 들어갈 높이([windowHeight])에 맞춰
  * 네모 높이를 정한다([ColorPalettePrompt]와 같다).
  */
 @Composable
 internal fun PaletteFormIn(draft: PaletteDraft, onChange: (PaletteDraft) -> Unit, windowHeight: Dp) {
-    val region = if (LocalHinges.current.any { !it.isVertical }) windowHeight / 2 else windowHeight
-    PaletteForm(draft, onChange, (region - PaletteChrome).coerceIn(MinSquare, MaxSquare))
+    PaletteForm(draft, onChange, (windowHeight - PaletteChrome).coerceIn(MinSquare, MaxSquare))
 }
 
 /**
  * 채도·밝기 네모, 그 옆 세로 색상 띠, 오른쪽에 새 색·원래 색과 16진 코드.
- * 높이가 네모 하나뿐이라 메인 세로의 창(접히는 선 위쪽 절반)에도 스크롤 없이 들어간다.
+ * 높이가 네모 하나뿐이라 낮은 창에도 스크롤 없이 들어간다.
  * 네모는 남는 폭에 맞추고(260dp까지), 높이는 [maxHeight]까지라 높이가 모자라면 가로로 긴 네모가 된다.
  */
 @Composable

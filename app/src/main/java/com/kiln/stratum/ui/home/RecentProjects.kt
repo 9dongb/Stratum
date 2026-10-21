@@ -79,7 +79,7 @@ import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAwareDialog
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.Span
@@ -354,7 +354,7 @@ private fun Modifier.checkerBackground(): Modifier =
  */
 @Composable
 fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit, count: Int = 1) {
-    HingeAwareDialog(
+    StratumDialog(
         onDismissRequest = onDismiss,
         title = if (count > 1) pluralStringResource(R.plurals.home_delete_projects_title, count, count) else stringResource(R.string.home_delete_title),
         buttons = {
@@ -372,7 +372,7 @@ fun DeleteProjectDialog(onConfirm: () -> Unit, onDismiss: () -> Unit, count: Int
 }
 
 /**
- * 프로젝트 이름을 바꾸는 창. 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 접히는 선을 피해 뜨는 창이다(글자 창과 같다).
+ * 프로젝트 이름을 바꾸는 창. 커버 화면(좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 화면 가운데의 창이다(글자 창과 같다).
  * 비우면 '제목 없음'이 된다. 적은 글자는 접기·펼치기에도 남는다([projectId]마다 따로).
  */
 // ModalBottomSheet가 아직 실험 기능이라 opt-in이 필요하다
@@ -399,7 +399,7 @@ fun RenameProjectPrompt(projectId: String, initial: String, widthClass: WidthCla
             AccentButton(onClick = { onRename(text) }, modifier = Modifier.testTag(HomeTags.RENAME_OK)) { Text(stringResource(R.string.action_ok)) }
         }
     }
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
             HideStatusBarInSheet()
@@ -412,7 +412,7 @@ fun RenameProjectPrompt(projectId: String, initial: String, widthClass: WidthCla
             }
         }
     } else {
-        HingeAwareDialog(onDismissRequest = onDismiss, title = title, buttons = { buttons(Modifier) }) {
+        StratumDialog(onDismissRequest = onDismiss, title = title, buttons = { buttons(Modifier) }) {
             field()
         }
     }

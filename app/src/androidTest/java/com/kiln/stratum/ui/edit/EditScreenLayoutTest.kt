@@ -16,9 +16,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.workBarContentPx
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -140,15 +140,15 @@ class EditScreenLayoutTest {
     }
 
     @Test
-    fun largePhotoDialog_avoidsVerticalHinge() {
-        // 펼친 폴드의 안쪽 화면처럼 세로 힌지가 가운데를 지날 때, 큰 사진 선택 창의 버튼이 힌지에 놓이지 않는다
+    fun largePhotoDialog_isCentered_evenAcrossAVerticalHinge() {
+        // 사용자 피드백 11차 1: 전에는 세로 힌지가 있으면 선 오른쪽에 띄웠다
         showEditScreen(930, 700, EditorState.AskSize(originalMegapixels = 200, originalAllowed = false, reducedMegapixels = 50))
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
-        composeRule.assertClickablesAvoid(hinge)
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(screen.center.x, card.center.x, 2f)
     }
 }

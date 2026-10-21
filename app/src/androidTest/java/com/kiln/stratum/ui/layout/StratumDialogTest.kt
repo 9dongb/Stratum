@@ -32,14 +32,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 힌지를 피하는 창이 힌지 한쪽에 뜨는지, 닫기가 맞게 동작하는지 확인한다. */
+/** 앱의 창이 화면 가운데에 뜨는지(접히는 선이 지나도, 사용자 피드백 11차 1), 닫기가 맞게 동작하는지 확인한다. */
 @RunWith(AndroidJUnit4::class)
-class HingeAwareDialogTest {
+class StratumDialogTest {
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    /** 가짜 힌지. 테스트 중에 바꾸면 창이 다시 배치된다. */
+    /** 가짜 힌지. 창은 이것과 상관없이 가운데에 뜬다. */
     private val hinges = mutableStateOf(emptyList<Hinge>())
 
     private var dismissCount = 0
@@ -50,7 +50,7 @@ class HingeAwareDialogTest {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
                     StratumTheme {
                         Box(Modifier.fillMaxSize()) {
-                            HingeAwareDialog(
+                            StratumDialog(
                                 onDismissRequest = { dismissCount++ },
                                 title = "Title",
                                 buttons = {
@@ -71,43 +71,33 @@ class HingeAwareDialogTest {
 
     private fun screen(): Rect = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
 
-    private fun card(): Rect = composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-
-    /** 띠의 반쪽 폭. 화면 루트가 아니라 화면 크기 강제 안쪽 노드(카드)의 밀도로 잰다. */
-    private fun marginPx(): Int =
-        with(composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).fetchSemanticsNode().layoutInfo.density) {
-            HingeMargin.roundToPx()
-        }
+    private fun card(): Rect = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
 
     @Test
-    fun noHinge_centersCardHorizontally() {
+    fun centersTheCard() {
         showDialog(930, 700)
 
         assertTrue("card ${card()} not centered in ${screen()}", abs(card().center.x - screen().center.x) <= 2f)
+        assertTrue("card ${card()} not centered in ${screen()}", abs(card().center.y - screen().center.y) <= 40f)
     }
 
     @Test
-    fun verticalHinge_putsCardOnTheRightSide() {
+    fun aHinge_doesNotMoveTheCard() {
+        // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 세로 힌지면 오른쪽, 가로 힌지면 위쪽 절반에 띄웠다)
         showDialog(930, 700)
-        val centerX = screen().center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen().bottom.roundToInt(), isVertical = true)
+        val before = card()
+        val screen = screen()
+        val centerX = screen.center.x.roundToInt()
+        val centerY = screen.center.y.roundToInt()
 
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle {
+            hinges.value = listOf(
+                Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true),
+                Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
+            )
+        }
 
-        composeRule.assertClickablesAvoid(hinge)
-        assertTrue("card ${card()} is not right of the band", card().left >= centerX + marginPx())
-    }
-
-    @Test
-    fun horizontalHinge_putsCardOnTheTopSide() {
-        showDialog(700, 900)
-        val centerY = screen().center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = centerY, right = screen().right.roundToInt(), bottom = centerY, isVertical = false)
-
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
-
-        composeRule.assertClickablesAvoid(hinge)
-        assertTrue("card ${card()} is not above the band", card().bottom <= centerY - marginPx())
+        assertEquals(before, card())
     }
 
     @Test

@@ -42,8 +42,7 @@ import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
-import com.kiln.stratum.ui.layout.HingeAwareDialog
-import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import kotlin.math.exp
 import kotlin.math.ln
@@ -157,7 +156,7 @@ data class TextDraft(
 }
 
 /**
- * 글자 창. 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 접히는 선을 피해 뜨는 창이다(크기 변경 창과 같다).
+ * 글자 창. 커버 화면(좁은 화면)은 아래에서 올라오는 시트, 그 밖에는 화면 가운데의 창이다(크기 변경 창과 같다).
  * 글자 칸, 크기 슬라이더, 색 칸이 있다(사용자 피드백 8차 1-6). 색 칸을 누르면 같은 창이 팔레트로 바뀌고, 확인·취소하면 글자 쪽으로 돌아온다.
  * 고르는 것은 [draft]이고 [onChange]로 바꾼다. 새 글자는 '넣기', 고치기는 '적용'이 [onConfirm]이다(비었으면 누를 수 없다).
  * 창 밖·뒤로는 팔레트 쪽이면 글자 쪽으로 돌아오고, 글자 쪽이면 [onDismiss]다.
@@ -212,7 +211,7 @@ fun TextPrompt(
             }
         }
     }
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val scope = rememberCoroutineScope()
         // 시트는 창 밖을 누르거나 아래로 밀면 먼저 내려간 뒤 onDismissRequest를 부른다(M3).
@@ -239,7 +238,7 @@ fun TextPrompt(
             }
         }
     } else {
-        HingeAwareDialog(onDismissRequest = dismiss, title = title, buttons = { buttons(Modifier) }) {
+        StratumDialog(onDismissRequest = dismiss, title = title, buttons = { buttons(Modifier) }) {
             content()
         }
     }

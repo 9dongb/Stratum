@@ -31,10 +31,9 @@ import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.ui.layout.HINGE_AWARE_DIALOG_CARD
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
-import com.kiln.stratum.ui.layout.assertClickablesAvoid
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -209,17 +208,12 @@ class ExportDialogTest {
         open()
 
         composeRule.onNodeWithTag(EditScreenTags.EXPORT_SAVE).assertExists()
-        composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(DIALOG_CARD).assertDoesNotExist()
     }
 
     @Test
-    fun medium_fitsAboveTheHorizontalHinge() {
-        // 폴드8 메인 세로처럼 가운데를 가로지르는 힌지가 있으면 창이 위쪽 절반에 들어간다
+    fun medium_everythingIsVisibleWithoutScrolling() {
         show(widthDp = 701, heightDp = 841)
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        val centerY = screen.center.y.roundToInt()
-        val hinge = Hinge(left = 0, top = centerY, right = screen.right.roundToInt(), bottom = centerY, isVertical = false)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
         open()
 
@@ -228,22 +222,21 @@ class ExportDialogTest {
         assertFullyVisible(composeRule.onNodeWithTag(EditScreenTags.EXPORT_QUALITY))
         assertFullyVisible(composeRule.onNodeWithTag(EditScreenTags.exportSize(ExportSize.LongEdge(1080))))
         assertFullyVisible(composeRule.onNodeWithText(text(R.string.export_result_jpeg, 4000, 3000)))
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test
-    fun expanded_avoidsTheVerticalHinge() {
+    fun expanded_isCentered_evenAcrossAVerticalHinge() {
+        // 사용자 피드백 11차 1: 전에는 세로 힌지가 있으면 선 오른쪽에 띄웠다
         show(widthDp = 930, heightDp = 700)
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
-        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
-        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
 
         open()
 
-        composeRule.onNodeWithTag(HINGE_AWARE_DIALOG_CARD).assertExists()
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(screen.center.x, card.center.x, 2f)
         composeRule.onNodeWithTag(EditScreenTags.EXPORT_SAVE).assertExists()
-        composeRule.assertClickablesAvoid(hinge)
     }
 
     @Test

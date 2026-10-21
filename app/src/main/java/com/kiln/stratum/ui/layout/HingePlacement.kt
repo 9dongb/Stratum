@@ -96,25 +96,6 @@ data class Region(val left: Int, val top: Int, val right: Int, val bottom: Int) 
 }
 
 /**
- * 창(카드)을 띄울 영역을 고른다.
- *
- * [area](시스템 바·키보드를 뺀 영역)에서 세로 힌지 띠 [verticalBands](x 구간)와 가로 힌지 띠 [horizontalBands](y 구간)를
- * 빼고 남은 조각 중 하나다. 점수는 min(폭, [maxCardWidth]) × 높이라, 넓기만 하고 낮은 조각보다 카드가 잘 들어가는 곳을 고른다.
- * 점수가 거의 같으면(가장 높은 점수의 98% 이상) 오른쪽, 그다음 위쪽 조각을 고른다.
- * - 시스템 바나 반올림 몇 픽셀 차이로 창이 놓이는 쪽이 바뀌지 않게 한다.
- * - 위쪽을 먼저 고르는 것은 키보드가 아래쪽을 가려서, 아래에 두면 입력하는 동안 창이 옮겨 다니기 때문이다.
- * 띠가 영역을 다 덮어 남는 조각이 없으면 [area]를 그대로 돌려준다.
- */
-fun dialogRegion(area: Region, verticalBands: List<Span>, horizontalBands: List<Span>, maxCardWidth: Int): Region {
-    val columns = subtract(Span(area.left, area.right), verticalBands)
-    val rows = subtract(Span(area.top, area.bottom), horizontalBands)
-    val pieces = columns.flatMap { x -> rows.map { y -> Region(x.start, y.start, x.end, y.end) } }
-    fun score(region: Region): Long = minOf(region.width, maxCardWidth).toLong() * region.height
-    val best = pieces.maxOfOrNull(::score) ?: return area
-    return pieces.filter { score(it) * 100 >= best * 98 }.maxWith(compareBy({ it.left }, { -it.top }))
-}
-
-/**
  * 크기가 [width]×[height]인 옵션 창을 칸 [anchor] 오른쪽([gap]만큼 띄움)에, 위 끝을 칸 위 끝에 맞춰 놓을 왼쪽 위 자리.
  * [region] 밖으로 나가면 안으로 민다. 옵션 창이 [region]보다 크면 왼쪽·위 끝에 맞춘다.
  */
@@ -182,19 +163,4 @@ fun stripTop(anchor: Span, height: Int, piece: Span): Int {
         else -> centered
     }
     return top.coerceAtMost(piece.end - height).coerceAtLeast(piece.start)
-}
-
-/** [range]에서 [bands]가 덮는 부분을 뺀 나머지 구간들. 길이가 0인 구간은 뺀다. */
-private fun subtract(range: Span, bands: List<Span>): List<Span> {
-    var pieces = listOf(range).filter { it.end > it.start }
-    for (band in bands) {
-        pieces = pieces.flatMap { piece ->
-            if (band.end <= piece.start || band.start >= piece.end) {
-                listOf(piece)
-            } else {
-                listOf(Span(piece.start, band.start), Span(band.end, piece.end)).filter { it.end > it.start }
-            }
-        }
-    }
-    return pieces
 }

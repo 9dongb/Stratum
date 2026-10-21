@@ -44,18 +44,17 @@ import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.StratumSlider
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
-import com.kiln.stratum.ui.layout.HingeAwareDialog
-import com.kiln.stratum.ui.layout.LocalHinges
+import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 창 내용이 이 폭 이상이면 형식과 품질을 한 줄에 둔다. 펼친 화면을 세로로 들면 창이 접히는 선 위쪽 절반에 들어가 높이가 모자라서다. */
+/** 창 내용이 이 폭 이상이면 형식과 품질을 한 줄에 둔다(창 높이를 줄여 낮은 화면에서도 스크롤 없이 들어가게). */
 private val WideFormWidth = 480.dp
 
 /**
- * 내보내기 창. 크기 변경 창과 같은 방식으로, 커버 화면(힌지 없는 좁은 화면)은 아래에서 올라오는 시트,
- * 그 밖에는 접히는 선을 피해 뜨는 창이다. 그래서 화면 전체를 덮는 자리에 놓아야 한다.
+ * 내보내기 창. 크기 변경 창과 같은 방식으로, 커버 화면(좁은 화면)은 아래에서 올라오는 시트,
+ * 그 밖에는 화면 가운데의 창이다. 그래서 화면 전체를 덮는 자리에 놓아야 한다.
  * 형식·품질·크기를 고르고([onChoiceChange]) '공유'나 '저장'을 누른다([onExport]). 숫자 칸이 없어 키보드가 뜨지 않는다.
  * [hdr]이면(HDR 문서) HDR 밝기가 남는지 한 줄로 알린다(JPEG만 담긴다).
  */
@@ -73,7 +72,7 @@ fun ExportPrompt(
     hdr: Boolean = false
 ) {
     val title = stringResource(R.string.action_export)
-    if (widthClass == WidthClass.Compact && LocalHinges.current.isEmpty()) {
+    if (widthClass == WidthClass.Compact) {
         // 처음부터 끝까지 펼쳐야 버튼이 가려지지 않는다
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -90,7 +89,7 @@ fun ExportPrompt(
             }
         }
     } else {
-        HingeAwareDialog(
+        StratumDialog(
             onDismissRequest = onDismiss,
             title = title,
             buttons = { ExportButtons(busy, onCancel = onDismiss, onExport = onExport) }
@@ -102,7 +101,7 @@ fun ExportPrompt(
 
 /**
  * 형식·품질, 크기, 안내 한 줄(HDR 문서면 한 줄 더).
- * 폭이 넉넉하면(메인 세로) 형식과 품질을 한 줄에 두어 접히는 선 위쪽 창에 스크롤 없이 들어가게 한다. 좁으면 위아래로 쌓는다.
+ * 폭이 넉넉하면(메인 화면) 형식과 품질을 한 줄에 두어 창을 낮게 한다. 좁으면 위아래로 쌓는다.
  */
 @Composable
 private fun ExportForm(choice: ExportChoice, documentSize: PixelSize, hdr: Boolean, onChoiceChange: (ExportChoice) -> Unit) {
