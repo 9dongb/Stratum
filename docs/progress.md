@@ -65,6 +65,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 남은 일
     - 폴드8 확인(사용자): 고친 밝기·색 맞추기, AI 선택, AI 제거 톡 고르기, 10단계 품질. 폰에 깔린 앱은 6단계 때 것이라 새 APK를 깔아야 한다(무선 디버깅으로 연결하면 Claude가 덮어 깔 수 있다).
     - (선택) 결 옮기기: 할지 사용자가 정한다(10단계 보고에서 물음). 50MP에서 큰 물체를 지우면 9배 넘게 키운 그림이라 흐린 것이 남는다.
+  - 10단계 뒤 사용자 피드백(2026-10-22): "새 레이어로 복사로 꺼냈을 때 가장자리가 부드럽지 않고 오돌토돌합니다" → AI 선택의 선택 영역 가장자리를 매끈하고 또렷하게 고쳤다(결정 기록의 '선택 가장자리').
 
 진행 중인 일은 아래 형식으로 적는다.
 
@@ -319,6 +320,12 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 고른 값의 까닭(맥, 실제 사진 7장): 색 길잡이가 회색 길잡이보다 낫다(밝기가 같은 색 경계, 사람 머리의 삐침이 없음). 반지름 12·16은 말 다리 안에 구멍이 숭숭 났다. 반 크기 계산은 원래 크기와 평균 0.001 이하로 같다.
     - 쓰는 곳: AI 선택(선택 영역, 경계가 부드러운 알파)과 AI 제거 톡 고르기(표시·채울 곳). 길잡이 그림은 특징과 함께 기억한다(4MB 이하). 탭마다 계산 메모리 어림을 16MB에서 40MB로 올렸다.
     - 함께 고친 것: 마스크를 문서 크기 타일로 키울 때(`upscaledTiles`) 타일을 '다 고름'으로 보는 것을 알파가 모두 255일 때만으로 고쳤다(전에는 0이 아니면 다 고름으로 봐서 부드러운 알파가 잘렸다).
+  - 선택 가장자리(사용자 피드백, 고친 방법은 Claude 판단, 2026-10-22, 상수는 `MaskEdge`)
+    - 사용자: "새 레이어로 복사로 꺼냈을 때 가장자리가 부드럽지 않고 오돌토돌합니다"
+    - 원인: AI 모양 마스크는 문서보다 2~8배 작아(긴 변 1024 이하), 쌍선형으로 키우기만 하면 경계가 마스크 칸의 계단을 따라 물결치고 2~8px 넓게 번졌다. 경계 다듬기의 반투명 띠에 배경 조각이 옅게 묻어 혹처럼 보이기도 했다.
+    - 고침: AI 선택으로 선택 영역을 만들 때 마스크를 가우스 σ 1칸 흐린 뒤 쌍선형으로 키우고, 0.5 둘레를 문서 1.5px 폭으로 편다(색 행렬, 안드로이드 그리기). 경계가 매끈한 곡선이 되고 또렷하며, 옅은 혹이 사라진다. 마스크가 문서와 같은 크기면(작은 사진) 그대로다.
+    - 고른 값의 까닭(맥, 자동차·말·사람을 50MP 흉내로 키워 견줌): σ 0.6은 말 입 안쪽이 잘렸고 1.0이 매끈하면서 모양을 지켰다. GPU B-스플라인으로 키운 것과 안드로이드 쌍선형 + 색 행렬이 거의 같아 GPU를 쓰지 않는다.
+    - 자동 선택(마술봉)과 AI 제거의 톡 고르기(표시·채울 곳)는 그대로다.
   - 10단계 맥 시험(잡음·창 여백·경계)은 앱과 같은 순서를 옮긴 파이썬 스크립트로 했다. 스크립트·시험 사진·변환 도구는 저장소 밖(이 Mac의 임시 폴더)에만 있어, 다른 PC에서 다시 재려면 다시 만든다.
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
@@ -1019,6 +1026,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - AI 선택 화면(8단계): `EditorViewModel.objectSegmenter`(internal var, 테스트는 가짜로 바꿈)를 `selectObject`(`SelectionActions.objectAt`)와 `prepareObjectSelection`(`SelectionActions.prepareObjects`, 편집 화면이 AI 선택을 고른 동안 `revision`마다 부름)이 쓴다. 쓸 수 없는 모델은 `runEdit`가 `EditorMessage.SelectUnavailable`로 알린다(편집 화면의 [자동 선택] 버튼은 `onMagicWand`).
   - AI 제거 톡 고르기(9단계): 화면(`RetouchOverlay`)이 톡을 `RetouchActions.pickObject`로 보내고, ViewModel `pickRemoveObject`가 `ObjectSegmenter.maskAt`으로 찾아 `removePick`(`RemovePick`: 표시용 알파 그림·윤곽선·채울 곳 `InpaintArea.Masked`·찾을 때의 `revision`)으로 알린다. [지우기]는 `RetouchActions.removePicked` → `removePickedObject`(`InpaintRegion(…, pick.area, …)`)다.
     - 편집 화면은 고른 것의 `revision`이 지금 문서와 같고 AI 제거를 고른 동안만 보인다(`shownPick`). AI 제거를 떠나면 `clearPicked`를 부르되, 화면이 사라지는 것(접기·펼치기)만으로는 부르지 않는다(고른 하위 도구가 바뀔 때만).
+  - 선택 가장자리: `SelectObject`가 `MaskTiles.upscaledTiles(…, sharp = true)`로 키운다(`MaskEdge.blur`로 흐린 마스크를 셰이더로 그리고 색 행렬로 편다). 알파 그림은 셰이더로 그려야 색 행렬이 그 알파에 걸린다.
   - 경계 다듬기(10단계): `ObjectSegmenter`가 그림을 읽을 때 마스크 크기 길잡이(`Guide`)도 그려 특징과 함께 기억하고, `maskAt`이 `SegmentMask.mask` 뒤에 `MaskRefine.refine`(순수 Kotlin, JVM 테스트)을 건다. 그래서 `ObjectMask.alphas`는 경계가 부드러운 0..255다.
   - 창 여백(10단계): `InpaintPlan.margin`(창 한 변 → 여백)과 `fitting`(구멍 길이 → 창 한 변)이 한곳에서 정한다.
   - 잡음 맞추기(10단계): `Inpainter.noiseLevel`이 조각을 고르고 읽어 `InpaintNoise`(순수 Kotlin: Immerkær 재기·더할 세기·조각 고르기·GPU와 같은 바이큐빅 읽기)로 세기를 정하고, 키우기의 `NOISY_BICUBIC`(= `ImageResizer.BICUBIC_SAMPLE` + 잡음)이 더한다. 바이큐빅 계산을 바꾸면 `BICUBIC_SAMPLE`과 `InpaintNoise.upscaledLuma`를 함께 고친다.

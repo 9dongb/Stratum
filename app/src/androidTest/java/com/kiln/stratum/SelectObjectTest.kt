@@ -72,6 +72,55 @@ class SelectObjectTest {
         assertFalse(history.canUndo)
     }
 
+    /** 흰 [width]×[height] 문서에 검은 원 하나(가운데, 반지름 [radius]). 한 가지 색 타일은 한 장을 함께 쓴다. */
+    private fun bigDisc(width: Int, height: Int, radius: Float): Document {
+        val cx = width / 2f
+        val cy = height / 2f
+        val white = Tile.of(IntArray(TILE_SIZE * TILE_SIZE) { Color.WHITE })
+        val tiles = TileGrid(width, height).keys().associateWith { key ->
+            val left = key.column * TILE_SIZE
+            val top = key.row * TILE_SIZE
+            // 원에 닿지 않는 타일은 흰 타일 하나를 함께 쓴다
+            val nearest = hypot((cx - cx.coerceIn(left.toFloat(), left + TILE_SIZE.toFloat())), (cy - cy.coerceIn(top.toFloat(), top + TILE_SIZE.toFloat())))
+            if (nearest > radius + 2) white else Tile.of(IntArray(TILE_SIZE * TILE_SIZE) { i ->
+                if (hypot(left + i % TILE_SIZE + 0.5f - cx, top + i / TILE_SIZE + 0.5f - cy) <= radius) Color.BLACK else Color.WHITE
+            })
+        }
+        return Document.create(width, height, "Background", Raster.EMPTY.withTiles(tiles))
+    }
+
+    @Test
+    fun inABigPicture_theSelectionEdgeIsSmoothAndCrisp() {
+        // 3600×2400(마스크는 1/4 크기, 한 칸 4px): 원의 경계가 마스크 칸의 계단을 따라 물결치지 않고, 2~3px 안에서 0에서 255로 바뀐다
+        val radius = 700f
+        val document = bigDisc(3600, 2400, radius)
+
+        val selected = tap(ObjectSegmenter(FakeSegmentModel()), document, 1800f, 1200f)
+
+        val crossings = ArrayList<Float>()
+        for (step in 0 until 72) {
+            val angle = step * Math.PI / 36
+            val dx = kotlin.math.cos(angle).toFloat()
+            val dy = kotlin.math.sin(angle).toFloat()
+            // 반지름 방향으로 0.25px씩 걸으며 알파가 128 아래로 내려가는 자리와, 10~245 사이인 폭
+            var crossing = Float.NaN
+            var soft = 0
+            var r = radius - 12f
+            while (r < radius + 12f) {
+                val a = alpha(selected, (1800f + dx * r).toInt(), (1200f + dy * r).toInt())
+                if (a in 11..244) soft++
+                if (crossing.isNaN() && a < 128) crossing = r
+                r += 0.25f
+            }
+            assertTrue("angle $step: soft band ${soft / 4f}px", soft / 4f <= 4f)
+            crossings += crossing
+        }
+        val mean = crossings.average().toFloat()
+        val wobble = crossings.maxOf { kotlin.math.abs(it - mean) }
+        assertEquals(radius, mean, 4f)
+        assertTrue("edge wobbles by $wobble px", wobble <= 2f)
+    }
+
     @Test
     fun modes_combineWithThePreviousSelection() {
         val segmenter = ObjectSegmenter(FakeSegmentModel())

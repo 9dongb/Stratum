@@ -1,9 +1,13 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.BlendMode as AndroidBlendMode
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Picture
+import android.graphics.Shader
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
@@ -21,6 +25,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.segment.MaskEdge
 import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.MaskTile
 import com.kiln.stratum.engine.selection.Selection
@@ -142,7 +147,8 @@ data class SelectObject(val x: Float, val y: Float, val mode: SelectionMode, val
             throw NotEnoughMemoryException(e)
         } ?: return document
         val size = PixelSize(document.width, document.height)
-        val tiles = MaskTiles.upscaledTiles(mask.alphas, mask.width, mask.height, mask.level, size, checkCanceled)
+        // 키운 경계가 마스크 칸의 계단을 따르지 않게 매끈하고 또렷하게 편다(새 레이어로 꺼낼 때 가장자리가 오돌토돌하지 않게)
+        val tiles = MaskTiles.upscaledTiles(mask.alphas, mask.width, mask.height, mask.level, size, checkCanceled, sharp = true)
         return document.withSelection(combineSelection(document.selection ?: Selection.EMPTY, tiles, mode, MaskTiles))
     }
 
@@ -312,13 +318,41 @@ internal object SelectedPixels {
 private fun tileCount(area: PixelRect): Long =
     ((area.right - 1) / TILE_SIZE - area.left / TILE_SIZE + 1).toLong() * ((area.bottom - 1) / TILE_SIZE - area.top / TILE_SIZE + 1)
 
-/** 줄인 마스크 바이트를 문서 크기 알파 타일로 키운다(MaskTiles에 붙인 도우미) */
-internal fun MaskTiles.upscaledTiles(alphas: ByteArray, width: Int, height: Int, level: Int, size: PixelSize, checkCanceled: () -> Unit): Map<TileKey, MaskTile> {
+/**
+ * 줄인 마스크 바이트를 문서 크기 알파 타일로 키운다(MaskTiles에 붙인 도우미). 쌍선형으로 키운다.
+ * [sharp]면(AI 선택) 마스크를 [MaskEdge]로 흐린 뒤 키우고, 0.5 둘레를 문서 [MaskEdge.EDGE_PIXELS]px 폭으로 편다(색 행렬).
+ * 그래서 경계가 마스크 칸의 계단을 따르지 않는 매끈한 곡선이 되고 또렷하다. 줄이지 않은 마스크(단계 0)는 그대로 쓴다.
+ */
+internal fun MaskTiles.upscaledTiles(
+    alphas: ByteArray,
+    width: Int,
+    height: Int,
+    level: Int,
+    size: PixelSize,
+    checkCanceled: () -> Unit,
+    sharp: Boolean = false
+): Map<TileKey, MaskTile> {
+    val sharpen = sharp && level > 0
+    val source = if (sharpen) MaskEdge.blur(alphas, width, height) else alphas
+    // 키운 값이 low 이하면 0, high 이상이면 255가 되는 문턱(0..255). 펴지 않으면 0이 아닌 곳이 보이고 255인 곳만 다 고름이다.
+    val half = if (sharpen) MaskEdge.halfWidth(1 shl level) else 0f
+    val low0 = if (sharpen) ((0.5f - half) * 255f) else 0f
+    val high0 = if (sharpen) ((0.5f + half) * 255f) else 255f
     val low = Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
     try {
-        low.copyPixelsFromBuffer(ByteBuffer.wrap(alphas))
+        low.copyPixelsFromBuffer(ByteBuffer.wrap(source))
         val scale = (1 shl level).toFloat()
-        val filter = Paint().apply { isFilterBitmap = true }
+        val filter = Paint().apply {
+            isFilterBitmap = true
+            if (sharpen) {
+                // 알파 a(0..255) → (a - low) / (high - low) × 255. 알파 그림은 셰이더로 그려야 색 행렬이 그 알파에 걸린다.
+                val gain = 255f / (high0 - low0)
+                colorFilter = ColorMatrixColorFilter(
+                    ColorMatrix(floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, gain, -low0 * gain))
+                )
+                shader = BitmapShader(low, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply { filterMode = BitmapShader.FILTER_MODE_LINEAR }
+            }
+        }
         val grid = TileGrid(size.width, size.height)
         val tiles = HashMap<TileKey, MaskTile>()
         for (key in grid.keys()) {
@@ -333,9 +367,9 @@ internal fun MaskTiles.upscaledTiles(alphas: ByteArray, width: Int, height: Int,
             var all = true
             for (y in top..bottom) {
                 for (x in left..right) {
-                    val alpha = alphas[y * width + x].toInt() and 0xFF
-                    if (alpha != 0) any = true
-                    if (alpha != 255) all = false
+                    val alpha = (source[y * width + x].toInt() and 0xFF).toFloat()
+                    if (alpha > low0) any = true
+                    if (alpha < high0) all = false
                 }
             }
             when {
@@ -344,7 +378,7 @@ internal fun MaskTiles.upscaledTiles(alphas: ByteArray, width: Int, height: Int,
                 else -> draw(tile.width, tile.height) { canvas ->
                     canvas.translate(-tile.left.toFloat(), -tile.top.toFloat())
                     canvas.scale(scale, scale)
-                    canvas.drawBitmap(low, 0f, 0f, filter)
+                    if (sharpen) canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), filter) else canvas.drawBitmap(low, 0f, 0f, filter)
                 }?.let { tiles[key] = it }
             }
         }
