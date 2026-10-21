@@ -64,7 +64,7 @@ interface ToneActions {
 class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? = null, val onChange: (ToneOptions) -> Unit)
 
 /**
- * 명암 옵션: 하위 도구(닷지·번), 범위(어두운 영역·중간 영역·밝은 영역), 노출, 크기, 단단함, 안내 한 줄.
+ * 명암 옵션: 하위 도구(닷지·번), 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 안내 한 줄.
  * 바꾸면 다음 획부터 쓴다(기록하지 않는다).
  */
 @Composable
@@ -75,6 +75,9 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.TONE_OPTIONS), gap = 8.dp, fillHeight = false) {
         SubToolSegments(EditTool.Tone.subTools, mode, onChoose)
         ToneRangeRow(options.range) { controls.onChange(options.copy(range = it)) }
+        // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
+        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)
+        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.TONE_HARDNESS, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.tone_exposure),
             shown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt()),
@@ -83,8 +86,6 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
             tag = EditScreenTags.TONE_EXPOSURE
         )
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.TONE_HARDNESS, controls.sizePreview)
         Text(
             text = stringResource(if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.TONE_HINT),

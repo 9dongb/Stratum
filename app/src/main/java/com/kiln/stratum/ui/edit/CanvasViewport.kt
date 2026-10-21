@@ -30,6 +30,18 @@ import com.kiln.stratum.engine.raster.PixelSize
 class CanvasViewState(initial: CanvasView) {
     var view: CanvasView by mutableStateOf(initial)
 
+    /** 캔버스 영역의 크기(픽셀). 그리는 쪽이 알린다([CanvasViewport]). 맞춤 배율을 구하는 데 쓰고, 저장하지 않는다. */
+    var area: IntSize by mutableStateOf(IntSize.Zero)
+
+    /**
+     * 지금 보이는 배율(문서 1픽셀이 화면 몇 픽셀인지). 맞춤이면 캔버스 크기로 구한 맞춤 배율이고, 캔버스 크기를 아직 모르면 null이다.
+     * 상단 바의 배율 표시가 쓴다(늘 보임, 사용자 피드백 9차).
+     */
+    fun scaleFor(document: PixelSize): Double? = when (val shown = view) {
+        is CanvasView.Free -> shown.scale
+        CanvasView.Fit -> area.takeIf { it.width > 0 && it.height > 0 }?.let { fitScale(PixelSize(it.width, it.height), document) }
+    }
+
     companion object {
         /** 접기·펼치기나 백그라운드 종료 뒤에도 남긴다. 맞춤은 빈 배열이다. */
         val Saver: Saver<CanvasViewState, DoubleArray> = Saver(
@@ -90,6 +102,8 @@ fun CanvasViewport(
     LaunchedEffect(viewState) {
         // 두 손가락으로 움직이는 동안에는 매 프레임 알린다. 엔진 쪽이 움직임이 멈춘 뒤에만 그린다.
         snapshotFlow { Triple(area, viewState.view, documentSize) }.collect { (size, view, document) ->
+            // 새 보기 상태(다른 크기의 문서)에도 캔버스 크기를 알린다(크기가 그대로면 크기 바뀜 알림이 오지 않는다)
+            viewState.area = size
             if (size.width > 0 && size.height > 0) report(view.viewport(PixelSize(size.width, size.height), document))
         }
     }

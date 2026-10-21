@@ -39,28 +39,35 @@ import kotlin.math.roundToInt
  * 옵션 창의 슬라이더·고르기는 커버 옵션과 같은 부품·이름표다. 그래서 바꾸는 값과 기록은 커버와 똑같다.
  * 고르기 칸의 옵션 창은 고르면 닫는다([close]).
  * 하위 도구는 띠에 두지 않고 도구 막대의 하위 도구 메뉴(꾹 누르기·다시 누르기)에서 고른다(사용자 피드백 7차).
+ * 칸 순서(사용자 피드백 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"): 수치 칸을 크기 → 경도 → 불투명도 → 강도
+ * (명암의 노출·모자이크의 셀 크기도 강도 자리) 순서로 맨 위에 두고, 구분선 아래에 나머지 칸(색·가져올 곳·범위 등)을 둔다([numbersFirst]).
  */
 
-/** 브러시·지우개의 띠: (브러시만) 색·스포이드, 크기, 단단함, 불투명도 */
+/** 수치 칸 [numbers] 다음에, 나머지 칸 [rest]가 있으면 구분선을 두고 그 칸들을 둔다 */
+private fun numbersFirst(numbers: List<StripItem>, rest: List<StripItem>): List<StripItem> =
+    if (rest.isEmpty()) numbers else numbers + StripDivider("afterNumbers") + rest
+
+/** 브러시·지우개의 띠: 크기, 경도, 불투명도, (브러시만) 구분선 아래 색·바꾸기·스포이드 */
 @Composable
 internal fun brushStrip(controls: BrushControls): List<StripItem> {
     val settings = controls.settings
     val colors = controls.colors.takeIf { !controls.erase }
-    return buildList {
-        if (colors != null) addAll(colorCells(colors))
-        add(sizeCell(settings.size, EditScreenTags.BRUSH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
-        add(hardnessCell(settings.hardness, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
-        add(opacityCell(settings.opacity, EditScreenTags.BRUSH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
-    }
+    return numbersFirst(
+        numbers = listOf(
+            sizeCell(settings.size, EditScreenTags.BRUSH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) },
+            hardnessCell(settings.hardness, EditScreenTags.BRUSH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) },
+            opacityCell(settings.opacity, EditScreenTags.BRUSH_OPACITY) { controls.onChange(settings.copy(opacity = it)) }
+        ),
+        rest = colors?.let { colorCells(it) }.orEmpty()
+    )
 }
 
-/** 글자의 띠: 색·스포이드, 크기. 넣을 자리를 누르라는 안내는 고를 때 알림으로 보인다. */
+/** 글자의 띠: 크기, 구분선 아래 색·바꾸기·스포이드. 넣을 자리를 누르라는 안내는 고를 때 알림으로 보인다. */
 @Composable
-internal fun textStrip(controls: TextControls): List<StripItem> =
-    buildList {
-        controls.colors?.let { addAll(colorCells(it)) }
-        val style = controls.style
-        add(
+internal fun textStrip(controls: TextControls): List<StripItem> {
+    val style = controls.style
+    return numbersFirst(
+        numbers = listOf(
             SliderCell(
                 key = "textSize",
                 caption = stringResource(R.string.brush_size),
@@ -71,8 +78,10 @@ internal fun textStrip(controls: TextControls): List<StripItem> =
                     tag = EditScreenTags.TEXT_SIZE
                 )
             )
-        )
-    }
+        ),
+        rest = controls.colors?.let { colorCells(it) }.orEmpty()
+    )
+}
 
 /**
  * 자르기·변형의 띠: 자르기면 비율·가로세로 바꾸기·취소·적용(파란 버튼), 회전·뒤집기면 왼쪽·오른쪽 회전과 좌우·상하 뒤집기.
@@ -192,13 +201,25 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
 }
 
 /**
- * 리터칭의 띠: (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양, 커버 옵션과 같은 이름표), 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
+ * 리터칭의 띠: 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도, 구분선 아래 (복구·복제) 가져올 곳 정하기(정하는 중이면 켜진 모양,
+ * 커버 옵션과 같은 이름표), (AI 제거) 고른 물체 지우기.
  * 가져올 곳을 아직 정하지 않았으면 정하는 중으로 보인다(누르면 끄지 못하고 캔버스를 눌러 정해야 한다, 커버와 같다).
  */
 @Composable
 internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripItem> {
     val settings = controls.settings
-    return buildList {
+    val numbers = buildList {
+        add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
+        // AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 경도가 없다
+        if (mode != SubTool.RETOUCH_REMOVE) {
+            add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
+        }
+        // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
+        if (mode == SubTool.RETOUCH_CLONE) {
+            add(opacityCell(settings.opacity, EditScreenTags.RETOUCH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
+        }
+    }
+    val rest = buildList {
         if (mode == SubTool.RETOUCH_HEAL || mode == SubTool.RETOUCH_CLONE) {
             add(
                 IconCell(
@@ -211,7 +232,6 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
                 )
             )
         }
-        add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
         if (mode == SubTool.RETOUCH_REMOVE) {
             // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
             add(
@@ -225,25 +245,35 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
                 )
             )
         }
-        // AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 경도가 없다
-        if (mode != SubTool.RETOUCH_REMOVE) {
-            add(hardnessCell(settings.hardness, EditScreenTags.RETOUCH_HARDNESS, controls.sizePreview) { controls.onChange(settings.copy(hardness = it)) })
-        }
-        // 복구는 둘레에 맞춰 섞으므로 불투명도가 없다(포토샵과 같다)
-        if (mode == SubTool.RETOUCH_CLONE) {
-            add(opacityCell(settings.opacity, EditScreenTags.RETOUCH_OPACITY) { controls.onChange(settings.copy(opacity = it)) })
-        }
     }
+    return numbersFirst(numbers, rest)
 }
 
-/** 명암의 띠: 범위(어두운·중간·밝은 영역, 아이콘), 노출, 크기, 경도 */
+/** 명암의 띠: 크기, 경도, 노출(강도 자리), 구분선 아래 범위(어두운·중간·밝은 영역, 아이콘) */
 @Composable
 internal fun toneStrip(controls: ToneControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
     val brush = options.brush
     val rangeCaption = stringResource(R.string.strip_tone_range)
-    return buildList {
-        add(
+    val exposureLabel = stringResource(R.string.tone_exposure)
+    val exposureShown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt())
+    return numbersFirst(
+        numbers = listOf(
+            sizeCell(brush.size, EditScreenTags.TONE_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) },
+            hardnessCell(brush.hardness, EditScreenTags.TONE_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) },
+            SliderCell(
+                key = "exposure",
+                caption = exposureLabel,
+                value = exposureShown,
+                slider = StripSlider(
+                    fraction = options.exposure,
+                    // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(커버 옵션과 같다)
+                    onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
+                    tag = EditScreenTags.TONE_EXPOSURE
+                )
+            )
+        ),
+        rest = listOf(
             ChoiceCell(
                 key = "range",
                 icon = toneRangeIcon(options.range),
@@ -262,70 +292,49 @@ internal fun toneStrip(controls: ToneControls, close: () -> Unit): List<StripIte
                 }
             }
         )
-        val exposureLabel = stringResource(R.string.tone_exposure)
-        val exposureShown = stringResource(R.string.layer_percent, (options.exposure * 100).roundToInt())
-        add(
-            SliderCell(
-                key = "exposure",
-                caption = exposureLabel,
-                value = exposureShown,
-                slider = StripSlider(
-                    fraction = options.exposure,
-                    // 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(커버 옵션과 같다)
-                    onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
-                    tag = EditScreenTags.TONE_EXPOSURE
-                )
-            )
-        )
-        add(sizeCell(brush.size, EditScreenTags.TONE_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
-        add(hardnessCell(brush.hardness, EditScreenTags.TONE_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
-    }
+    )
 }
 
-/** 흐림의 띠: 강도, 크기, 경도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
+/** 흐림의 띠: 크기, 경도, 강도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
 @Composable
 internal fun blurStrip(controls: BlurControls): List<StripItem> {
     val options = controls.options
     val brush = options.brush
-    return buildList {
-        add(
-            SliderCell(
-                key = "strength",
-                caption = stringResource(R.string.effect_strength),
-                value = stringResource(R.string.layer_percent, (options.strength * 100).roundToInt()),
-                slider = StripSlider(
-                    fraction = options.strength,
-                    onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
-                    tag = EditScreenTags.BLUR_STRENGTH
-                )
+    return listOf(
+        sizeCell(brush.size, EditScreenTags.BLUR_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) },
+        hardnessCell(brush.hardness, EditScreenTags.BLUR_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) },
+        SliderCell(
+            key = "strength",
+            caption = stringResource(R.string.effect_strength),
+            value = stringResource(R.string.layer_percent, (options.strength * 100).roundToInt()),
+            slider = StripSlider(
+                fraction = options.strength,
+                onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
+                tag = EditScreenTags.BLUR_STRENGTH
             )
         )
-        add(sizeCell(brush.size, EditScreenTags.BLUR_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
-        add(hardnessCell(brush.hardness, EditScreenTags.BLUR_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
-    }
+    )
 }
 
-/** 모자이크의 띠: 셀 크기(2~512px, 로그 눈금), 크기, 경도 */
+/** 모자이크의 띠: 크기, 경도, 셀 크기(강도 자리, 2~512px, 로그 눈금) */
 @Composable
 internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
     val options = controls.options
     val brush = options.brush
-    return buildList {
-        add(
-            SliderCell(
-                key = "cell",
-                caption = stringResource(R.string.mosaic_cell),
-                value = stringResource(R.string.brush_size_value, options.cell),
-                slider = StripSlider(
-                    fraction = cellToFraction(options.cell),
-                    onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
-                    tag = EditScreenTags.MOSAIC_CELL
-                )
+    return listOf(
+        sizeCell(brush.size, EditScreenTags.MOSAIC_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) },
+        hardnessCell(brush.hardness, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) },
+        SliderCell(
+            key = "cell",
+            caption = stringResource(R.string.mosaic_cell),
+            value = stringResource(R.string.brush_size_value, options.cell),
+            slider = StripSlider(
+                fraction = cellToFraction(options.cell),
+                onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
+                tag = EditScreenTags.MOSAIC_CELL
             )
         )
-        add(sizeCell(brush.size, EditScreenTags.MOSAIC_SIZE, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(size = it))) })
-        add(hardnessCell(brush.hardness, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview) { controls.onChange(options.copy(brush = brush.copy(hardness = it))) })
-    }
+    )
 }
 
 /** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]), 손을 떼거나 슬라이더 창이 닫히면 사라진다 */

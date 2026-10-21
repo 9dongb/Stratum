@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -88,6 +89,7 @@ import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PaintColors
+import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
@@ -155,6 +157,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * @param onSwapColors 전경색과 배경색을 맞바꾼다(색 줄의 바꾸기 버튼)
  * @param eyedropper 스포이드로 고르는 중인 자리와 색(없으면 null). 손가락 둘레 고리만 읽도록 함수로 받는다.
  * @param eyedropperActions 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일
+ * @param stripPosition 메인 화면 도구 옵션 띠를 옮겨 놓은 자리(없으면 캔버스 왼쪽 위), [onStripPosition]으로 바꾼다(손잡이를 놓을 때)
  */
 @Composable
 fun EditScreen(
@@ -209,7 +212,9 @@ fun EditScreen(
     onSwapColors: () -> Unit = {},
     eyedropper: () -> EyedropperState? = { null },
     eyedropperActions: EyedropperActions = EyedropperActions.None,
-    moveActions: MoveActions = MoveActions.None
+    moveActions: MoveActions = MoveActions.None,
+    stripPosition: StripPosition? = null,
+    onStripPosition: (StripPosition) -> Unit = {}
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -329,11 +334,19 @@ fun EditScreen(
     var coverSheetPx by remember { mutableStateOf(0) }
     // 편집 화면과 캔버스 영역의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 전체 자리에서 캔버스 위쪽 아래에 띄운다.
     var screenTop by remember { mutableFloatStateOf(0f) }
+    // 편집 화면 왼쪽 끝(창 루트 기준). 알림 막대를 화면 가로 정중앙에 두는 데 쓴다.
+    var screenLeft by remember { mutableFloatStateOf(0f) }
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
-    BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { screenTop = it.positionInRoot().y }) {
+    BoxWithConstraints(
+        modifier.fillMaxSize().onGloballyPositioned {
+            val position = it.positionInRoot()
+            screenTop = position.y
+            screenLeft = position.x
+        }
+    ) {
         val widthClass = widthClassOf(maxWidth.value)
         // 커버 화면 옵션 자리의 최대 높이를 정하는 창 높이
         val windowHeight = maxHeight
@@ -557,14 +570,13 @@ fun EditScreen(
             }
         }
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
-        val stripInset = if (stripItems != null) OptionStripWidth + OptionStripGap else 0.dp
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
             // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다.
             if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
             if (stripItems != null && railTool != null) {
-                // 띠는 고른 도구 옆에 칸만큼의 높이로 뜬다(사용자 요청)
-                OptionStripHost(stripItems, floating, railTool, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                // 띠는 캔버스 왼쪽 위(옮겨 놓은 자리)에 칸만큼의 높이로 뜬다(사용자 피드백 9차)
+                OptionStripHost(stripItems, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
                 FlyoutHost(floating, stripItems, Modifier.fillMaxSize().windowInsetsPadding(insets))
             }
         }
@@ -727,7 +739,9 @@ fun EditScreen(
                             null
                         } else {
                             PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
-                        }
+                        },
+                        // 배율 표시는 상단 바 가운데에 늘 보인다(사용자 피드백 9차)
+                        zoom = ready?.let { ZoomBadge(viewState, it.documentSize) }
                     )
                 }
             },
@@ -801,8 +815,9 @@ fun EditScreen(
                         // 자르기 새 창: 크기 유지 규칙에서 빠진다. 캔버스(사진 전체를 맞춤), 하위 도구·비율, 맨 아래 X(취소)·✓(적용).
                         // 뒤로 가기는 X와 같다(도구를 닫는 뒤로 가기). 탭 줄은 숨긴다.
                         EditCanvas(
-                            state, viewState, messages, reportCanvasSize, onViewport, overlay, false,
+                            state, viewState, messages, reportCanvasSize, onViewport, overlay,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                            screenStart = screenLeft,
                             flip = viewFlip,
                             onSpotHeal = useSpotHeal,
                             onMagicWand = useMagicWand
@@ -829,8 +844,9 @@ fun EditScreen(
                     } else {
                         // 캔버스는 상단 바와 탭 줄 사이 전체를 늘 차지하고, 옵션 칸은 그 아래쪽 위에 겹쳐 뜬다(이미지 크기·자리 그대로)
                         EditCanvas(
-                            state, viewState, messages, reportCanvasSize, onViewport, overlay, true,
+                            state, viewState, messages, reportCanvasSize, onViewport, overlay,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                            screenStart = screenLeft,
                             overlayBottom = coverSheetInset,
                             flip = viewFlip,
                             onSpotHeal = useSpotHeal,
@@ -860,9 +876,9 @@ fun EditScreen(
                         onToolBounds = { tool, bounds -> if (floating.toolAnchors[tool] != bounds) floating.toolAnchors[tool] = bounds }
                     )
                     EditCanvas(
-                        state, viewState, messages, reportCanvasSize, onViewport, overlay, !cropMode,
+                        state, viewState, messages, reportCanvasSize, onViewport, overlay,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
-                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, overlayStart = stripInset, flip = viewFlip,
+                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
                         onSpotHeal = useSpotHeal, onMagicWand = useMagicWand, floating = floatingUi
                     )
                 }
@@ -870,7 +886,7 @@ fun EditScreen(
         }
 
         // 제스처 알림·도구 안내는 도구 막대·띠와 상관없이 화면 가로 정중앙에 띄운다(2026-10-20 사용자 요청: "도구바나 띠 생각하지 말고 화면 정중앙에").
-        // 세로는 캔버스 위쪽 끝 아래(배율 표시 아래)다. 떠 있는 띠·패널보다 위에 그리고, 터치는 받지 않아 그 밑을 그대로 누를 수 있다.
+        // 세로는 캔버스 위쪽 끝 조금 아래다. 떠 있는 띠·패널보다 위에 그리고, 터치는 받지 않아 그 밑을 그대로 누를 수 있다.
         GestureToast(gestureToast, Modifier.fillMaxSize().padding(top = with(LocalDensity.current) { (canvasTop - screenTop).coerceAtLeast(0f).toDp() }))
         // 하위 도구 메뉴는 캔버스·띠 위에 뜬다(창보다는 아래). 고르면 닫고 하위 도구를 고른다(크기 변경은 창을 띄움).
         SubToolMenuHost(
@@ -970,9 +986,13 @@ private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, mod
 /** 메인 화면 상단 바의 조정·레이어 패널 버튼: 열린 패널, 누를 수 있는지, 누르면 할 일(열고 닫음) */
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
 
+/** 상단 바 가운데 배율 표시의 보기 상태와 문서 크기(맞춤 배율을 구한다) */
+class ZoomBadge(val viewState: CanvasViewState, val documentSize: PixelSize)
+
 /**
- * 편집 화면 상단 바: 뒤로, 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
+ * 편집 화면 상단 바: 뒤로, 가운데 배율 표시([zoom]), 실행 취소·다시 실행, (메인 화면만) 조정·레이어 패널 버튼, 내보내기.
  * 작업 공간을 넓게 쓰려고 버튼이 꼭 들어가는 높이(48dp)로 낮게 두고, 카메라 구멍이 버튼에 걸릴 때만 구멍 아래로 내린다(결정 기록 '화면 공간').
+ * 배율 표시는 바의 내용 줄 위에 겹쳐 놓아 바 가운데(화면 가운데)에 온다([CanvasZoomChip]).
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -985,9 +1005,11 @@ private fun EditTopBar(
     onRedo: () -> Unit,
     canExport: Boolean,
     onExport: () -> Unit,
-    panels: PanelToggles? = null
+    panels: PanelToggles? = null,
+    zoom: ZoomBadge? = null
 ) {
     val barInsets = rememberTopBarInsets(WorkTopBarHeight)
+    Box {
     TopAppBar(
         title = {},
         // 캔버스(작업 공간)와 기본 배경 바를 1dp 구분선으로 나눈다(시안)
@@ -1044,6 +1066,9 @@ private fun EditTopBar(
         windowInsets = barInsets.windowInsets(),
         colors = stratumTopAppBarColors()
     )
+    // 바의 내용 줄(아래쪽 48dp) 위에 겹친다. 바가 구멍 아래로 내려가도 내용 줄과 같은 높이다.
+    zoom?.let { CanvasZoomChip(it.viewState, it.documentSize, barInsets, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(WorkTopBarHeight)) }
+    }
 }
 
 /**
@@ -1054,10 +1079,10 @@ private fun EditTopBar(
  * [onCanvasTop]으로 캔버스 영역의 위쪽 끝(창 루트 기준)을 알린다. 제스처 알림은 편집 화면 전체 자리에서 그 아래 화면 정중앙에 뜬다.
  * [onTwoFingerTap]·[threeFinger]는 캔버스의 두 손가락 톡·세 손가락 제스처를 받는다(설정이 꺼져 있으면 null).
  * [floating]은 캔버스 위에 겹치는 메인 화면의 띠·옵션 창·패널이다. 캔버스 영역 전체(시스템 바 쪽 포함)를 받고, 내용이 피할 여백을 함께 받는다.
- * 배율 표시는 [overlayStart](왼쪽 띠의 폭과 간격)만큼 오른쪽으로 비킨다. 알림 막대는 양쪽을 [overlayStart]만큼 비워
- * 띠를 덮지 않으면서 캔버스 정중앙에 둔다(2026-10-20 사용자 요청). 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
+ * 알림 막대는 화면 가로 정중앙에 둔다(사용자 피드백 9차): 캔버스 영역의 왼쪽 끝이 편집 화면 왼쪽 끝([screenStart], 창 루트 기준)에서
+ * 떨어진 만큼(도구 막대) 오른쪽을 비운다. 알림 막대('보기' 버튼)는 떠 있는 것보다 위에 그린다.
  * 닫힌 화면은 옵션 칸을 [floating]으로 캔버스 아래쪽 위에 겹쳐 띄우고, 알림 막대는 그 높이([overlayBottom])만큼 위로 비킨다.
- * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 배율 표시·알림·띠·패널은 뒤집지 않는다.
+ * [flip](화면 반전)은 캔버스 영역([CanvasViewport])에만 건다. 알림·띠·패널은 뒤집지 않는다.
  * AI 제거를 쓸 수 없다는 알림의 '스팟 복구' 버튼을 누르면 [onSpotHeal]을, AI 선택을 쓸 수 없다는 알림의 '자동 선택' 버튼을 누르면 [onMagicWand]를 부른다.
  */
 @Composable
@@ -1068,13 +1093,12 @@ private fun EditCanvas(
     onCanvasSize: (width: Int, height: Int) -> Unit,
     onViewport: (Viewport) -> Unit,
     overlay: @Composable BoxScope.() -> Unit,
-    showZoomChip: Boolean,
     insets: WindowInsets,
     onCanvasTop: (Float) -> Unit,
     modifier: Modifier = Modifier,
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
-    overlayStart: Dp = 0.dp,
+    screenStart: Float = 0f,
     overlayBottom: Dp = 0.dp,
     flip: ViewFlip = ViewFlip.None,
     onSpotHeal: () -> Unit = {},
@@ -1142,7 +1166,15 @@ private fun EditCanvas(
             }
         }
     }
-    Box(modifier.fillMaxSize().background(StratumTheme.colors.workspace).onGloballyPositioned { onCanvasTop(it.positionInRoot().y) }) {
+    // 캔버스 영역 왼쪽 끝(창 루트 기준). 알림 막대를 화면 가로 정중앙에 두는 데 쓴다.
+    var canvasStart by remember { mutableFloatStateOf(0f) }
+    Box(
+        modifier.fillMaxSize().background(StratumTheme.colors.workspace).onGloballyPositioned {
+            val position = it.positionInRoot()
+            canvasStart = position.x
+            onCanvasTop(position.y)
+        }
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1151,28 +1183,28 @@ private fun EditCanvas(
                 .testTag(EditScreenTags.CANVAS),
             contentAlignment = Alignment.Center
         ) {
-            CanvasContent(state, viewState, onViewport, overlay, showZoomChip, showBusy, onTwoFingerTap, threeFinger, overlayStart, flip)
+            CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip)
         }
         floating(insets)
-        // 알림 막대는 캔버스 아래쪽 정중앙에 띄우되, 펼친 화면의 접히는 선과 왼쪽 띠(양쪽을 띠 폭만큼 비움), 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
-        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(start = overlayStart, end = overlayStart, bottom = overlayBottom), margin = 8.dp) {
+        // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우되(도구 막대 폭만큼 오른쪽을 비움) 펼친 화면의 접히는 선과
+        // 닫힌 화면에서 겹쳐 뜬 옵션 칸([overlayBottom])을 피한다
+        val railWidth = with(LocalDensity.current) { (canvasStart - screenStart).coerceAtLeast(0f).toDp() }
+        HingeAvoidingBottom(Modifier.fillMaxSize().windowInsetsPadding(insets).padding(end = railWidth, bottom = overlayBottom), margin = 8.dp) {
             SnackbarHost(snackbarHostState, Modifier.testTag(EditScreenTags.MESSAGE_BAR))
         }
     }
 }
 
-/** 캔버스 영역 안: 문서 상태에 따른 내용(여는 중 표시, 캔버스와 배율 표시·처리 중 막대, 실패 글) */
+/** 캔버스 영역 안: 문서 상태에 따른 내용(여는 중 표시, 캔버스와 처리 중 막대, 실패 글) */
 @Composable
 private fun CanvasContent(
     state: EditorState,
     viewState: CanvasViewState,
     onViewport: (Viewport) -> Unit,
     overlay: @Composable BoxScope.() -> Unit,
-    showZoomChip: Boolean,
     showBusy: Boolean,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
-    overlayStart: Dp,
     flip: ViewFlip
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1183,8 +1215,6 @@ private fun CanvasContent(
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
                 CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, flip = flip, overlay = overlay)
-                // 확대·이동했을 때만 보이는 배율 표시. 누르면 화면에 맞춘다. 자르기 중에는 테두리를 가리지 않게 숨긴다. 왼쪽 띠가 있으면 그 오른쪽에 둔다.
-                if (showZoomChip) CanvasZoomChip(viewState, Modifier.fillMaxSize().padding(start = overlayStart))
                 if (showBusy) {
                     val working = stringResource(R.string.edit_working)
                     LinearProgressIndicator(

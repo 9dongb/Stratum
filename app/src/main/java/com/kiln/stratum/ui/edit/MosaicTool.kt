@@ -35,13 +35,16 @@ data class MosaicOptions(
 @Stable
 class MosaicControls(val options: MosaicOptions, val sizePreview: SizePreviewState? = null, val onChange: (MosaicOptions) -> Unit)
 
-/** 모자이크 옵션(커버): 셀 크기, 크기, 경도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다). */
+/** 모자이크 옵션(커버): 크기, 경도, 셀 크기, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다). */
 @Composable
 fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
     val options = controls.options
     val brush = options.brush
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.MOSAIC_OPTIONS), gap = 8.dp, fillHeight = false) {
+        // 슬라이더는 크기 → 경도 → 셀 크기(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
+        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.MOSAIC_SIZE, controls.sizePreview)
+        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.mosaic_cell),
             shown = stringResource(R.string.brush_size_value, options.cell),
@@ -49,8 +52,6 @@ fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
             onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
             tag = EditScreenTags.MOSAIC_CELL
         )
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.MOSAIC_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.MOSAIC_HARDNESS, controls.sizePreview)
         Text(
             text = stringResource(R.string.mosaic_hint),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.MOSAIC_HINT),

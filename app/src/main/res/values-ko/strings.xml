@@ -88,6 +88,7 @@
     <string name="export_hdr_lost">HDR 밝기는 JPEG로 내보낼 때만 남아요.</string>
     <string name="canvas_zoom_percent">%1$s%%</string>
     <string name="canvas_zoom_fit_description">배율 %1$s%%. 누르면 화면에 맞춰요.</string>
+    <string name="canvas_zoom_description">배율 %1$s%%</string>
 
     <!-- 편집 도구. _short는 커버 화면 탭 줄에 보이는 짧은 이름이고, 나머지는 화면 읽기 기능이 읽는 이름이다. -->
     <string name="tool_transform">자르기·변형</string>
@@ -195,6 +196,7 @@
     <string name="floating_panel_close">%1$s 닫기</string>
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
+    <string name="strip_handle_description">옵션 띠 옮기기</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_selection_mode">방식</string>
     <string name="strip_tone_range">범위</string>

@@ -50,6 +50,7 @@ enum class ThemeMode {
  * @property threeFingerGestures 세 손가락 제스처: 캔버스를 톡 누르면 다시 실행, 위아래로 밀면 브러시 크기, 좌우로 밀면 단단함(유동화는 압력)
  * @property themeMode 앱 테마(다크·라이트·휴대폰 설정 따름)
  * @property paintColors 전경색·배경색(브러시·글자가 함께 씀, [PaintColors]). 설정 화면에는 보이지 않고, 앱을 다시 켜도 남는다.
+ * @property stripPosition 메인 화면 도구 옵션 띠를 옮겨 놓은 자리(없으면 처음 자리, [StripPosition]). 설정 화면에는 보이지 않는다.
  */
 data class SettingsValues(
     val export: ExportChoice = ExportChoice(),
@@ -57,8 +58,15 @@ data class SettingsValues(
     val twoFingerTapUndo: Boolean = true,
     val threeFingerGestures: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.DARK,
-    val paintColors: PaintColors = PaintColors.DEFAULT
+    val paintColors: PaintColors = PaintColors.DEFAULT,
+    val stripPosition: StripPosition? = null
 )
+
+/**
+ * 메인 화면 도구 옵션 띠를 손잡이로 옮겨 놓은 자리(사용자 피드백 9차). 캔버스 영역 왼쪽 위에서 띠 왼쪽 위까지의 거리(dp)다.
+ * 화면 크기가 바뀌면(접기·돌리기) 편집 화면이 영역 안으로 맞춰 놓는다.
+ */
+data class StripPosition(val x: Float, val y: Float)
 
 /**
  * 앱 설정. 앱 전체에서 하나이고, 안드로이드 기본 저장소(SharedPreferences)에 남는다(새 라이브러리 없음).
@@ -93,6 +101,8 @@ class AppSettings internal constructor(private val preferences: SharedPreference
         private const val KEY_THEME_MODE = "themeMode"
         private const val KEY_FOREGROUND = "foregroundColor"
         private const val KEY_BACKGROUND = "backgroundColor"
+        private const val KEY_STRIP_X = "stripX"
+        private const val KEY_STRIP_Y = "stripY"
 
         /** 전에 쓰던 최근 색(사용자 피드백 7차에서 전경색·배경색으로 바꿈). 저장할 때 지운다. */
         private const val KEY_RECENT_COLORS = "recentColors"
@@ -134,7 +144,13 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 paintColors = PaintColors(
                     foreground = PaintColors.opaque(preferences.getInt(KEY_FOREGROUND, defaults.paintColors.foreground)),
                     background = PaintColors.opaque(preferences.getInt(KEY_BACKGROUND, defaults.paintColors.background))
-                )
+                ),
+                stripPosition = if (preferences.contains(KEY_STRIP_X) && preferences.contains(KEY_STRIP_Y)) {
+                    StripPosition(preferences.getFloat(KEY_STRIP_X, 0f), preferences.getFloat(KEY_STRIP_Y, 0f))
+                        .takeIf { it.x.isFinite() && it.y.isFinite() }
+                } else {
+                    null
+                }
             )
         }
 
@@ -156,6 +172,16 @@ class AppSettings internal constructor(private val preferences: SharedPreference
                 .putInt(KEY_FOREGROUND, values.paintColors.foreground)
                 .putInt(KEY_BACKGROUND, values.paintColors.background)
                 .remove(KEY_RECENT_COLORS)
+                .apply {
+                    val strip = values.stripPosition
+                    if (strip == null) {
+                        remove(KEY_STRIP_X)
+                        remove(KEY_STRIP_Y)
+                    } else {
+                        putFloat(KEY_STRIP_X, strip.x)
+                        putFloat(KEY_STRIP_Y, strip.y)
+                    }
+                }
                 .apply()
         }
     }

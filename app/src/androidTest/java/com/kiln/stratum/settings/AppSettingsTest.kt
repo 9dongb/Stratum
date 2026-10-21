@@ -47,7 +47,8 @@ class AppSettingsTest {
             twoFingerTapUndo = false,
             threeFingerGestures = false,
             themeMode = ThemeMode.LIGHT,
-            paintColors = PaintColors(foreground = 0xFF1E88E5.toInt(), background = 0xFF000000.toInt())
+            paintColors = PaintColors(foreground = 0xFF1E88E5.toInt(), background = 0xFF000000.toInt()),
+            stripPosition = StripPosition(312.5f, 48f)
         )
 
         AppSettings(preferences()).update { changed }

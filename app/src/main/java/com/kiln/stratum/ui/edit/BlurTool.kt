@@ -71,7 +71,7 @@ val SubTool.effectKind: EffectKind?
 class BlurControls(val options: BlurOptions, val sizePreview: SizePreviewState? = null, val onChange: (BlurOptions) -> Unit)
 
 /**
- * 흐림 옵션(커버): 하위 도구(흐림·선명·스머지), 강도, 크기, 경도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 흐림 옵션(커버): 하위 도구(흐림·선명·스머지), 크기, 경도, 강도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
  */
 @Composable
 fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -80,6 +80,9 @@ fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.BLUR_OPTIONS), gap = 8.dp, fillHeight = false) {
         SubToolSegments(EditTool.Blur.subTools, mode, onChoose)
+        // 슬라이더는 크기 → 경도 → 강도 순서다(사용자 피드백 9차, 띠와 같다)
+        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.BLUR_SIZE, controls.sizePreview)
+        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.BLUR_HARDNESS, controls.sizePreview)
         OptionSlider(
             label = stringResource(R.string.effect_strength),
             shown = stringResource(R.string.layer_percent, (options.strength * 100).roundToInt()),
@@ -87,8 +90,6 @@ fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
             tag = EditScreenTags.BLUR_STRENGTH
         )
-        SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.BLUR_SIZE, controls.sizePreview)
-        HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.BLUR_HARDNESS, controls.sizePreview)
         Text(
             text = stringResource(blurHint(mode)),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.BLUR_HINT),

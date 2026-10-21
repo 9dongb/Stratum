@@ -31,6 +31,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.down
+import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -45,6 +48,7 @@ import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.tone.ToneRange
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PaintColors
+import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.HingeMargin
 import com.kiln.stratum.ui.layout.LocalHinges
@@ -101,6 +105,7 @@ class OptionStripTest {
     private var cloneSource by mutableStateOf<CloneSource?>(null)
     private var toneOptions by mutableStateOf(ToneOptions())
     private var paintColors by mutableStateOf(PaintColors.DEFAULT)
+    private var stripPosition by mutableStateOf<StripPosition?>(null)
     private val chosen = mutableListOf<Pair<ColorSlot, Int>>()
     private var homeBacks = 0
     private var undos = 0
@@ -158,7 +163,9 @@ class OptionStripTest {
                                 override fun move(x: Float, y: Float) = Unit
                                 override fun end() = Unit
                                 override fun cancel() = Unit
-                            }
+                            },
+                            stripPosition = stripPosition,
+                            onStripPosition = { stripPosition = it }
                         )
                     }
                 }
@@ -183,7 +190,7 @@ class OptionStripTest {
     }
 
     @Test
-    fun withTheStrip_theHintToastIsCenteredOnTheScreen_andTheMessageBarOnTheCanvas() {
+    fun withTheStrip_theHintToastAndTheMessageBarAreCenteredOnTheScreen() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Text)
         composeRule.runOnIdle { messages.trySend(EditorMessage.HiddenLayer) }
@@ -196,12 +203,10 @@ class OptionStripTest {
         assertEquals(screen.center.x, toast.center.x, 2f)
         // 세로는 캔버스 위쪽(배율 표시 아래)이다
         assertTrue("toast $toast canvas $canvas", toast.top > canvas.top && toast.bottom < canvas.center.y)
-        // 알림 막대('보기' 버튼)는 띠를 덮지 않게 캔버스 정중앙이다
+        // 알림 막대('보기' 버튼)도 화면 가로 정중앙이다(사용자 피드백 9차: 띠가 왼쪽 위로 가서 가릴 일이 거의 없음)
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_hidden_layer)).assertExists()
         val bar = composeRule.onNodeWithTag(EditScreenTags.MESSAGE_BAR).fetchSemanticsNode().layoutBoundsInWindow()
-        assertEquals(canvas.center.x, bar.center.x, 2f)
-        val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("bar $bar strip $strip", bar.left >= strip.right)
+        assertEquals(screen.center.x, bar.center.x, 2f)
     }
 
     @Test
@@ -275,6 +280,46 @@ class OptionStripTest {
             up()
         }
         composeRule.runOnIdle { assertEquals(0f, brush.hardness, 0.01f) }
+    }
+
+    @Test
+    fun sliderCell_draggingTheNumber_changesTheValue_withoutOpeningTheSlider() {
+        // 사용자 피드백 9차: "수치를 터치하고 위나 아래로 슬라이딩하면 해당 옵션값(100~0)이 조절되도록 해주세요."
+        brush = brush.copy(hardness = 0.5f)
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        val dp = with(cell("hardness").fetchSemanticsNode().layoutInfo.density) { 1.dp.toPx() }
+        val slop = android.view.ViewConfiguration.get(composeRule.activity).scaledTouchSlop.toFloat()
+
+        // 위로 50dp 끈다: 터치 허용 거리를 넘은 만큼, 200dp에 처음부터 끝까지의 비율로 커진다
+        cell("hardness").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -30 * dp))
+            moveBy(Offset(0f, -20 * dp))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(0.5f + (50 * dp - slop) / (200 * dp), brush.hardness, 0.02f) }
+        // 끈 터치로는 옵션 창이 뜨지 않는다(톡 누르면 뜬다)
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+
+        // 아래로 끌면 작아지고 0에서 멈춘다
+        cell("hardness").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 150 * dp))
+            moveBy(Offset(0f, 150 * dp))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(0f, brush.hardness, 0.001f) }
+
+        // 크기도 같다(로그 눈금이라 슬라이더 눈금으로 커진다)
+        val size = brush.size
+        cell("size").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -40 * dp))
+            moveBy(Offset(0f, -40 * dp))
+            up()
+        }
+        composeRule.runOnIdle { assertTrue("size $size -> ${brush.size}", brush.size > size) }
     }
 
     @Test
@@ -434,60 +479,168 @@ class OptionStripTest {
         composeRule.runOnIdle { assertEquals(TextStyle.MIN_SIZE, textStyle.size, 0.5f) }
     }
 
+    /** 띠 손잡이를 ([dx], [dy]) 픽셀만큼 끌어 놓는다 */
+    private fun dragHandle(dx: Float, dy: Float) {
+        composeRule.onNodeWithTag(EditScreenTags.STRIP_HANDLE).performTouchInput {
+            down(center)
+            moveBy(Offset(dx / 2, dy / 2))
+            moveBy(Offset(dx / 2, dy / 2))
+            up()
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun stripBounds() = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
+
     @Test
-    fun strip_isAsWideAsTheRail_hugsItsCells_andSitsBesideItsTool() {
+    fun strip_isAsWideAsTheRail_hugsItsCells_andSitsAtTheCanvasTopLeft() {
         show(MAIN_LANDSCAPE)
         val rail = composeRule.onNodeWithTag(EditScreenTags.TOOL_RAIL).fetchSemanticsNode().layoutBoundsInWindow()
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode()
         val dp = with(canvas.layoutInfo.density) { 1.dp.toPx() }
+        val canvasBounds = canvas.layoutBoundsInWindow()
 
-        // 위아래 자리가 넉넉한 도구(명암): 띠 가운데가 도구 버튼 가운데다. 폭은 도구 막대와 같고, 높이는 칸만큼이다.
+        // 사용자 피드백 9차: 도구를 고르면 옵션은 캔버스 왼쪽 위에 뜬다(고른 도구의 높이와 상관없이)
         pick(EditTool.Tone)
-        val tone = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Tone)).fetchSemanticsNode().layoutBoundsInWindow()
-        var strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
+        var strip = stripBounds()
         assertEquals(rail.width, strip.width, 2 * dp)
-        // 칸만큼의 높이: 첫 칸(범위) 위와 마지막 칸(경도) 아래에 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
-        val first = cell("range").fetchSemanticsNode().layoutBoundsInWindow()
-        val last = cell("hardness").fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$strip should hug $first..$last", first.top - strip.top <= 8 * dp && strip.bottom - last.bottom <= 8 * dp)
-        assertTrue("$strip should be shorter than ${canvas.layoutBoundsInWindow()}", strip.height < canvas.layoutBoundsInWindow().height)
-        assertEquals(tone.center.y, strip.center.y, 2 * dp)
-        assertTrue("$strip should float right of the rail $rail", strip.left > rail.right)
+        assertEquals(canvasBounds.left + 4 * dp, strip.left, 2 * dp)
+        assertEquals(canvasBounds.top + 8 * dp, strip.top, 2 * dp)
+        // 칸만큼의 높이: 맨 위 손잡이(48dp) 아래 첫 칸, 마지막 칸 아래에는 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
+        val handle = composeRule.onNodeWithTag(EditScreenTags.STRIP_HANDLE).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(strip.top, handle.top, 2 * dp)
+        assertEquals(48 * dp, handle.height, 2 * dp)
+        val last = cell("range").fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$strip should hug down to $last", strip.bottom - last.bottom <= 8 * dp)
+        assertTrue("$strip should be shorter than $canvasBounds", strip.height < canvasBounds.height)
 
-        // 위쪽 자리가 모자란 도구(자르기·변형, 맨 위): 띠가 도구 버튼(누르는 영역 48dp) 위 끝에서 시작한다
-        pick(EditTool.Transform)
-        val crop = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
-        strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode().layoutBoundsInWindow()
-        assertEquals(crop.center.y - 24 * dp, strip.top, 2 * dp)
+        // 다른 도구(맨 아래 쪽 모자이크)도 같은 자리다
+        pick(EditTool.Mosaic)
+        strip = stripBounds()
+        assertEquals(canvasBounds.left + 4 * dp, strip.left, 2 * dp)
+        assertEquals(canvasBounds.top + 8 * dp, strip.top, 2 * dp)
     }
 
     @Test
-    fun mainPortrait_stripStaysOnItsToolsSideOfAHorizontalHinge() {
+    fun numberCellsComeFirst_sizeHardnessOpacityStrength_thenTheRest() {
+        // 사용자 피드백 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"
+        show(MAIN_LANDSCAPE)
+        fun tops(vararg keys: String) = keys.map { cell(it).fetchSemanticsNode().layoutBoundsInWindow().top }
+        fun assertDownward(values: List<Float>) = assertTrue("$values should go down", values.zipWithNext().all { (a, b) -> a < b })
+
+        pick(EditTool.Brush)
+        val brushColors = composeRule.onNodeWithTag(EditScreenTags.strip("foreground")).fetchSemanticsNode().layoutBoundsInWindow().top
+        assertDownward(tops("size", "hardness", "opacity") + brushColors)
+
+        pick(EditTool.Tone)
+        assertDownward(tops("size", "hardness", "exposure", "range"))
+    }
+
+    @Test
+    fun handle_dragsTheStrip_andTheSpotIsKeptForOtherTools() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        val before = stripBounds()
+
+        dragHandle(300f, 120f)
+
+        val after = stripBounds()
+        assertEquals(before.left + 300f, after.left, 3f)
+        assertEquals(before.top + 120f, after.top, 3f)
+        // 놓은 자리를 설정에 알린다(캔버스 왼쪽 위에서의 dp)
+        val dp = with(composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutInfo.density) { 1.dp.toPx() }
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
+        composeRule.runOnIdle {
+            val saved = checkNotNull(stripPosition)
+            assertEquals(after.left - canvas.left, saved.x * dp, 2f)
+            assertEquals(after.top - canvas.top, saved.y * dp, 2f)
+        }
+        // 도구를 바꿔도 그 자리다
+        pick(EditTool.Retouch)
+        assertEquals(after.left, stripBounds().left, 2f)
+        assertEquals(after.top, stripBounds().top, 2f)
+    }
+
+    @Test
+    fun handle_cannotDragTheStripOutOfTheCanvas() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Eraser)
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
+
+        dragHandle(5_000f, 5_000f)
+        val strip = stripBounds()
+        assertTrue("$strip should stay inside $canvas", strip.right <= canvas.right + 1f && strip.bottom <= canvas.bottom + 1f)
+
+        // 밖으로 끈 만큼은 쌓이지 않아 되돌아올 때 바로 따라온다
+        dragHandle(-200f, 0f)
+        assertEquals(strip.left - 200f, stripBounds().left, 3f)
+    }
+
+    @Test
+    fun mainPortrait_stripDraggedBelowAHorizontalHinge_staysOffTheHinge() {
         show(MAIN_PORTRAIT)
+        pick(EditTool.Retouch)
+        val strip = stripBounds()
+        // 띠 바로 아래를 지나는 가로 힌지
+        val y = strip.bottom.roundToInt() + 40
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        // 리터칭 버튼 바로 아래를 지나는 가로 힌지: 리터칭은 힌지 위에 남고, 바로 아래 명암은 도구 막대가 힌지 아래로 비켜 놓는다.
-        // (도구 막대 자리는 화면마다 다르다. 접은 에뮬레이터에서는 카메라 구멍 때문에 상단 바가 높아진다)
-        val retouch = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Retouch)).fetchSemanticsNode()
-        val margin = with(retouch.layoutInfo.density) { HingeMargin.roundToPx() }
-        val y = retouch.touchBoundsInWindow().bottom.roundToInt() + margin + 2
         val hinge = Hinge(left = 0, top = y, right = screen.right.roundToInt(), bottom = y, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
         composeRule.waitForIdle()
-
-        pick(EditTool.Retouch)
         var node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
         val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
         assertTrue("${node.layoutBoundsInWindow()} should end above $band", node.layoutBoundsInWindow().bottom <= band.start + 1f)
         composeRule.assertClickablesAvoid(hinge)
 
-        pick(EditTool.Tone)
+        // 위 끝을 힌지 아래로 끌면 힌지 아래 조각에 놓인다
+        dragHandle(0f, (band.end - strip.top) + 20f)
         node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
         assertTrue("${node.layoutBoundsInWindow()} should start below $band", node.layoutBoundsInWindow().top >= band.end - 1f)
         composeRule.assertClickablesAvoid(hinge)
         // 힌지 아래 띠의 옵션 창도 힌지 아래 조각에 뜬다
-        cell("range").performClick()
+        cell("size").performClick()
         val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode()
         assertTrue("${flyout.layoutBoundsInWindow()} should be below $band", flyout.layoutBoundsInWindow().top >= band.end - 1f)
+    }
+
+    @Test
+    fun mainLandscape_stripDroppedOnAVerticalHinge_movesOffIt() {
+        show(MAIN_LANDSCAPE)
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        val centerX = screen.center.x.roundToInt()
+        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)
+        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        pick(EditTool.Brush)
+        val strip = stripBounds()
+
+        // 띠 가운데가 힌지 바로 왼쪽에 오게 끌어 놓는다: 힌지에 걸치지 않고 왼쪽 조각 끝에 놓인다
+        dragHandle(centerX - strip.center.x - 4f, 0f)
+
+        val node = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()
+        val band = hinge.band(with(node.layoutInfo.density) { HingeMargin.roundToPx() })
+        assertTrue("${node.layoutBoundsInWindow()} crosses $band", node.layoutBoundsInWindow().right <= band.start + 1f)
+        composeRule.assertClickablesAvoid(hinge)
+        // 칸 옆 오른쪽은 힌지라, 옵션 창은 띠 왼쪽에 뜬다(힌지를 건너뛰지 않음)
+        cell("size").performClick()
+        val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$flyout should be left of ${node.layoutBoundsInWindow()}", flyout.right <= node.layoutBoundsInWindow().left + 1f)
+    }
+
+    @Test
+    fun flyout_opensOnTheLeft_whenTheStripIsAtTheRightEdge() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        dragHandle(5_000f, 0f)
+        val strip = stripBounds()
+
+        cell("hardness").performClick()
+
+        val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$flyout should be left of $strip", flyout.right <= strip.left + 1f)
+        // 값 표시는 슬라이더 카드의 칸 반대쪽(왼쪽)이다
+        val value = composeRule.onNodeWithTag(EditScreenTags.STRIP_SLIDER_VALUE).fetchSemanticsNode().layoutBoundsInWindow()
+        val slider = composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$value should be left of $slider", value.right <= slider.left + 1f)
     }
 
     @Test
@@ -513,7 +666,8 @@ class OptionStripTest {
         show(DpSize(900.dp, 320.dp))
         pick(EditTool.Brush)
 
-        cell("opacity").performScrollTo().assertIsDisplayed()
+        // 맨 아래 칸(스포이드)까지 밀어 볼 수 있다
+        composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).performScrollTo().assertIsDisplayed()
     }
 
     @Test

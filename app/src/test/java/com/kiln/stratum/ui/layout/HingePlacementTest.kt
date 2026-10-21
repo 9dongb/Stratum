@@ -222,6 +222,66 @@ class HingePlacementTest {
     }
 
     @Test
+    fun flyoutSides_areBesideTheCell_andInsideItsPiece() {
+        val area = Region(0, 0, 1000, 600)
+        // 띠 칸 200~256: 오른쪽은 260부터 끝까지, 왼쪽은 처음부터 196까지
+        val (right, left) = flyoutSides(Region(200, 100, 256, 156), area, emptyList(), emptyList(), gap = 4)
+        assertEquals(Region(260, 0, 1000, 600), right)
+        assertEquals(Region(0, 0, 196, 600), left)
+        // 세로 힌지(480~520)가 있으면 칸 쪽 조각까지만이다
+        val (rightOfHinge, leftOfHinge) = flyoutSides(Region(600, 100, 656, 156), area, listOf(Span(480, 520)), emptyList(), gap = 4)
+        assertEquals(Region(660, 0, 1000, 600), rightOfHinge)
+        assertEquals(Region(520, 0, 596, 600), leftOfHinge)
+    }
+
+    @Test
+    fun flyoutOnLeft_onlyWhenTheRightSideIsShort() {
+        val area = Region(0, 0, 1000, 600)
+        // 왼쪽 끝 띠: 오른쪽에 들어간다
+        val nearLeft = Region(4, 100, 60, 156)
+        flyoutSides(nearLeft, area, emptyList(), emptyList(), gap = 4).let { (right, left) ->
+            assertEquals(false, flyoutOnLeft(240, nearLeft, right, left, gap = 4))
+        }
+        // 오른쪽 끝 띠: 오른쪽 자리가 모자라 왼쪽에 띄운다
+        val nearRight = Region(900, 100, 956, 156)
+        flyoutSides(nearRight, area, emptyList(), emptyList(), gap = 4).let { (right, left) ->
+            assertEquals(true, flyoutOnLeft(240, nearRight, right, left, gap = 4))
+        }
+        // 세로 힌지 바로 왼쪽 띠: 오른쪽은 힌지 너머라 칸 옆이 아니므로, 왼쪽에 들어가면 왼쪽에 띄운다
+        val nextToHinge = Region(420, 100, 476, 156)
+        flyoutSides(nextToHinge, area, listOf(Span(478, 520)), emptyList(), gap = 4).let { (right, left) ->
+            assertEquals(true, flyoutOnLeft(240, nextToHinge, right, left, gap = 4))
+        }
+    }
+
+    @Test
+    fun stripPiece_keepsTheStripOffTheHinges() {
+        val area = Region(60, 60, 1000, 700)
+        // 힌지가 없으면 영역 전체
+        assertEquals(area, stripPiece(100, 100, 56, area, emptyList(), emptyList()))
+        // 세로 힌지(500~540): 띠 가운데가 든 쪽 조각. 가운데가 선을 넘으면 너머 조각이다.
+        assertEquals(Region(60, 60, 500, 700), stripPiece(440, 100, 56, area, listOf(Span(500, 540)), emptyList()))
+        assertEquals(Region(540, 60, 1000, 700), stripPiece(530, 100, 56, area, listOf(Span(500, 540)), emptyList()))
+        // 띠 가운데가 힌지 띠 위면 접히는 선(520)에서 가까운 쪽 조각이다
+        assertEquals(Region(60, 60, 500, 700), stripPiece(482, 100, 56, area, listOf(Span(500, 540)), emptyList()))
+        assertEquals(Region(540, 60, 1000, 700), stripPiece(496, 100, 56, area, listOf(Span(500, 540)), emptyList()))
+        // 가로 힌지(380~420): 띠 위 끝이 든 쪽 조각
+        assertEquals(Region(60, 60, 1000, 380), stripPiece(100, 300, 56, area, emptyList(), listOf(Span(380, 420))))
+        assertEquals(Region(60, 420, 1000, 700), stripPiece(100, 450, 56, area, emptyList(), listOf(Span(380, 420))))
+    }
+
+    @Test
+    fun placeInside_pushesIntoThePiece() {
+        val piece = Region(60, 60, 500, 380)
+        assertEquals(100 to 100, placeInside(100, 100, 56, 200, piece))
+        // 오른쪽·아래로 넘치면 안으로, 왼쪽·위로 넘치면 끝으로
+        assertEquals(444 to 180, placeInside(470, 300, 56, 200, piece))
+        assertEquals(60 to 60, placeInside(0, 0, 56, 200, piece))
+        // 조각보다 크면 위 끝(안에서 밀어 봄)
+        assertEquals(100 to 60, placeInside(100, 100, 56, 500, piece))
+    }
+
+    @Test
     fun stripTop_centersOnTheTool() {
         // 위아래 자리가 넉넉하면 도구 버튼 가운데(300)에 띠 가운데를 맞춘다
         assertEquals(200, stripTop(Span(276, 324), height = 200, piece = Span(56, 700)))

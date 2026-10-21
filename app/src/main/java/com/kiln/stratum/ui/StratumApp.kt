@@ -157,7 +157,10 @@ fun StratumApp(editor: EditorViewModel) {
                 onSwapColors = editor::swapColors,
                 moveActions = editor.moveActions,
                 eyedropper = { eyedropper.value },
-                eyedropperActions = editor.eyedropperActions
+                eyedropperActions = editor.eyedropperActions,
+                // 메인 화면 도구 옵션 띠를 손잡이로 옮겨 놓은 자리는 설정에 남는다(사용자 피드백 9차)
+                stripPosition = settingsValues.stripPosition,
+                onStripPosition = { spot -> settings.update { it.copy(stripPosition = spot) } }
             )
         }
     }

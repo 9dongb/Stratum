@@ -148,6 +148,57 @@ fun flyoutOffset(anchor: Region, width: Int, height: Int, region: Region, gap: I
 }
 
 /**
+ * 띠 칸 [anchor] 옆에 띄우는 옵션 창이 들어갈 수 있는 오른쪽·왼쪽 영역(창 좌표). [area]에서 힌지 띠를 뺀 조각 가운데,
+ * 오른쪽은 칸 오른쪽에서 [gap]만큼 띈 자리부터 그 자리가 든 조각 끝까지, 왼쪽은 그 조각 처음부터 칸 왼쪽에서 [gap]만큼 띈 자리까지다.
+ * 세로는 둘 다 칸 가운데가 든 조각이다. 자리가 없으면 폭이 0 이하다. 띠를 옮길 수 있어(사용자 피드백 9차) 오른쪽 끝에 둔 띠는 왼쪽에 띄운다.
+ */
+fun flyoutSides(anchor: Region, area: Region, verticalBands: List<Span>, horizontalBands: List<Span>, gap: Int): Pair<Region, Region> {
+    val rows = pieceAt(Span(area.top, area.bottom), horizontalBands, (anchor.top + anchor.bottom) / 2)
+    val horizontal = Span(area.left, area.right)
+    val rightStart = anchor.right + gap
+    val leftEnd = anchor.left - gap
+    val right = pieceAt(horizontal, verticalBands, rightStart)
+    val left = pieceAt(horizontal, verticalBands, leftEnd - 1)
+    return Region(maxOf(right.start, rightStart), rows.start, right.end, rows.end) to
+        Region(left.start, rows.start, minOf(left.end, leftEnd), rows.end)
+}
+
+/**
+ * 폭 [width]인 옵션 창을 칸 [anchor]의 왼쪽([left])에 띄울지. 오른쪽([right])에 칸 바로 옆으로 들어가면 오른쪽, 아니고 왼쪽에 칸 바로 옆으로
+ * 들어가면 왼쪽이다(접히는 선 너머로 건너뛰지 않게). 둘 다 아니면 넓은 쪽이다. [right]·[left]는 [flyoutSides]의 것이다.
+ */
+fun flyoutOnLeft(width: Int, anchor: Region, right: Region, left: Region, gap: Int): Boolean {
+    val rightFits = right.width >= width && right.left == anchor.right + gap
+    val leftFits = left.width >= width && left.right == anchor.left - gap
+    return when {
+        rightFits -> false
+        leftFits -> true
+        else -> left.width > right.width
+    }
+}
+
+/**
+ * 옮길 수 있는 도구 옵션 띠(폭 [width])를 놓을 조각(창 좌표, 사용자 피드백 9차). [area]에서 힌지 띠를 뺀 조각 가운데
+ * 가로는 띠 가운데([x] + [width] / 2)가 든 조각, 세로는 띠 위 끝([y])이 든 조각이다. 그 자리가 힌지 띠 위면 접히는 선에서 가까운 쪽이다.
+ * 그래서 띠가 접히는 선에 걸치지 않고, 끌어서 선을 넘으면 선 너머 조각으로 건너간다.
+ */
+fun stripPiece(x: Int, y: Int, width: Int, area: Region, verticalBands: List<Span>, horizontalBands: List<Span>): Region {
+    val columns = pieceAt(Span(area.left, area.right), verticalBands, nearestSide(x + width / 2, verticalBands))
+    val rows = pieceAt(Span(area.top, area.bottom), horizontalBands, nearestSide(y, horizontalBands))
+    return Region(columns.start, rows.start, columns.end, rows.end)
+}
+
+/** [at]이 띠([bands]) 위면 띠 가운데(접히는 선)에서 가까운 쪽 조각 안의 자리로 옮긴다. 띠 밖이면 그대로다. */
+private fun nearestSide(at: Int, bands: List<Span>): Int {
+    val band = bands.firstOrNull { at >= it.start && at < it.end } ?: return at
+    return if (at < (band.start + band.end) / 2) band.start - 1 else band.end
+}
+
+/** 크기 [width]×[height]인 것의 왼쪽 위를 ([x], [y])에 두되 [piece] 안으로 민 자리. [piece]보다 크면 왼쪽·위 끝이다. */
+fun placeInside(x: Int, y: Int, width: Int, height: Int, piece: Region): Pair<Int, Int> =
+    x.coerceAtMost(piece.right - width).coerceAtLeast(piece.left) to y.coerceAtMost(piece.bottom - height).coerceAtLeast(piece.top)
+
+/**
  * 높이 [height]인 도구 옵션 띠의 위 끝(창 좌표). 고른 도구 버튼([anchor]의 위아래)의 가운데에 띠의 가운데를 맞춘다.
  * 위쪽 자리가 모자라면 버튼 위 끝에서 시작하고(사용자 요청), 아래쪽 자리가 모자라면 버튼 아래 끝에서 끝낸다.
  * 그래도 [piece](도구가 든 조각의 위아래 구간) 밖으로 나가면 안으로 민다. 띠가 조각보다 크면 조각 위 끝이다.
