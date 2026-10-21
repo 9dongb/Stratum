@@ -2,9 +2,12 @@ package com.kiln.stratum.ui.edit
 
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** 확대할 수 있는 가장 큰 배율. 문서 픽셀 하나가 화면 픽셀 32개(3200%)다. */
@@ -164,6 +167,22 @@ data class Viewport(val documentSize: PixelSize, val scale: Double, val visible:
 /** [area] 크기 캔버스 영역에서 이 보기로 [document]를 볼 때의 [Viewport]. */
 fun CanvasView.viewport(area: PixelSize, document: PixelSize): Viewport =
     Viewport(document, scale(area, document), visibleRect(area, document), fitScale(area, document))
+
+/**
+ * 자르기·회전 화면에서 사진을 [orientation] 방향으로 돌려 보이는 동안의 보기([documentSize]가 돌린 크기)를,
+ * 원래 방향 문서([original])의 보기로 되돌린다(사용자 피드백 8차 1). 엔진 쪽은 원래 방향 문서만 알아, 보이는 곳을 선명하게
+ * 다시 그리는 데 이것을 쓴다. 90° 단위라 배율은 그대로이고, 보이는 영역은 사각형 그대로 옮겨진다.
+ */
+fun Viewport.turnedBack(orientation: Orientation, original: PixelSize): Viewport {
+    if (orientation == Orientation.IDENTITY) return this
+    val back = orientation.inverse
+    val width = documentSize.width.toDouble()
+    val height = documentSize.height.toDouble()
+    val (x0, y0) = back.mapPoint(visible.left.toDouble(), visible.top.toDouble(), width, height)
+    val (x1, y1) = back.mapPoint(visible.right.toDouble(), visible.bottom.toDouble(), width, height)
+    val rect = PixelRect(min(x0, x1).roundToInt(), min(y0, y1).roundToInt(), max(x0, x1).roundToInt(), max(y0, y1).roundToInt())
+    return Viewport(original, scale, rect, fitScale)
+}
 
 /** 비율 표시의 숫자(배율 × 100). 10% 미만은 소수 첫째 자리까지, 그 위는 정수로 보인다. */
 fun zoomPercentText(scale: Double): String {

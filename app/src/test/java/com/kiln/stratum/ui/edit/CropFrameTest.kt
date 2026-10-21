@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -24,6 +25,45 @@ class CropFrameTest {
         assertFrame(0.0, 0.0, 4000.0, 3000.0, frame)
         assertEquals(PixelRect.of(document), frame.toPixelRect(document))
         assertNull(frame.aspect(document))
+    }
+
+    @Test
+    fun turned_movesTheFrameWithThePhoto() {
+        // 4000×3000 사진의 테두리 (100, 200)~(1100, 700)을 사진과 함께 돌리고 뒤집는다(사용자 피드백 8차 1)
+        val frame = CropFrame(100.0, 200.0, 1100.0, 700.0)
+
+        // 시계 방향: (x, y) → (3000 - y, x)
+        assertFrame(2300.0, 100.0, 2800.0, 1100.0, frame.turned(Orientation.ROTATE_CLOCKWISE, document))
+        // 반시계 방향: (x, y) → (y, 4000 - x)
+        assertFrame(200.0, 2900.0, 700.0, 3900.0, frame.turned(Orientation.ROTATE_COUNTERCLOCKWISE, document))
+        assertFrame(2900.0, 200.0, 3900.0, 700.0, frame.turned(Orientation.FLIP_HORIZONTAL, document))
+        assertFrame(100.0, 2300.0, 1100.0, 2800.0, frame.turned(Orientation.FLIP_VERTICAL, document))
+        // 네 번 돌리면 제자리다(돌린 뒤의 사진 크기로 다시 돌린다)
+        var turned = frame
+        var size = document
+        repeat(4) {
+            turned = turned.turned(Orientation.ROTATE_CLOCKWISE, size)
+            size = Orientation.ROTATE_CLOCKWISE.targetSize(size)
+        }
+        assertFrame(100.0, 200.0, 1100.0, 700.0, turned)
+    }
+
+    @Test
+    fun turned_keepsTheRatioMatchingTheFrame() {
+        // 고정 비율은 90° 돌리면 가로세로를 바꿔(4:5 → 5:4) 돌린 테두리 모양과 맞춘다
+        val portrait = CropFrame.whole(document).withRatio(CropRatio.PORTRAIT_4_5, document)
+        val turned = portrait.turned(Orientation.ROTATE_CLOCKWISE, document)
+        val shown = Orientation.ROTATE_CLOCKWISE.targetSize(document)
+        assertEquals(true, turned.swapped)
+        assertEquals(turned.width / turned.height, checkNotNull(turned.aspect(shown)), 1e-9)
+        // 뒤집기는 모양이 그대로라 바꾸지 않는다
+        assertEquals(false, portrait.turned(Orientation.FLIP_HORIZONTAL, document).swapped)
+        // 원본 비율은 돌린 사진의 비율을 따르므로 그대로 두어도 맞는다
+        val original = CropFrame.whole(document).withRatio(CropRatio.ORIGINAL, document).turned(Orientation.ROTATE_CLOCKWISE, document)
+        assertEquals(false, original.swapped)
+        assertEquals(original.width / original.height, checkNotNull(original.aspect(shown)), 1e-9)
+        // 자유는 비율이 없다
+        assertEquals(false, CropFrame.whole(document).turned(Orientation.ROTATE_CLOCKWISE, document).swapped)
     }
 
     @Test

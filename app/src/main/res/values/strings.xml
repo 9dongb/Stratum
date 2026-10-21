@@ -48,11 +48,9 @@
     <string name="edit_project_failed_memory">Not enough memory to open this project.</string>
     <string name="edit_autosave_failed">Couldn\'t save your work. Check your storage space.</string>
     <string name="edit_working">Working…</string>
-    <string name="subtool_crop">Crop</string>
-    <string name="subtool_rotate">Rotate and flip</string>
+    <string name="subtool_crop">Crop and rotate</string>
     <string name="subtool_resize">Resize image</string>
     <string name="subtool_menu">Choose sub-tool</string>
-    <string name="subtool_rotate_short">Rotate</string>
     <string name="subtool_resize_short">Resize</string>
     <string name="rotate_left">Left 90°</string>
     <string name="rotate_right">Right 90°</string>
@@ -63,6 +61,9 @@
     <string name="crop_ratio_original">Original</string>
     <string name="crop_ratio_format">%1$d:%2$d</string>
     <string name="crop_swap">Swap width and height</string>
+    <string name="crop_tab_crop">Crop</string>
+    <string name="crop_tab_rotate">Rotate</string>
+    <string name="crop_resize_first">Apply or cancel the crop first to resize the image.</string>
     <string name="resize_current">Current size: %1$d × %2$d px</string>
     <string name="resize_unit_pixels">Pixels</string>
     <string name="resize_unit_percent">Percent</string>

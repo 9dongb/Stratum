@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -39,6 +40,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 한 손으로 쥐었을 때 엄지가 닿는 아래 양 끝에 둔다. 자르기·픽셀 유동화가 같이 쓰고, 앞으로의 전용 작업 창도 이것을 쓴다.
  * 시스템 뒤로 가기는 X와 같게 부르는 쪽이 처리한다. 아래 시스템 바와 옆쪽 카메라 구멍은 피한다.
  * [cancelTag]·[doneTag]는 화면 테스트 이름표(창마다 지금 쓰는 취소·적용 이름표를 그대로 쓴다).
+ * [middle]은 X와 ✓ 사이 가운데에 둘 것(자르기·회전 창의 [자르기 | 회전] 탭 등, 사용자 피드백 8차 1-1: 고르는 탭은 맨 아래 X와 ✓ 사이)이다.
  */
 @Composable
 fun CoverWorkBar(
@@ -48,7 +50,8 @@ fun CoverWorkBar(
     cancelTag: String,
     doneTag: String,
     modifier: Modifier = Modifier,
-    cancelEnabled: Boolean = true
+    cancelEnabled: Boolean = true,
+    middle: (@Composable RowScope.() -> Unit)? = null
 ) {
     val colors = StratumTheme.colors
     Surface(modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, colors.divider), color = colors.panel) {
@@ -63,6 +66,10 @@ fun CoverWorkBar(
                 Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
             }
             Spacer(Modifier.weight(1f))
+            if (middle != null) {
+                middle()
+                Spacer(Modifier.weight(1f))
+            }
             AccentIconButton(onClick = onDone, enabled = doneEnabled, modifier = Modifier.testTag(doneTag)) {
                 Icon(painterResource(R.drawable.ic_check), contentDescription = stringResource(R.string.action_done))
             }

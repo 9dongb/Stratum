@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -192,6 +193,26 @@ data class CropFrame(
         val newTop = if (handle.movesBottom) anchorY else anchorY - newHeight
         val newLeft = (centerX - newWidth / 2).coerceIn(0.0, w - newWidth)
         return copy(left = newLeft, top = newTop, right = newLeft + newWidth, bottom = newTop + newHeight)
+    }
+
+    /**
+     * 보이는 사진을 [step] 방향으로 돌리거나 뒤집을 때(자르기·회전 화면, 사용자 피드백 8차 1) 사진과 함께 옮긴 테두리.
+     * [document]는 돌리기 전에 보이던 사진 크기다. 가로·세로가 바뀌는 회전이면 고정 비율(4:5 등)은 가로세로를 바꿔(4:5 → 5:4)
+     * 돌린 테두리 모양과 맞춘다. 자유는 비율이 없고, 원본은 돌린 사진의 비율을 따르므로 그대로다.
+     */
+    fun turned(step: Orientation, document: PixelSize): CropFrame {
+        val w = document.width.toDouble()
+        val h = document.height.toDouble()
+        val (x0, y0) = step.mapPoint(left, top, w, h)
+        val (x1, y1) = step.mapPoint(right, bottom, w, h)
+        val fixedRatio = ratio != CropRatio.FREE && ratio != CropRatio.ORIGINAL
+        return copy(
+            left = min(x0, x1),
+            top = min(y0, y1),
+            right = max(x0, x1),
+            bottom = max(y0, y1),
+            swapped = if (step.swapsAxes && fixedRatio) !swapped else swapped
+        )
     }
 
     /**

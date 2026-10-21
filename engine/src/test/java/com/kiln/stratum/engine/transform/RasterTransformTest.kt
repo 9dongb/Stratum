@@ -106,6 +106,25 @@ class RasterTransformTest {
     }
 
     @Test
+    fun gainmap_isCroppedAtTheSameProportion_thenTurned() {
+        // 자르기·회전 화면은 둘을 한 번에 한다. 전에는 돌리면 게인맵 자르기를 빼먹었다.
+        val source = withGainmap(photo(PixelSize(800, 600)), PixelSize(200, 150))
+        val plan = TransformPlan.cropThenOrient(PixelSize(800, 600), PixelRect(400, 0, 800, 600), Orientation.ROTATE_CLOCKWISE)
+
+        val result = RasterTransform.apply(source, plan, composer)
+
+        // 문서 오른쪽 반(400×600)을 돌린 600×400, 게인맵은 오른쪽 반(100×150)을 돌린 150×100
+        assertEquals(PixelSize(600, 400), PixelSize(result.width, result.height))
+        val gainmap = checkNotNull(result.layers[0].gainmap)
+        assertEquals(150, gainmap.width)
+        assertEquals(100, gainmap.height)
+        for ((x, y) in listOf(0 to 0, 149 to 99, 37 to 60)) {
+            val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x, y, 150, 100)
+            assertEquals(colorAt(from.x + 100, from.y), gainmap.pixelAt(x, y))
+        }
+    }
+
+    @Test
     fun orient_movesEveryPixel() {
         val source = photo(PixelSize(600, 300))
         for (orientation in Orientation.entries) {

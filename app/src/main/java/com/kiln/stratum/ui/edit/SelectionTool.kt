@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.platform.MAX_FEATHER
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.ColorRegion
@@ -361,7 +362,8 @@ fun SelectionAnts(
     detail: SelectionOutline?,
     view: () -> CanvasView,
     document: PixelSize,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    orientation: Orientation = Orientation.IDENTITY
 ) {
     if (outline == null) return
     val whole = remember(outline) { pathOf(outline) }
@@ -374,17 +376,26 @@ fun SelectionAnts(
         label = "antsPhase"
     )
     Canvas(modifier.testTag(EditScreenTags.SELECTION_OUTLINE)) {
-        val transform = view().transform(PixelSize(size.width.roundToInt(), size.height.roundToInt()), document)
+        // 자르기·회전 화면에서 돌려 보이는 중이면 보기는 돌린 모습의 문서 기준이고, 윤곽선(원래 방향 좌표)을 먼저 그 방향으로 돌린다
+        val transform = view().transform(PixelSize(size.width.roundToInt(), size.height.roundToInt()), orientation.targetSize(document))
+        val width = document.width.toDouble()
+        val height = document.height.toDouble()
+        val (ox, oy) = orientation.mapPoint(0.0, 0.0, width, height)
+        val (ux, uy) = orientation.mapPoint(1.0, 0.0, width, height)
+        val (vx, vy) = orientation.mapPoint(0.0, 1.0, width, height)
         val matrix = android.graphics.Matrix().apply {
-            setScale(transform.scaleX.toFloat(), transform.scaleY.toFloat())
+            setValues(floatArrayOf((ux - ox).toFloat(), (vx - ox).toFloat(), ox.toFloat(), (uy - oy).toFloat(), (vy - oy).toFloat(), oy.toFloat(), 0f, 0f, 1f))
+            postScale(transform.scaleX.toFloat(), transform.scaleY.toFloat())
             postTranslate(transform.originX.toFloat(), transform.originY.toFloat())
         }
         val region = detail?.region
         if (part != null && region != null) {
-            val left = transform.toScreenX(region.left.toDouble()).toFloat()
-            val top = transform.toScreenY(region.top.toDouble()).toFloat()
-            val right = transform.toScreenX(region.right.toDouble()).toFloat()
-            val bottom = transform.toScreenY(region.bottom.toDouble()).toFloat()
+            val (ax, ay) = orientation.mapPoint(region.left.toDouble(), region.top.toDouble(), width, height)
+            val (bx, by) = orientation.mapPoint(region.right.toDouble(), region.bottom.toDouble(), width, height)
+            val left = transform.toScreenX(minOf(ax, bx)).toFloat()
+            val top = transform.toScreenY(minOf(ay, by)).toFloat()
+            val right = transform.toScreenX(maxOf(ax, bx)).toFloat()
+            val bottom = transform.toScreenY(maxOf(ay, by)).toFloat()
             clipRect(left, top, right, bottom) { drawAnts(transformed(part, matrix), phase) }
             clipRect(left, top, right, bottom, clipOp = ClipOp.Difference) { drawAnts(transformed(whole, matrix), phase) }
         } else {

@@ -86,6 +86,7 @@ import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PaintColors
@@ -255,6 +256,26 @@ fun EditScreen(
     // 자르기 테두리(문서 픽셀 좌표). 접기·펼치기에도 남고, 문서가 바뀌면(편집·실행 취소) 새로 시작한다.
     var cropFrame by rememberSaveable(ready?.revision, stateSaver = CropFrameSaver) { mutableStateOf<CropFrame?>(null) }
     val cropMode = ready != null && selection.active == EditTool.Transform && selection.transformMode == SubTool.CROP
+    // 자르기·회전 화면에서 돌리거나 뒤집은 방향(사용자 피드백 8차 1). 아직 적용하지 않고 그릴 때만 돌려 보이며, ✓를 누를 때 자르기와 함께
+    // 실행 취소 한 단계로 적용한다. 테두리처럼 접기·펼치기에도 남고, 문서가 바뀌면 새로 시작한다.
+    var cropOrientation by rememberSaveable(ready?.revision) { mutableStateOf(Orientation.IDENTITY) }
+    // ✓를 누른 뒤 결과가 올 때까지(그때의 문서 번호와 방향) 돌린 모습을 그대로 보인다. 돌리기 전 모습이 잠깐 보였다가 돌아가며 깜빡이지 않게.
+    var applyingOrientation by remember { mutableStateOf<Pair<Long, Orientation>?>(null) }
+    val shownOrientation = if (cropMode) {
+        cropOrientation
+    } else {
+        applyingOrientation?.takeIf { ready?.busy == true && it.first == ready.revision }?.second ?: Orientation.IDENTITY
+    }
+    // 보이는(돌린) 문서 크기. 보기·테두리·배율 표시가 쓴다.
+    val shownSize = ready?.let { shownOrientation.targetSize(it.documentSize) }
+    // 닫힌 화면 자르기·회전 창 맨 아래에서 고른 탭(자르기·회전). 마지막에 고른 것을 다음에도 연다.
+    var coverCropTab by rememberSaveable { mutableStateOf(CropTab.CROP) }
+    // 자르기·회전에서 바꾼 것(돌리기·뒤집기, 사진 전체가 아닌 테두리)이 있는지. 있으면 크기 변경을 막는다(크기를 바꾸면 사라지므로).
+    val cropChanged = cropMode && ready != null && cropFrame.let { frame ->
+        val shown = cropOrientation.targetSize(ready.documentSize)
+        cropOrientation != Orientation.IDENTITY || (frame != null && frame.toPixelRect(shown) != PixelRect.of(shown))
+    }
+    val cropFirstText = stringResource(R.string.crop_resize_first)
     // 크기 변경 창의 입력. 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var resizeInput by rememberSaveable(stateSaver = ResizeInput.Saver) { mutableStateOf<ResizeInput?>(null) }
     // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다
@@ -264,7 +285,8 @@ fun EditScreen(
     // 하위 도구 고르기. 크기 변경은 한 번 하고 끝나는 일이라 도구를 바꾸지 않고 창만 띄운다.
     val chooseSubTool: (SubTool) -> Unit = { subTool ->
         if (subTool == SubTool.RESIZE) {
-            ready?.let { resizeInput = ResizeInput.start(it.documentSize) }
+            // 자르기·회전에서 바꾼 것이 있으면 먼저 적용하거나 취소하라고 알린다(메인 화면의 하위 도구 메뉴. 커버 창의 버튼은 꺼 둔다)
+            if (cropChanged) gestureToast.show(cropFirstText) else ready?.let { resizeInput = ResizeInput.start(it.documentSize) }
         } else {
             selection.choose(subTool)
         }
@@ -357,27 +379,33 @@ fun EditScreen(
         // 메인 화면에서는 도구 막대의 도구만 본다. 커버에서 고른 조정·레이어는 메인에서 보이지 않아 뒤로를 먹지 않는다.
         // 늘 두고 켜고 끄기만 해서, 홈으로 가는 처리(StratumApp)보다 나중에·창과 유동화보다 먼저 등록된 순서를 지킨다.
         val density = LocalDensity.current
+        // 자르기·회전을 시작할 때(그리고 돌릴 때) 보이는 사진([shown], 돌린 크기) 전체가 보이게 맞춘 보기.
+        // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠 자리를 양쪽에 비워 캔버스 정중앙에 맞춘다(결정 기록 '도구 옵션 띠').
+        fun cropStart(shown: PixelSize): CanvasView =
+            if (widthClass != WidthClass.Compact && canvasArea.width > 0 && canvasArea.height > 0) {
+                cropStartView(
+                    area = PixelSize(canvasArea.width, canvasArea.height),
+                    document = shown,
+                    strip = with(density) { (OptionStripWidth + OptionStripGap).roundToPx() },
+                    margin = with(density) { CropStartMargin.roundToPx() }
+                )
+            } else {
+                CanvasView.Fit
+            }
         LaunchedEffect(cropMode, ready?.revision) {
             if (cropMode && ready != null) {
-                // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 맞춘다.
-                // 메인 화면은 테두리 손잡이가 왼쪽 띠에 가리지 않게 띠 자리를 양쪽에 비워 캔버스 정중앙에 맞춘다(결정 기록 '도구 옵션 띠').
+                // 자르기를 시작하면 사진 전체를 테두리로 두고, 사진 전체가 보이게 맞춘다
                 if (cropFrame == null) {
-                    cropFrame = CropFrame.whole(ready.documentSize)
-                    val start = if (widthClass != WidthClass.Compact && canvasArea.width > 0 && canvasArea.height > 0) {
-                        cropStartView(
-                            area = PixelSize(canvasArea.width, canvasArea.height),
-                            document = ready.documentSize,
-                            strip = with(density) { (OptionStripWidth + OptionStripGap).roundToPx() },
-                            margin = with(density) { CropStartMargin.roundToPx() }
-                        )
-                    } else {
-                        CanvasView.Fit
-                    }
+                    val shown = cropOrientation.targetSize(ready.documentSize)
+                    cropFrame = CropFrame.whole(shown)
+                    val start = cropStart(shown)
                     viewState.view = start
                     cropStartView = start
                 }
             } else {
                 cropFrame = null
+                // 취소하면 돌리던 방향도 버린다(적용했으면 문서가 바뀌어 저절로 새로 시작한다)
+                cropOrientation = Orientation.IDENTITY
                 if (cropStartView != null && viewState.view == cropStartView) viewState.view = CanvasView.Fit
                 cropStartView = null
             }
@@ -402,14 +430,38 @@ fun EditScreen(
         LaunchedEffect(dialogOpen) { if (dialogOpen) floating.closeFlyout() }
         val crop = cropFrame?.takeIf { cropMode }?.let { frame ->
             val document = checkNotNull(ready).documentSize
+            val revision = ready.revision
+            // 테두리는 돌린 모습의 사진 기준이다. 누를 때마다 지금 방향으로 크기를 다시 구한다(빠르게 거듭 눌러도 맞게).
+            fun shownNow() = cropOrientation.targetSize(document)
+            val shown = shownNow()
+            // 바꾼 것: 돌리거나 뒤집었거나, 테두리가 사진 전체가 아니다
+            val changed = cropOrientation != Orientation.IDENTITY || frame.toPixelRect(shown) != PixelRect.of(shown)
             CropControls(
                 frame = frame,
-                canApply = frame.toPixelRect(document) != PixelRect.of(document),
-                onRatio = { ratio -> cropFrame = cropFrame?.withRatio(ratio, document) },
-                onSwap = { cropFrame = cropFrame?.swapped(document) },
+                canApply = changed,
+                canResize = !changed,
+                onRatio = { ratio -> cropFrame = cropFrame?.withRatio(ratio, shownNow()) },
+                onSwap = { cropFrame = cropFrame?.swapped(shownNow()) },
+                onTurn = { step ->
+                    // 보이는 사진을 돌리거나 뒤집으면 테두리도 함께 옮기고, 돌린 사진 전체가 보이게 다시 맞춘다
+                    val before = shownNow()
+                    cropFrame?.let { current ->
+                        cropFrame = current.turned(step, before)
+                        cropOrientation = cropOrientation.then(step)
+                        val start = cropStart(step.targetSize(before))
+                        viewState.view = start
+                        cropStartView = start
+                    }
+                },
                 onCancel = selection::close,
                 onApply = {
-                    cropFrame?.let { onEdit(CropImage(it.toPixelRect(document), document)) }
+                    cropFrame?.let { current ->
+                        val now = shownNow()
+                        // 원래 방향 사진에서 자를 곳으로 되돌려, 돌리기·뒤집기와 함께 실행 취소 한 단계로 보낸다
+                        val rect = cropOrientation.inverse.mapRect(current.toPixelRect(now), now.width, now.height)
+                        onEdit(CropImage(rect, document, cropOrientation))
+                        if (cropOrientation != Orientation.IDENTITY) applyingOrientation = revision to cropOrientation
+                    }
                     selection.close()
                 }
             )
@@ -483,10 +535,7 @@ fun EditScreen(
             {
                 ToolOptions(
                     selection,
-                    busy = ready?.busy == true,
-                    onEdit = onEdit,
                     onChoose = chooseSubTool,
-                    crop = crop,
                     adjust = adjustControls,
                     adjustItem = adjustItem,
                     onAdjustItem = { adjustItem = it },
@@ -514,7 +563,7 @@ fun EditScreen(
             when (railTool) {
                 EditTool.Brush, EditTool.Eraser -> brushControls?.let { brushStrip(it) }
                 EditTool.Text -> textControls?.let { textStrip(it) }
-                EditTool.Transform -> transformStrip(selection.transformMode, ready?.busy == true, onEdit, crop, floating::closeFlyout)
+                EditTool.Transform -> crop?.let { transformStrip(it, ready?.busy == true, floating::closeFlyout) }
                 EditTool.Select -> selectionControls?.let {
                     selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it, floating::closeFlyout)
                 }
@@ -678,7 +727,8 @@ fun EditScreen(
             if (cropMode && frame != null && ready != null) {
                 CropOverlay(
                     frame = frame,
-                    document = ready.documentSize,
+                    // 테두리는 돌린 모습의 사진 기준이다
+                    document = cropOrientation.targetSize(ready.documentSize),
                     view = { viewState.view },
                     onFrameChange = { cropFrame = it },
                     modifier = Modifier.fillMaxSize()
@@ -718,9 +768,9 @@ fun EditScreen(
                 } else {
                     EditTopBar(
                         onBack = onBack,
-                        // 편집을 처리하는 동안에는 막는다
-                        canUndo = ready?.canUndo == true && !ready.busy,
-                        canRedo = ready?.canRedo == true && !ready.busy,
+                        // 편집을 처리하는 동안에는 막는다. 자르기·회전 중에도 막는다(아직 적용하지 않은 테두리·방향을 모르고 잃지 않게).
+                        canUndo = ready?.canUndo == true && !ready.busy && !cropMode,
+                        canRedo = ready?.canRedo == true && !ready.busy && !cropMode,
                         onUndo = onUndo,
                         onRedo = onRedo,
                         // 자르기 중에는 막는다(적용이나 취소한 뒤 내보낸다)
@@ -733,7 +783,7 @@ fun EditScreen(
                             PanelToggles(open = floating.panel, enabled = ready != null && !cropMode, onToggle = floating::togglePanel)
                         },
                         // 배율 표시는 상단 바 가운데에 늘 보인다(사용자 피드백 9차)
-                        zoom = ready?.let { ZoomBadge(viewState, it.documentSize) }
+                        zoom = shownSize?.let { ZoomBadge(viewState, it) }
                     )
                 }
             },
@@ -741,12 +791,12 @@ fun EditScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { innerPadding ->
             val body = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding)
-            // 두 손가락 톡: 실행 취소 버튼과 같은 조건(되돌릴 것이 있고 처리 중이 아님)일 때만 되돌린다
-            // 처리 중이면 아무것도 하지 않고, 되돌릴 것이 없으면 그렇다고 알린다
+            // 두 손가락 톡: 실행 취소 버튼과 같은 조건(되돌릴 것이 있고 처리 중·자르기·회전 중이 아님)일 때만 되돌린다
+            // 처리 중·자르기·회전 중이면 아무것도 하지 않고, 되돌릴 것이 없으면 그렇다고 알린다
             val twoFingerUndo: (() -> Unit)? = if (twoFingerTapUndo) {
                 {
                     when {
-                        ready == null || ready.busy -> Unit
+                        ready == null || ready.busy || cropMode -> Unit
                         ready.canUndo -> {
                             onUndo()
                             gestureToast.show(undoneText)
@@ -764,7 +814,7 @@ fun EditScreen(
                 object : ThreeFingerActions {
                     override fun tap() {
                         when {
-                            ready == null || ready.busy -> Unit
+                            ready == null || ready.busy || cropMode -> Unit
                             ready.canRedo -> {
                                 onRedo()
                                 gestureToast.show(redoneText)
@@ -811,26 +861,36 @@ fun EditScreen(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
                             screenStart = screenLeft,
                             flip = viewFlip,
+                            orientation = shownOrientation,
                             onSpotHeal = useSpotHeal,
                             onMagicWand = useMagicWand
                         )
                         if (crop != null) {
                             Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
                                 CoverCropOptions(
-                                    selection.transformMode,
-                                    chooseSubTool,
+                                    coverCropTab,
                                     crop,
-                                    Modifier
+                                    busy = ready?.busy == true,
+                                    modifier = Modifier
                                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                                         .padding(horizontal = 12.dp, vertical = 8.dp)
                                 )
                             }
+                            // 맨 아래 줄: X(취소) · [자르기 | 회전] 탭 · 크기 변경 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                             CoverWorkBar(
                                 onCancel = crop.onCancel,
                                 onDone = crop.onApply,
                                 doneEnabled = crop.canApply && ready?.busy != true,
                                 cancelTag = EditScreenTags.CROP_CANCEL,
-                                doneTag = EditScreenTags.CROP_APPLY
+                                doneTag = EditScreenTags.CROP_APPLY,
+                                middle = {
+                                    CoverCropTabs(
+                                        tab = coverCropTab,
+                                        onTab = { coverCropTab = it },
+                                        resizeEnabled = crop.canResize && ready?.busy != true,
+                                        onResize = { chooseSubTool(SubTool.RESIZE) }
+                                    )
+                                }
                             )
                         }
                     } else {
@@ -841,6 +901,7 @@ fun EditScreen(
                             screenStart = screenLeft,
                             overlayBottom = coverSheetInset,
                             flip = viewFlip,
+                            orientation = shownOrientation,
                             onSpotHeal = useSpotHeal,
                             onMagicWand = useMagicWand,
                             floating = {
@@ -871,6 +932,7 @@ fun EditScreen(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
                         reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
+                        orientation = shownOrientation,
                         onSpotHeal = useSpotHeal, onMagicWand = useMagicWand, floating = floatingUi
                     )
                 }
@@ -1093,6 +1155,7 @@ private fun EditCanvas(
     screenStart: Float = 0f,
     overlayBottom: Dp = 0.dp,
     flip: ViewFlip = ViewFlip.None,
+    orientation: Orientation = Orientation.IDENTITY,
     onSpotHeal: () -> Unit = {},
     onMagicWand: () -> Unit = {},
     floating: @Composable BoxScope.(WindowInsets) -> Unit = {}
@@ -1175,7 +1238,7 @@ private fun EditCanvas(
                 .testTag(EditScreenTags.CANVAS),
             contentAlignment = Alignment.Center
         ) {
-            CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip)
+            CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip, orientation)
         }
         floating(insets)
         // 알림 막대는 캔버스 아래쪽, 화면 가로 정중앙에 띄우되(도구 막대 폭만큼 오른쪽을 비움) 펼친 화면의 접히는 선과
@@ -1197,7 +1260,8 @@ private fun CanvasContent(
     showBusy: Boolean,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
-    flip: ViewFlip
+    flip: ViewFlip,
+    orientation: Orientation
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (state) {
@@ -1206,7 +1270,7 @@ private fun CanvasContent(
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, flip = flip, overlay = overlay)
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, flip = flip, orientation = orientation, overlay = overlay)
                 if (showBusy) {
                     val working = stringResource(R.string.edit_working)
                     LinearProgressIndicator(

@@ -23,9 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
-import com.kiln.stratum.engine.command.EditCommand
-import com.kiln.stratum.engine.platform.FlipImage
-import com.kiln.stratum.engine.platform.RotateImage
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.tone.ToneRange
@@ -84,51 +82,38 @@ internal fun textStrip(controls: TextControls): List<StripItem> {
 }
 
 /**
- * 자르기·변형의 띠: 자르기면 비율·가로세로 바꾸기·취소·적용(파란 버튼), 회전·뒤집기면 왼쪽·오른쪽 회전과 좌우·상하 뒤집기.
- * 하위 도구(자르기 / 회전·뒤집기 / 크기 변경…)는 띠에 두지 않고 도구 막대의 하위 도구 메뉴에서 고른다(사용자 피드백 7차).
- * 자르기 테두리가 아직 없으면(첫 화면) 자르기 칸은 다음 화면에 보인다.
+ * 자르기·회전의 띠(사용자 피드백 8차 1): 비율·가로세로 바꾸기, 왼쪽·오른쪽 90°·좌우·상하 뒤집기, 취소·적용(파란 버튼).
+ * 돌리기·뒤집기는 보이는 사진만 돌리고, ✓를 누를 때 자르기와 함께 실행 취소 한 단계로 적용한다.
+ * 크기 변경은 띠에 두지 않고 도구 막대의 하위 도구 메뉴에서 고른다(사용자 피드백 7차).
  */
 @Composable
-internal fun transformStrip(
-    mode: SubTool,
-    busy: Boolean,
-    onEdit: (EditCommand) -> Unit,
-    crop: CropControls?,
-    close: () -> Unit
-): List<StripItem> =
+internal fun transformStrip(crop: CropControls, busy: Boolean, close: () -> Unit): List<StripItem> =
     buildList {
-        when (mode) {
-            SubTool.CROP -> if (crop != null) {
-                add(
-                    ValueCell("ratio", stringResource(R.string.strip_crop_ratio), cropRatioLabel(crop.frame.ratio)) {
-                        CropRatioFlow(crop, onChosen = close)
-                    }
-                )
-                add(IconCell("swap", R.drawable.ic_swap_horiz, stringResource(R.string.crop_swap), crop.onSwap, tag = EditScreenTags.CROP_SWAP))
-                add(StripDivider("cropActions"))
-                add(IconCell("cancel", R.drawable.ic_close, stringResource(R.string.action_cancel), crop.onCancel, tag = EditScreenTags.CROP_CANCEL))
-                add(
-                    IconCell(
-                        key = "apply",
-                        icon = R.drawable.ic_check,
-                        description = stringResource(R.string.action_apply),
-                        onClick = crop.onApply,
-                        enabled = crop.canApply && !busy,
-                        accent = true,
-                        tag = EditScreenTags.CROP_APPLY
-                    )
-                )
+        add(
+            ValueCell("ratio", stringResource(R.string.strip_crop_ratio), cropRatioLabel(crop.frame.ratio)) {
+                CropRatioFlow(crop, onChosen = close)
             }
-            SubTool.ROTATE -> {
-                add(IconCell("rotateLeft", R.drawable.ic_rotate_90_degrees_ccw, stringResource(R.string.rotate_left), { onEdit(RotateImage(clockwise = false)) }, enabled = !busy, tag = EditScreenTags.ROTATE_LEFT))
-                add(IconCell("rotateRight", R.drawable.ic_rotate_90_degrees_cw, stringResource(R.string.rotate_right), { onEdit(RotateImage(clockwise = true)) }, enabled = !busy, tag = EditScreenTags.ROTATE_RIGHT))
-                add(IconCell("flipHorizontal", R.drawable.ic_flip, stringResource(R.string.flip_horizontal), { onEdit(FlipImage(horizontal = true)) }, enabled = !busy, tag = EditScreenTags.FLIP_HORIZONTAL))
-                // 상하 뒤집기 아이콘은 좌우 뒤집기 아이콘을 90° 돌려 쓴다(커버 옵션과 같다)
-                add(IconCell("flipVertical", R.drawable.ic_flip, stringResource(R.string.flip_vertical), { onEdit(FlipImage(horizontal = false)) }, enabled = !busy, iconRotation = 90f, tag = EditScreenTags.FLIP_VERTICAL))
-            }
-            // 크기 변경은 창을 띄우는 일이고, 다른 하위 도구는 이 도구의 것이 아니다
-            else -> Unit
-        }
+        )
+        add(IconCell("swap", R.drawable.ic_swap_horiz, stringResource(R.string.crop_swap), crop.onSwap, tag = EditScreenTags.CROP_SWAP))
+        add(StripDivider("turn"))
+        add(IconCell("rotateLeft", R.drawable.ic_rotate_90_degrees_ccw, stringResource(R.string.rotate_left), { crop.onTurn(Orientation.ROTATE_COUNTERCLOCKWISE) }, enabled = !busy, tag = EditScreenTags.ROTATE_LEFT))
+        add(IconCell("rotateRight", R.drawable.ic_rotate_90_degrees_cw, stringResource(R.string.rotate_right), { crop.onTurn(Orientation.ROTATE_CLOCKWISE) }, enabled = !busy, tag = EditScreenTags.ROTATE_RIGHT))
+        add(IconCell("flipHorizontal", R.drawable.ic_flip, stringResource(R.string.flip_horizontal), { crop.onTurn(Orientation.FLIP_HORIZONTAL) }, enabled = !busy, tag = EditScreenTags.FLIP_HORIZONTAL))
+        // 상하 뒤집기 아이콘은 좌우 뒤집기 아이콘을 90° 돌려 쓴다(커버 옵션과 같다)
+        add(IconCell("flipVertical", R.drawable.ic_flip, stringResource(R.string.flip_vertical), { crop.onTurn(Orientation.FLIP_VERTICAL) }, enabled = !busy, iconRotation = 90f, tag = EditScreenTags.FLIP_VERTICAL))
+        add(StripDivider("cropActions"))
+        add(IconCell("cancel", R.drawable.ic_close, stringResource(R.string.action_cancel), crop.onCancel, tag = EditScreenTags.CROP_CANCEL))
+        add(
+            IconCell(
+                key = "apply",
+                icon = R.drawable.ic_check,
+                description = stringResource(R.string.action_apply),
+                onClick = crop.onApply,
+                enabled = crop.canApply && !busy,
+                accent = true,
+                tag = EditScreenTags.CROP_APPLY
+            )
+        )
     }
 
 /**

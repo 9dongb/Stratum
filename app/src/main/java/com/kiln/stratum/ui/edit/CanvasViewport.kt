@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 
 /**
  * 캔버스 보기 상태를 들고 있는 곳. 두 손가락으로 움직이는 동안 자주 바뀌므로, 그리는 쪽은 그리는 순간에 읽는다.
@@ -76,6 +77,10 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  * Compose는 그림 층의 변환을 터치 자리에도 거꾸로 걸어 주므로, 도구 화면과 두 손가락 확대·이동은 뒤집기 전의 자리를 받는다
  * (반전된 화면의 오른쪽을 누르면 문서의 왼쪽). 세 손가락 밀기만 화면의 손가락 방향 그대로 알린다(위로 밀면 크기를 키움).
  * 안쪽에는 [LocalViewFlip]으로 알린다(방향이 있는 표시가 반전을 되돌리는 데 쓴다).
+ *
+ * [orientation]은 자르기·회전 화면에서 아직 적용하지 않은 돌리기·뒤집기다(사용자 피드백 8차 1). 문서를 그 방향으로 돌린 모습으로 그리고,
+ * 보기·두 손가락 조작·도구 화면(자르기 테두리)은 돌린 모습의 문서 크기([Orientation.targetSize]) 기준이다.
+ * 엔진 쪽에는 원래 방향으로 되돌린 보이는 영역을 알린다([Viewport.turnedBack]).
  */
 @Composable
 fun CanvasViewport(
@@ -86,10 +91,14 @@ fun CanvasViewport(
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
     flip: ViewFlip = ViewFlip.None,
+    orientation: Orientation = Orientation.IDENTITY,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
-    // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다
-    val documentSize by rememberUpdatedState(state.documentSize)
+    // 조작 도중에 문서·콜백이 바뀌어도 터치 처리와 알림을 다시 시작하지 않는다.
+    // 보기는 돌려 보이는 모습의 문서 크기 기준이다(돌리지 않았으면 문서 크기 그대로).
+    val documentSize by rememberUpdatedState(orientation.targetSize(state.documentSize))
+    val shownOrientation by rememberUpdatedState(orientation)
+    val originalSize by rememberUpdatedState(state.documentSize)
     val report by rememberUpdatedState(onViewport)
     val twoFingerTap by rememberUpdatedState(onTwoFingerTap)
     val threeFingerActions by rememberUpdatedState(threeFinger)
@@ -101,10 +110,13 @@ fun CanvasViewport(
     var area by remember { mutableStateOf(IntSize.Zero) }
     LaunchedEffect(viewState) {
         // 두 손가락으로 움직이는 동안에는 매 프레임 알린다. 엔진 쪽이 움직임이 멈춘 뒤에만 그린다.
-        snapshotFlow { Triple(area, viewState.view, documentSize) }.collect { (size, view, document) ->
+        snapshotFlow { ViewportInputs(area, viewState.view, documentSize, shownOrientation, originalSize) }.collect { inputs ->
             // 새 보기 상태(다른 크기의 문서)에도 캔버스 크기를 알린다(크기가 그대로면 크기 바뀜 알림이 오지 않는다)
+            val size = inputs.area
             viewState.area = size
-            if (size.width > 0 && size.height > 0) report(view.viewport(PixelSize(size.width, size.height), document))
+            if (size.width > 0 && size.height > 0) {
+                report(inputs.view.viewport(PixelSize(size.width, size.height), inputs.shown).turnedBack(inputs.orientation, inputs.original))
+            }
         }
     }
     Box(
@@ -158,10 +170,26 @@ fun CanvasViewport(
             }
     ) {
         CompositionLocalProvider(LocalViewFlip provides flip) {
-            CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize())
+            CanvasImage(state = state, view = { viewState.view }, modifier = Modifier.fillMaxSize(), orientation = orientation)
             // 선택 영역 윤곽선은 어떤 도구를 골라도 보인다(도구 화면 아래)
-            SelectionAnts(state.selection, state.selectionDetail, view = { viewState.view }, document = state.documentSize, modifier = Modifier.fillMaxSize())
+            SelectionAnts(
+                state.selection,
+                state.selectionDetail,
+                view = { viewState.view },
+                document = state.documentSize,
+                modifier = Modifier.fillMaxSize(),
+                orientation = orientation
+            )
             overlay()
         }
     }
 }
+
+/** 엔진 쪽에 알릴 보기를 정하는 것들: 캔버스 크기, 보기, 보이는(돌린) 문서 크기, 돌린 방향, 원래 문서 크기 */
+private data class ViewportInputs(
+    val area: IntSize,
+    val view: CanvasView,
+    val shown: PixelSize,
+    val orientation: Orientation,
+    val original: PixelSize
+)

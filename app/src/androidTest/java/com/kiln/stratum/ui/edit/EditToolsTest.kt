@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -25,11 +27,13 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.command.EditCommand
-import com.kiln.stratum.engine.platform.FlipImage
-import com.kiln.stratum.engine.platform.RotateImage
+import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -105,9 +109,9 @@ class EditToolsTest {
 
         transformTab.performClick()
 
-        // 처음에는 자르기부터 시작하고, 닫힌 화면에서 자르기는 새 창이다(결정 기록 '닫힌 화면 새 창')
+        // 처음에는 자르기부터 시작하고, 닫힌 화면에서 자르기·회전은 새 창이다(결정 기록 '닫힌 화면 새 창')
         composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.CROP)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.CROP)).assertIsSelected()
     }
 
     @Test
@@ -130,15 +134,18 @@ class EditToolsTest {
 
         transformTab.performSemanticsAction(SemanticsActions.OnLongClick)
 
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).assertIsDisplayed()
+        // 자르기·변형의 하위 도구는 자르기·회전과 크기 변경이다(회전·뒤집기는 자르기와 한 화면, 사용자 피드백 8차 1)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RESIZE)).assertIsDisplayed()
     }
 
     @Test
-    fun rotateButtons_sendCommands() {
+    fun rotateButtons_onlyTurnThePreview_andCheckAppliesThemWithTheCrop() {
         show(411, 800)
         transformTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
 
+        // 사용자 피드백 8차 1: 누르는 동안은 보이는 사진만 돌리고 편집하지 않는다
         for (tag in listOf(
             EditScreenTags.ROTATE_LEFT,
             EditScreenTags.ROTATE_RIGHT,
@@ -147,12 +154,12 @@ class EditToolsTest {
         )) {
             composeRule.onNodeWithTag(tag).performClick()
         }
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
 
+        // ✓를 누르면 자르기와 함께 실행 취소 한 단계로 보낸다(왼쪽·오른쪽 90°는 서로 지우고, 좌우·상하 뒤집기는 180°)
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsEnabled().performClick()
         composeRule.runOnIdle {
-            assertEquals(
-                listOf(RotateImage(clockwise = false), RotateImage(clockwise = true), FlipImage(horizontal = true), FlipImage(horizontal = false)),
-                commands
-            )
+            assertEquals(listOf<EditCommand>(CropImage(PixelRect(0, 0, 400, 300), PixelSize(400, 300), Orientation.ROTATE_180)), commands)
         }
     }
 
@@ -160,7 +167,7 @@ class EditToolsTest {
     fun busy_disablesRotateButtons() {
         show(411, 800, ready(busy = true))
         transformTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertIsNotEnabled()
     }
@@ -177,9 +184,9 @@ class EditToolsTest {
         show(700, 900)
 
         transformRail.performTouchInput { longClick() }
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).performClick()
 
-        // 메인 화면의 옵션은 도구 막대 오른쪽 띠에 있다(결정 기록 '편집 화면 도구 배치')
+        // 메인 화면의 옵션은 띠에 있다. 자르기·회전의 띠에는 돌리기 버튼도 있다(사용자 피드백 8차 1)
         composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
     }
@@ -192,11 +199,20 @@ class EditToolsTest {
         // 사용자 요청: 고른 도구를 한 번 더 누르면 하위 도구 메뉴가 뜬다
         transformRail.performClick()
         composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        // 띠의 돌리기 버튼은 보이는 사진만 돌린다(✓를 누를 때 적용)
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).performClick()
-        composeRule.runOnIdle { assertEquals(listOf<EditCommand>(RotateImage(clockwise = false)), commands) }
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
 
+        // 돌려 둔 채 크기 변경을 고르면 먼저 적용하거나 취소하라고 알리고 창은 띄우지 않는다(크기를 바꾸면 돌린 것이 사라지므로)
+        chooseSubTool(SubTool.RESIZE)
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.crop_resize_first), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.RESIZE_WIDTH).assertDoesNotExist()
+
+        // 취소한 뒤에는 크기 변경 창이 뜬다
+        composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).performClick()
+        transformRail.performClick()
         chooseSubTool(SubTool.RESIZE)
         composeRule.onNodeWithTag(EditScreenTags.RESIZE_WIDTH).assertExists()
         // 메뉴에서 고르는 하위 도구는 띠에 두지 않는다(사용자 요청)
@@ -220,7 +236,7 @@ class EditToolsTest {
             moveBy(Offset(0f, 1f))
         }
         composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertIsDisplayed()
-        val item = composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).fetchSemanticsNode().layoutBoundsInWindow()
+        val item = composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).fetchSemanticsNode().layoutBoundsInWindow()
 
         // 사용자 요청: 손가락을 떼지 않고 항목 위로 끌고 가서 떼면 그 항목을 고른다
         transformRail.performTouchInput {
@@ -291,8 +307,7 @@ class EditToolsTest {
     fun medium_optionsMoveOffHorizontalHinge() {
         show(700, 900)
         transformRail.performClick()
-        chooseSubTool(SubTool.ROTATE)
-        // 회전 버튼 줄 한가운데를 가로로 지나가는 힌지
+        // 회전 버튼 한가운데를 가로로 지나가는 힌지
         val rowCenter = composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT)
             .fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
         val screenWidth = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow().right.roundToInt()
@@ -314,7 +329,7 @@ class EditToolsTest {
         transformRail.performClick()
         transformRail.performClick()
         composeRule.assertClickablesAvoid(hinge)
-        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).performClick()
 
         composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_LEFT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
@@ -326,25 +341,25 @@ class EditToolsTest {
         val tester = StateRestorationTester(composeRule)
         tester.setContent {
             StratumTheme {
-                EditScreen(state = ready(), onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {})
+                EditScreen(state = ready(), onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {}, onEdit = { commands += it })
             }
         }
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).assertDoesNotExist()
-        // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)을 눌러 회전·뒤집기를 고른다
+        // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)을 눌러 자르기·회전을 시작하고, 커버는 회전 탭을 연다
         val tab = composeRule.onAllNodesWithTagOrNull(EditScreenTags.tabTool(EditTool.Transform))
         (tab ?: transformRail).performClick()
-        if (tab == null) {
-            // 메인 화면은 고른 도구를 다시 눌러 연 하위 도구 메뉴에서 고른다
-            transformRail.performClick()
-            composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.ROTATE)).performClick()
-        } else {
-            composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
-        }
+        if (tab != null) composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
+        // 오른쪽으로 돌려 둔다(아직 적용하지 않음)
+        composeRule.onNodeWithTag(EditScreenTags.ROTATE_RIGHT).performClick()
 
         // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다
         tester.emulateSavedInstanceStateRestore()
 
+        // 고른 도구·탭과 돌린 방향이 남아, 적용하면 함께 보낸다
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf<EditCommand>(CropImage(PixelRect(0, 0, 400, 300), PixelSize(400, 300), Orientation.ROTATE_CLOCKWISE)), commands)
+        }
     }
 
     /** [tag] 노드가 있으면 그 노드, 없으면 null. */

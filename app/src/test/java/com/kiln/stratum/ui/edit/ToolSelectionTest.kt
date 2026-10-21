@@ -8,7 +8,8 @@ import org.junit.Test
 
 class ToolSelectionTest {
 
-    private fun rotating() = ToolSelection(active = null, modes = mapOf(EditTool.Transform to SubTool.ROTATE))
+    /** 선택 도구의 하위 도구를 올가미로 바꿔 둔 상태 */
+    private fun lassoing() = ToolSelection(active = null, modes = mapOf(EditTool.Select to SubTool.SELECT_LASSO))
 
     @Test
     fun tap_picksTheTool_andTappingAgainPutsItDown() {
@@ -34,33 +35,34 @@ class ToolSelectionTest {
     fun choose_switchesModeAndPicksTheTool() {
         val selection = ToolSelection(active = null)
 
-        selection.choose(SubTool.ROTATE)
+        selection.choose(SubTool.SELECT_WAND)
 
-        assertEquals(EditTool.Transform, selection.active)
-        assertEquals(SubTool.ROTATE, selection.transformMode)
+        assertEquals(EditTool.Select, selection.active)
+        assertEquals(SubTool.SELECT_WAND, selection.modeOf(EditTool.Select))
     }
 
     @Test
     fun choose_remembersSubToolsPerTool() {
-        val selection = rotating()
+        val selection = lassoing()
 
-        selection.choose(SubTool.SELECT_WAND)
+        selection.choose(SubTool.RETOUCH_HEAL)
 
-        // 선택 도구를 골랐고, 자르기·변형의 하위 도구는 그대로다
-        assertEquals(EditTool.Select, selection.active)
-        assertEquals(SubTool.SELECT_WAND, selection.modeOf(EditTool.Select))
-        assertEquals(SubTool.ROTATE, selection.transformMode)
+        // 리터칭을 골랐고, 선택 도구의 하위 도구는 그대로다
+        assertEquals(EditTool.Retouch, selection.active)
+        assertEquals(SubTool.RETOUCH_HEAL, selection.modeOf(EditTool.Retouch))
+        assertEquals(SubTool.SELECT_LASSO, selection.modeOf(EditTool.Select))
     }
 
     @Test
     fun oneShotSubTool_isNotRemembered() {
-        val selection = rotating()
+        val selection = lassoing()
 
         // 크기 변경은 창을 띄우고 끝나므로, 고른 도구와 시작할 하위 도구를 바꾸지 않는다
         selection.choose(SubTool.RESIZE)
 
         assertNull(selection.active)
-        assertEquals(SubTool.ROTATE, selection.transformMode)
+        assertEquals(SubTool.CROP, selection.transformMode)
+        assertEquals(SubTool.SELECT_LASSO, selection.modeOf(EditTool.Select))
         assertThrows(IllegalArgumentException::class.java) { ToolSelection(null, mapOf(EditTool.Transform to SubTool.RESIZE)) }
     }
 
@@ -87,15 +89,28 @@ class ToolSelectionTest {
     @Test
     fun saver_keepsToolAndModes() {
         val scope = SaverScope { true }
-        val chosen = ToolSelection(EditTool.Select, mapOf(EditTool.Transform to SubTool.ROTATE, EditTool.Select to SubTool.SELECT_LASSO))
+        val chosen = ToolSelection(EditTool.Select, mapOf(EditTool.Retouch to SubTool.RETOUCH_CLONE, EditTool.Select to SubTool.SELECT_LASSO))
         for (selection in listOf(chosen, ToolSelection(null))) {
             val saved = checkNotNull(with(ToolSelection.Saver) { scope.save(selection) })
 
             val restored = checkNotNull(ToolSelection.Saver.restore(saved))
 
             assertEquals(selection.active, restored.active)
-            assertEquals(selection.transformMode, restored.transformMode)
+            assertEquals(selection.modeOf(EditTool.Retouch), restored.modeOf(EditTool.Retouch))
             assertEquals(selection.modeOf(EditTool.Select), restored.modeOf(EditTool.Select))
         }
+    }
+
+    @Test
+    fun saver_skipsNamesThisAppDoesNotKnow() {
+        // 앞 판 앱이 저장한 것(없앤 하위 도구 '회전·뒤집기' 등)이 남아 있어도 되살리다 멈추지 않는다(사용자 피드백 8차 1)
+        val saved = listOf("Transform", "Transform=ROTATE", "Gone=CROP", "Transform=SELECT_LASSO", "Transform=RESIZE", "Select=SELECT_LASSO")
+
+        val restored = checkNotNull(ToolSelection.Saver.restore(saved))
+
+        assertEquals(EditTool.Transform, restored.active)
+        assertEquals(SubTool.CROP, restored.transformMode)
+        assertEquals(SubTool.SELECT_LASSO, restored.modeOf(EditTool.Select))
+        assertNull(checkNotNull(ToolSelection.Saver.restore(listOf("Spin"))).active)
     }
 }

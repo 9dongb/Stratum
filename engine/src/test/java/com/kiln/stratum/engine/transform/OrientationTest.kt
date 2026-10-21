@@ -102,6 +102,24 @@ class OrientationTest {
         }
     }
 
+    @Test
+    fun mapPoint_movesEachPixelSquareOntoTheMovedPixel() {
+        // 픽셀 (x, y)를 덮는 사각형의 네 모서리를 옮기면, 옮긴 픽셀을 덮는 사각형이 된다
+        val size = PixelSize(5, 3)
+        for (orientation in Orientation.entries) {
+            forEachPixel(size) { x, y ->
+                val corners = listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1).map { (dx, dy) ->
+                    orientation.mapPoint((x + dx).toDouble(), (y + dy).toDouble(), size.width.toDouble(), size.height.toDouble())
+                }
+                val moved = orientation.mapPixel(x, y, size.width, size.height)
+                assertEquals("$orientation ($x, $y)", moved.x.toDouble(), corners.minOf { it.first }, 0.0)
+                assertEquals("$orientation ($x, $y)", moved.y.toDouble(), corners.minOf { it.second }, 0.0)
+                assertEquals("$orientation ($x, $y)", moved.x + 1.0, corners.maxOf { it.first }, 0.0)
+                assertEquals("$orientation ($x, $y)", moved.y + 1.0, corners.maxOf { it.second }, 0.0)
+            }
+        }
+    }
+
     private inline fun forEachPixel(size: PixelSize, action: (x: Int, y: Int) -> Unit) {
         for (y in 0 until size.height) {
             for (x in 0 until size.width) action(x, y)

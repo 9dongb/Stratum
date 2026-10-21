@@ -63,25 +63,21 @@ object RasterTransform {
     }
 
     /**
-     * 게인맵을 문서와 같이 옮긴다(결정 기록 'HDR'). 게인맵은 레이어 전체를 늘여 덮으므로, 돌리기·뒤집기는 같은 방향으로 옮기고,
-     * 자르기는 같은 비율 자리를 게인맵 칸 경계(가장 가까운 칸, 적어도 한 칸)로 잘라 낸다. 게인맵이 보통 원본의 1/4이라
-     * 자른 가장자리가 게인맵 반 칸(원본 약 2픽셀)까지 어긋날 수 있지만, 밝기 지도는 부드러워 보이지 않는다.
+     * 게인맵을 문서와 같이 옮긴다(결정 기록 'HDR'). 게인맵은 레이어 전체를 늘여 덮으므로, 자르기는 같은 비율 자리를
+     * 게인맵 칸 경계(가장 가까운 칸, 적어도 한 칸)로 잘라 내고, 돌리기·뒤집기는 그 뒤에 같은 방향으로 옮긴다(자르기·회전 화면은 둘을 한 번에 한다).
+     * 게인맵이 보통 원본의 1/4이라 자른 가장자리가 게인맵 반 칸(원본 약 2픽셀)까지 어긋날 수 있지만, 밝기 지도는 부드러워 보이지 않는다.
      */
     fun transformGainmap(gainmap: HdrGainmap, plan: TransformPlan, composer: TileComposer, checkCanceled: () -> Unit = {}): HdrGainmap {
         val size = PixelSize(gainmap.width, gainmap.height)
-        val gainmapPlan = if (plan.orientation != Orientation.IDENTITY) {
-            TransformPlan.orient(size, plan.orientation)
-        } else {
-            val scaleX = gainmap.width.toDouble() / plan.sourceSize.width
-            val scaleY = gainmap.height.toDouble() / plan.sourceSize.height
-            val left = (plan.crop.left * scaleX).roundToInt().coerceIn(0, gainmap.width - 1)
-            val top = (plan.crop.top * scaleY).roundToInt().coerceIn(0, gainmap.height - 1)
-            val right = (plan.crop.right * scaleX).roundToInt().coerceIn(left + 1, gainmap.width)
-            val bottom = (plan.crop.bottom * scaleY).roundToInt().coerceIn(top + 1, gainmap.height)
-            val rect = PixelRect(left, top, right, bottom)
-            if (rect == PixelRect.of(size)) return gainmap
-            TransformPlan.crop(size, rect)
-        }
+        val scaleX = gainmap.width.toDouble() / plan.sourceSize.width
+        val scaleY = gainmap.height.toDouble() / plan.sourceSize.height
+        val left = (plan.crop.left * scaleX).roundToInt().coerceIn(0, gainmap.width - 1)
+        val top = (plan.crop.top * scaleY).roundToInt().coerceIn(0, gainmap.height - 1)
+        val right = (plan.crop.right * scaleX).roundToInt().coerceIn(left + 1, gainmap.width)
+        val bottom = (plan.crop.bottom * scaleY).roundToInt().coerceIn(top + 1, gainmap.height)
+        val rect = PixelRect(left, top, right, bottom)
+        if (rect == PixelRect.of(size) && plan.orientation == Orientation.IDENTITY) return gainmap
+        val gainmapPlan = TransformPlan.cropThenOrient(size, rect, plan.orientation)
         return HdrGainmap(gainmapPlan.targetSize.width, gainmapPlan.targetSize.height, transform(gainmap.raster, gainmapPlan, composer, checkCanceled))
     }
 

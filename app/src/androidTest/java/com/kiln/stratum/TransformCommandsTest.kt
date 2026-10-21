@@ -133,6 +133,29 @@ class TransformCommandsTest {
     }
 
     @Test
+    fun cropWithOrientation_isTheSameAsCroppingThenTurning() {
+        // 자르기·회전 화면의 ✓는 자르기와 돌리기·뒤집기를 실행 취소 한 단계로 함께 한다(사용자 피드백 8차 1)
+        val original = photo()
+        val rect = PixelRect(100, 50, 400, 250)
+        for (orientation in listOf(Orientation.ROTATE_CLOCKWISE, Orientation.ROTATE_180, Orientation.TRANSVERSE, Orientation.FLIP_VERTICAL)) {
+            val result = CropImage(rect, size, orientation).applyTo(original)
+
+            val target = orientation.targetSize(PixelSize(rect.width, rect.height))
+            assertEquals("$orientation", target, PixelSize(result.width, result.height))
+            assertMoved(original, result) { x, y ->
+                val inCrop = orientation.inverse.mapPixel(x, y, target.width, target.height)
+                inCrop.x + rect.left to inCrop.y + rect.top
+            }
+        }
+        // 자르지 않고 돌리기만 해도 된다
+        val turned = CropImage(PixelRect.of(size), size, Orientation.ROTATE_COUNTERCLOCKWISE).applyTo(original)
+        assertMoved(original, turned) { x, y ->
+            val from = Orientation.ROTATE_COUNTERCLOCKWISE.inverse.mapPixel(x, y, turned.width, turned.height)
+            from.x to from.y
+        }
+    }
+
+    @Test
     fun crop_planned_forAnotherSize_changesNothing() {
         val original = photo()
 

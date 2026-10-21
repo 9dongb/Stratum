@@ -53,6 +53,21 @@ enum class Orientation(val quarterTurns: Int, val mirrored: Boolean) {
         }
     }
 
+    /**
+     * [width]×[height] 이미지 안의 점 ([x], [y])가 옮겨 가는 자리. 픽셀 가장자리를 기준으로 한 실수 좌표라서, 픽셀 (x, y)를 덮는
+     * 사각형 (x, y)~(x + 1, y + 1)은 [mapPixel]이 옮긴 픽셀을 덮는 사각형으로 간다. 자르기·회전 화면이 테두리·보이는 영역을 돌리고,
+     * 돌린 모습을 그리는 데 쓴다(사용자 피드백 8차 1).
+     */
+    fun mapPoint(x: Double, y: Double, width: Double, height: Double): Pair<Double, Double> {
+        val mx = if (mirrored) width - x else x
+        return when (quarterTurns) {
+            0 -> mx to y
+            1 -> (height - y) to mx
+            2 -> (width - mx) to (height - y)
+            else -> y to (width - mx)
+        }
+    }
+
     /** [width]×[height] 이미지 안의 [rect]가 옮겨 가는 사각형. 사각형은 돌리거나 뒤집어도 사각형이다. */
     fun mapRect(rect: PixelRect, width: Int, height: Int): PixelRect {
         require(rect.width > 0 && rect.height > 0) { "Rect must not be empty: $rect" }

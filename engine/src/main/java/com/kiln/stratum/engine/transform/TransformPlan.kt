@@ -46,10 +46,16 @@ class TransformPlan private constructor(
             build(source, PixelRect.of(source), orientation)
 
         /** [source] 크기 이미지에서 [rect]만 남기는 계획. [rect]는 이미지 안에 있고 비어 있지 않아야 한다. */
-        fun crop(source: PixelSize, rect: PixelRect): TransformPlan {
+        fun crop(source: PixelSize, rect: PixelRect): TransformPlan = cropThenOrient(source, rect, Orientation.IDENTITY)
+
+        /**
+         * [source] 크기 이미지에서 [rect]만 남긴 뒤 [orientation] 방향으로 바꾸는 계획(자르기·회전 화면의 ✓, 사용자 피드백 8차 1).
+         * [rect]는 바꾸기 전(원래 방향) 좌표이고, 이미지 안에 있고 비어 있지 않아야 한다. 대상 크기는 [rect]를 그 방향으로 바꾼 크기다.
+         */
+        fun cropThenOrient(source: PixelSize, rect: PixelRect, orientation: Orientation): TransformPlan {
             require(rect.width > 0 && rect.height > 0) { "Crop rect must not be empty: $rect" }
             require(rect in PixelRect.of(source)) { "Crop rect outside image: $rect in $source" }
-            return build(source, rect, Orientation.IDENTITY)
+            return build(source, rect, orientation)
         }
 
         /**

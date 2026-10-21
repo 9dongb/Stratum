@@ -28,8 +28,8 @@ enum class SubTool(
     @get:StringRes val shortLabel: Int = label,
     val oneShot: Boolean = false
 ) {
+    /** 자르기·회전: 테두리로 자르고, 돌리기·뒤집기도 같은 화면에서 미리 본 뒤 ✓로 함께 적용한다(사용자 피드백 8차 1) */
     CROP(R.string.subtool_crop, R.drawable.ic_crop),
-    ROTATE(R.string.subtool_rotate, R.drawable.ic_rotate_90_degrees_cw, R.string.subtool_rotate_short),
     RESIZE(R.string.subtool_resize, R.drawable.ic_photo_size_select_large, R.string.subtool_resize_short, oneShot = true),
 
     /** 사각형 선택: 끌어서 사각형으로 고른다 */
@@ -95,12 +95,12 @@ enum class EditTool(
     /** 이동(포토샵의 이동 도구). 고른 레이어를 한 손가락으로 끌어 옮긴다(사용자 피드백 7차). 고를 옵션이 없다. */
     Move(R.drawable.ic_open_with, R.string.tool_move, R.string.tool_move_short, available = true),
 
-    /** 자르기·변형. 하위 도구는 자르기 / 회전·뒤집기 / 크기 변경이다. */
+    /** 자르기·변형. 하위 도구는 자르기·회전 / 크기 변경이다(회전·뒤집기는 자르기와 한 화면, 사용자 피드백 8차 1). */
     Transform(
         R.drawable.ic_crop,
         R.string.tool_transform,
         R.string.tool_transform_short,
-        subTools = listOf(SubTool.CROP, SubTool.ROTATE, SubTool.RESIZE),
+        subTools = listOf(SubTool.CROP, SubTool.RESIZE),
         available = true
     ),
     /** 조정(기본 보정). 커버 화면에서는 탭, 메인 화면에서는 패널(아래 패널의 탭, 오른쪽 패널의 칸)이다. */

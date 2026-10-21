@@ -59,18 +59,23 @@ class ToolSelection(active: EditTool?, modes: Map<EditTool, SubTool> = emptyMap(
     }
 
     companion object {
-        /** 고른 도구의 이름(없으면 빈 문자열)과, 도구마다의 하위 도구 이름으로 저장한다. */
+        /**
+         * 고른 도구의 이름(없으면 빈 문자열)과, 도구마다의 하위 도구 이름으로 저장한다.
+         * 되살릴 때 지금 앱에 없는 이름(없앤 하위 도구 '회전·뒤집기' 등, 사용자 피드백 8차 1)이나 그 도구의 것이 아닌 짝은 건너뛴다.
+         */
         val Saver: Saver<ToolSelection, List<String>> = Saver(
             save = { selection ->
                 listOf(selection.active?.name.orEmpty()) + selection.modes.map { (tool, subTool) -> "${tool.name}=${subTool.name}" }
             },
             restore = { saved ->
                 ToolSelection(
-                    active = saved[0].takeIf { it.isNotEmpty() }?.let(EditTool::valueOf),
-                    modes = saved.drop(1).associate { entry ->
-                        val (tool, subTool) = entry.split('=')
-                        EditTool.valueOf(tool) to SubTool.valueOf(subTool)
-                    }
+                    active = EditTool.entries.firstOrNull { it.name == saved[0] },
+                    modes = saved.drop(1).mapNotNull { entry ->
+                        val names = entry.split('=')
+                        val tool = EditTool.entries.firstOrNull { it.name == names.first() }
+                        val subTool = SubTool.entries.firstOrNull { it.name == names.last() }
+                        if (tool != null && subTool != null && subTool in tool.subTools && !subTool.oneShot) tool to subTool else null
+                    }.toMap()
                 )
             }
         )

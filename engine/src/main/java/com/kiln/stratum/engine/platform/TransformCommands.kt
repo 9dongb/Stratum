@@ -38,10 +38,15 @@ data class FlipImage(val horizontal: Boolean) : CancellableCommand {
 }
 
 /**
- * 문서 전체에서 [rect]만 남기고 바깥 픽셀은 버린다(결정 기록 '자르기·회전·뒤집기·크기 변경').
+ * 문서 전체에서 [rect]만 남기고 바깥 픽셀은 버린 뒤, [orientation] 방향으로 돌리거나 뒤집는다(결정 기록 '자르기·회전·뒤집기·크기 변경').
+ * 자르기·회전 화면의 ✓가 돌리기·뒤집기와 자르기를 실행 취소 한 단계로 함께 적용한다(사용자 피드백 8차 1). [rect]는 돌리기 전(원래 방향) 좌표다.
  * [documentSize]는 화면이 자르기를 계획한 문서 크기다. 그사이 문서 크기가 바뀌었으면(한발 늦은 명령) 그대로 둔다.
  */
-data class CropImage(val rect: PixelRect, val documentSize: PixelSize) : CancellableCommand {
+data class CropImage(
+    val rect: PixelRect,
+    val documentSize: PixelSize,
+    val orientation: Orientation = Orientation.IDENTITY
+) : CancellableCommand {
 
     init {
         require(rect.width > 0 && rect.height > 0) { "Crop rect must not be empty: $rect" }
@@ -49,8 +54,9 @@ data class CropImage(val rect: PixelRect, val documentSize: PixelSize) : Cancell
     }
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
-        if (document.size != documentSize || rect == PixelRect.of(documentSize)) return document
-        return transform(document, TransformPlan.crop(documentSize, rect), checkCanceled)
+        if (document.size != documentSize) return document
+        if (rect == PixelRect.of(documentSize) && orientation == Orientation.IDENTITY) return document
+        return transform(document, TransformPlan.cropThenOrient(documentSize, rect, orientation), checkCanceled)
     }
 
     override fun estimateNewBytes(document: Document): Long =

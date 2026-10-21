@@ -25,6 +25,7 @@ import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.assertClickablesAvoid
@@ -48,18 +49,18 @@ class EditCropTest {
     private val hinges = mutableStateOf(emptyList<Hinge>())
     private val commands = mutableListOf<EditCommand>()
 
-    private fun ready(): EditorState.Ready {
+    private fun ready(canUndo: Boolean = false): EditorState.Ready {
         val preview = Bitmap.createBitmap(document.width, document.height, Bitmap.Config.ARGB_8888)
-        return EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document)
+        return EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document, canUndo = canUndo, canRedo = canUndo)
     }
 
-    private fun show(widthDp: Int = 411, heightDp: Int = 800) {
+    private fun show(widthDp: Int = 411, heightDp: Int = 800, canUndo: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
                     StratumTheme {
                         EditScreen(
-                            state = ready(),
+                            state = ready(canUndo),
                             onBack = {},
                             onCanvasSize = { _, _ -> },
                             onViewport = {},
@@ -158,14 +159,88 @@ class EditCropTest {
     }
 
     @Test
-    fun cover_choosingRotate_leavesTheCropWindow() {
+    fun cover_bottomBar_putsTheTabsBetweenXAndCheck_andResizeNeedsNoChanges() {
+        // 사용자 피드백 8차 1-1: 고르는 탭은 맨 아래 X와 ✓ 사이
         show()
         startCropOnCover()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.ROTATE)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).assertExists()
+        val cancel = bounds(EditScreenTags.CROP_CANCEL)
+        val cropTab = bounds(EditScreenTags.cropTab(CropTab.CROP))
+        val rotateTab = bounds(EditScreenTags.cropTab(CropTab.ROTATE))
+        val resize = bounds(EditScreenTags.subToolOption(SubTool.RESIZE))
+        val apply = bounds(EditScreenTags.CROP_APPLY)
+        val row = listOf(cancel, cropTab, rotateTab, resize, apply)
+        for (item in row) assertEquals("$item", cancel.center.y, item.center.y, cancel.height / 2)
+        // 분할 버튼의 두 칸은 테두리를 겹쳐 붙이므로(M3) 가운데 순서만 보고, 따로인 버튼끼리는 겹치지 않는지 본다
+        for ((left, right) in row.zipWithNext()) assertTrue("$left should be left of $right", left.center.x < right.center.x)
+        for ((left, right) in listOf(cancel to cropTab, rotateTab to resize, resize to apply)) {
+            assertTrue("$left should end before $right", left.right <= right.left + 1f)
+        }
+
+        // 크기 변경은 바꾼 것이 없을 때만 누를 수 있다(크기를 바꾸면 고르던 테두리가 사라지므로)
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).assertIsEnabled()
+        chooseRatio(CropRatio.SQUARE)
+        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).assertIsNotEnabled()
     }
+
+    @Test
+    fun cover_rotateTab_turnsOnlyThePreview_andCheckAppliesItWithTheCrop() {
+        show()
+        startCropOnCover()
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.ROTATE_RIGHT).performClick()
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
+        // 돌렸으니 테두리가 사진 전체여도 적용할 것이 있다
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsEnabled()
+
+        // 돌린 사진(300×400)에서 1:1을 고르면 가운데 300×300이고, 원래 사진으로는 가운데 (50, 0)~(350, 300)이다
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.CROP)).performClick()
+        chooseRatio(CropRatio.SQUARE)
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf(CropImage(PixelRect(50, 0, 350, 300), document, Orientation.ROTATE_CLOCKWISE)), commands) }
+    }
+
+    @Test
+    fun cover_x_dropsTheTurnToo() {
+        show()
+        startCropOnCover()
+        composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.FLIP_HORIZONTAL).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).performClick()
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
+
+        // 다시 열면 뒤집기 전 그대로라 적용할 것이 없다
+        startCropOnCover()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).assertIsNotEnabled()
+    }
+
+    @Test
+    fun main_undoIsOff_whileCropping() {
+        // 아직 적용하지 않은 테두리·방향을 모르고 잃지 않게 자르는 동안은 실행 취소·다시 실행을 막는다
+        // (커버의 자르기·회전 창은 상단 바 대신 이름 줄이라 버튼이 없다)
+        show(930, 700, canUndo = true)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.UNDO).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.REDO).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.CROP_CANCEL).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.UNDO).assertIsEnabled()
+    }
+
+    @Test
+    fun main_stripTurns_thenAppliesWithTheCrop() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+
+        composeRule.onNode(hasTestTag(EditScreenTags.ROTATE_RIGHT) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).performClick()
+        composeRule.runOnIdle { assertTrue(commands.isEmpty()) }
+        composeRule.onNodeWithTag(EditScreenTags.CROP_APPLY).performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf(CropImage(PixelRect.of(document), document, Orientation.ROTATE_CLOCKWISE)), commands) }
+    }
+
+    private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
 
     @Test
     fun cancel_endsCroppingWithoutEditing() {

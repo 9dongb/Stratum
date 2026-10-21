@@ -57,6 +57,26 @@ class TransformPlanTest {
     }
 
     @Test
+    fun cropThenOrient_takesTheRectangle_thenTurnsIt() {
+        // 자르기·회전 화면의 ✓: 원래 방향에서 자른 뒤 돌린다(사용자 피드백 8차 1)
+        val source = PixelSize(1001, 521)
+        val rects = listOf(PixelRect.of(source), PixelRect(100, 50, 700, 400), PixelRect(255, 255, 257, 260), PixelRect(1000, 520, 1001, 521))
+        for (rect in rects) {
+            for (orientation in Orientation.entries) {
+                val plan = TransformPlan.cropThenOrient(source, rect, orientation)
+                val target = orientation.targetSize(PixelSize(rect.width, rect.height))
+                assertEquals(target, plan.targetSize)
+                assertEquals(rect, plan.crop)
+                // 대상 픽셀에는 방향을 되돌린 자리(자른 사각형 안)의 원본 픽셀이 와야 한다
+                assertMovesEveryPixel(plan) { x, y ->
+                    val inCrop = orientation.inverse.mapPixel(x, y, target.width, target.height)
+                    PixelPoint(inCrop.x + rect.left, inCrop.y + rect.top)
+                }
+            }
+        }
+    }
+
+    @Test
     fun crop_atTopLeft_takesWholeTilesFromTheSameKeys() {
         val plan = TransformPlan.crop(PixelSize(1001, 521), PixelRect(0, 0, 600, 300))
 

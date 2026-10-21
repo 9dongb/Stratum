@@ -242,6 +242,9 @@ object EditScreenTags {
     /** 자르기 비율 [ratio] 칩 */
     fun cropRatio(ratio: CropRatio): String = "cropRatio_${ratio.name}"
 
+    /** 닫힌 화면 자르기·회전 창 맨 아래의 탭(자르기·회전) */
+    fun cropTab(tab: CropTab): String = "cropTab_${tab.name}"
+
     /** 크기 변경 창의 [unit] 단위 버튼 */
     fun resizeUnit(unit: ResizeUnit): String = "resizeUnit_${unit.name}"
 

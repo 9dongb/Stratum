@@ -6,6 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -21,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
@@ -102,5 +106,54 @@ class CanvasImageTest {
         val blueEnd = transform.toScreenX(2.0).roundToInt()
         for (x in redStart until boundary) assertEquals("x=$x", hex(AndroidColor.RED), hex(shot.getPixel(x, y)))
         for (x in boundary until blueEnd) assertEquals("x=$x", hex(AndroidColor.BLUE), hex(shot.getPixel(x, y)))
+    }
+
+    @Test
+    fun turnedPreview_isDrawnTurned_withCrispPixels() {
+        // 자르기·회전 화면(사용자 피드백 8차 1): 빨강·파랑 두 픽셀짜리 원본을 픽셀을 다시 그리지 않고 돌려 보인다
+        val document = PixelSize(2, 1)
+        val preview = Bitmap.createBitmap(intArrayOf(AndroidColor.RED, AndroidColor.BLUE), 2, 1, Bitmap.Config.ARGB_8888)
+        var orientation by mutableStateOf(Orientation.ROTATE_CLOCKWISE)
+        // 보기는 돌린 모습의 문서 기준이다(시계 방향이면 1×2)
+        var view by mutableStateOf<CanvasView>(CanvasView.Free(scale = 8.0, centerX = 0.5, centerY = 1.0))
+        composeRule.setContent {
+            StratumTheme {
+                Box(Modifier.size(100.dp, 200.dp).testTag("canvas")) {
+                    CanvasImage(
+                        state = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document),
+                        view = { view },
+                        modifier = Modifier.fillMaxSize(),
+                        orientation = orientation
+                    )
+                }
+            }
+        }
+
+        // 시계 방향: 왼쪽(빨강)이 위, 오른쪽(파랑)이 아래로 간다
+        var shot = composeRule.onNodeWithTag("canvas").captureToImage().asAndroidBitmap()
+        var transform = view.transform(PixelSize(shot.width, shot.height), orientation.targetSize(document))
+        val x = transform.toScreenX(0.5).roundToInt()
+        for (y in transform.toScreenY(0.0).roundToInt() until transform.toScreenY(1.0).roundToInt()) {
+            assertEquals("y=$y", hex(AndroidColor.RED), hex(shot.getPixel(x, y)))
+        }
+        for (y in transform.toScreenY(1.0).roundToInt() until transform.toScreenY(2.0).roundToInt()) {
+            assertEquals("y=$y", hex(AndroidColor.BLUE), hex(shot.getPixel(x, y)))
+        }
+
+        // 좌우 뒤집기: 파랑이 왼쪽, 빨강이 오른쪽
+        composeRule.runOnIdle {
+            orientation = Orientation.FLIP_HORIZONTAL
+            view = CanvasView.Free(scale = 8.0, centerX = 1.0, centerY = 0.5)
+        }
+        composeRule.waitForIdle()
+        shot = composeRule.onNodeWithTag("canvas").captureToImage().asAndroidBitmap()
+        transform = view.transform(PixelSize(shot.width, shot.height), document)
+        val y = transform.toScreenY(0.5).roundToInt()
+        for (column in transform.toScreenX(0.0).roundToInt() until transform.toScreenX(1.0).roundToInt()) {
+            assertEquals("x=$column", hex(AndroidColor.BLUE), hex(shot.getPixel(column, y)))
+        }
+        for (column in transform.toScreenX(1.0).roundToInt() until transform.toScreenX(2.0).roundToInt()) {
+            assertEquals("x=$column", hex(AndroidColor.RED), hex(shot.getPixel(column, y)))
+        }
     }
 }

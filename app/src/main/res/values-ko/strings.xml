@@ -49,11 +49,9 @@
     <string name="edit_project_failed_memory">메모리가 부족해서 이 프로젝트를 열 수 없어요.</string>
     <string name="edit_autosave_failed">작업을 저장하지 못했어요. 저장 공간을 확인해 주세요.</string>
     <string name="edit_working">처리 중…</string>
-    <string name="subtool_crop">자르기</string>
-    <string name="subtool_rotate">회전·뒤집기</string>
+    <string name="subtool_crop">자르기·회전</string>
     <string name="subtool_resize">크기 변경</string>
     <string name="subtool_menu">하위 도구 고르기</string>
-    <string name="subtool_rotate_short">회전·뒤집기</string>
     <string name="subtool_resize_short">크기 변경</string>
     <string name="rotate_left">왼쪽 90°</string>
     <string name="rotate_right">오른쪽 90°</string>
@@ -64,6 +62,9 @@
     <string name="crop_ratio_original">원본</string>
     <string name="crop_ratio_format">%1$d:%2$d</string>
     <string name="crop_swap">가로·세로 바꾸기</string>
+    <string name="crop_tab_crop">자르기</string>
+    <string name="crop_tab_rotate">회전</string>
+    <string name="crop_resize_first">자르기·회전을 적용하거나 취소한 뒤에 크기를 바꿀 수 있어요.</string>
     <string name="resize_current">지금 크기: %1$d × %2$d px</string>
     <string name="resize_unit_pixels">픽셀</string>
     <string name="resize_unit_percent">퍼센트</string>

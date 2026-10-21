@@ -1,7 +1,9 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.ui.geometry.Offset
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,5 +152,40 @@ class CanvasViewTest {
         val view = fitInside(PixelSize(100, 100), PixelSize(200, 200), insetStart = 100)
         assertEquals(0.5, view.scale, 1e-9)
         assertEquals(100.0, view.centerX, 1e-9)
+    }
+
+    @Test
+    fun turnedBack_reportsTheVisibleAreaOfTheOriginalDocument() {
+        // 4000×3000 사진을 시계 방향으로 돌려 3000×4000으로 보이는 동안, 돌린 모습의 (100, 200)~(1100, 700)이 보인다
+        val shown = Viewport(PixelSize(3000, 4000), scale = 0.25, visible = PixelRect(100, 200, 1100, 700), fitScale = 0.2)
+
+        val back = shown.turnedBack(Orientation.ROTATE_CLOCKWISE, photo)
+
+        // 돌린 모습의 (x, y)는 원래 사진의 (y, 3000 - x)다
+        assertEquals(PixelRect(200, 1900, 700, 2900), back.visible)
+        assertEquals(photo, back.documentSize)
+        assertEquals(0.25, back.scale, 0.0)
+        assertEquals(0.2, back.fitScale, 0.0)
+        // 문서 밖으로 나간 영역도 그대로 옮긴다
+        val wide = Viewport(PixelSize(3000, 4000), 0.1, PixelRect(-500, -100, 3500, 4100))
+        assertEquals(PixelRect(-100, -500, 4100, 3500), wide.turnedBack(Orientation.ROTATE_CLOCKWISE, photo).visible)
+        assertEquals(shown, shown.turnedBack(Orientation.IDENTITY, PixelSize(3000, 4000)))
+    }
+
+    @Test
+    fun orientationMatrix_putsTheUnturnedRectOntoTheScreenRect() {
+        // 돌리기 전 200×100 그림을 시계 방향으로 돌려 화면 (10, 20)에 놓으면 100×200 사각형 (10, 20)~(110, 220)을 덮는다
+        for (orientation in Orientation.entries) {
+            val matrix = orientationMatrix(orientation, 200, 100, 10, 20)
+            val corners = listOf(Offset(0f, 0f), Offset(200f, 0f), Offset(0f, 100f), Offset(200f, 100f)).map { matrix.map(it) }
+            val size = orientation.targetSize(PixelSize(200, 100))
+            assertEquals("$orientation", 10f, corners.minOf { it.x }, 1e-4f)
+            assertEquals("$orientation", 20f, corners.minOf { it.y }, 1e-4f)
+            assertEquals("$orientation", 10f + size.width, corners.maxOf { it.x }, 1e-4f)
+            assertEquals("$orientation", 20f + size.height, corners.maxOf { it.y }, 1e-4f)
+            // 그림의 왼쪽 위 모서리는 그 방향이 옮기는 자리로 간다
+            val (x, y) = orientation.mapPoint(0.0, 0.0, 200.0, 100.0)
+            assertEquals("$orientation", Offset(10f + x.toFloat(), 20f + y.toFloat()), corners[0])
+        }
     }
 }
