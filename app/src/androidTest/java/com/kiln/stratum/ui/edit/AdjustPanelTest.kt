@@ -15,7 +15,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
@@ -52,7 +52,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 보정 패널을 세 배치(커버 탭, 메인 세로 아래 패널의 탭, 메인 가로 오른쪽 패널의 칸)에서 확인한다.
+ * 보정을 커버 조정 막대(결정 기록 '커버 화면 개편' Q1 A)와 메인 화면의 떠 있는 조정 패널에서 확인한다.
  * 엔진 대신 값만 들고 있는 가짜([FakeAdjust])를 써서, 슬라이더·곡선·버튼이 보내는 값을 본다.
  */
 @RunWith(AndroidJUnit4::class)
@@ -123,21 +123,27 @@ class AdjustPanelTest {
     private fun slider(item: AdjustItem) =
         composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress) and hasAnyAncestor(hasTestTag(EditScreenTags.adjustSlider(item))))
 
-    private fun openCompactAdjust() {
+    /** 커버에서 상단 바의 조정을 켠다: 한 줄 막대가 조정 칩이 된다. [item]이 있으면 그 칩을 펼친다(같은 줄이 슬라이더). */
+    private fun openCompactAdjust(item: AdjustItem? = null) {
         show(411, 800)
         composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+        item?.let { composeRule.expandAdjustChip(it) }
     }
 
     @Test
     fun compact_chipPicksTheSlider_andSettingItRecordsOnce() {
         openCompactAdjust()
-        // 처음에는 노출 하나만 보인다
-        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.EXPOSURE)).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.CONTRAST)).assertDoesNotExist()
+        // 처음에는 항목 칩 줄이고 슬라이더는 없다. 막대는 캔버스 아래에 있어 사진을 가리지 않는다.
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
+        val bar = composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$bar should start below $canvas", bar.top >= canvas.bottom - 1f)
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.EXPOSURE)).assertDoesNotExist()
 
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CONTRAST)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CONTRAST)).assertIsSelected()
+        // 칩을 누르면 같은 줄이 그 항목의 슬라이더가 된다
+        composeRule.expandAdjustChip(AdjustItem.CONTRAST)
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.CONTRAST)).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CONTRAST)).assertDoesNotExist()
         // 화면 읽기 기능처럼 값을 정한다: 바꾸고(미리 보기) 바로 놓는다(기록)
         slider(AdjustItem.CONTRAST).performSemanticsAction(SemanticsActions.SetProgress) { it(0.4f) }
 
@@ -148,11 +154,31 @@ class AdjustPanelTest {
         }
         // 숫자는 -100..100으로 보인다
         slider(AdjustItem.CONTRAST).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "+40"))
+        // ✓로 칩 줄로 돌아온다
+        composeRule.collapseBar()
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.CONTRAST)).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CONTRAST)).assertIsDisplayed()
+    }
+
+    @Test
+    fun compact_closeButton_turnsTheAdjustOff_andTheToolComesBack() {
+        openCompactAdjust()
+        // 조정을 끄면 막대는 고른 도구(없으면 안내 글)로 돌아온다
+        composeRule.onNodeWithTag(EditScreenTags.BAR_CLOSE).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).assertIsOff()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
+
+        // 도구 탭을 누르면 조정이 꺼지고 그 도구의 칩이 보인다(같은 막대를 쓰므로)
+        composeRule.togglePanel(MainPanel.ADJUST)
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
     }
 
     @Test
     fun compact_draggingPreviewsManyTimes_butRecordsOnce() {
-        openCompactAdjust()
+        openCompactAdjust(AdjustItem.EXPOSURE)
 
         slider(AdjustItem.EXPOSURE).performTouchInput {
             swipe(start = centerLeft + Offset(width * 0.5f, 0f), end = centerRight, durationMillis = 400)
@@ -168,14 +194,15 @@ class AdjustPanelTest {
     @Test
     fun doubleTapOnTheName_resetsThatItemOnly() {
         fake.committed = Adjustments(exposure = 0.5f, contrast = 0.2f, saturation = 0.3f)
-        openCompactAdjust()
+        openCompactAdjust(AdjustItem.EXPOSURE)
 
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.EXPOSURE), useUnmergedTree = true)
             .performTouchInput { doubleClick(centerLeft + Offset(20f, 0f)) }
         composeRule.runOnIdle { assertEquals(Adjustments(contrast = 0.2f, saturation = 0.3f), fake.committed) }
 
-        // 칩을 바꾸면 같은 줄이 다른 항목이 된다. 그 항목을 초기화해야 한다.
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CONTRAST)).performClick()
+        // 다른 칩을 펼치면 같은 줄이 다른 항목이 된다. 그 항목을 초기화해야 한다.
+        composeRule.collapseBar()
+        composeRule.expandAdjustChip(AdjustItem.CONTRAST)
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.CONTRAST), useUnmergedTree = true)
             .performTouchInput { doubleClick(centerLeft + Offset(20f, 0f)) }
         composeRule.runOnIdle { assertEquals(Adjustments(saturation = 0.3f), fake.committed) }
@@ -190,7 +217,7 @@ class AdjustPanelTest {
     @Test
     fun doubleTapOnTheThumb_resetsThatItem_andOneTapChangesNothing() {
         fake.committed = Adjustments(exposure = 0.5f, contrast = 0.2f)
-        openCompactAdjust()
+        openCompactAdjust(AdjustItem.EXPOSURE)
 
         // 원을 한 번 톡: 누른 자리로 튀지 않고 아무것도 기록하지 않는다
         thumb(AdjustItem.EXPOSURE).performTouchInput { click(center + Offset(6f, 0f)) }
@@ -215,7 +242,7 @@ class AdjustPanelTest {
     @Test
     fun draggingTheThumb_followsTheFinger_withoutJumpingToIt() {
         fake.committed = Adjustments(exposure = 0.5f)
-        openCompactAdjust()
+        openCompactAdjust(AdjustItem.EXPOSURE)
         val before = thumbCenterX(AdjustItem.EXPOSURE)
 
         // 원 가운데에서 조금 오른쪽을 잡고 오른쪽으로 끈다
@@ -254,10 +281,13 @@ class AdjustPanelTest {
     @Test
     fun resetAll_isEnabledOnlyWhenSomethingChanged() {
         openCompactAdjust()
-        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsNotEnabled()
+        // 모두 초기화는 칩 줄 끝에 있다(넘치면 밀어 본다)
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).performScrollTo().assertIsNotEnabled()
 
+        composeRule.expandAdjustChip(AdjustItem.EXPOSURE)
         slider(AdjustItem.EXPOSURE).performSemanticsAction(SemanticsActions.SetProgress) { it(-0.5f) }
-        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).assertIsEnabled().performClick()
+        composeRule.collapseBar()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_RESET_ALL).performScrollTo().assertIsEnabled().performClick()
 
         composeRule.runOnIdle {
             assertEquals(Adjustments.NONE, fake.committed)
@@ -267,8 +297,7 @@ class AdjustPanelTest {
 
     @Test
     fun curve_tapAddsAPoint_andDeleteRemovesIt() {
-        openCompactAdjust()
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CURVE)).performScrollTo().performClick()
+        openCompactAdjust(AdjustItem.CURVE)
         composeRule.onNodeWithTag(EditScreenTags.CURVE_DELETE_POINT).assertIsNotEnabled()
 
         // 그래프 가운데를 톡: 곡선 위(대각선)에 점이 하나 생기고 기록된다
@@ -287,8 +316,7 @@ class AdjustPanelTest {
 
     @Test
     fun curve_draggingUpBendsTheCurve() {
-        openCompactAdjust()
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CURVE)).performScrollTo().performClick()
+        openCompactAdjust(AdjustItem.CURVE)
 
         // 가운데에서 위로 끌면 그 자리에 점을 더해 올린다(중간 밝기를 밝게)
         composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).performTouchInput {
@@ -303,6 +331,32 @@ class AdjustPanelTest {
         }
         composeRule.onNodeWithTag(EditScreenTags.CURVE_RESET).assertIsEnabled().performClick()
         composeRule.runOnIdle { assertEquals(ToneCurve.IDENTITY, fake.committed.curve) }
+    }
+
+    @Test
+    fun compactCurve_floatsAboveTheBar_andCheckOrBackFoldsIt() {
+        openCompactAdjust()
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
+        composeRule.expandAdjustChip(AdjustItem.CURVE)
+
+        // 곡선 편집기는 막대 위(캔버스 아래쪽 위)에 겹쳐 뜨고 캔버스 크기는 그대로다. 막대 줄은 '곡선' 이름과 ✓다.
+        val sheet = composeRule.onNodeWithTag(EditScreenTags.COVER_CURVE_SHEET).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(canvas.bottom, sheet.bottom, 1f)
+        assertTrue("$sheet should start inside $canvas", sheet.top > canvas.top)
+        assertEquals(canvas, composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow())
+
+        // ✓로 접힌다
+        composeRule.collapseBar()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_CURVE_SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+
+        // 뒤로 가기는 곡선부터 접고, 다음에 조정을 끈다
+        composeRule.expandAdjustChip(AdjustItem.CURVE)
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.COVER_CURVE_SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
     }
 
     @Test
@@ -360,9 +414,9 @@ class AdjustPanelTest {
             }
         }
         composeRule.togglePanel(MainPanel.ADJUST)
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CURVE)).performScrollTo().performClick()
+        composeRule.expandAdjustChip(AdjustItem.CURVE)
 
-        // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다
+        // 접기·펼치기나 백그라운드 종료로 화면이 다시 만들어지는 것처럼 저장했다가 되살린다(펼친 칩도 남는다)
         tester.emulateSavedInstanceStateRestore()
 
         composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).assertIsDisplayed()
@@ -372,8 +426,7 @@ class AdjustPanelTest {
     fun curveWithManyPoints_isShownAsIs() {
         // 점이 여럿인 곡선도 그대로 그리고, 가운데 점을 골라 지울 수 있다
         fake.committed = Adjustments(curve = ToneCurve(listOf(CurvePoint(0f, 0f), CurvePoint(0.3f, 0.2f), CurvePoint(0.7f, 0.8f), CurvePoint(1f, 1f))))
-        openCompactAdjust()
-        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.CURVE)).performScrollTo().performClick()
+        openCompactAdjust(AdjustItem.CURVE)
 
         // (0.3, 0.2) 점을 톡 눌러 고른다. 그래프는 점 반지름만큼 안쪽에 그려진다.
         composeRule.onNodeWithTag(EditScreenTags.CURVE_EDITOR).performTouchInput {

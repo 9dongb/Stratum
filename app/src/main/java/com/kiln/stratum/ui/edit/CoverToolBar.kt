@@ -59,6 +59,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 커버 화면(Compact)의 한 줄 막대(결정 기록 '커버 화면 개편'). 탭 줄 바로 위에 늘 같은 높이로 있고, 캔버스는 그 위만 쓴다.
  * 틀은 모든 도구가 같다: [하위 도구 ▾] [색] [값 칩…] [동작 ▾] … [✕]. 칩을 누르면 같은 줄이 그 칩의 내용(슬라이더·고를 것·색·동작)이 되고,
  * 오른쪽 끝 ✓로 칩 줄로 돌아온다. 값·할 일·이름표는 메인 화면 띠의 칸(ToolStrips.kt)과 같은 것을 쓴다.
+ * 상단 바의 조정을 켜면 같은 막대가 조정 칩(항목·모두 초기화, [adjustBar])이 되고 ✕는 조정을 끈다(Q1 A).
  */
 
 /** 한 줄 막대·탭 줄의 가장 낮은 높이 */
@@ -152,6 +153,16 @@ class BarGroup(
 ) : BarItem
 
 /**
+ * 직접 그리는 칩(조정 항목·모두 초기화). [chip]은 칩 줄의 칩이고, 받은 함수를 부르면 같은 줄이 [content]가 된다(✓로 돌아옴).
+ * 이름표·화면 읽기는 [chip]이 스스로 단다.
+ */
+class BarCustom(
+    override val key: String,
+    val chip: @Composable (expand: () -> Unit) -> Unit,
+    val content: @Composable () -> Unit
+) : BarItem
+
+/**
  * 막대에서 펼친 칩. 칩을 누르면 펼치고, ✓·뒤로 가기로 접는다. 펼친 칩은 그때의 막대 내용([owner]: 도구·하위 도구·조정)에 딸려,
  * 내용이 바뀌면(도구를 바꿈) 곧바로 칩 줄이 보인다([expandedFor]). 화면이 다시 만들어져도(접기·펼치기) 남는다.
  */
@@ -195,7 +206,7 @@ class CoverBarState(expanded: String? = null, owner: String? = null) {
 fun rememberCoverBarState(): CoverBarState = rememberSaveable(saver = CoverBarState.Saver) { CoverBarState() }
 
 /**
- * 커버 화면의 한 줄 막대. 칩 줄은 [items]를 차례로 놓고(넘치면 칩만 옆으로 밀어 봄) 오른쪽 끝에 ✕([onClose], 없으면 없음)를 둔다.
+ * 커버 화면의 한 줄 막대. 칩 줄은 [items]를 차례로 놓고(넘치면 칩만 옆으로 밀어 봄) 오른쪽 끝에 ✕([onClose], 없으면 없음, 화면 읽기 이름 [closeDescription])를 둔다.
  * 칩이 없으면 [empty](도구를 고르지 않았을 때의 안내, 이동 도구의 이름)를 흐린 글자로 보인다.
  * 펼친 칩([state])이 있으면 그 칩의 내용과 오른쪽 끝 ✓다. 옆쪽 시스템 바·카메라 구멍은 피한다.
  * [content]는 막대 내용의 이름(도구·하위 도구·조정)이다. 펼친 칩과 칩 줄의 밀어 본 자리는 이 내용에 딸린다(✓로 돌아와도 보던 칩 그대로).
@@ -207,6 +218,7 @@ fun CoverToolBar(
     modifier: Modifier = Modifier,
     content: String = "",
     onClose: (() -> Unit)? = null,
+    closeDescription: String = stringResource(R.string.bar_close_tool),
     empty: String? = null
 ) {
     val colors = StratumTheme.colors
@@ -255,7 +267,7 @@ fun CoverToolBar(
                     }
                     if (onClose != null) {
                         StratumIconButton(onClick = onClose, modifier = Modifier.testTag(EditScreenTags.BAR_CLOSE)) {
-                            Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.bar_close_tool))
+                            Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
                         }
                     }
                 }
@@ -343,6 +355,7 @@ private fun BarChip(item: BarItem, expand: (String) -> Unit) {
             trailingIcon = { Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null, modifier = Modifier.size(18.dp)) },
             modifier = tag
         )
+        is BarCustom -> item.chip { expand(item.key) }
     }
 }
 
@@ -386,6 +399,7 @@ private fun BarExpanded(item: BarItem, state: CoverBarState) {
             verticalAlignment = Alignment.CenterVertically,
             content = item.content
         )
+        is BarCustom -> item.content()
         // 색 버튼·버튼·켜고 끄는 칩은 펼치지 않는다
         is BarColors, is BarButton, is BarToggle -> Unit
     }

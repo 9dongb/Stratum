@@ -49,7 +49,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 레이어 패널을 세 배치(커버 탭, 메인 세로 아래 패널의 탭, 메인 가로 오른쪽 패널의 칸)에서 확인한다.
+ * 레이어 패널을 커버 레이어 시트(결정 기록 '커버 화면 개편' Q2 A)와 메인 화면의 떠 있는 레이어 패널에서 확인한다.
  * 엔진 대신 레이어 목록만 들고 있는 가짜([FakeLayers])로 버튼·목록·슬라이더·메뉴가 보내는 일을 본다.
  */
 @RunWith(AndroidJUnit4::class)
@@ -158,12 +158,68 @@ class LayerPanelTest {
 
     private fun openCompactLayers(fake: FakeLayers) {
         show(fake, 411, 800)
-        // 탭 줄 끝에 있어 커버 폭에서는 밀어야 보인다
+        // 커버도 상단 바의 레이어 버튼으로 연다. 한 줄 막대 위에 시트가 올라온다.
         composeRule.togglePanel(MainPanel.LAYERS)
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
     }
 
     private fun row(index: Int) = composeRule.onNodeWithTag(EditScreenTags.layerRow(LayerId(index.toLong())))
+
+    private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
+
+    @Test
+    fun compact_sheetRisesAboveTheBar_keepsTheCanvas_andTheBarStaysUsable() {
+        show(FakeLayers(2), 411, 800)
+        val canvas = bounds(EditScreenTags.CANVAS)
+        composeRule.togglePanel(MainPanel.LAYERS)
+
+        // 시트는 막대 바로 위(캔버스 아래쪽 위)에 겹쳐 뜨고, 캔버스 크기는 그대로다
+        val sheet = bounds(EditScreenTags.COVER_LAYER_SHEET)
+        assertEquals(canvas.bottom, sheet.bottom, 1f)
+        assertTrue("$sheet should start inside $canvas", sheet.top > canvas.top)
+        assertEquals(canvas, bounds(EditScreenTags.CANVAS))
+
+        // 도구를 골라도 시트는 남고, 막대(고른 도구의 칩)는 그대로 쓸 수 있다
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET).assertIsDisplayed()
+        composeRule.expandBarChip("size")
+        composeRule.onNodeWithTag(EditScreenTags.BAR_DONE).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET).assertIsDisplayed()
+    }
+
+    @Test
+    fun compact_draggingTheSheetDown_closesIt_andBackClosesItToo() {
+        openCompactLayers(FakeLayers(2))
+        // 머리를 아래로 끌면 닫히고 레이어 버튼도 꺼진다
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE).performTouchInput {
+            swipe(start = center, end = center + Offset(0f, 120.dp.toPx()), durationMillis = 300)
+        }
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).assertIsOff()
+
+        // 뒤로 가기로도 닫힌다(아래 시트는 뒤로 가기로 닫히는 것이 보통이다)
+        composeRule.togglePanel(MainPanel.LAYERS)
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET).assertIsDisplayed()
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET).assertDoesNotExist()
+    }
+
+    @Test
+    fun compact_tappingTheTitle_letsTheSheetGrowToTheCanvasHeight() {
+        // 레이어가 많으면 반 높이에서는 목록을 밀어 보고, 제목을 누르면 캔버스 높이까지 늘어난다
+        openCompactLayers(FakeLayers(12))
+        val canvas = bounds(EditScreenTags.CANVAS)
+        val half = bounds(EditScreenTags.COVER_LAYER_SHEET)
+        assertTrue("$half should be at most about half of $canvas", half.height <= canvas.height * 0.56f)
+
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE).performClick()
+        val full = bounds(EditScreenTags.COVER_LAYER_SHEET)
+        assertTrue("$full should be taller than $half", full.height > half.height + 1f)
+        assertTrue("$full should stay inside $canvas", full.top >= canvas.top - 1f)
+
+        composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE).performClick()
+        assertEquals(half, bounds(EditScreenTags.COVER_LAYER_SHEET))
+    }
 
     @Test
     fun compact_listShowsTheTopLayerFirst_andTappingPicksALayer() {

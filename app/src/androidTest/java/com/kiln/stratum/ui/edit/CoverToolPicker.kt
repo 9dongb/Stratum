@@ -41,6 +41,11 @@ fun SemanticsNodeInteractionsProvider.chooseCoverSubTool(subTool: SubTool) {
     onNodeWithTag(EditScreenTags.subToolOption(subTool)).performScrollTo().performClick()
 }
 
+/** 커버 조정 막대에서 [item] 칩을 누른다(슬라이더 항목은 같은 줄이 슬라이더, 곡선은 막대 위에 곡선 편집기) */
+fun SemanticsNodeInteractionsProvider.expandAdjustChip(item: AdjustItem) {
+    onNodeWithTag(EditScreenTags.adjustChip(item)).performScrollTo().performClick()
+}
+
 /** 상단 바의 [panel] 버튼(조정·레이어)을 누른다(켜고 끔). 커버·메인 화면 모두 같은 버튼이다. */
 fun SemanticsNodeInteractionsProvider.togglePanel(panel: MainPanel) {
     onNodeWithTag(EditScreenTags.panelToggle(panel)).performClick()

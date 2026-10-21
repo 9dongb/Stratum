@@ -107,6 +107,8 @@
     <string name="bar_close_tool">도구 닫기</string>
     <string name="bar_selection_mode">합치는 방법</string>
     <string name="bar_selection_actions">동작</string>
+    <string name="sheet_expand">펼치기</string>
+    <string name="sheet_collapse">줄이기</string>
 
     <!-- 편집 패널 -->
 

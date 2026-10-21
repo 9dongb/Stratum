@@ -20,15 +20,12 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -246,8 +243,6 @@ fun EditScreen(
     // 편집 화면을 나가면 풀린다. 레이어 탭의 버튼으로 켜고 끈다.
     var viewFlipBits by rememberSaveable { mutableIntStateOf(0) }
     val viewFlip = ViewFlip.fromBits(viewFlipBits)
-    // 커버 화면 조정 옵션에서 고른 항목
-    var adjustItem by rememberSaveable { mutableStateOf(AdjustItem.EXPOSURE) }
     // 커버 화면 더보기 줄(탭 줄에 없는 도구)이 열려 있는지(결정 기록 '커버 화면 개편'). 고르는 메뉴라 잠깐만 뜬다.
     var coverMoreOpen by rememberSaveable { mutableStateOf(false) }
     // 커버 화면 한 줄 막대에서 펼친 칩(슬라이더·고를 것·동작 줄, 결정 기록 '커버 화면 개편')
@@ -600,10 +595,12 @@ fun EditScreen(
             else -> null
         }
         // 커버 화면 한 줄 막대의 칩(결정 기록 '커버 화면 개편'). 값·할 일·이름표는 메인 띠의 칸과 같다.
-        val coverBarItems: List<BarItem> = if (widthClass != WidthClass.Compact) {
-            emptyList()
-        } else {
-            when (activeTool) {
+        // 상단 바의 조정을 켜면 같은 막대가 조정 칩이 된다(Q1 A, 사진을 가리지 않게).
+        val coverAdjust = coverPanel == MainPanel.ADJUST
+        val coverBarItems: List<BarItem> = when {
+            widthClass != WidthClass.Compact -> emptyList()
+            coverAdjust -> adjustControls?.let { adjustBar(it) }.orEmpty()
+            else -> when (activeTool) {
                 EditTool.Brush, EditTool.Eraser -> brushControls?.let { brushBar(it) }
                 EditTool.Text -> textControls?.let { textBar(it) }
                 EditTool.Select -> selectionControls?.let { selectionBar(checkNotNull(selection.modeOf(EditTool.Select)), it, chooseSubTool) }
@@ -614,17 +611,16 @@ fun EditScreen(
                 else -> null
             }.orEmpty()
         }
-        // 커버 화면에서 캔버스 아래쪽 위에 겹쳐 뜨는 칸: 상단 바 버튼으로 연 조정·레이어(결정 기록 '커버 화면 개편').
-        // 도구의 옵션은 겹치지 않는 한 줄 막대에 있다. 더보기 줄이 떠 있는 동안은 더보기 줄을 보인다(아래 floating).
-        val coverSheet: (@Composable () -> Unit)? = when (coverPanel) {
-            MainPanel.ADJUST -> adjustControls?.let { controls -> { AdjustCompact(controls, adjustItem, onItem = { adjustItem = it }) } }
-            MainPanel.LAYERS -> layerControls?.let { controls -> { LayerCompact(controls) } }
-            null -> null
+        // 커버 화면에서 캔버스 아래쪽 위에 겹쳐 뜨는 것(결정 기록 '커버 화면 개편'): 더보기 줄, 레이어 시트, 조정 막대에서 펼친 곡선 편집기.
+        // 도구·조정의 옵션은 겹치지 않는 한 줄 막대에 있어, 탭을 고르거나 바꾸거나 닫아도 보던 이미지의 크기·자리가 그대로다.
+        val coverOverlay: CoverOverlay? = when {
+            widthClass != WidthClass.Compact || cropMode -> null
+            moreShown -> CoverOverlay.MORE
+            coverPanel == MainPanel.LAYERS && layerControls != null -> CoverOverlay.LAYERS
+            coverAdjust && adjustControls != null && coverBar.expandedFor(barContent) == CURVE_BAR_KEY -> CoverOverlay.CURVE
+            else -> null
         }
-        // 닫힌 화면 공통 규칙(결정 기록 '닫힌 화면 도구 옵션'): 옵션 칸은 캔버스를 줄이지 않고 아래쪽 위에 겹쳐 뜬다.
-        // 그래서 탭을 고르거나 바꾸거나 닫아도 보던 이미지의 크기·자리가 그대로다. 자르기(새 창)는 따로다.
-        val coverSheetOverlays = widthClass == WidthClass.Compact && !cropMode && (coverSheet != null || moreShown)
-        val coverSheetInset = if (coverSheetOverlays) with(density) { coverSheetPx.toDp() } else 0.dp
+        val coverSheetInset = if (coverOverlay != null) with(density) { coverSheetPx.toDp() } else 0.dp
         // 메인 화면: 도구 막대에서 고른 도구의 옵션은 도구 막대 오른쪽 띠에 보인다(결정 기록 '편집 화면 도구 배치').
         // 띠가 없는 도구는 패널 위쪽에 옵션을 보인다. 조정·레이어는 패널에 늘 있다.
         val railTool = activeTool?.takeIf { it in EditTool.railTools }
@@ -919,7 +915,6 @@ fun EditScreen(
             }
             when (widthClass) {
                 WidthClass.Compact -> Column(body) {
-                    val sheetMaxHeight = windowHeight * COMPACT_OPTIONS_MAX_FRACTION
                     if (coverCropWindow) {
                         // 자르기 새 창: 크기 유지 규칙에서 빠진다. 캔버스(사진 전체를 맞춤), 하위 도구·비율, 맨 아래 X(취소)·✓(적용).
                         // 뒤로 가기는 X와 같다(도구를 닫는 뒤로 가기). 탭 줄은 숨긴다.
@@ -962,7 +957,7 @@ fun EditScreen(
                         }
                     } else {
                         // 아래는 늘 한 줄 막대 + 탭 줄이고 캔버스는 그 위만 쓴다(결정 기록 '커버 화면 개편'). 그래서 도구를 바꾸거나 닫아도 사진 크기·자리가 그대로다.
-                        // 아직 옮기지 않은 조정·레이어와 더보기 줄은 전처럼 캔버스 아래쪽 위에 겹쳐 뜬다.
+                        // 잠깐 뜨는 것(더보기 줄, 레이어 시트, 곡선 편집기)만 캔버스 아래쪽 위에 겹쳐 뜬다.
                         EditCanvas(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
@@ -974,11 +969,11 @@ fun EditScreen(
                             onMagicWand = useMagicWand,
                             floating = {
                                 val sheetModifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { coverSheetPx = it.height }
-                                // 겹친 칸이 사라지면 그 높이를 지운다(가져올 곳 표시를 놓을 때 지난 높이만큼 비키지 않게)
-                                if (moreShown || coverSheet != null) DisposableEffect(Unit) { onDispose { coverSheetPx = 0 } }
-                                if (moreShown) {
-                                    // 더보기 줄: 탭 줄에 없는 도구. 고르면 닫고, 조정을 보던 중이면 끈다(같은 자리에 도구 옵션을 보이게).
-                                    CoverMoreTools(
+                                // 겹친 것이 사라지면 그 높이를 지운다(가져올 곳 표시를 놓을 때 지난 높이만큼 비키지 않게)
+                                if (coverOverlay != null) DisposableEffect(Unit) { onDispose { coverSheetPx = 0 } }
+                                when (coverOverlay) {
+                                    // 더보기 줄: 탭 줄에 없는 도구. 고르면 닫고, 조정을 보던 중이면 끈다(같은 막대에 도구 옵션을 보이게).
+                                    CoverOverlay.MORE -> CoverMoreTools(
                                         selection,
                                         enabled = toolsEnabled,
                                         onPick = { tool ->
@@ -988,19 +983,33 @@ fun EditScreen(
                                         },
                                         modifier = sheetModifier
                                     )
-                                } else if (coverSheet != null) {
-                                    ToolOptionsSheet(coverSheet, maxHeight = sheetMaxHeight, modifier = sheetModifier)
+                                    // 레이어 시트는 캔버스 높이까지 펼칠 수 있다(Q2 A)
+                                    CoverOverlay.LAYERS -> layerControls?.let { controls ->
+                                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                                            CoverLayerSheet(controls, onClose = floating::closePanel, maxHeight = maxHeight, modifier = sheetModifier)
+                                        }
+                                    }
+                                    CoverOverlay.CURVE -> adjustControls?.let { CoverCurveSheet(it, sheetModifier) }
+                                    null -> Unit
                                 }
                             }
                         )
-                        CoverToolBar(
-                            items = coverBarItems,
-                            state = coverBar,
-                            content = barContent,
-                            onClose = activeTool?.let { { selection.close() } },
-                            // 도구가 없으면 안내 글, 칩이 없는 도구(이동)는 도구 이름
-                            empty = activeTool?.let { stringResource(it.shortLabel) } ?: stringResource(R.string.bar_hint_choose_tool)
-                        )
+                        // 조정을 켜면 같은 막대가 조정 칩이 되고 ✕는 조정을 끈다(화면 테스트는 그때 막대를 조정 칸으로 본다)
+                        Box(if (coverAdjust) Modifier.testTag(EditScreenTags.ADJUST_PANEL) else Modifier) {
+                            CoverToolBar(
+                                items = coverBarItems,
+                                state = coverBar,
+                                content = barContent,
+                                onClose = if (coverAdjust) floating::closePanel else activeTool?.let { { selection.close() } },
+                                closeDescription = if (coverAdjust) {
+                                    stringResource(R.string.floating_panel_close, stringResource(R.string.tool_adjust))
+                                } else {
+                                    stringResource(R.string.bar_close_tool)
+                                },
+                                // 도구가 없으면 안내 글, 칩이 없는 도구(이동)는 도구 이름
+                                empty = activeTool?.let { stringResource(it.shortLabel) } ?: stringResource(R.string.bar_hint_choose_tool)
+                            )
+                        }
                         ToolTabBar(
                             selection,
                             enabled = toolsEnabled,
@@ -1148,26 +1157,8 @@ fun EditScreen(
     }
 }
 
-/**
- * 커버 화면(Compact)의 도구 옵션 자리. 탭 줄 바로 위에서 캔버스 아래쪽 위에 겹쳐 뜬다(캔버스를 줄이지 않아 이미지 크기·자리가 그대로,
- * 결정 기록 '닫힌 화면 도구 옵션'). 자르기는 새 창이라 캔버스 아래에 따로 놓는다.
- * 옆쪽 시스템 바·카메라 구멍만 피한다.
- * 옵션이 길면(선택 도구 등) [maxHeight]까지만 차지하고 그 안에서 위아래로 밀어 본다. 작은 폰에서도 캔버스가 보인다.
- */
-@Composable
-private fun ToolOptionsSheet(options: @Composable () -> Unit, maxHeight: Dp, modifier: Modifier = Modifier) {
-    Surface(modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_OPTIONS), color = StratumTheme.colors.panel) {
-        Box(
-            Modifier
-                .heightIn(max = maxHeight)
-                .verticalScroll(rememberScrollState())
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            options()
-        }
-    }
-}
+/** 커버 화면에서 캔버스 아래쪽 위에 겹쳐 뜨는 것(결정 기록 '커버 화면 개편'): 더보기 줄, 레이어 시트, 곡선 편집기 */
+private enum class CoverOverlay { MORE, LAYERS, CURVE }
 
 /** 상단 바의 조정·레이어 패널 버튼(커버·메인 화면): 열린 패널, 누를 수 있는지, 누르면 할 일(열고 닫음) */
 class PanelToggles(val open: MainPanel?, val enabled: Boolean, val onToggle: (MainPanel) -> Unit)
@@ -1490,8 +1481,6 @@ private tailrec fun Context.findActivity(): Activity? =
 /** 바쁨이 이만큼(밀리초) 이어지면 처리 중 막대를 보인다 */
 private const val BUSY_INDICATOR_DELAY_MILLIS = 200L
 
-/** 커버 화면에서 도구 옵션 자리가 차지할 수 있는 화면 높이의 비율 */
-private const val COMPACT_OPTIONS_MAX_FRACTION = 0.45f
 
 /** 메인 화면에서 자르기를 시작할 때 사진 둘레에 남기는 여백(테두리 손잡이를 잡을 수 있게) */
 private val CropStartMargin = 24.dp

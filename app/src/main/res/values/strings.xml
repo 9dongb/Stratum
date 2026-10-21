@@ -107,6 +107,8 @@
     <string name="bar_close_tool">Close tool</string>
     <string name="bar_selection_mode">Combine</string>
     <string name="bar_selection_actions">Actions</string>
+    <string name="sheet_expand">Expand</string>
+    <string name="sheet_collapse">Collapse</string>
 
     <!-- 편집 패널 -->
 

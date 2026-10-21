@@ -7,22 +7,26 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -54,10 +58,12 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.ToneCurve
+import com.kiln.stratum.ui.components.DividerEdge
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSlider
+import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 
@@ -106,7 +112,7 @@ private val NameWidth = 88.dp
 /** 슬라이더 줄의 숫자 칸 폭. '-100', '+1.25'가 들어간다. */
 private val ValueWidth = 48.dp
 
-/** 커버 화면 곡선 그래프의 높이. 캔버스를 너무 가리지 않게 낮게 둔다. */
+/** 커버 화면 곡선 편집기([CoverCurveSheet])의 높이. 캔버스를 너무 가리지 않게 낮게 둔다. */
 private val CompactCurveHeight = 168.dp
 
 /** 메인 화면 조정 패널의 곡선 그래프(제목 포함) 높이 */
@@ -116,35 +122,62 @@ private val ListCurveHeight = 232.dp
 private val PointRadius = 6.dp
 private val PointTouchRadius = 24.dp
 
+/** 커버 화면 조정 막대에서 [item] 칩의 이름([BarItem.key]) */
+internal fun adjustBarKey(item: AdjustItem): String = "adjust_" + item.name.lowercase()
+
+/** 조정 막대의 곡선 칩. 펼치면 편집 화면이 막대 위에 곡선 편집기([CoverCurveSheet])를 띄운다. */
+internal val CURVE_BAR_KEY = adjustBarKey(AdjustItem.CURVE)
+
 /**
- * 커버 화면(Compact)의 보정 옵션. 위에서 항목(칩)을 고르고, 그 아래 슬라이더 하나 또는 곡선 편집기로 바꾼다.
- * 한 손으로 쓰는 빠른 보정이라 한 번에 하나만 보인다(기획서 '화면별 UI 전략'). '모두 초기화'는 칩 줄 끝에 고정한다.
- *
- * @param item 고른 항목. 접기·펼치기에도 남도록 편집 화면이 들고 있다.
+ * 커버 화면 조정 막대의 칸(결정 기록 '커버 화면 개편' Q1 A): 항목 칩(노출·밝기·대비·하이라이트·그림자·색온도·채도·곡선)과 모두 초기화.
+ * 한 손으로 쓰는 빠른 보정이라 한 번에 하나만 보인다(기획서 '화면별 UI 전략'). 사진을 가리지 않게 한 줄 막대 안에서 바꾼다.
+ * 슬라이더 항목 칩을 누르면 같은 줄이 그 항목의 슬라이더 줄(이름·슬라이더·숫자)이 되고, 이름이나 원을 두 번 누르면 그 항목만 초기화한다.
+ * 곡선 칩을 누르면 줄은 '곡선' 이름이고 막대 위에 곡선 편집기가 뜬다(곡선은 넓은 자리가 필요해서). ✓로 칩 줄로 돌아온다.
+ * 값은 칩·줄 안에서만 읽는다(끄는 동안 편집 화면 전체가 다시 그려지지 않게, [AdjustControls]).
  */
-@Composable
-fun AdjustCompact(controls: AdjustControls, item: AdjustItem, onItem: (AdjustItem) -> Unit, modifier: Modifier = Modifier) {
-    CommitOnDispose(controls.actions)
-    val adjustments = controls.adjustments
-    Column(modifier.testTag(EditScreenTags.ADJUST_PANEL), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                for (entry in AdjustItem.entries) {
-                    AdjustChip(entry, selected = entry == item, changed = entry.isChanged(adjustments), enabled = controls.enabled) {
-                        onItem(entry)
-                    }
+internal fun adjustBar(controls: AdjustControls): List<BarItem> =
+    AdjustItem.entries.map { entry ->
+        BarCustom(
+            key = adjustBarKey(entry),
+            chip = { expand ->
+                AdjustChip(entry, changed = entry.isChanged(controls.adjustments), enabled = controls.enabled, onClick = expand)
+            },
+            content = {
+                if (entry.isSlider) {
+                    CommitOnDispose(controls.actions)
+                    AdjustSliderRow(entry, controls)
+                } else {
+                    Text(
+                        text = stringResource(entry.label),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        color = StratumTheme.colors.textSecondary,
+                        maxLines = 1,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
-            ResetAllButton(controls)
-        }
-        if (item.isSlider) {
-            AdjustSliderRow(item, controls)
-        } else {
-            CurveBlock(controls, Modifier.fillMaxWidth().height(CompactCurveHeight))
-        }
+        )
+    } + BarCustom(key = "adjust_reset_all", chip = { ResetAllButton(controls) }, content = {})
+
+/**
+ * 커버 화면 조정 막대에서 곡선 칩을 펼치면 막대 위(캔버스 아래쪽 위)에 뜨는 곡선 편집기와 그 옆 버튼(곡선 초기화·고른 점 지우기).
+ * 옆쪽 시스템 바·카메라 구멍만 피한다.
+ */
+@Composable
+internal fun CoverCurveSheet(controls: AdjustControls, modifier: Modifier = Modifier) {
+    CommitOnDispose(controls.actions)
+    Surface(
+        modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_CURVE_SHEET),
+        color = StratumTheme.colors.panel
+    ) {
+        CurveBlock(
+            controls,
+            Modifier
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .fillMaxWidth()
+                .height(CompactCurveHeight)
+        )
     }
 }
 
@@ -184,11 +217,11 @@ private fun CommitOnDispose(actions: AdjustActions) {
     }
 }
 
-/** 커버 화면의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
+/** 커버 화면 조정 막대의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
 @Composable
-private fun AdjustChip(item: AdjustItem, selected: Boolean, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun AdjustChip(item: AdjustItem, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
     StratumFilterChip(
-        selected = selected,
+        selected = false,
         onClick = onClick,
         enabled = enabled,
         label = { Text(stringResource(item.label), maxLines = 1, softWrap = false) },

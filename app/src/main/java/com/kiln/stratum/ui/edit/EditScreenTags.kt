@@ -56,8 +56,6 @@ object EditScreenTags {
     /** 상단 바 맨 오른쪽 설정 버튼(사용자 피드백 11차 4) */
     const val SETTINGS = "editSettings"
     const val TOOL_OPTIONS = "toolOptions"
-    /** 닫힌 화면(커버)의 도구 옵션 칸(캔버스 아래쪽 위에 겹쳐 뜸) */
-    const val COVER_OPTIONS = "coverOptions"
     /** 닫힌 화면 새 창(자르기 등)의 위 줄 */
     const val COVER_WINDOW_TOP_BAR = "coverWindowTopBar"
     /** 닫힌 화면 자르기 창의 옵션(하위 도구·비율) */
@@ -110,6 +108,15 @@ object EditScreenTags {
 
     /** 펼친 칩을 접는 ✓ */
     const val BAR_DONE = "barDone"
+
+    /** 커버 화면 레이어 시트(한 줄 막대 위에 올라옴, 결정 기록 '커버 화면 개편' Q2 A) */
+    const val COVER_LAYER_SHEET = "coverLayerSheet"
+
+    /** 레이어 시트 머리의 제목 자리(누르면 반 높이·전체 높이를 오감) */
+    const val COVER_LAYER_SHEET_HANDLE = "coverLayerSheetHandle"
+
+    /** 커버 조정 막대에서 곡선을 펼치면 막대 위에 뜨는 곡선 편집기 */
+    const val COVER_CURVE_SHEET = "coverCurveSheet"
 
     /** 메인 화면의 떠 있는 레이어·조정 패널 */
     const val FLOATING_PANEL = "floatingPanel"

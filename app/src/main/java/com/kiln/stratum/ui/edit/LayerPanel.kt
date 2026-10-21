@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -187,26 +186,8 @@ private val ThumbnailSize = 40.dp
 private val TextBadgeSize = 16.dp
 private val ThumbnailChecker = 5.dp
 
-/** 커버 화면 레이어 목록의 최대 높이(줄 세 개). 캔버스를 너무 가리지 않게 한다. */
-private val CompactListHeight = 168.dp
-
 /**
- * 커버 화면(Compact)의 레이어 옵션: 버튼 줄(더하기·지우기·화면 좌우·상하 반전), 레이어 목록(줄 세 개까지 보이고 밀어 봄),
- * 고른 레이어의 불투명도와 혼합 모드. 기획서대로 레이어 패널은 아래에서 올라오는 옵션 자리에 연다.
- */
-@Composable
-fun LayerCompact(controls: LayerControls, modifier: Modifier = Modifier) {
-    CommitOpacityOnDispose(controls.actions)
-    Column(modifier.testTag(EditScreenTags.LAYER_PANEL), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        LayerToolbar(controls)
-        LayerList(controls, Modifier.fillMaxWidth().heightIn(max = CompactListHeight))
-        LayerOpacityRow(controls)
-        BlendModeRow(controls)
-    }
-}
-
-/**
- * 메인 화면 떠 있는 레이어 패널의 내용: 레이어 목록, 그 아래 고른 레이어의 불투명도와 혼합 모드.
+ * 레이어 패널의 내용(메인 화면 떠 있는 패널, 커버 화면 레이어 시트): 레이어 목록, 그 아래 고른 레이어의 불투명도와 혼합 모드.
  * 목록은 줄이 적으면 그만큼만 차지하고(패널도 작아진다), 많으면 남는 높이에서 밀어 본다. 버튼 줄은 패널 제목 줄에 놓는다([LayerToolbar]).
  */
 @Composable

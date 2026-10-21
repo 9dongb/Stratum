@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
 /**
  * 닫힌 화면 공통 규칙(결정 기록 '커버 화면 개편', 전 '닫힌 화면 도구 옵션'): 아래는 늘 한 줄 막대 + 탭 줄이고 캔버스는 그 위만 쓴다.
  * 그래서 도구·조정·레이어를 고르거나 바꾸거나 닫아도 캔버스 크기(보던 이미지의 크기·자리)는 그대로다.
- * 아직 막대로 옮기지 않은 것(조정·레이어)과 더보기 줄은 캔버스 아래쪽 위에 겹쳐 뜬다. 자르기(새 창)는 빠진다.
+ * 잠깐 뜨는 것(더보기 줄, 레이어 시트)만 캔버스 아래쪽 위에 겹쳐 뜬다. 자르기(새 창)는 빠진다.
  */
 @RunWith(AndroidJUnit4::class)
 class CoverOptionsTest {
@@ -75,26 +75,23 @@ class CoverOptionsTest {
         val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(before.bottom, bar.top, 1f)
         composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
 
-        // 막대로 옮긴 도구는 옵션 칸 없이 막대만 바뀐다(이동은 옵션이 없다)
+        // 도구는 막대만 바뀐다(이동은 옵션이 없다)
         for (tool in listOf(EditTool.Brush, EditTool.Select, EditTool.Retouch, EditTool.Tone, EditTool.Mosaic, EditTool.Text, EditTool.Move)) {
             tab(tool)
             composeRule.waitForIdle()
             assertEquals("$tool canvas", before, canvasBounds())
-            composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
         }
-        // 아직 옮기지 않은 것(상단 바의 조정·레이어)은 캔버스 아래쪽 위에 겹쳐 뜬다
-        val steps = listOf<Pair<String, () -> Unit>>(
-            "adjust" to { composeRule.togglePanel(MainPanel.ADJUST) },
-            "layers" to { composeRule.togglePanel(MainPanel.LAYERS) }
-        )
-        for ((name, step) in steps) {
-            step()
-            composeRule.waitForIdle()
-            assertEquals("$name canvas", before, canvasBounds())
-            assertOverlapsTheCanvasBottom(name, EditScreenTags.COVER_OPTIONS, before)
-        }
+        // 조정은 같은 막대가 조정 칩이 된다(겹치지 않음, Q1 A)
+        composeRule.togglePanel(MainPanel.ADJUST)
+        composeRule.waitForIdle()
+        assertEquals("adjust canvas", before, canvasBounds())
+        assertEquals(bar, composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).fetchSemanticsNode().layoutBoundsInWindow())
+        // 레이어는 막대 위에 시트로 겹쳐 뜬다(Q2 A)
+        composeRule.togglePanel(MainPanel.LAYERS)
+        composeRule.waitForIdle()
+        assertEquals("layers canvas", before, canvasBounds())
+        assertOverlapsTheCanvasBottom("layers", EditScreenTags.COVER_LAYER_SHEET, before)
         composeRule.togglePanel(MainPanel.LAYERS)
         // 더보기 줄도 겹쳐 뜨고, 더보기 칸을 다시 누르면 닫힌다
         composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
