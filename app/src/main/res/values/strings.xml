@@ -207,7 +207,6 @@
     <string name="strip_handle_description">Move the options strip</string>
     <string name="tool_help">Help</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
-    <string name="strip_selection_mode">Mode</string>
     <string name="strip_tone_range">Range</string>
     <string name="strip_crop_ratio">Ratio</string>
     <string name="color_saturation_value">Saturation and brightness</string>

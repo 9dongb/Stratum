@@ -205,7 +205,6 @@
     <string name="strip_handle_description">옵션 띠 옮기기</string>
     <string name="tool_help">도움말</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
-    <string name="strip_selection_mode">방식</string>
     <string name="strip_tone_range">범위</string>
     <string name="strip_crop_ratio">비율</string>
     <string name="color_saturation_value">채도·밝기</string>

@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -52,6 +53,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 /** 선택 도구의 옵션, 캔버스에서 끌기·누르기, 윤곽선 표시를 확인한다(엔진 대신 받은 일만 적는 가짜). */
 @RunWith(AndroidJUnit4::class)
@@ -125,6 +128,9 @@ class SelectionToolTest {
     /** 문서 (200, 200)-(600, 600) 사각형 윤곽선 */
     private val square = SelectionOutline(listOf(floatArrayOf(200f, 200f, 600f, 200f, 600f, 600f, 200f, 600f, 200f, 200f)))
 
+    /** 편집 화면에 보내는 알림(알림 막대) */
+    private val messages = Channel<EditorMessage>(Channel.UNLIMITED)
+
     private fun show(widthDp: Int, heightDp: Int, outline: SelectionOutline? = null) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
@@ -142,6 +148,7 @@ class SelectionToolTest {
                             onCanvasSize = { _, _ -> },
                             onViewport = {},
                             onChooseSize = {},
+                            messages = messages.receiveAsFlow(),
                             selectionOptions = options,
                             onSelectionOptions = { options = it },
                             selectionActions = actions
@@ -335,10 +342,12 @@ class SelectionToolTest {
     fun aSecondFinger_dropsTheShape() {
         openCoverTool()
 
+        // 두 손가락 모두 옵션 칸이 덮지 않은 위쪽 캔버스를 누른다(상단 바가 낮아져 캔버스 가운데가 옵션 칸 위 끝에 가까워졌다)
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OVERLAY).performTouchInput {
-            down(0, center)
+            val (point, _) = visiblePoint()
+            down(0, point)
             moveBy(0, Offset(60f, 0f))
-            down(1, center + Offset(0f, 200f))
+            down(1, point + Offset(0f, 100f))
             moveBy(1, Offset(0f, 50f))
             up(1)
             up(0)
@@ -367,9 +376,11 @@ class SelectionToolTest {
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_OPTIONS).assertDoesNotExist()
 
-        // 합치는 방법: 칸을 눌러 연 목록에서 고르면 창이 닫힌다
-        composeRule.onNodeWithTag(EditScreenTags.strip("mode")).performClick()
+        // 합치는 방법: 띠에 아이콘 넷이 늘 보이고, 누르면 바로 바뀐다(사용자 피드백 10차 1)
+        for (mode in SelectionMode.entries) composeRule.onNodeWithTag(EditScreenTags.selectionMode(mode)).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.ADD)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.ADD)).assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.REPLACE)).assertIsOff()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.strip("feather")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
@@ -391,8 +402,8 @@ class SelectionToolTest {
             assertEquals(false, options.contiguous)
         }
 
-        // 합치는 방법 칸 한가운데를 가로로 지나는 힌지
-        val y = composeRule.onNodeWithTag(EditScreenTags.strip("mode")).fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
+        // 합치는 방법 첫 칸 한가운데를 가로로 지나는 힌지
+        val y = composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.REPLACE)).fetchSemanticsNode().layoutBoundsInWindow().center.y.roundToInt()
         val hinge = Hinge(left = 0, top = y, right = 10_000, bottom = y, isVertical = false)
         composeRule.runOnIdle { hinges.value = listOf(hinge) }
 
@@ -400,38 +411,113 @@ class SelectionToolTest {
     }
 
     @Test
-    fun expanded_aiSelectStrip_hasTheModeAndActions_butNoSlider() {
+    fun expanded_aiSelectStrip_hasTheModes_butNoSlider_andTheBarHasTheActions() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_AI)).performClick()
 
-        composeRule.onNodeWithTag(EditScreenTags.strip("mode")).assertIsDisplayed()
+        for (mode in SelectionMode.entries) {
+            composeRule.onNode(hasTestTag(EditScreenTags.selectionMode(mode)) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
+        }
         composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).assertDoesNotExist()
-        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).assertIsEnabled()
         composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }
     }
 
     @Test
-    fun expanded_stripActions_needASelection_andAreSent() {
+    fun expanded_barActions_needASelection() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
-            .assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).assertIsEnabled()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_INVERT).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_AI_FILL).assertIsNotEnabled()
+        // 띠에는 동작이 없다(아래 작업 표시줄에 있다)
+        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertDoesNotExist()
     }
 
     @Test
-    fun expanded_withASelection_stripActionsAreSent() {
+    fun expanded_withASelection_barActionsAreSent() {
         show(930, 700, outline = square)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
 
         for (tag in listOf(EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_NONE)) {
-            composeRule.onNodeWithTag(tag).performScrollTo().performClick()
+            composeRule.onNodeWithTag(tag).performClick()
         }
 
         composeRule.runOnIdle { assertEquals(listOf("invert", "delete", "copy", "cut", "aiFill", "none"), actions.calls) }
+    }
+
+    private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
+
+    private val barActionTags = listOf(
+        EditScreenTags.SELECTION_ALL, EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE,
+        EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL
+    )
+
+    @Test
+    fun expanded_actionBar_sitsAtTheBottomCenterOfTheScreen_inOneRow() {
+        // 사용자 피드백 10차 1: "그외 액션은 화면 중앙 하단에 가로로 보여주세요."
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+
+        val node = composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).fetchSemanticsNode()
+        val dp = with(node.layoutInfo.density) { 1.dp.toPx() }
+        val bar = node.layoutBoundsInWindow()
+        val screen = bounds(EditScreenTags.TOP_BAR)
+        val canvas = bounds(EditScreenTags.CANVAS)
+        assertEquals(screen.center.x, bar.center.x, 2 * dp)
+        assertEquals(canvas.bottom - 8 * dp, bar.bottom, 2 * dp)
+        // 버튼 일곱이 카드 안 한 줄에, 왼쪽부터 차례로
+        val buttons = barActionTags.map { bounds(it) }
+        for (button in buttons) assertTrue("$button should be inside $bar", button.left >= bar.left - 1 && button.right <= bar.right + 1 && button.top >= bar.top - 1 && button.bottom <= bar.bottom + 1)
+        assertEquals(buttons.map { it.left }.sorted(), buttons.map { it.left })
+    }
+
+    @Test
+    fun expanded_actionBar_splitsAroundACenterHinge() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        // 펼친 폴드처럼 화면 가운데를 세로로 지나는 힌지
+        val centerX = bounds(EditScreenTags.TOP_BAR).center.x.roundToInt()
+        val hinge = Hinge(left = centerX, top = 0, right = centerX, bottom = 10_000, isVertical = true)
+
+        composeRule.runOnIdle { hinges.value = listOf(hinge) }
+        composeRule.waitForIdle()
+
+        composeRule.assertClickablesAvoid(hinge)
+        val buttons = barActionTags.map { bounds(it) }
+        assertTrue("$buttons should be on both sides of $centerX", buttons.any { it.right < centerX } && buttons.any { it.left > centerX })
+    }
+
+    @Test
+    fun expanded_messageBar_sitsAboveTheActionBar() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+
+        composeRule.runOnIdle { messages.trySend(EditorMessage.HiddenLayer) }
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_hidden_layer)).assertExists()
+
+        val message = bounds(EditScreenTags.MESSAGE_BAR)
+        val bar = bounds(EditScreenTags.SELECTION_ACTION_BAR)
+        assertTrue("message $message should be above the bar $bar", message.bottom <= bar.top + 1)
+    }
+
+    @Test
+    fun actionBar_isOnlyForTheSelectionTool() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertIsDisplayed()
+    }
+
+    @Test
+    fun cover_keepsTheActionsInTheOptions_withoutTheBar() {
+        openCoverTool()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ACTION_BAR).assertDoesNotExist()
+        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_ALL) and hasAnyAncestor(hasTestTag(EditScreenTags.SELECTION_OPTIONS))).assertExists()
     }
 }

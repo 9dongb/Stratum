@@ -181,6 +181,15 @@ internal fun selectionModeLabel(mode: SelectionMode): Int =
         SelectionMode.INTERSECT -> R.string.selection_mode_intersect
     }
 
+/** 합치는 방법의 아이콘(메인 화면 띠, 사용자 피드백 10차 1). 빼기는 Material에 없어 'join_left'에서 겹친 곳을 뺀 모양이다. */
+internal fun selectionModeIcon(mode: SelectionMode): Int =
+    when (mode) {
+        SelectionMode.REPLACE -> R.drawable.ic_selection_new
+        SelectionMode.ADD -> R.drawable.ic_selection_add
+        SelectionMode.SUBTRACT -> R.drawable.ic_selection_subtract
+        SelectionMode.INTERSECT -> R.drawable.ic_selection_intersect
+    }
+
 /** 자동 선택의 '이어진 곳만' 스위치 줄. 줄 전체를 누를 수 있다(48dp). */
 @Composable
 internal fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {

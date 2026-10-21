@@ -119,30 +119,24 @@ internal fun transformStrip(crop: CropControls, busy: Boolean, close: () -> Unit
     }
 
 /**
- * 선택의 띠: 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),
- * 그리고 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기(모두 선택만 늘, 나머지는 고른 곳이 있을 때).
+ * 선택의 띠(사용자 피드백 10차 1: "선택도구 방식을 띠에서 한번 더 클릭하면 목록이 나오는데, 아이콘으로 띠에 일렬로 4개가 다 나오게 해주고"):
+ * 합치는 방법 넷(새로·더하기·빼기·교차, 고른 것이 켜진 아이콘 칸, 누르면 바로 바꿈), 구분선 아래 페더(자동 선택은 허용치와 '이어진 곳만').
+ * 개체 선택은 경계가 이미 부드러워 페더가 없다. 모두 선택·해제 같은 동작은 화면 아래 가운데 작업 표시줄([SelectionActionBar])에 있다.
  */
 @Composable
-internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: () -> Unit): List<StripItem> {
+internal fun selectionStrip(mode: SubTool, controls: SelectionControls): List<StripItem> {
     val options = controls.options
-    val ready = !controls.busy
-    val selected = ready && controls.hasSelection
-    val actions = controls.actions
-    return buildList {
-        add(
-            ValueCell("mode", stringResource(R.string.strip_selection_mode), stringResource(selectionModeLabel(options.mode))) {
-                ChoiceList(
-                    choices = SelectionMode.entries,
-                    selected = options.mode,
-                    label = { stringResource(selectionModeLabel(it)) },
-                    icon = { null },
-                    tag = { EditScreenTags.selectionMode(it) }
-                ) {
-                    controls.onOptions(options.copy(mode = it))
-                    close()
-                }
-            }
+    val modes = SelectionMode.entries.map { entry ->
+        IconCell(
+            key = "mode${entry.name}",
+            icon = selectionModeIcon(entry),
+            description = stringResource(selectionModeLabel(entry)),
+            onClick = { controls.onOptions(options.copy(mode = entry)) },
+            checked = options.mode == entry,
+            tag = EditScreenTags.selectionMode(entry)
         )
+    }
+    val numbers = buildList {
         if (mode == SubTool.SELECT_WAND) {
             val label = stringResource(R.string.selection_tolerance)
             add(
@@ -160,7 +154,7 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
                 )
             )
         } else if (mode != SubTool.SELECT_AI) {
-            // AI 선택은 경계가 이미 부드러워 페더가 없다
+            // 개체 선택은 경계가 이미 부드러워 페더가 없다
             val label = stringResource(R.string.selection_feather)
             val shown = stringResource(R.string.selection_feather_value, options.feather.roundToInt())
             add(
@@ -176,15 +170,8 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls, close: (
                 )
             )
         }
-        add(StripDivider("selectionActions"))
-        add(IconCell("all", R.drawable.ic_select_all, stringResource(R.string.selection_all_description), actions::all, enabled = ready, tag = EditScreenTags.SELECTION_ALL))
-        add(IconCell("none", R.drawable.ic_deselect, stringResource(R.string.selection_none), actions::none, enabled = selected, tag = EditScreenTags.SELECTION_NONE))
-        add(IconCell("invert", R.drawable.ic_flip_to_front, stringResource(R.string.selection_invert), actions::invert, enabled = selected, tag = EditScreenTags.SELECTION_INVERT))
-        add(IconCell("delete", R.drawable.ic_delete, stringResource(R.string.selection_delete_description), actions::delete, enabled = selected, tag = EditScreenTags.SELECTION_DELETE))
-        add(IconCell("copy", R.drawable.ic_content_copy, stringResource(R.string.selection_copy_description), { actions.copyToLayer(cut = false) }, enabled = selected, tag = EditScreenTags.SELECTION_COPY))
-        add(IconCell("cut", R.drawable.ic_content_cut, stringResource(R.string.selection_cut_description), { actions.copyToLayer(cut = true) }, enabled = selected, tag = EditScreenTags.SELECTION_CUT))
-        add(IconCell("aiFill", R.drawable.ic_auto_awesome, stringResource(R.string.selection_ai_fill_description), actions::aiFill, enabled = selected, tag = EditScreenTags.SELECTION_AI_FILL))
     }
+    return numbersLast(numbers, modes)
 }
 
 /**

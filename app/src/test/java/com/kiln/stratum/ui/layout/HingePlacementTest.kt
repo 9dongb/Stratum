@@ -347,4 +347,28 @@ class HingePlacementTest {
         val strip = Region(64, 60, 120, 400)
         assertEquals(190 to 60, zoomChipSpot(70, 60, width = 60, height = 32, verticalBands = listOf(Span(150, 190)), horizontalBands = emptyList(), avoid = strip, gap = 8))
     }
+
+    @Test
+    fun actionBarStarts_centersTheRow_insideTheArea() {
+        // 버튼 셋(60·80·60, 사이 4): 줄 폭 208, 가운데 500이면 396부터
+        assertEquals(listOf(396, 460, 544), actionBarStarts(listOf(60, 80, 60), center = 500, area = Span(10, 990), bands = emptyList(), gap = 4))
+        // 가운데가 끝에 가까우면 영역 안으로 민다
+        assertEquals(listOf(10, 74, 158), actionBarStarts(listOf(60, 80, 60), center = 50, area = Span(10, 990), bands = emptyList(), gap = 4))
+    }
+
+    @Test
+    fun actionBarStarts_splitsAroundAHinge() {
+        // 띠(480~520)가 줄 가운데를 지나면 넷 중 둘은 띠 왼쪽 끝에, 나머지 둘은 띠 오른쪽 끝에 붙인다
+        assertEquals(listOf(356, 420, 520, 584), actionBarStarts(List(4) { 60 }, center = 500, area = Span(10, 990), bands = listOf(Span(480, 520)), gap = 4))
+        // 홀수면 왼쪽이 하나 더(다섯 중 셋)
+        assertEquals(listOf(292, 356, 420, 520, 584), actionBarStarts(List(5) { 60 }, center = 500, area = Span(10, 990), bands = listOf(Span(480, 520)), gap = 4))
+    }
+
+    @Test
+    fun actionBarStarts_putsFewerOnTheShortSide() {
+        // 띠 왼쪽 자리(10~110)에는 하나만 들어가 나머지 넷은 띠 오른쪽에
+        assertEquals(listOf(50, 150, 214, 278, 342), actionBarStarts(List(5) { 60 }, center = 130, area = Span(10, 990), bands = listOf(Span(110, 150)), gap = 4))
+        // 어떻게 나눠도 들어가지 않으면 넓은 쪽(오른쪽)에 모두
+        assertEquals(listOf(200, 264, 328), actionBarStarts(List(3) { 60 }, center = 150, area = Span(10, 300), bands = listOf(Span(100, 200)), gap = 4))
+    }
 }

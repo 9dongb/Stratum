@@ -157,6 +157,9 @@ object EditScreenTags {
     const val SELECTION_TOLERANCE = "selectionTolerance"
     const val SELECTION_CONTIGUOUS = "selectionContiguous"
     const val SELECTION_ALL = "selectionAll"
+
+    /** 메인 화면 선택 도구의 아래 가운데 작업 표시줄(카드) */
+    const val SELECTION_ACTION_BAR = "selectionActionBar"
     const val SELECTION_NONE = "selectionNone"
     const val SELECTION_INVERT = "selectionInvert"
     const val SELECTION_DELETE = "selectionDelete"

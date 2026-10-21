@@ -233,6 +233,35 @@ fun zoomChipSpot(
 private const val MAX_SPOT_MOVES = 8
 
 /**
+ * 작업 표시줄 버튼들(폭 [widths], 왼쪽부터, 사이 [gap])의 왼쪽 자리(사용자 피드백 10차 1). 버튼 줄의 가운데를 [center](화면 가운데)에 맞추되
+ * [area] 안으로 민다. 세로 힌지의 띠([bands])에 걸리면 버튼을 띠 양쪽으로 나눈다: 반(올림)을 띠 왼쪽 끝에, 나머지를 띠 오른쪽 끝에 붙이고,
+ * 한쪽에 들어가지 않으면 그쪽 개수를 줄인다. 어떻게 나눠도 들어가지 않으면 넓은 쪽에 모두 둔다.
+ */
+fun actionBarStarts(widths: List<Int>, center: Int, area: Span, bands: List<Span>, gap: Int): List<Int> {
+    fun rowWidth(part: List<Int>) = if (part.isEmpty()) 0 else part.sum() + gap * (part.size - 1)
+    fun row(start: Int, part: List<Int>): List<Int> {
+        var x = start
+        return part.map { width -> x.also { x += width + gap } }
+    }
+    val total = rowWidth(widths)
+    val centered = (center - total / 2).coerceAtMost(area.end - total).coerceAtLeast(area.start)
+    val band = bands.firstOrNull { it.start < centered + total && centered < it.end } ?: return row(centered, widths)
+    val leftRoom = band.start - area.start
+    val rightRoom = area.end - band.end
+    // 반(올림)에 가까운 나누기부터 본다
+    val half = (widths.size + 1) / 2
+    val split = widths.indices.plus(widths.size).sortedBy { kotlin.math.abs(it - half) }.firstOrNull { count ->
+        rowWidth(widths.take(count)) <= leftRoom && rowWidth(widths.drop(count)) <= rightRoom
+    }
+    if (split != null) {
+        val left = widths.take(split)
+        val right = widths.drop(split)
+        return row(band.start - rowWidth(left), left) + row(band.end, right)
+    }
+    return if (leftRoom >= rightRoom) row((band.start - total).coerceAtLeast(area.start), widths) else row(band.end, widths)
+}
+
+/**
  * 높이 [height]인 도구 옵션 띠의 위 끝(창 좌표). 고른 도구 버튼([anchor]의 위아래)의 가운데에 띠의 가운데를 맞춘다.
  * 위쪽 자리가 모자라면 버튼 위 끝에서 시작하고(사용자 요청), 아래쪽 자리가 모자라면 버튼 아래 끝에서 끝낸다.
  * 그래도 [piece](도구가 든 조각의 위아래 구간) 밖으로 나가면 안으로 민다. 띠가 조각보다 크면 조각 위 끝이다.

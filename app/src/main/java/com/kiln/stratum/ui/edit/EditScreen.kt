@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -374,6 +375,10 @@ fun EditScreen(
     var screenTop by remember { mutableFloatStateOf(0f) }
     // 편집 화면 왼쪽 끝(창 루트 기준). 알림 막대를 화면 가로 정중앙에 두는 데 쓴다.
     var screenLeft by remember { mutableFloatStateOf(0f) }
+    // 편집 화면 가로 가운데(창 x). 선택 도구의 작업 표시줄을 화면 가로 정중앙에 둔다.
+    var screenCenterX by remember { mutableFloatStateOf(0f) }
+    // 선택 도구의 작업 표시줄이 캔버스 아래에서 차지하는 높이(픽셀). 알림 막대·떠 있는 패널을 그 위에 둔다(없으면 0).
+    var selectionBarPx by remember { mutableIntStateOf(0) }
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
@@ -383,6 +388,7 @@ fun EditScreen(
             val position = it.positionInRoot()
             screenTop = position.y
             screenLeft = position.x
+            screenCenterX = it.positionInWindow().x + it.size.width / 2f
         }
     ) {
         val widthClass = widthClassOf(maxWidth.value)
@@ -584,7 +590,7 @@ fun EditScreen(
                 EditTool.Text -> textControls?.let { textStrip(it) }
                 EditTool.Transform -> crop?.let { transformStrip(it, ready?.busy == true, floating::closeFlyout) }
                 EditTool.Select -> selectionControls?.let {
-                    selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it, floating::closeFlyout)
+                    selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it)
                 }
                 EditTool.Retouch -> retouchControls?.let {
                     retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it)
@@ -630,10 +636,16 @@ fun EditScreen(
         }
         // 도구를 고를 때 띄우던 안내 알림은 없앴다(사용자 피드백 8차 1-7: 리터칭·명암만 띠 맨 아래 물음표 칸으로 안내)
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
+        // 선택 도구의 동작(모두·해제·반전·지우기·복사·잘라내기·AI 채우기)은 메인 화면에서 화면 아래 가운데 작업 표시줄이다(사용자 피드백 10차 1)
+        val selectionBar = selectionControls?.takeIf { widthClass != WidthClass.Compact }
+        val selectionBarInset = with(LocalDensity.current) { (if (selectionBar != null) selectionBarPx else 0).toDp() }
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
-            // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다.
-            if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets))
+            // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다. 선택 도구의 작업 표시줄이 있으면 그 위까지만 늘어난다.
+            if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(bottom = selectionBarInset))
+            selectionBar?.let {
+                SelectionActionBar(it, screenCenterX, Modifier.fillMaxSize().windowInsetsPadding(insets)) { inset -> selectionBarPx = inset }
+            }
             if (stripItems != null && railTool != null) {
                 // 띠는 캔버스 왼쪽 위(옮겨 놓은 자리)에 칸만큼의 높이로 뜬다(사용자 피드백 9차)
                 OptionStripHost(stripItems, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
@@ -963,6 +975,8 @@ fun EditScreen(
                         reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
                         orientation = shownOrientation,
                         onSpotHeal = useSpotHeal, onMagicWand = useMagicWand,
+                        // 알림 막대는 선택 도구의 작업 표시줄 위에 뜬다
+                        overlayBottom = selectionBarInset,
                         // 배율 표시는 도구 옵션 띠를 피한다(띠가 왼쪽 위에 있으면 그 오른쪽)
                         avoid = { floating.stripRegion },
                         floating = floatingUi

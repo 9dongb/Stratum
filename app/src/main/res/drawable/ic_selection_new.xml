@@ -1,0 +1,10 @@
+<!-- Material Icons 'circle' (Apache License 2.0). Android Studio 'Vector Asset'의 Material Icons 파일을 그대로 옮겼다(tint 줄 없음). 선택의 합치는 방법 '새로'. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M12,2C6.47,2 2,6.47 2,12s4.47,10 10,10 10,-4.47 10,-10S17.53,2 12,2z"/>
+</vector>
