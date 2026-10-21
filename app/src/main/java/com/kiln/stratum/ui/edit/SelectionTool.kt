@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
@@ -78,9 +77,9 @@ class SelectionControls(
 )
 
 /**
- * 선택 도구 옵션: 하위 도구(사각형·원형·올가미·자동 선택·AI 선택), 합치는 방법(새로·더하기·빼기·교차),
- * 페더(모양) 또는 허용치·이어진 곳만(자동 선택), 동작 버튼(모두·해제·반전·지우기·복사·잘라내기·AI 채우기), 안내 한 줄.
- * AI 선택은 경계가 이미 부드러워 페더가 없다.
+ * 선택 도구 옵션: 합치는 방법(새로·더하기·빼기·교차), 페더(모양) 또는 허용치·이어진 곳만(자동 선택),
+ * 동작 버튼(모두·해제·반전·지우기·복사·잘라내기·AI 채우기), 맨 아래 하위 도구(사각형·원형·올가미·자동 선택·AI 선택).
+ * AI 선택은 경계가 이미 부드러워 페더가 없다. 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
  * 설정은 바꾸면 다음 선택부터 쓴다(기록하지 않는다). 동작은 누르면 바로 하고 실행 취소 한 단계로 남는다.
  */
 @Composable
@@ -88,7 +87,6 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
     val options = controls.options
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.SELECTION_OPTIONS), gap = 8.dp, fillHeight = false) {
-        SubToolSegments(EditTool.Select.subTools, mode, onChoose)
         SelectionModeRow(options.mode) { controls.onOptions(options.copy(mode = it)) }
         if (mode == SubTool.SELECT_WAND) {
             OptionSlider(
@@ -109,28 +107,31 @@ fun SelectionToolOptions(mode: SubTool, controls: SelectionControls, onChoose: (
             )
         }
         SelectionActionRow(controls)
-        Text(
-            text = stringResource(
-                when (mode) {
-                    SubTool.SELECT_WAND -> R.string.selection_hint_wand
-                    SubTool.SELECT_AI -> R.string.selection_hint_ai
-                    SubTool.SELECT_LASSO -> R.string.selection_hint_lasso
-                    else -> R.string.selection_hint_drag
-                }
-            ),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
+        // 하위 도구 줄은 옵션 칸 맨 아래(탭 줄 바로 위)다(커버 공통 규칙, 사용자 피드백 8차 1-1)
+        SubToolSegments(EditTool.Select.subTools, mode, onChoose)
     }
 }
 
 /**
- * 하위 도구 줄(모두 옵션이 이어지는 하위 도구일 때). 길게 누르는 메뉴(CLAUDE.md 6장)를 모르는 사람도 찾을 수 있게 옵션 위쪽에 둔다.
+ * 커버 옵션 칸 맨 아래의 하위 도구 줄(모두 옵션이 이어지는 하위 도구일 때). 길게 누르는 메뉴(CLAUDE.md 6장)를 모르는 사람도 찾을 수 있게 둔다.
+ * 맨 아래(탭 줄 바로 위)인 까닭은 커버 공통 규칙이다(사용자 피드백 8차 1-1: "선택 탭은 하단에 공통적으로 배치"). 엄지가 가장 쉽게 닿는다.
+ * [help]가 있으면 줄 오른쪽 끝에 둔다(물음표 도움말, 사용자 피드백 8차 1-7).
  */
 @Composable
-fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit) {
-    StratumSegmentedRow {
+fun SubToolSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit, help: (@Composable () -> Unit)? = null) {
+    if (help == null) {
+        SubToolRowSegments(subTools, mode, onChoose, Modifier)
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SubToolRowSegments(subTools, mode, onChoose, Modifier.weight(1f))
+            help()
+        }
+    }
+}
+
+@Composable
+private fun SubToolRowSegments(subTools: List<SubTool>, mode: SubTool, onChoose: (SubTool) -> Unit, modifier: Modifier) {
+    StratumSegmentedRow(modifier) {
         subTools.forEachIndexed { index, subTool ->
             StratumSegment(
                 selected = subTool == mode,

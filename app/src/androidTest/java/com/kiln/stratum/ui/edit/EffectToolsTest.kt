@@ -116,14 +116,18 @@ class EffectToolsTest {
     )
 
     @Test
-    fun blurOptions_haveStrengthSizeHardness_andTheHintFollowsTheMode() {
+    fun blurOptions_haveSizeHardnessStrength_thenTheSubToolsAtTheBottom() {
         showBlurOptions(SubTool.EFFECT_SHARPEN)
 
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).assertIsSelected()
-        for (tag in listOf(EditScreenTags.BLUR_STRENGTH, EditScreenTags.BLUR_SIZE, EditScreenTags.BLUR_HARDNESS)) {
-            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        // 슬라이더는 크기 → 경도 → 강도(사용자 피드백 9차), 하위 도구 줄은 맨 아래(8차 1-1). 설명 줄·물음표는 없다(8차 1-7).
+        val tops = listOf(EditScreenTags.BLUR_SIZE, EditScreenTags.BLUR_HARDNESS, EditScreenTags.BLUR_STRENGTH).map {
+            composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
         }
-        composeRule.onNodeWithTag(EditScreenTags.BLUR_HINT).assertTextEquals(composeRule.activity.getString(R.string.blur_hint_sharpen))
+        assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
+        val sharpen = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$sharpen should be below the sliders", sharpen.top >= tops.last())
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertDoesNotExist()
     }
 
     @Test
@@ -144,19 +148,17 @@ class EffectToolsTest {
     }
 
     @Test
-    fun blurOptions_offerSmudge_withItsOwnHint() {
+    fun blurOptions_offerSmudge() {
         showBlurOptions(SubTool.EFFECT_SMUDGE)
 
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SMUDGE)).assertIsSelected()
         composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BLUR_HINT).assertTextEquals(composeRule.activity.getString(R.string.blur_hint_smudge))
     }
 
     @Test
     fun mosaicOptions_changeTheCellOnALogScale() {
         showMosaicOptions()
 
-        composeRule.onNodeWithTag(EditScreenTags.MOSAIC_HINT).assertTextEquals(composeRule.activity.getString(R.string.mosaic_hint))
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_CELL).performSemanticsAction(SemanticsActions.SetProgress) { it(cellToFraction(40)) }
         composeRule.runOnIdle { assertEquals(40, mosaic.cell) }
         // 양 끝은 2px·512px
@@ -233,7 +235,6 @@ class EffectToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Blur)).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.BLUR_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.BLUR_OVERLAY).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.BLUR_HINT).assertTextEquals(composeRule.activity.getString(R.string.blur_hint_blur))
 
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Mosaic)).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.MOSAIC_OPTIONS).assertIsDisplayed()

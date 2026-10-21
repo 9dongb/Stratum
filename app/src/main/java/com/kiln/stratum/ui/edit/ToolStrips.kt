@@ -246,12 +246,12 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
             )
         }
     }
-    return numbersFirst(numbers, rest)
+    return numbersFirst(numbers, rest) + helpCells(EditTool.Retouch, mode, controls.picking)
 }
 
-/** 명암의 띠: 크기, 경도, 노출(강도 자리), 구분선 아래 범위(어두운·중간·밝은 영역, 아이콘) */
+/** 명암의 띠: 크기, 경도, 노출(강도 자리), 구분선 아래 범위(어두운·중간·밝은 영역, 아이콘), 맨 아래 물음표 도움말 */
 @Composable
-internal fun toneStrip(controls: ToneControls, close: () -> Unit): List<StripItem> {
+internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit): List<StripItem> {
     val options = controls.options
     val brush = options.brush
     val rangeCaption = stringResource(R.string.strip_tone_range)
@@ -292,7 +292,7 @@ internal fun toneStrip(controls: ToneControls, close: () -> Unit): List<StripIte
                 }
             }
         )
-    )
+    ) + helpCells(EditTool.Tone, mode, retouchPicking = false)
 }
 
 /** 흐림의 띠: 크기, 경도, 강도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */
@@ -480,20 +480,13 @@ private fun <T> ChoiceList(
 }
 
 /**
- * 메인 화면에서 도구를 고를 때 캔버스 위쪽 가운데에 알림으로 보일 안내. 띠에는 커버 옵션의 안내 글이 들어갈 자리가 없다.
- * [mode]는 고른 하위 도구, [retouchPicking]은 리터칭이 가져올 곳을 정하는 중인지다. 같은 안내는 편집 화면에서 한 번만 띄운다(편집 화면이 기억한다).
- * 안내가 없는 도구(브러시·지우개·자르기·변형)는 null이다.
+ * 물음표 도움말의 안내 글(사용자 피드백 8차 1-7: 설명 줄을 빼고 조작이 모호한 도구에만 물음표, 사용자 결정 'AI 제거·리터칭·명암').
+ * [mode]는 고른 하위 도구, [retouchPicking]은 리터칭이 가져올 곳을 정하는 중인지다. 물음표가 없는 도구는 null이다.
+ * 커버는 옵션 칸 맨 아래 하위 도구 줄 끝([HelpButton]), 메인 화면은 띠 맨 아래 칸([HelpCell])에서 쓴다.
  */
 @Composable
-internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boolean): String? {
+internal fun toolHelpText(tool: EditTool?, mode: SubTool?, retouchPicking: Boolean): String? {
     val hint = when (tool) {
-        EditTool.Text -> R.string.text_hint
-        EditTool.Select -> when (mode) {
-            SubTool.SELECT_WAND -> R.string.selection_hint_wand
-            SubTool.SELECT_AI -> R.string.selection_hint_ai
-            SubTool.SELECT_LASSO -> R.string.selection_hint_lasso
-            else -> R.string.selection_hint_drag
-        }
         EditTool.Retouch -> when {
             mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
             mode == SubTool.RETOUCH_REMOVE -> R.string.retouch_hint_remove
@@ -502,10 +495,12 @@ internal fun toolHintText(tool: EditTool?, mode: SubTool?, retouchPicking: Boole
             else -> R.string.retouch_hint_clone
         }
         EditTool.Tone -> if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge
-        EditTool.Blur -> blurHint(mode)
-        EditTool.Mosaic -> R.string.mosaic_hint
-        EditTool.Move -> R.string.move_hint
         else -> null
     }
     return hint?.let { stringResource(it) }
 }
+
+/** 띠 맨 아래의 물음표 칸(누르면 옆에 안내 글 창). 안내 글이 없는 도구는 빈 목록이다. */
+@Composable
+private fun helpCells(tool: EditTool, mode: SubTool, retouchPicking: Boolean): List<StripItem> =
+    toolHelpText(tool, mode, retouchPicking)?.let { listOf(StripDivider("beforeHelp"), HelpCell("help", stringResource(R.string.tool_help), it)) }.orEmpty()

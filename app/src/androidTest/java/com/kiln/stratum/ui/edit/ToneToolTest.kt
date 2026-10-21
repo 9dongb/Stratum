@@ -1,5 +1,10 @@
 package com.kiln.stratum.ui.edit
 
+import com.kiln.stratum.ui.components.HELP_TOOLTIP_TAG
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -95,14 +100,22 @@ class ToneToolTest {
     }
 
     @Test
-    fun options_haveRangeExposureSizeHardness_andTheHintFollowsTheMode() {
+    fun options_haveRangeSizeHardnessExposure_andTheHelpFollowsTheMode() {
         showOptions(SubTool.TONE_BURN)
 
         composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.MIDTONES)).assertIsSelected()
-        for (tag in listOf(EditScreenTags.TONE_EXPOSURE, EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS)) {
-            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차)
+        val tops = listOf(EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS, EditScreenTags.TONE_EXPOSURE).map {
+            composeRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow().top
         }
-        composeRule.onNodeWithTag(EditScreenTags.TONE_HINT).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_burn))
+        assertTrue("$tops should go down", tops.zipWithNext().all { (a, b) -> a < b })
+        // 하위 도구 줄은 맨 아래이고, 설명 줄 대신 물음표를 누르면 안내가 뜬다(사용자 피드백 8차 1-1·1-7)
+        val burn = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$burn should be below the sliders", burn.top >= tops.last())
+        val hint = composeRule.activity.getString(R.string.tone_hint_burn)
+        composeRule.onNodeWithText(hint).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).performClick()
+        composeRule.onNode(hasText(hint) and hasAnyAncestor(hasTestTag(HELP_TOOLTIP_TAG))).assertIsDisplayed()
     }
 
     @Test
@@ -180,7 +193,7 @@ class ToneToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.TONE_OPTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.TONE_OVERLAY).assertExists()
-        composeRule.onNodeWithTag(EditScreenTags.TONE_HINT).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_dodge))
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertIsDisplayed()
     }
 
     @Test

@@ -38,7 +38,6 @@ import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.layout.HingeAwareDialog
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.WidthClass
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -51,20 +50,13 @@ import kotlin.math.roundToInt
 class TextControls(val style: TextStyle, val onChange: (TextStyle) -> Unit, val colors: ColorControls? = null)
 
 /**
- * 글자 옵션: 안내 한 줄, 색, 크기. 캔버스를 누르면 그 자리에 글자를 넣는 창이 뜬다(편집 화면).
- * 크기는 8~2000px을 고르게 고를 수 있게 로그 눈금이다.
+ * 글자 옵션: 색, 크기. 캔버스를 누르면 그 자리에 글자를 넣는 창이 뜬다(편집 화면).
+ * 크기는 8~2000px을 고르게 고를 수 있게 로그 눈금이다. 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
  */
 @Composable
 fun TextOptions(controls: TextControls, modifier: Modifier = Modifier) {
     // 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(자르기·변형 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.TEXT_OPTIONS), fillHeight = false) {
-        Text(
-            text = stringResource(R.string.text_hint),
-            // 힌지를 피하는 칸은 좁은 줄을 가운데 놓으므로, 왼쪽에 맞추려고 줄을 꽉 채운다
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
         controls.colors?.let { ColorRow(it) }
         TextSizeSlider(controls)
     }

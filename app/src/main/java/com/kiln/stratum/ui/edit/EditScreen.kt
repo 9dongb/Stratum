@@ -478,7 +478,8 @@ fun EditScreen(
             EditTool.Mosaic -> mosaicOptions.brush
             else -> null
         }
-        val toolOptions: (@Composable () -> Unit)? = activeTool?.let {
+        // 이동 도구는 고를 옵션이 없어 커버에 옵션 칸을 띄우지 않는다(사용자 피드백 8차 1-7: 설명 줄도 뺌)
+        val toolOptions: (@Composable () -> Unit)? = activeTool?.takeIf { it != EditTool.Move }?.let {
             {
                 ToolOptions(
                     selection,
@@ -521,7 +522,7 @@ fun EditScreen(
                     retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it)
                 }
                 EditTool.Tone -> toneControls?.let {
-                    toneStrip(it, floating::closeFlyout)
+                    toneStrip(checkNotNull(selection.modeOf(EditTool.Tone)), it, floating::closeFlyout)
                 }
                 EditTool.Blur -> blurControls?.let {
                     blurStrip(it)
@@ -559,16 +560,7 @@ fun EditScreen(
                 }
             }
         }
-        // 메인 화면은 띠에 안내 글이 들어갈 자리가 없어, 도구를 고를 때 캔버스 위쪽 가운데에 알림으로 한 번 보인다
-        // 이동 도구는 고를 옵션이 없어 띠 없이 안내만 띄운다
-        val toolHint = if (stripItems != null || (widthClass != WidthClass.Compact && railTool == EditTool.Move)) toolHintText(railTool, activeMode, retouchPicks) else null
-        var shownHints by rememberSaveable { mutableStateOf(listOf<String>()) }
-        LaunchedEffect(toolHint) {
-            if (toolHint != null && toolHint !in shownHints) {
-                shownHints = shownHints + toolHint
-                gestureToast.show(toolHint, TOOL_HINT_MILLIS)
-            }
-        }
+        // 도구를 고를 때 띄우던 안내 알림은 없앴다(사용자 피드백 8차 1-7: 리터칭·명암만 띠 맨 아래 물음표 칸으로 안내)
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.

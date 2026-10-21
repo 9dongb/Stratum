@@ -1,9 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
@@ -14,7 +10,6 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectMath
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -35,7 +30,7 @@ data class MosaicOptions(
 @Stable
 class MosaicControls(val options: MosaicOptions, val sizePreview: SizePreviewState? = null, val onChange: (MosaicOptions) -> Unit)
 
-/** 모자이크 옵션(커버): 크기, 경도, 셀 크기, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다). */
+/** 모자이크 옵션(커버): 크기, 경도, 셀 크기. 바꾸면 다음 획부터 쓴다(기록하지 않는다). 설명 줄은 두지 않는다(사용자 피드백 8차 1-7). */
 @Composable
 fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
     val options = controls.options
@@ -51,12 +46,6 @@ fun MosaicToolOptions(controls: MosaicControls, modifier: Modifier = Modifier) {
             fraction = cellToFraction(options.cell),
             onFraction = { controls.onChange(options.copy(cell = fractionToCell(it))) },
             tag = EditScreenTags.MOSAIC_CELL
-        )
-        Text(
-            text = stringResource(R.string.mosaic_hint),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.MOSAIC_HINT),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
         )
     }
 }

@@ -16,6 +16,13 @@ object EditScreenTags {
 
     /** 도구 옵션 띠 맨 위의 손잡이(끌어 띠를 옮김, 사용자 피드백 9차) */
     const val STRIP_HANDLE = "stripHandle"
+
+    /** 커버 옵션 칸 하위 도구 줄 끝의 물음표 도움말(리터칭·명암, 사용자 피드백 8차 1-7) */
+    const val TOOL_HELP = "toolHelp"
+
+    /** 띠 맨 아래 물음표 칸의 안내 글(옵션 창 안) */
+    const val STRIP_HELP_TEXT = "stripHelpText"
+
     /** 세로 슬라이더 창의 값 표시('경도 82%') */
     const val STRIP_SLIDER_VALUE = "stripSliderValue"
     const val OPTION_FLYOUT = "optionFlyout"
@@ -180,7 +187,6 @@ object EditScreenTags {
     const val RETOUCH_HARDNESS = "retouchHardness"
     const val RETOUCH_OPACITY = "retouchOpacity"
     const val RETOUCH_SOURCE = "retouchSource"
-    const val RETOUCH_HINT = "retouchHint"
     const val RETOUCH_REMOVE_PICKED = "retouchRemovePicked"
     const val RETOUCH_SOURCE_MARKER = "retouchSourceMarker"
 
@@ -190,22 +196,18 @@ object EditScreenTags {
     const val TONE_EXPOSURE = "toneExposure"
     const val TONE_SIZE = "toneSize"
     const val TONE_HARDNESS = "toneHardness"
-    const val TONE_HINT = "toneHint"
     const val BLUR_OPTIONS = "blurOptions"
     const val BLUR_OVERLAY = "blurOverlay"
     const val BLUR_STRENGTH = "blurStrength"
     const val BLUR_SIZE = "blurSize"
     const val BLUR_HARDNESS = "blurHardness"
-    const val BLUR_HINT = "blurHint"
     const val MOSAIC_OPTIONS = "mosaicOptions"
-    /** 이동 도구의 캔버스 손가락과 커버 옵션(안내 한 줄) */
+    /** 이동 도구의 캔버스 손가락 */
     const val MOVE_OVERLAY = "moveOverlay"
-    const val MOVE_OPTIONS = "moveOptions"
     const val MOSAIC_OVERLAY = "mosaicOverlay"
     const val MOSAIC_CELL = "mosaicCell"
     const val MOSAIC_SIZE = "mosaicSize"
     const val MOSAIC_HARDNESS = "mosaicHardness"
-    const val MOSAIC_HINT = "mosaicHint"
 
     /** 명암 옵션의 [range] 범위 버튼 */
     fun toneRange(range: com.kiln.stratum.engine.tone.ToneRange): String = "toneRange_${range.name}"

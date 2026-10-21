@@ -197,6 +197,7 @@
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_handle_description">옵션 띠 옮기기</string>
+    <string name="tool_help">도움말</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_selection_mode">방식</string>
     <string name="strip_tone_range">범위</string>
@@ -213,7 +214,6 @@
     <string name="color_revert">원래 색 %1$s. 누르면 이 색으로 돌아가요.</string>
 
     <!-- 글자 -->
-    <string name="text_hint">글자를 넣을 자리(글자의 왼쪽 위)를 캔버스에서 누르세요.</string>
     <string name="text_prompt_title">글자 넣기</string>
     <string name="text_prompt_label">글자</string>
     <string name="action_add">넣기</string>
@@ -280,10 +280,6 @@
     <string name="selection_cut_description">새 레이어로 잘라내기</string>
     <string name="selection_ai_fill">AI 채우기</string>
     <string name="selection_ai_fill_description">고른 곳을 AI로 채우기</string>
-    <string name="selection_hint_drag">캔버스를 끌어서 고르세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
-    <string name="selection_hint_lasso">고를 곳을 손가락으로 둘러 그리세요. 브러시·지우개는 고른 곳 안에만 그려요.</string>
-    <string name="selection_hint_wand">색을 누르면 고른 레이어에서 비슷한 색을 골라요.</string>
-    <string name="selection_hint_ai">물체를 톡 누르면 AI가 모양대로 골라요. 처음 한 번은 준비하느라 몇 초 걸릴 수 있어요.</string>
 
     <!-- 픽셀 유동화 -->
     <string name="tool_liquify">픽셀 유동화</string>
@@ -330,15 +326,10 @@
     <string name="subtool_sharpen">선명</string>
     <string name="subtool_smudge">스머지</string>
     <string name="effect_strength">강도</string>
-    <string name="blur_hint_blur">칠한 곳을 흐리게 해요. 다시 칠하면 더 흐려져요.</string>
-    <string name="blur_hint_sharpen">칠한 곳의 가는 결을 또렷하게 해요. 다시 칠하면 더 선명해져요.</string>
-    <string name="blur_hint_smudge">손가락으로 문지르듯 색을 끌어요. 강도가 셀수록 멀리 끌려요.</string>
     <string name="tool_mosaic">모자이크</string>
     <string name="tool_move">이동 도구</string>
     <string name="tool_move_short">이동</string>
-    <string name="move_hint">끌어서 고른 레이어를 옮겨요. 캔버스 밖으로 나간 부분은 손을 떼면 잘려요.</string>
     <string name="mosaic_cell">셀 크기</string>
-    <string name="mosaic_hint">칠한 곳을 네모 칸으로 가려요. 칸마다 그 아래의 평균 색이에요.</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">명암(닷지·번)</string>

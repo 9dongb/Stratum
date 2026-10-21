@@ -199,6 +199,7 @@
     <!-- 세로 슬라이더 옆 값 표시: 이름과 값(예: 경도 82%) -->
     <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_handle_description">Move the options strip</string>
+    <string name="tool_help">Help</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
     <string name="strip_selection_mode">Mode</string>
     <string name="strip_tone_range">Range</string>
@@ -215,7 +216,6 @@
     <string name="color_revert">Original color %1$s. Tap to go back to it.</string>
 
     <!-- 글자 -->
-    <string name="text_hint">Tap the canvas where the text should start (its top-left corner).</string>
     <string name="text_prompt_title">Add text</string>
     <string name="text_prompt_label">Text</string>
     <string name="action_add">Add</string>
@@ -282,10 +282,6 @@
     <string name="selection_cut_description">Cut to a new layer</string>
     <string name="selection_ai_fill">AI fill</string>
     <string name="selection_ai_fill_description">Fill the selection with AI</string>
-    <string name="selection_hint_drag">Drag on the canvas to select. Brushes and the eraser only paint inside the selection.</string>
-    <string name="selection_hint_lasso">Draw around the area to select. Brushes and the eraser only paint inside the selection.</string>
-    <string name="selection_hint_wand">Tap a color to select similar colors on the chosen layer.</string>
-    <string name="selection_hint_ai">Tap an object and AI selects its shape. The first time may take a few seconds to get ready.</string>
 
     <!-- 픽셀 유동화 -->
     <string name="tool_liquify">Liquify</string>
@@ -332,15 +328,10 @@
     <string name="subtool_sharpen">Sharpen</string>
     <string name="subtool_smudge">Smudge</string>
     <string name="effect_strength">Strength</string>
-    <string name="blur_hint_blur">Paint to soften. Paint again to blur more.</string>
-    <string name="blur_hint_sharpen">Paint to bring out fine detail. Paint again to sharpen more.</string>
-    <string name="blur_hint_smudge">Drag to push color like a fingertip. Higher strength drags it farther.</string>
     <string name="tool_mosaic">Mosaic</string>
     <string name="tool_move">Move tool</string>
     <string name="tool_move_short">Move</string>
-    <string name="move_hint">Drag to move the selected layer. Parts moved off the canvas are cut off when you let go.</string>
     <string name="mosaic_cell">Cell size</string>
-    <string name="mosaic_hint">Paint to cover with square cells. Each cell takes the average color under it.</string>
 
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">Dodge &amp; burn</string>

@@ -93,7 +93,7 @@ class MoveToolTest {
     private fun text(id: Int) = composeRule.activity.getString(id)
 
     @Test
-    fun main_moveIsTheTopTool_withoutAStrip_andItsHintShows() {
+    fun main_moveIsTheTopTool_withoutAStripOrAHint() {
         show(930, 700)
         val move = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
         val transform = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
@@ -102,13 +102,13 @@ class MoveToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Move)).performClick()
 
-        // 고를 옵션이 없어 띠가 없고, 안내는 알림으로 한 번 보인다
+        // 고를 옵션이 없어 띠가 없고, 도구를 고를 때 뜨던 안내 알림도 없다(사용자 피드백 8차 1-7)
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(text(R.string.move_hint))
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
     }
 
     @Test
-    fun cover_moveIsTheFirstTab_andShowsItsHintLine() {
+    fun cover_moveIsTheFirstTab_withoutAnOptionsSheet() {
         show(411, 800)
         val move = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
         val transform = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
@@ -116,7 +116,9 @@ class MoveToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
 
-        composeRule.onNodeWithTag(EditScreenTags.MOVE_OPTIONS).assertIsDisplayed().assertTextEquals(text(R.string.move_hint))
+        // 고를 옵션이 없어 옵션 칸을 띄우지 않는다(설명 줄도 뺌, 사용자 피드백 8차 1-7)
+        composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_OPTIONS).assertDoesNotExist()
     }
 
     @Test

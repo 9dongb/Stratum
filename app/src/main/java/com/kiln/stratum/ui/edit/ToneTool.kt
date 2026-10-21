@@ -1,10 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -16,10 +13,10 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.ui.components.HelpButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -64,8 +61,8 @@ interface ToneActions {
 class ToneControls(val options: ToneOptions, val sizePreview: SizePreviewState? = null, val onChange: (ToneOptions) -> Unit)
 
 /**
- * 명암 옵션: 하위 도구(닷지·번), 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 안내 한 줄.
- * 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 명암 옵션: 범위(어두운 영역·중간 영역·밝은 영역), 크기, 경도, 노출, 맨 아래 하위 도구(닷지·번)와 그 오른쪽 끝의 물음표 도움말.
+ * 바꾸면 다음 획부터 쓴다(기록하지 않는다). 설명 줄 대신 물음표를 누르면 안내가 말풍선으로 뜬다(사용자 피드백 8차 1-7).
  */
 @Composable
 fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -73,7 +70,6 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
     val brush = options.brush
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.TONE_OPTIONS), gap = 8.dp, fillHeight = false) {
-        SubToolSegments(EditTool.Tone.subTools, mode, onChoose)
         ToneRangeRow(options.range) { controls.onChange(options.copy(range = it)) }
         // 슬라이더는 크기 → 경도 → 노출(강도 자리) 순서다(사용자 피드백 9차, 띠와 같다)
         SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.TONE_SIZE, controls.sizePreview)
@@ -86,12 +82,11 @@ fun ToneToolOptions(mode: SubTool, controls: ToneControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(exposure = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
             tag = EditScreenTags.TONE_EXPOSURE
         )
-        Text(
-            text = stringResource(if (mode == SubTool.TONE_BURN) R.string.tone_hint_burn else R.string.tone_hint_dodge),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.TONE_HINT),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
+        // 하위 도구 줄은 맨 아래(커버 공통 규칙), 그 오른쪽 끝에 물음표 도움말
+        val help = checkNotNull(toolHelpText(EditTool.Tone, mode, retouchPicking = false))
+        SubToolSegments(EditTool.Tone.subTools, mode, onChoose) {
+            HelpButton(help, stringResource(R.string.tool_help), Modifier.testTag(EditScreenTags.TOOL_HELP))
+        }
     }
 }
 

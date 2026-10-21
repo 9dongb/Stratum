@@ -1,9 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
@@ -15,7 +11,6 @@ import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -71,7 +66,8 @@ val SubTool.effectKind: EffectKind?
 class BlurControls(val options: BlurOptions, val sizePreview: SizePreviewState? = null, val onChange: (BlurOptions) -> Unit)
 
 /**
- * 흐림 옵션(커버): 하위 도구(흐림·선명·스머지), 크기, 경도, 강도, 안내 한 줄. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 흐림 옵션(커버): 크기, 경도, 강도, 맨 아래 하위 도구(흐림·선명·스머지). 바꾸면 다음 획부터 쓴다(기록하지 않는다).
+ * 설명 줄은 두지 않는다(사용자 피드백 8차 1-7: 작업 공간 확보).
  */
 @Composable
 fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -79,7 +75,6 @@ fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -
     val brush = options.brush
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.BLUR_OPTIONS), gap = 8.dp, fillHeight = false) {
-        SubToolSegments(EditTool.Blur.subTools, mode, onChoose)
         // 슬라이더는 크기 → 경도 → 강도 순서다(사용자 피드백 9차, 띠와 같다)
         SizeSlider(brush.size, { controls.onChange(options.copy(brush = brush.copy(size = it))) }, EditScreenTags.BLUR_SIZE, controls.sizePreview)
         HardnessSlider(brush.hardness, { controls.onChange(options.copy(brush = brush.copy(hardness = it))) }, EditScreenTags.BLUR_HARDNESS, controls.sizePreview)
@@ -90,25 +85,13 @@ fun BlurToolOptions(mode: SubTool, controls: BlurControls, onChoose: (SubTool) -
             onFraction = { controls.onChange(options.copy(strength = strengthOf(it))) },
             tag = EditScreenTags.BLUR_STRENGTH
         )
-        Text(
-            text = stringResource(blurHint(mode)),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.BLUR_HINT),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
+        // 하위 도구 줄은 맨 아래(커버 공통 규칙)
+        SubToolSegments(EditTool.Blur.subTools, mode, onChoose)
     }
 }
 
 /** 강도 슬라이더 눈금(0..1)을 강도로: 1% 단위, 0%면 아무것도 바뀌지 않으니 1%에서 멈춘다(명암의 노출과 같다) */
 internal fun strengthOf(fraction: Float): Float = ((fraction * 100).roundToInt() / 100f).coerceIn(0.01f, 1f)
-
-/** 흐림 하위 도구의 안내 */
-internal fun blurHint(mode: SubTool?): Int =
-    when (mode) {
-        SubTool.EFFECT_SHARPEN -> R.string.blur_hint_sharpen
-        SubTool.EFFECT_SMUDGE -> R.string.blur_hint_smudge
-        else -> R.string.blur_hint_blur
-    }
 
 /**
  * 흐림·모자이크 도구를 고르면 캔버스 위에 겹치는 터치 자리. 한 손가락으로 끌어 [kind] 획을 그린다(브러시와 같은 손가락 처리).

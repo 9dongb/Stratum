@@ -5,10 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,11 +48,11 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.components.AccentButton
+import com.kiln.stratum.ui.components.HelpButton
 import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.editLongPressMillis
 import com.kiln.stratum.ui.layout.HingeAvoidingColumn
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /**
@@ -155,17 +153,17 @@ class RetouchControls(
 )
 
 /**
- * 리터칭 옵션: 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거), (복구 브러시·복제 도장) 가져올 곳 정하기 버튼, 안내 한 줄,
- * (AI 제거) 톡 눌러 고른 물체를 지우는 [지우기] 버튼, 크기, (AI 제거가 아니면) 단단함, (복제 도장만) 불투명도. 바꾸면 다음 획부터 쓴다(기록하지 않는다).
- * AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
+ * 리터칭 옵션: (복구 브러시·복제 도장) 가져올 곳 정하기 버튼, (AI 제거) 톡 눌러 고른 물체를 지우는 [지우기] 버튼, 크기,
+ * (AI 제거가 아니면) 경도, (복제 도장만) 불투명도, 맨 아래 하위 도구(스팟 복구·복구 브러시·복제 도장·AI 제거)와 그 오른쪽 끝의 물음표 도움말.
+ * 바꾸면 다음 획부터 쓴다(기록하지 않는다). AI 제거는 칠한 곳을 단단한 원으로 보고 AI가 채우므로 크기만 고른다(결정 기록 'AI 제거·AI 선택').
+ * 설명 줄 대신 물음표를 누르면 지금 하위 도구의 안내가 말풍선으로 뜬다(사용자 피드백 8차 1-7: 작업 공간 확보, AI 제거·리터칭·명암에만).
  */
 @Composable
 fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val settings = controls.settings
     // 패널 안에서 내용만큼만 차지하고, 가로 힌지의 띠에 걸리는 줄은 띠 아래로 비켜 놓는다(다른 도구 옵션과 같다)
     HingeAvoidingColumn(modifier.testTag(EditScreenTags.RETOUCH_OPTIONS), gap = 8.dp, fillHeight = false) {
-        SubToolSegments(EditTool.Retouch.subTools, mode, onChoose)
-        // 할 일(가져올 곳 정하기·안내)을 위쪽에 둔다. 옵션 자리가 좁으면 아래 슬라이더는 밀어서 본다.
+        // 할 일(가져올 곳 정하기)을 위쪽에 둔다. 옵션 자리가 좁으면 아래 슬라이더는 밀어서 본다.
         if (mode == SubTool.RETOUCH_HEAL || mode == SubTool.RETOUCH_CLONE) {
             StratumFilterChip(
                 selected = controls.picking,
@@ -175,20 +173,6 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
                 modifier = Modifier.testTag(EditScreenTags.RETOUCH_SOURCE)
             )
         }
-        Text(
-            text = stringResource(
-                when {
-                    mode == SubTool.RETOUCH_SPOT -> R.string.retouch_hint_spot
-                    mode == SubTool.RETOUCH_REMOVE -> R.string.retouch_hint_remove
-                    controls.picking -> R.string.retouch_hint_pick
-                    mode == SubTool.RETOUCH_HEAL -> R.string.retouch_hint_heal
-                    else -> R.string.retouch_hint_clone
-                }
-            ),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).testTag(EditScreenTags.RETOUCH_HINT),
-            color = StratumTheme.colors.textDescription,
-            style = MaterialTheme.typography.bodySmall
-        )
         if (mode == SubTool.RETOUCH_REMOVE) {
             // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
             AccentButton(
@@ -213,6 +197,11 @@ fun RetouchOptions(mode: SubTool, controls: RetouchControls, onChoose: (SubTool)
                 onFraction = { controls.onChange(settings.copy(opacity = ((it * 100).roundToInt() / 100f).coerceAtLeast(0.01f))) },
                 tag = EditScreenTags.RETOUCH_OPACITY
             )
+        }
+        // 하위 도구 줄은 맨 아래(커버 공통 규칙), 그 오른쪽 끝에 물음표 도움말
+        val help = checkNotNull(toolHelpText(EditTool.Retouch, mode, controls.picking))
+        SubToolSegments(EditTool.Retouch.subTools, mode, onChoose) {
+            HelpButton(help, stringResource(R.string.tool_help), Modifier.testTag(EditScreenTags.TOOL_HELP))
         }
     }
 }

@@ -106,7 +106,7 @@ fun ToolOptions(
             BlurToolOptions(checkNotNull(selection.modeOf(EditTool.Blur)), blur, onChoose, modifier)
         }
         EditTool.Mosaic -> if (mosaic != null) MosaicToolOptions(mosaic, modifier)
-        EditTool.Move -> MoveToolOptions(modifier)
+        // 이동 도구는 고를 옵션이 없어 옵션 칸을 띄우지 않는다(편집 화면, 사용자 피드백 8차 1-7)
         else -> Unit
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -203,6 +204,24 @@ class StripSlider(
 
 /** 칸 묶음 사이의 가는 구분선 */
 class StripDivider(override val key: String) : StripItem
+
+/**
+ * 물음표 도움말 칸(사용자 피드백 8차 1-7, 띠 맨 아래): 물음표 아이콘. 누르면 칸 옆에 안내 글([text]) 창이 뜨고, 다시 누르거나 캔버스를 누르면 닫힌다.
+ * 화면 읽기 기능은 [description]('도움말')으로 읽는다.
+ */
+class HelpCell(override val key: String, val description: String, val text: String) : StripItem {
+    override val title: String
+        get() = description
+
+    override val flyout: @Composable () -> Unit
+        get() = {
+            Text(
+                text = text,
+                modifier = Modifier.width(FlyoutSliderWidth).testTag(EditScreenTags.STRIP_HELP_TEXT),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+}
 
 /** 띠를 처음 띄우는 자리: 캔버스 영역 왼쪽 위에서 가로 [OptionStripGap](도구 막대 옆), 세로 [OptionStripMargin] */
 private val DefaultStripX = OptionStripGap
@@ -402,6 +421,7 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
                 state.closeFlyout()
                 item.onClick()
             }
+            is HelpCell -> HelpCellView(item, open) { state.toggleFlyout(item.key) }
             is StripDivider -> HorizontalDivider(Modifier.width(32.dp).padding(vertical = 4.dp), color = StratumTheme.colors.divider)
         }
     }
@@ -546,6 +566,20 @@ private fun ChoiceCellView(cell: ChoiceCell, open: Boolean, onClick: () -> Unit)
     }
 }
 
+/** 물음표 칸의 모양: 작은 물음표 원(20dp). 안내 글 창이 열려 있으면 선택 배경·선택 색이다. */
+@Composable
+private fun HelpCellView(cell: HelpCell, open: Boolean, onClick: () -> Unit) {
+    val colors = StratumTheme.colors
+    CellBox(EditScreenTags.strip(cell.key), cell.description, null, open, enabled = true, onClick = onClick) {
+        Icon(
+            painter = painterResource(R.drawable.ic_help_outline),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (open) colors.selectedContent else colors.textSecondary
+        )
+    }
+}
+
 @Composable
 private fun ColorCellView(cell: ColorCell, onClick: () -> Unit) {
     CellBox(EditScreenTags.strip(cell.key), cell.description, null, open = false, enabled = true, onClick = onClick) {
@@ -601,6 +635,9 @@ private fun IconCellView(cell: IconCell, onClick: () -> Unit) {
 private val VerticalSliderWidth = 48.dp
 private val VerticalSliderHeight = 240.dp
 
+/** 값 표시 줄 아래에 남기는 여백: 밀어 보는 줄이 끝에서 잘라 그리므로, 맨 아래 카드의 그림자가 들어갈 자리 */
+private val ValueShadowRoom = 8.dp
+
 /**
  * 슬라이더 칸의 옵션 창(사진: 태블릿 포토샵): 얇은 세로 슬라이더 카드와 그 옆 위의 값 표시('경도 82%'),
  * 값 표시 아래에는 [SliderCell.extra]. 카드를 가리키는 삼각형은 [FlyoutHost]가 칸 쪽에 그린다.
@@ -636,8 +673,13 @@ internal fun VerticalSliderFlyout(cell: SliderCell, valueOnLeft: Boolean = false
         }
     }
     val valueColumn: @Composable () -> Unit = {
+        // 폭은 내용만큼이다('이어진 곳만'처럼 폭을 채우는 칸이 창 영역 끝까지 늘어나지 않게).
+        // 접히는 선 가까이처럼 창 영역이 낮으면 아래로 넘치지 않고 그 안에서 밀어 본다(아래 여백은 카드 그림자 자리).
         Column(
-            modifier = if (valueOnLeft) Modifier.padding(end = 6.dp) else Modifier.padding(start = 6.dp),
+            modifier = Modifier
+                .width(IntrinsicSize.Max)
+                .verticalScroll(rememberScrollState())
+                .padding(start = if (valueOnLeft) 0.dp else 6.dp, end = if (valueOnLeft) 6.dp else 0.dp, bottom = ValueShadowRoom),
             horizontalAlignment = if (valueOnLeft) Alignment.End else Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {

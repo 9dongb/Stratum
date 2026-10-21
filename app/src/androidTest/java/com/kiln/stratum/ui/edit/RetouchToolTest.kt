@@ -1,5 +1,7 @@
 package com.kiln.stratum.ui.edit
 
+import com.kiln.stratum.ui.components.HELP_TOOLTIP_TAG
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -226,6 +228,12 @@ class RetouchToolTest {
 
     private fun hint(id: Int) = composeRule.activity.getString(id)
 
+    /** 하위 도구 줄 끝의 물음표를 누르면 [id] 안내가 말풍선으로 뜬다(설명 줄 대신, 사용자 피드백 8차 1-7) */
+    private fun assertHelp(id: Int) {
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).assertContentDescriptionEquals(hint(R.string.tool_help)).performClick()
+        composeRule.onNode(hasText(hint(id)) and hasAnyAncestor(hasTestTag(HELP_TOOLTIP_TAG))).assertIsDisplayed()
+    }
+
     @Test
     fun spotHeal_hasNoSourceButtonOrOpacity() {
         showOptions(SubTool.RETOUCH_SPOT)
@@ -233,7 +241,22 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HARDNESS).assertIsDisplayed()
         assertTrue(!exists(EditScreenTags.RETOUCH_OPACITY) && !exists(EditScreenTags.RETOUCH_SOURCE))
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HINT).assertTextEquals(hint(R.string.retouch_hint_spot))
+        assertHelp(R.string.retouch_hint_spot)
+    }
+
+    @Test
+    fun subToolRow_isAtTheBottom_withTheHelpAtItsEnd() {
+        // 커버 공통 규칙(사용자 피드백 8차 1-1): 하위 도구 줄은 옵션 칸 맨 아래, 물음표는 그 줄 오른쪽 끝(1-7)
+        showOptions(SubTool.RETOUCH_CLONE, source = CloneSource(100f, 100f), picking = false)
+
+        val opacity = composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).fetchSemanticsNode().layoutBoundsInWindow()
+        val spot = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).fetchSemanticsNode().layoutBoundsInWindow()
+        val remove = composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).fetchSemanticsNode().layoutBoundsInWindow()
+        val help = composeRule.onNodeWithTag(EditScreenTags.TOOL_HELP).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$spot should be below $opacity", spot.top >= opacity.bottom)
+        assertTrue("$help should be right of $remove", help.left >= remove.right - 1f)
+        // 설명 줄은 없다(물음표를 눌러야 보인다)
+        composeRule.onNodeWithText(hint(R.string.retouch_hint_clone)).assertDoesNotExist()
     }
 
     @Test
@@ -242,14 +265,13 @@ class RetouchToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).assertIsSelected()
         assertTrue(!exists(EditScreenTags.RETOUCH_OPACITY))
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HINT).assertTextEquals(hint(R.string.retouch_hint_pick))
+        assertHelp(R.string.retouch_hint_pick)
     }
 
     @Test
     fun clone_withASource_hasOpacity_andTheSourceButtonPicksAgain() {
         showOptions(SubTool.RETOUCH_CLONE, source = CloneSource(100f, 100f), picking = false)
 
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HINT).assertTextEquals(hint(R.string.retouch_hint_clone))
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).performSemanticsAction(SemanticsActions.SetProgress) { it(0.4f) }
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SOURCE).performClick()
 
@@ -257,6 +279,7 @@ class RetouchToolTest {
             assertEquals(0.4f, settings.opacity, 0.001f)
             assertEquals(1, picks)
         }
+        assertHelp(R.string.retouch_hint_clone)
     }
 
     @Test
@@ -265,8 +288,8 @@ class RetouchToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
         assertTrue(!exists(EditScreenTags.RETOUCH_HARDNESS) && !exists(EditScreenTags.RETOUCH_OPACITY) && !exists(EditScreenTags.RETOUCH_SOURCE))
-        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_HINT).assertTextEquals(hint(R.string.retouch_hint_remove))
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).assertIsSelected()
+        assertHelp(R.string.retouch_hint_remove)
     }
 
     @Test

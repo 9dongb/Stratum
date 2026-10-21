@@ -49,7 +49,7 @@ class GestureToastState {
     internal var durationMillis: Long = GESTURE_TOAST_MILLIS
         private set
 
-    /** [text]를 [durationMillis] 동안 띄운다. 메인 화면의 도구 안내는 읽을 시간이 필요해 [TOOL_HINT_MILLIS]로 띄운다. */
+    /** [text]를 [durationMillis] 동안 띄운다. */
     fun show(text: String, durationMillis: Long = GESTURE_TOAST_MILLIS) {
         last = text
         this.durationMillis = durationMillis
@@ -100,9 +100,6 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
 
 /** 제스처 알림이 보이는 시간(밀리초). 마지막으로 띄운 때부터 잰다. */
 const val GESTURE_TOAST_MILLIS = 1_000L
-
-/** 메인 화면의 도구 안내 알림이 보이는 시간(밀리초). 한 문장을 읽을 수 있게 제스처 알림보다 길다. */
-const val TOOL_HINT_MILLIS = 2_500L
 
 /** 제스처 알림의 캔버스 위쪽 여백. 왼쪽 위 배율 표시(누르는 자리 48dp)보다 아래다. */
 private val GESTURE_TOAST_TOP = 64.dp

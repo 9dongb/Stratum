@@ -281,10 +281,9 @@ class SelectionToolTest {
         openCoverTool()
         composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_AI)).performClick()
 
-        // 페더·허용치가 없고, 안내 글이 보이며, 고르자마자 그림을 미리 읽는다
+        // 페더·허용치가 없고(설명 줄도 없다, 사용자 피드백 8차 1-7), 고르자마자 그림을 미리 읽는다
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).assertDoesNotExist()
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.selection_hint_ai)).assertExists()
         composeRule.runOnIdle { assertTrue("${actions.prepares}", actions.prepares >= 1) }
 
         // 끌면 무시하고, 누르면 그 자리의 물체를 고른다

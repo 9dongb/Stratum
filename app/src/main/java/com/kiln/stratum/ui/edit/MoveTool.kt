@@ -1,17 +1,8 @@
 package com.kiln.stratum.ui.edit
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
-import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
  * 이동 도구가 보내는 일(문서 좌표, 사용자 피드백 7차, 결정 기록 '이동 도구').
@@ -58,13 +49,3 @@ fun MoveOverlay(view: () -> CanvasView, document: PixelSize, actions: MoveAction
     )
 }
 
-/** 커버 화면의 이동 도구 옵션: 고를 것이 없어 안내 한 줄이다(메인 화면은 띠 없이, 고를 때 알림으로 보인다). */
-@Composable
-fun MoveToolOptions(modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(R.string.move_hint),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp).testTag(EditScreenTags.MOVE_OPTIONS),
-        color = StratumTheme.colors.textDescription,
-        style = MaterialTheme.typography.bodySmall
-    )
-}
