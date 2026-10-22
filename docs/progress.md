@@ -17,6 +17,9 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 계획(승인됨, 단계마다 커밋하고 확인받기): `docs/face-liquify-plan.md`. 0 준비 → 1 얼굴 찾기·특징점 표시 → 2 슬라이더 3개(눈 크기·코 너비·얼굴 너비) → 3 다시 고치기(유동화 기록)·저장 → 4 나머지 15개(콧등 너비 포함) → 5 검토.
   - 한 일
     - 0단계: 얼굴 모델 두 파일(`blaze_face_full_range.tflite` 1,083,786바이트, `face_landmarks_detector.tflite` 2,553,590바이트, Apache-2.0)을 넣고 고지(`LICENSE-MEDIAPIPE-FACE.txt`, 설정의 오픈소스 두 언어)를 더했다. 입력·출력 모양(얼굴 찾기 1×192×192×3 → 2304×16·2304×1, 특징점 1×256×256×3 → 1434·1·1)과 사용자 정의 연산 없음을 확인했다. 시험 사진 4장(NASA 퍼블릭 도메인)은 저장소 밖(이 Mac의 임시 폴더)에만 있다.
+    - 1단계: 유동화의 다섯째 도구 '얼굴'(커버 맨 아래 탭·커버 가로 기둥·펼친 화면 띠)을 고르면 고른 레이어에서 얼굴을 찾는다(그림 전체 + 작은 얼굴용 조각, 특징점 두 번, 못 찾으면 돌려 다시). 하나면 바로 고르고, 여럿이면 톡해서 고르고, 없으면 알린다. 확인용으로 고른 얼굴에 478점·얼굴 좌표축·계산에 쓰는 점의 번호를 그린다(결정 기록 '얼굴 인식 보정'의 1단계).
+  - 남은 일
+    - 사용자 확인(1단계): 에뮬레이터·폴드8에서 정면·기울인·여러 명·얼굴 없는 사진의 점이 눈·코·입·윤곽에 맞는지, 여럿일 때 톡하면 바뀌는지, 없을 때 안내. 확인을 받으면 2단계(눈 크기·코 너비·얼굴 너비).
 
 - **사용자 피드백 12차(사용자 요청)** (시작: 2026-10-22)
   - 요청(사용자, 그대로):
@@ -226,7 +229,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌(대신 도구 막대·탭 줄 아이콘이 고른 하위 도구, 2026-10-22). 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(접히는 선을 보지 않음, 11차). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
 | AI 제거·AI 선택(사용자 요청) | 10단계(품질) 진행 중 | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 리터칭 넷째 하위 도구 'AI 제거'(칠하고 떼면 지움, 옵션은 크기만, 쓸 수 없는 기기는 알림과 스팟 복구 버튼). 선택 도구 'AI 채우기'(고른 곳을 채우고 선택은 남김). 채운 곳의 밝기·색은 채운 색을 늘여 경계 바깥과 맞춘다(폴드8 피드백으로 고침). 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 SAM 2.1 Tiny(97MB, Apache-2.0, 폴드8 GPU에서 사진 0.21초·탭 19ms)로 정해 파일을 넣었고, 선택 도구 'AI 선택'(물체를 톡 누르면 모양대로 고름)과 AI 제거의 톡 고르기(모양을 보이고 [지우기]로 지움)를 더했다. 채운 곳에 둘레만큼의 고운 잡음을 더한다(10단계). 계획은 `docs/ai-remove-plan.md` |
-| 얼굴 인식 보정(사용자 요청) | 0단계(준비) 끝 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음). 계획 `docs/face-liquify-plan.md` |
+| 얼굴 인식 보정(사용자 요청) | 1단계(얼굴 찾기·특징점 표시) 끝, 사용자 확인 기다림 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음, CPU). 유동화의 다섯째 도구 '얼굴'로 얼굴을 찾고 톡해서 고르며, 지금은 확인용으로 점·좌표축·번호를 그린다. 계획 `docs/face-liquify-plan.md` |
 
 ## 결정 기록
 
@@ -515,6 +518,22 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 기록이 있는 레이어를 칠하거나 이동 도구로 옮기면 묻지 않고 굳히고 짧은 알림만 보인다(사용자 결정 "묻지 않고 굳히기", 추천은 글자처럼 먼저 묻기였다).
   - 시험 사진: 위키미디어 공용의 퍼블릭 도메인 사진을 저장소 밖에만 받아 쓴다(사용자 결정 "공개 사진 받기 (추천)").
   - 슬라이더: 눈(크기·높이·너비·기울기·간격·뒷트임), 코(높이·너비·콧등 너비), 입(미소·윗입술·아랫입술·너비·높이), 얼굴형(이마·턱 높이·턱선·얼굴 너비). 콧등 너비는 계획을 본 사용자가 더했다("콧등 너비도 조절도 추가하세요.").
+  - 1단계 얼굴 찾기(Claude 판단, 2026-10-22, 상수는 `FaceSearch`·`FaceFinder`·`FaceDetectionDecoder`)
+    - 찾을 그림: 유동화하는 레이어 하나(유동화 미리 보기와 같게 불투명도·혼합 모드 없이, 보정은 건 채)를 긴 변이 1536px 이상인 가장 작은 축소본 단계로 그리고(1536~3071px), 투명한 곳은 흰 바탕에 합친다. 모델 입력은 반씩 줄인 단계에서 안드로이드 그리기(쌍선형)로 잘라 읽는다(Kotlin 반복은 입력 크기에서만).
+    - 앞뒤 처리는 미디어파이프 그래프의 값 그대로다: 얼굴 찾기는 비율 유지 192²(밖은 검정), 앵커 48×48, 점수 0.5 이상, 가중 NMS(IoU 0.3). 특징점은 상자로 자른 곳(1.5배 정사각형, 두 눈으로 돌림)에서 한 번, 그 점으로 다시 자른 곳(눈꼬리 33·263으로 돌림)에서 한 번 더 읽어 두 번째를 쓴다(밖은 가장자리를 늘임).
+    - 작은 얼굴: 그림 전체에 더해 정사각형 조각(긴 변의 40%, 짧은 변 이하, 25% 넘게 겹침, 3×3 안팎)으로 한 번 더 찾는다. 조각의 안쪽 경계에 걸린 후보는 버린다(이웃 조각·그림 전체가 찾음).
+    - 얼굴 있음: 특징점 모델의 둘째 출력은 로짓이다(맥: 실제 얼굴 20~23, 옷 단추 -8.8, 135° 돌린 사진의 잘못 자른 곳 2.3). 3 이상만 얼굴로 본다(미디어파이프는 0.5 = 로짓 0).
+    - 기울기: 30°·45°·60°는 바로 찾는다(맥 평균 오차 두 눈 사이의 1%). 하나도 못 찾으면 그림 전체를 90°·270°·180° 돌려 다시 찾는다(옆으로·거꾸로 누운 레이어, 90° 사본으로 확인).
+    - 같은 얼굴(특징점 상자 IoU 0.3 넘게)은 하나만, 두 눈동자 사이가 문서 24px보다 작은 얼굴은 빼고, 8개까지(얼굴 있음 순), 왼쪽부터(두 눈 가운데 x) 번호를 붙인다.
+    - 모델은 CPU(4스레드)로 먼저, 안 되면 GPU. 불러온 장치마다 회색 그림을 읽어 결과가 숫자이고 얼굴을 찾지 않을 때만 쓴다. AI 스레드(`stratum-ai`)에서만 다루고, 홈으로 나갈 때·앱이 화면에서 사라질 때 다른 AI 모델과 함께 내려놓는다. 쓸 수 없으면 앱을 다시 켤 때까지 다시 해 보지 않는다.
+    - 메모리: 모델 불러오기 64MB(에뮬레이터 CPU 실측 +33MB), 찾을 그림의 2.5배 + 8MB를 `makeRoom`의 계산 메모리로 본다(오래된 실행 취소 단계를 버려서 될 때만 버림).
+  - 1단계 화면(Claude 판단, 2026-10-22)
+    - 자리: 유동화의 다섯째 도구 '얼굴'(Material Icons face_retouching_natural). 커버는 맨 아래 [X | 뒤틀기·오목·볼록·재구성·얼굴 | ✓](탭 한 칸 52dp로 정해 411dp에 들어가게), 커버 가로는 오른쪽 기둥, 펼친 화면은 띠의 도구 칸. 브러시 도구를 고르면 얼굴 모드가 꺼진다. 엔진의 브러시 도구 목록(`LiquifyTool`)은 그대로다.
+    - 얼굴 모드는 도구처럼 앱을 끌 때까지 기억한다(다음에 유동화를 열면 바로 찾는다). 찾은 얼굴은 그 작업 창 안에서 다시 찾지 않는다.
+    - 하나면 바로 고르고, 여럿이면 고르지 않은 채 '얼굴 n개를 찾았어요. 고칠 얼굴을 톡해서 골라요.', 없으면 '얼굴을 찾지 못했어요. 사진이 있는 레이어를 골랐는지 확인해 주세요.'를 제스처 알림 자리에 글 길이만큼 보인다(쓸 수 없는 기기·메모리 부족도). 접기·펼치기로 다시 만들어져도 같은 알림은 다시 띄우지 않는다.
+    - 커버 막대는 크기·압력 대신 안내 글(찾는 중, 고칠 얼굴을 톡해서 골라요, 얼굴 2 / 3, 못 찾음)이다. 펼친 화면 띠는 크기·압력 칸을 뺀다(칠하지 않음).
+    - 캔버스: 손가락이 움직이지 않은 톡만 그 자리 얼굴(윤곽 안)을 고른다. 끌어도 칠하지 않는다. 두 손가락 확대·이동·톡은 그대로다. 손으로 민 뒤에는 누른 자리 + 변위(원래 그림의 점)로 찾는다.
+    - 그림(확인용): 고른 얼굴은 파란 윤곽(#0076FE)·478점(초록)·얼굴 좌표축(빨강 눈 선 쪽, 파랑 턱 쪽, 길이 U = max(두 눈 사이, 눈 가운데–턱 끝의 반))·계산에 쓰는 점의 번호(노랑, 화면 반전 때도 바로 읽힘), 나머지 얼굴은 흰 윤곽. 얼굴이 화면에서 작으면(두 눈 사이 96dp 미만) 점을 가늘게 하고 번호는 숨긴다(두 손가락으로 확대하면 보임, 에뮬레이터에서 단체 사진의 번호가 겹쳐 읽을 수 없었다). 손으로 민 만큼 점도 따라 옮겨 그린다(`LiquifyMesh.forward`). 2단계부터는 윤곽만 남긴다(계획).
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
   - 자리: 도구 막대 맨 위, 커버 탭 줄 맨 앞(막대 11개·탭 13개). 아이콘 Material Icons open_with(네 방향 화살표), 탭 이름 '이동', 화면 읽기 이름 '이동 도구'.
@@ -1251,6 +1270,11 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 분할 모델 시험: 가짜 모델 `FakeSegmentModel`(app/src/androidTest, 탭한 칸에서 비슷한 색으로 이어진 곳, 0번 후보는 그림 전체)로 `SelectObjectTest`, 진짜 모델은 `SegmentRealModelTest`다.
   - 계산하는 동안만 쓰는 메모리는 명령의 `estimateWorkBytes`로 알리고, `makeRoom`이 `EditHistory.unreleasableBytes`로 단계를 버려서 될 때만 버린다. 쓸 수 없는 모델(`InpaintUnavailableException`)은 `runEdit`가 `EditorMessage.RemoveUnavailable`로 알린다.
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
+- **얼굴 인식 보정:** 계획은 `docs/face-liquify-plan.md`다.
+  - 엔진 순수 Kotlin(`engine/face/`, JVM 테스트): 모델 틀 `FaceModel`(입력·출력 모양, 쓸 수 없으면 `FaceUnavailableException`), 풀기·NMS `FaceDetectionDecoder`, 자를 곳 `FaceRoi`(돌린 정사각형, 그림 ↔ 자른 그림 비율 좌표), 입력 `FaceTensor`, 결과 `FaceLandmarks`(478점, 윤곽 안 `contains`), 점 번호 `FaceMeshIndex`(계산에 쓰는 점 `CALCULATION_POINTS`), 찾는 순서 `FaceSearch`(그림 읽기는 `FaceImage`로 받음).
+  - 엔진 플랫폼: `LiteRtFaceModel`(두 모델, AI 스레드), `FaceFinder`(`render`는 그리기 잠금 안, `search`는 밖, `workBytes`, `release`)와 그림 `FacePicture`(반씩 줄인 단계, `read`가 안드로이드 그리기로 자름).
+  - 앱: `EditorViewModel.faceFinder`(internal var, 테스트는 가짜 모델로 바꿈), 유동화 작업 `LiquifySession.faces`·`selectedFace`·`faceJob`·`faceNotice`, `openFaceMode`·`findFaces`·`pickLiquifyFace`·`shownFaces`(민 격자를 앞으로 따라감). 화면은 `LiquifyState`의 얼굴 칸(`faceMode`·`faces`·`selectedFace`·`findingFaces`·`faceNotice`)과 `LiquifyActions.setFaceMode`·`pickFace`, 그림은 `FaceOverlay`(LiquifyFaces.kt).
+  - 시험: 엔진은 `TestFace`·`FakeFaceScene`(engine/src/test), 앱은 빨간 덩어리를 얼굴로 보는 `FakeFaceModel`(app/src/androidTest, 진짜 찾는 순서·그림 읽기를 거침). 진짜 모델은 `FaceModelProbeTest`·`FacePhotoTest`(시험 사진, `docs/emulator.md` '얼굴 시험 사진').
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.
   - 미리 보기: ViewModel의 `moveActions` → `moving`(끄는 중)·`committingShift`(기록을 기다림) → `liveShift()`를 `LayerPreviewCache.render(shift = LayerShift)`에 넘겨 그 레이어 축소본을 옮겨 합친다(`showMove`). 기록하는 순간(`onCommitted`) 지운다. 옮기는 동안 부분 그림은 그리지 않는다(`updateDetail`).
@@ -1354,6 +1378,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - APK에 넣는 네이티브 라이브러리: arm64 약 9.1MB, armeabi-v7a 약 6.1MB, x86_64 약 11.9MB(32비트 x86은 없음). 모두 16KB 정렬이다(`zipalign -c -P 16`).
   - GPU의 `CompiledModel.run`은 비동기라 결과를 읽을 때(`readFloat`) 끝난다. 시간은 읽기까지 잰다(2026-10-21, 폴드8).
   - GPU는 5차원 이상 텐서를 받지 않는다(MobileSAM의 TinyViT 창 나누기가 FULLY_CONNECTED에 6차원 입력을 만들어 컴파일 실패). GPU에 다 올라가도 결과가 틀릴 수 있어(MobileSAM 인코더) CPU 결과와 꼭 견준다.
+  - 미디어파이프 얼굴 모델(2026-10-22 확인): 서명이 없어 출력은 모델 파일 순서다. 얼굴 찾기는 [상자 2304×16, 점수 2304], 특징점은 [점 1434, 얼굴 있음(로짓, 시그모이드 전), 혀 내밀기]. 에뮬레이터 CPU에서 불러오기 0.36초(처음), 얼굴 찾기 7ms, 특징점 12ms.
+  - 맥에서 LiteRT 파이썬을 쓰려면 uv 캐시에 있는 판으로만 돈다(인터넷 없이): `uv run --offline --no-project --python 3.11 --with ai-edge-litert==2.3.0 --with typing-extensions==4.12.2 --with numpy==2.4.6 --with pillow==13.0.0 python -I <스크립트>`.
   - GPU 처음 불러오기는 프로그램을 만드느라 몇 초 걸린다(SAM 2.1 Tiny 4~8초). `GpuOptions`의 `serializationDir`·`modelCacheKey`·`serializeProgramCache`로 남기면 다음부터 1초 안이다.
 - `connectedDebugAndroidTest`의 `-Pandroid.testInstrumentationRunnerArguments.class=`에 클래스 여러 개를 쉼표로 넣었더니 첫 클래스만 돌았다(2026-10-20). 클래스마다 따로 돌린다.
 - material3 1.4.0의 `TopAppBar`는 `@OptIn(ExperimentalMaterial3Api::class)`가 필요하다. 매개변수 타입 `TopAppBarScrollBehavior`가 실험 기능이기 때문이다.
@@ -1367,6 +1393,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - IconButton·IconToggleButton은 `shape` 매개변수가 있다(공개). 버튼 모양이 들어간 `ButtonDefaults.shape`는 늘 알약이다.
   - `LocalRippleConfiguration provides null`이면 그 안의 부품은 누를 때 번지는 표시를 그리지 않는다.
   - NavigationBarItem의 고른 표시는 모양을 바꿀 수 없다(알약, 크기 고정). 다른 모양은 표시 색을 투명하게 두고 아이콘에 `drawBehind`로 그린다.
+- Android Studio 'Vector Asset'의 Material Icons 파일은 `Android Studio.app/Contents/plugins/android/lib/android.jar` 안 `images/material/icons/materialicons/<이름>/baseline_<이름>_24.xml`에 있다(2026-10-22, face_retouching_natural).
 - 아이콘은 Android Studio 'Vector Asset'의 Material Icons 파일을 쓰고, `android:tint="?attr/colorControlNormal"` 줄은 뺀다. 이 프로젝트에는 AppCompat이 없어서 그 줄이 있으면 빌드가 실패한다.
 - `List.removeFirst()`·`removeLast()`는 안드로이드 13·14 기기에서 오류가 나므로 `removeAt(0)` 등을 쓴다.
 - 색 공간:

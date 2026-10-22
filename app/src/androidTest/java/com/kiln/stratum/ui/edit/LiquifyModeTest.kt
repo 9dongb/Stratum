@@ -14,9 +14,11 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -36,6 +38,9 @@ import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceMeshIndex
+import com.kiln.stratum.engine.face.FaceModel
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
@@ -123,9 +128,40 @@ class LiquifyModeTest {
         override fun cancel() {
             calls += "cancel"
         }
+
+        override fun setFaceMode() {
+            calls += "faceMode"
+        }
+
+        override fun pickFace(x: Float, y: Float) {
+            calls += "pickFace"
+            points += x to y
+        }
     }
 
     private val actions = FakeLiquify()
+
+    /** 문서 (500, 450)이 두 눈 가운데인 시험 얼굴: 윤곽은 가운데 (500, 500), 반폭 150·반높이 200인 타원, 나머지 점은 그 안 */
+    private fun testFace(): FaceLandmarks {
+        val points = FloatArray(FaceModel.LANDMARK_COUNT * 2)
+        for (i in 0 until FaceModel.LANDMARK_COUNT) {
+            val t = 2 * Math.PI * i / FaceModel.LANDMARK_COUNT
+            points[2 * i] = (500 + 60 * Math.cos(t)).toFloat()
+            points[2 * i + 1] = (500 + 80 * Math.sin(t)).toFloat()
+        }
+        FaceMeshIndex.FACE_OVAL.forEachIndexed { k, index ->
+            val t = -Math.PI / 2 + 2 * Math.PI * k / FaceMeshIndex.FACE_OVAL.size
+            points[2 * index] = (500 + 150 * Math.cos(t)).toFloat()
+            points[2 * index + 1] = (500 + 200 * Math.sin(t)).toFloat()
+        }
+        for ((index, x) in listOf(FaceMeshIndex.RIGHT_IRIS to 450f, FaceMeshIndex.LEFT_IRIS to 550f)) {
+            points[2 * index] = x
+            points[2 * index + 1] = 450f
+        }
+        points[2 * FaceMeshIndex.CHIN] = 500f
+        points[2 * FaceMeshIndex.CHIN + 1] = 700f
+        return FaceLandmarks(points, 15f)
+    }
 
     /** 1000×1000 문서. 정사각형이라 화면에 맞추면 캔버스 가운데가 문서 가운데다. */
     private val document = PixelSize(1000, 1000)
@@ -168,6 +204,88 @@ class LiquifyModeTest {
         advanceEventTime(80)
         up(0)
         up(1)
+    }
+
+    @Test
+    fun cover_theFaceToolIsTheFifthTab_andTurnsOnFaceMode() {
+        show(411, 800)
+        val restore = composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.RECONSTRUCT)).fetchSemanticsNode().layoutBoundsInWindow()
+        val face = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow()
+        val apply = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals(restore.center.y, face.center.y, 3f)
+        assertTrue("face $face should be between $restore and $apply", face.left >= restore.right - 3f && face.right <= apply.left)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE).performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("faceMode"), actions.calls) }
+    }
+
+    @Test
+    fun cover_faceMode_showsTheHintInsteadOfSizeAndPressure_andTheFaceTabIsSelected() {
+        state = state.copy(faceMode = true, findingFaces = true)
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsNotSelected()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.liquify_face_finding))
+
+        composeRule.runOnIdle { state = state.copy(findingFaces = false, faces = listOf(testFace(), testFace()), selectedFace = -1) }
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.liquify_face_pick))
+        composeRule.runOnIdle { state = state.copy(selectedFace = 1) }
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.liquify_face_selected, 2, 2))
+        composeRule.runOnIdle { state = state.copy(faces = emptyList(), selectedFace = -1) }
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.liquify_face_none))
+    }
+
+    @Test
+    fun faceMode_aTapPicksInDocumentCoordinates_andDoesNotPaint() {
+        state = state.copy(faceMode = true, faces = listOf(testFace()), selectedFace = 0)
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).performTouchInput { click(center) }
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("pickFace"), actions.calls)
+            // 정사각형 문서를 맞춰 보이므로 캔버스 가운데는 문서 가운데다
+            val (x, y) = actions.points.single()
+            assertEquals(500f, x, 15f)
+            assertEquals(500f, y, 15f)
+        }
+    }
+
+    @Test
+    fun faceMode_dragging_paintsNothing() {
+        state = state.copy(faceMode = true, faces = listOf(testFace()), selectedFace = 0)
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).performTouchInput { swipe(center, center + Offset(200f, 0f), 300) }
+
+        composeRule.runOnIdle { assertTrue("${actions.calls}", "begin" !in actions.calls && "pickFace" !in actions.calls) }
+    }
+
+    @Test
+    fun faceNotice_isShownAsAToast() {
+        state = state.copy(faceMode = true, faces = emptyList(), faceNotice = FaceNotice(FaceNotice.Kind.NOT_FOUND, serial = 1))
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.liquify_face_none))
+    }
+
+    @Test
+    fun mainScreens_theStripHasTheFaceCell_andFaceModeHasNoSizeOrPressure() {
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE).assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals(listOf("faceMode"), actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).assertIsDisplayed()
+
+        composeRule.runOnIdle { state = state.copy(faceMode = true, faces = listOf(testFace()), selectedFace = 0) }
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE).assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("strength")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).assertIsDisplayed()
     }
 
     @Test

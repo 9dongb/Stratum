@@ -179,6 +179,15 @@ object CanvasOverlayColors {
 
     /** 스포이드가 아직 색을 읽지 못했거나 투명한 곳 */
     val Unknown = Color.Gray
+
+    /** 얼굴 인식 보정: 고른 얼굴의 테두리(앱의 주요 색 #0076FE) */
+    val FaceSelected = Color(0xFF0076FE)
+
+    /** 얼굴 인식 보정 확인 화면(1단계): 특징점, 얼굴 가로축(눈 선)·세로축(턱 쪽), 계산에 쓰는 점의 번호 */
+    val FacePoint = Color(0xFF3CFF6E)
+    val FaceAxisAcross = Color(0xFFFF4D4D)
+    val FaceAxisDown = Color(0xFF4DB8FF)
+    val FaceLabel = Color(0xFFFFE14D)
 }
 
 /** 색 팔레트가 그리는 색. 고르는 색 자체를 보이는 그림이라 테마와 상관없다. */

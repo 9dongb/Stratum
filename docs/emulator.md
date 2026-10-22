@@ -68,6 +68,17 @@
 - 돌리기: 위 '에뮬레이터에서만 돌리는 방법'처럼 APK를 `install -r`로 깔고 `am instrument … -e class com.kiln.stratum.SegmentProbeTest`. 잰 값은 `adb logcat -s SegmentProbe`.
   - 폰에서는 `connectedDebugAndroidTest`를 쓰지 않는다. 끝나면 앱을 지우므로 폰에 만든 프로젝트가 사라질 수 있다. `install -r`은 앱 자료를 남긴다.
 
+## 얼굴 시험 사진 넣기 (얼굴 인식 보정 1단계)
+
+- `FacePhotoTest`는 앱 내부 저장소 `files/face/`의 사진으로만 돈다(없으면 건너뜀). 사진은 저장소에 넣지 않는다(위키미디어 공용의 NASA 퍼블릭 도메인 사진, 2026-10-22 이 Mac의 임시 폴더에 받음).
+  - `Neil_Armstrong_pose.jpg`(3300×4125), `Apollo_11_Crew.jpg`(4200×3300, 세 명), `Buzz_Aldrin.jpg`(6498×8123), `VAB_exterior_and_LCC.jpg`(1920×1277, 얼굴 없음). 위키미디어 공용에서 같은 이름으로 찾을 수 있다.
+  - 기대값(눈동자·턱 끝의 문서 좌표)은 같은 순서를 맥 파이썬(LiteRT)으로 돌린 값이고 시험 코드에 적혀 있다.
+- 넣기(디버그 앱이 깔려 있어야 한다)
+  1. `adb -s <기기> shell mkdir -p /data/local/tmp/face` 뒤 사진마다 `adb -s <기기> push <사진> /data/local/tmp/face/`
+  2. `adb -s <기기> shell "run-as com.kiln.stratum mkdir -p files/face && run-as com.kiln.stratum sh -c 'cp /data/local/tmp/face/* files/face/'"`
+  3. `adb -s <기기> shell rm -rf /data/local/tmp/face`
+- 돌리기: `am instrument … -e class com.kiln.stratum.FacePhotoTest`(분할 모델 시험과 같은 방법). 걸린 시간은 `adb logcat -s FaceFinder FacePhoto`.
+
 ## adb·emulator 위치
 
 - Android SDK 폴더 안에 있다. SDK 폴더는 `local.properties`의 `sdk.dir`에 적혀 있다.

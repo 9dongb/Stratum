@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,9 +30,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.StripPosition
@@ -80,6 +84,11 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * @property changed 움직인 곳이 있는지(적용·모두 되돌리기를 켠다)
  * @property busy 적용하는 중이다
  * @property colorSpace 문서 색 공간(미리 보기를 그 꼬리표로 보인다)
+ * @property faceMode 얼굴 모드(얼굴 인식 보정)를 골랐는지. 고르면 칠하지 않고 얼굴을 톡해서 고른다.
+ * @property faces 찾은 얼굴(화면에 보이는 자리의 문서 좌표, 왼쪽부터). 얼굴 모드가 아니거나 아직 찾지 않았으면 null
+ * @property selectedFace 고른 얼굴의 번호([faces] 안). 없으면 -1
+ * @property findingFaces 얼굴을 찾는 중이다
+ * @property faceNotice 화면에 한 번 알릴 것(얼굴을 못 찾음 등)
  */
 data class LiquifyState(
     val preview: PreviewImage,
@@ -91,8 +100,30 @@ data class LiquifyState(
     val changed: Boolean,
     val busy: Boolean = false,
     val canRedo: Boolean = false,
-    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB
+    val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+    val faceMode: Boolean = false,
+    val faces: List<FaceLandmarks>? = null,
+    val selectedFace: Int = -1,
+    val findingFaces: Boolean = false,
+    val faceNotice: FaceNotice? = null
 )
+
+/** 얼굴 모드가 한 번 알릴 것([kind], 여럿 찾았으면 그 수 [count]). 같은 알림도 다시 알리게 [serial]이 늘 바뀐다. */
+data class FaceNotice(val kind: Kind, val count: Int = 0, val serial: Int = 0) {
+    enum class Kind {
+        /** 얼굴을 찾지 못했다 */
+        NOT_FOUND,
+
+        /** 얼굴을 여럿 찾았다(톡해서 고른다) */
+        SEVERAL,
+
+        /** 이 기기에서 얼굴 모델을 돌릴 수 없다 */
+        UNAVAILABLE,
+
+        /** 메모리가 모자라 찾지 못했다 */
+        NOT_ENOUGH_MEMORY
+    }
+}
 
 /** 픽셀 유동화 작업 모드가 보내는 일 */
 interface LiquifyActions {
@@ -130,6 +161,12 @@ interface LiquifyActions {
 
     /** 바꾼 것을 버리고 닫는다 */
     fun cancel()
+
+    /** 얼굴 모드(얼굴 인식 보정)를 켠다. 처음 켜면 얼굴을 찾는다. 브러시 도구를 고르면([setTool]) 꺼진다. */
+    fun setFaceMode() {}
+
+    /** 얼굴 모드에서 문서 좌표 ([x], [y])를 톡했다: 그 자리 얼굴을 고른다 */
+    fun pickFace(x: Float, y: Float) {}
 
     object None : LiquifyActions {
         override fun begin(x: Float, y: Float) = Unit
@@ -236,6 +273,16 @@ fun LiquifyMode(
     } else {
         null
     }
+    // 얼굴 모드가 알릴 것(못 찾음·여럿 찾음 등)은 제스처 알림 자리에 한 번 띄운다. 접기·펼치기로 다시 만들어져도 다시 띄우지 않는다.
+    val notice = state.faceNotice
+    val noticeText = notice?.let { faceNoticeText(it) }
+    var shownNotice by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(notice?.serial) {
+        if (notice != null && noticeText != null && notice.serial > shownNotice) {
+            shownNotice = notice.serial
+            gestureToast.show(noticeText, toolHelpToastMillis(noticeText))
+        }
+    }
     // 바탕은 편집 화면처럼 작업 공간 색이다(캔버스 주변). 위 막대와 옵션은 제 색을 칠한다.
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = StratumTheme.colors.workspace) {
         BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { screenTop = it.positionInRoot().y }) {
@@ -257,7 +304,7 @@ fun LiquifyMode(
                             Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                         )
                         BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
-                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview), state = coverBar)
+                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                         CoverWorkBar(
                             onCancel = actions::cancel,
                             onDone = actions::apply,
@@ -266,7 +313,7 @@ fun LiquifyMode(
                             cancelTag = EditScreenTags.LIQUIFY_CANCEL,
                             doneTag = EditScreenTags.LIQUIFY_APPLY,
                             vertical = true,
-                            middle = { LiquifyToolColumn(state.tool, enabled = !state.busy, onTool = actions::setTool) }
+                            middle = { LiquifyToolColumn(state, enabled = !state.busy, actions = actions) }
                         )
                     }
                 } else if (coverWindow) {
@@ -274,7 +321,8 @@ fun LiquifyMode(
                     // 크기·압력은 편집 화면과 같은 한 줄 막대다(칩을 누르면 같은 줄이 슬라이더, 결정 기록 '커버 화면 개편').
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
                     BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
-                    CoverToolBar(items = liquifyBar(state, actions, sizePreview), state = coverBar)
+                    // 얼굴 모드는 막대에 칩이 없고 안내 글(찾는 중·고르기·고른 얼굴)을 보인다
+                    CoverToolBar(items = liquifyBar(state, actions, sizePreview), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(
                         onCancel = actions::cancel,
@@ -283,7 +331,7 @@ fun LiquifyMode(
                         cancelEnabled = !state.busy,
                         cancelTag = EditScreenTags.LIQUIFY_CANCEL,
                         doneTag = EditScreenTags.LIQUIFY_APPLY,
-                        middle = { LiquifyToolTabs(state.tool, enabled = !state.busy, onTool = actions::setTool) }
+                        middle = { LiquifyToolTabs(state, enabled = !state.busy, actions = actions) }
                     )
                 } else {
                     // 펼친 화면: 캔버스가 창 전체를 쓰고, 옵션은 편집 화면과 같은 왼쪽 위 띠(손잡이로 옮김)다.
@@ -393,14 +441,26 @@ private fun LiquifyCanvas(
     ) {
         // 편집 화면의 화면 반전을 그대로 따른다(결정 기록 '화면 반전')
         CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger, flip = flip) {
-            LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
+            if (state.faceMode) {
+                FaceOverlay(
+                    view = { viewState.view },
+                    document = state.documentSize,
+                    faces = state.faces.orEmpty(),
+                    selected = state.selectedFace,
+                    enabled = !state.busy,
+                    onPick = actions::pickFace,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
+            }
             if (showSize) {
                 SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())
             }
             // 띠의 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(편집 화면과 같다)
             floating?.let { FloatingDismissLayer(it, Modifier.fillMaxSize()) }
         }
-        if (state.busy) {
+        if (state.busy || state.findingFaces) {
             LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
     }
@@ -476,50 +536,84 @@ fun LiquifyOverlay(
 }
 
 /**
- * 닫힌 화면 맨 아래 줄 가운데의 도구 탭: 뒤틀기·오목·볼록·재구성(아이콘, 화면 읽기는 이름). 커버 폭(411dp)에 네 칸이 들어가게 아이콘이다(띠의 칸과 같은 아이콘).
+ * 닫힌 화면 맨 아래 줄 가운데의 도구 탭: 뒤틀기·오목·볼록·재구성·얼굴(아이콘, 화면 읽기는 이름). 커버 폭(411dp)에 다섯 칸이 들어가게 아이콘이다(띠의 칸과 같은 아이콘).
  */
 @Composable
-private fun LiquifyToolTabs(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
+private fun LiquifyToolTabs(state: LiquifyState, enabled: Boolean, actions: LiquifyActions) {
     val tools = LiquifyTool.entries
-    StratumSegmentedRow {
+    val count = tools.size + 1
+    // 칸 폭을 정해 다섯 칸이 X·✓ 사이에 들어가게 한다(M3 분할 버튼의 최소 폭대로면 커버 411dp에서 ✓가 밀려난다)
+    StratumSegmentedRow(Modifier.width(ToolTabWidth * count)) {
         tools.forEachIndexed { index, entry ->
             StratumSegment(
-                selected = entry == tool,
-                onClick = { onTool(entry) },
+                selected = !state.faceMode && entry == state.tool,
+                onClick = { actions.setTool(entry) },
                 index = index,
-                count = tools.size,
+                count = count,
                 enabled = enabled,
                 modifier = Modifier.testTag(EditScreenTags.liquifyTool(entry))
             ) {
                 Icon(painterResource(liquifyToolIcon(entry)), contentDescription = stringResource(liquifyToolLabel(entry)))
             }
         }
+        StratumSegment(
+            selected = state.faceMode,
+            onClick = actions::setFaceMode,
+            index = tools.size,
+            count = count,
+            enabled = enabled,
+            modifier = Modifier.testTag(EditScreenTags.LIQUIFY_FACE)
+        ) {
+            Icon(painterResource(R.drawable.ic_face_retouching_natural), contentDescription = stringResource(R.string.liquify_face))
+        }
     }
 }
 
 /**
- * 커버를 가로로 돌렸을 때 오른쪽 기둥 가운데(✓와 X 사이)의 도구 칸 넷(위아래로, 아이콘과 이름). 고른 도구는 선택 배경이다.
+ * 커버를 가로로 돌렸을 때 오른쪽 기둥 가운데(✓와 X 사이)의 도구 칸 다섯(위아래로, 아이콘과 이름: 브러시 도구 넷과 얼굴). 고른 도구는 선택 배경이다.
  * 이름표·할 일은 가로 탭([LiquifyToolTabs])과 같다. 세로 칸은 폭이 늘 같아 이름도 함께 보인다.
  */
 @Composable
-private fun LiquifyToolColumn(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
-    val colors = StratumTheme.colors
+private fun LiquifyToolColumn(state: LiquifyState, enabled: Boolean, actions: LiquifyActions) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         for (entry in LiquifyTool.entries) {
-            val selected = entry == tool
-            val label = stringResource(liquifyToolLabel(entry))
-            val color = when {
-                !enabled -> colors.textDisabled
-                selected -> colors.selectedContent
-                else -> colors.textSecondary
-            }
-            CellBox(EditScreenTags.liquifyTool(entry), label, null, open = selected, enabled = enabled, onClick = { onTool(entry) }) {
-                Icon(painterResource(liquifyToolIcon(entry)), contentDescription = null, tint = color)
-                CompactLabel(label, if (selected && enabled) colors.selectedContent else if (enabled) colors.textDescription else colors.textDisabled)
-            }
+            ToolColumnCell(
+                tag = EditScreenTags.liquifyTool(entry),
+                icon = liquifyToolIcon(entry),
+                label = stringResource(liquifyToolLabel(entry)),
+                selected = !state.faceMode && entry == state.tool,
+                enabled = enabled,
+                onClick = { actions.setTool(entry) }
+            )
         }
+        ToolColumnCell(
+            tag = EditScreenTags.LIQUIFY_FACE,
+            icon = R.drawable.ic_face_retouching_natural,
+            label = stringResource(R.string.liquify_face),
+            selected = state.faceMode,
+            enabled = enabled,
+            onClick = actions::setFaceMode
+        )
     }
 }
+
+/** 세로 도구 칸 하나(아이콘과 이름) */
+@Composable
+private fun ToolColumnCell(tag: String, @DrawableRes icon: Int, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val colors = StratumTheme.colors
+    val color = when {
+        !enabled -> colors.textDisabled
+        selected -> colors.selectedContent
+        else -> colors.textSecondary
+    }
+    CellBox(tag, label, null, open = selected, enabled = enabled, onClick = onClick) {
+        Icon(painterResource(icon), contentDescription = null, tint = color)
+        CompactLabel(label, if (selected && enabled) colors.selectedContent else if (enabled) colors.textDescription else colors.textDisabled)
+    }
+}
+
+/** 닫힌 화면 도구 탭 한 칸의 폭: 아이콘(24dp)과 좌우 여백(12dp씩), 누르는 영역 48dp 이상 */
+private val ToolTabWidth = 52.dp
 
 /** 유동화 도구의 아이콘(Material Icons: 뒤틀기 swipe, 오목 zoom_in_map, 볼록 zoom_out_map, 재구성 settings_backup_restore) */
 @DrawableRes

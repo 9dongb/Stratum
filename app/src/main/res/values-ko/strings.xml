@@ -325,6 +325,14 @@
     <string name="liquify_pucker">오목</string>
     <string name="liquify_bloat">볼록</string>
     <string name="liquify_reconstruct">재구성</string>
+    <string name="liquify_face">얼굴</string>
+    <string name="liquify_face_finding">얼굴을 찾고 있어요</string>
+    <string name="liquify_face_none">얼굴을 찾지 못했어요. 사진이 있는 레이어를 골랐는지 확인해 주세요.</string>
+    <string name="liquify_face_several">얼굴 %d개를 찾았어요. 고칠 얼굴을 톡해서 골라요.</string>
+    <string name="liquify_face_pick">고칠 얼굴을 톡해서 골라요</string>
+    <string name="liquify_face_selected">얼굴 %1$d / %2$d</string>
+    <string name="liquify_face_unavailable">이 기기에서는 얼굴을 찾을 수 없어요</string>
+    <string name="liquify_face_memory">메모리가 모자라 얼굴을 찾지 못했어요</string>
     <string name="liquify_strength">압력</string>
     <string name="liquify_undo">한 획 되돌리기</string>
     <string name="liquify_redo">한 획 다시 실행</string>

@@ -48,6 +48,8 @@ import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.inpaint.InpaintModel
 import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
 import com.kiln.stratum.engine.segment.SegmentUnavailableException
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceUnavailableException
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.AddTextLayer
@@ -66,6 +68,8 @@ import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.LiquifyRenderer
+import com.kiln.stratum.engine.platform.FaceFinder
+import com.kiln.stratum.engine.platform.LiteRtFaceModel
 import com.kiln.stratum.engine.platform.LiteRtInpaintModel
 import com.kiln.stratum.engine.platform.LiteRtSegmentModel
 import com.kiln.stratum.engine.platform.LiveStroke
@@ -346,6 +350,12 @@ class EditorViewModel internal constructor(
      * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 읽은 것과 모델을 놓는다. 테스트는 가짜 모델로 바꾼다.
      */
     internal var objectSegmenter: ObjectSegmenter = ObjectSegmenter(LiteRtSegmentModel(application.assets, application.cacheDir))
+
+    /**
+     * 유동화의 얼굴 인식 보정이 쓰는 얼굴 찾기(미디어파이프 얼굴 모델 둘, 결정 기록 '얼굴 인식 보정'). 얼굴 모드를 고르면 찾고,
+     * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 모델을 내려놓는다. 테스트는 가짜 모델로 바꾼다.
+     */
+    internal var faceFinder: FaceFinder = FaceFinder(LiteRtFaceModel(application.assets, application.cacheDir))
 
     /** 앱 내부 저장소의 프로젝트들. 자동 저장은 여기서 끝까지 한다(편집 화면이 사라져도). */
     private val library = ProjectLibrary.get(application)
@@ -670,6 +680,18 @@ class EditorViewModel internal constructor(
         var lastX = 0f
         var lastY = 0f
         var pressed = false
+
+        /** 찾은 얼굴(원래 그림의 문서 좌표, 왼쪽부터). 아직 찾지 않았거나 찾지 못하고 실패했으면 null */
+        var faces: List<FaceLandmarks>? = null
+
+        /** 고른 얼굴의 번호([faces] 안). 없으면 -1 */
+        var selectedFace = -1
+
+        /** 얼굴을 찾는 작업. 작업 모드를 닫으면 취소한다. */
+        var faceJob: Job? = null
+
+        /** 화면에 한 번 알릴 것(못 찾음 등) */
+        var faceNotice: FaceNotice? = null
     }
 
     private var liquifySession: LiquifySession? = null
@@ -679,6 +701,12 @@ class EditorViewModel internal constructor(
 
     /** 유동화 도구·크기(문서 픽셀 지름, 처음에는 문서에 맞춤)·압력. 앱을 끌 때까지 남는다. */
     private var liquifyTool = LiquifyTool.PUSH
+
+    /** 유동화의 얼굴 모드(얼굴 인식 보정)를 골랐는지. 도구처럼 앱을 끌 때까지 남아, 다음에 열면 바로 얼굴을 찾는다. */
+    private var liquifyFaceMode = false
+
+    /** 얼굴 모드 알림의 번호. 작업 모드를 새로 열어도 늘기만 해 화면이 같은 알림을 두 번 띄우지 않는다. */
+    private var faceNoticeSerial = 0
     private var liquifySize: Float? = null
     private var liquifyStrength = 0.5f
 
@@ -690,6 +718,7 @@ class EditorViewModel internal constructor(
         override fun cancelStroke() = cancelLiquifyStroke()
         override fun setTool(tool: LiquifyTool) {
             liquifyTool = tool
+            liquifyFaceMode = false
             republishLiquify()
         }
         override fun setSize(size: Float) {
@@ -705,6 +734,8 @@ class EditorViewModel internal constructor(
         override fun reset() = resetLiquify()
         override fun apply() = applyLiquify()
         override fun cancel() = cancelLiquify()
+        override fun setFaceMode() = openFaceMode()
+        override fun pickFace(x: Float, y: Float) = pickLiquifyFace(x, y)
     }
 
     /** 레이어 패널이 보내는 일 */
@@ -995,6 +1026,8 @@ class EditorViewModel internal constructor(
             if (liquifySize == null) liquifySize = defaultLiquifySize(size)
             finishEditing()
             publishLiquify(session, PreviewImage(image, PreviewLevels.wholeRegion(size, level)))
+            // 얼굴 모드로 닫았으면 열자마자 얼굴을 찾는다
+            if (liquifyFaceMode) findFaces(session)
         }
     }
 
@@ -1012,8 +1045,104 @@ class EditorViewModel internal constructor(
             canRedo = session.redo.isNotEmpty(),
             changed = !session.mesh.isIdentity(),
             busy = busy,
-            colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB
+            colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB,
+            faceMode = liquifyFaceMode,
+            faces = if (liquifyFaceMode) shownFaces(session) else null,
+            selectedFace = session.selectedFace,
+            findingFaces = session.faceJob?.isActive == true,
+            faceNotice = session.faceNotice
         )
+    }
+
+    /** 찾은 얼굴을 화면에 보이는 자리로(손으로 민 격자를 앞으로 따라감, 원래 그림의 점 → 비튼 미리 보기의 점) */
+    private fun shownFaces(session: LiquifySession): List<FaceLandmarks>? {
+        val faces = session.faces ?: return null
+        if (session.mesh.isIdentity()) return faces
+        val shown = FloatArray(2)
+        return faces.map { face ->
+            val points = FloatArray(face.points.size)
+            for (i in 0 until points.size / 2) {
+                session.mesh.forward(face.x(i), face.y(i), shown)
+                points[2 * i] = shown[0]
+                points[2 * i + 1] = shown[1]
+            }
+            FaceLandmarks(points, face.presence)
+        }
+    }
+
+    /** 얼굴 모드를 켠다(얼굴 인식 보정). 아직 찾지 않았으면 찾는다. 처리 중(적용)이면 무시한다. */
+    private fun openFaceMode() {
+        val session = liquifySession ?: return
+        if (_liquify.value?.busy == true || session.pressed) return
+        liquifyFaceMode = true
+        if (session.faces == null) findFaces(session) else republishLiquify()
+    }
+
+    /**
+     * 유동화하는 레이어에서 얼굴을 찾는다(결정 기록 '얼굴 인식 보정'). 그림은 다른 축소본 그리기와 겹치지 않게 그리기 잠금 안에서 그리고,
+     * 모델 계산은 잠금 밖(AI 스레드)에서 한다. 하나면 바로 고르고, 여럿이면 톡해서 고르게 알리고, 없으면 알린다.
+     * 쓸 수 없는 기기·메모리 부족이면 알리고, 다음에 얼굴 모드를 고르면 다시 찾는다.
+     */
+    private fun findFaces(session: LiquifySession) {
+        val history = history ?: return
+        if (session.faceJob?.isActive == true) return
+        val document = history.document
+        val layer = document.layers.getOrNull(document.indexOfLayer(session.layer)) ?: return
+        session.faceJob = viewModelScope.launch {
+            var failure: FaceNotice.Kind? = null
+            val faces = try {
+                val picture = renderMutex.withLock {
+                    makeRoom(history, needed = 0L, work = faceFinder.workBytes(document))
+                    withContext(Dispatchers.Default) { faceFinder.render(document, layer) { ensureActive() } }
+                }
+                try {
+                    withContext(Dispatchers.Default) { faceFinder.search(picture) { ensureActive() } }
+                } finally {
+                    picture.close()
+                }
+            } catch (e: NotEnoughMemoryException) {
+                Log.w(TAG, "Not enough memory to find faces", e)
+                failure = FaceNotice.Kind.NOT_ENOUGH_MEMORY
+                null
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Not enough memory to find faces", e)
+                failure = FaceNotice.Kind.NOT_ENOUGH_MEMORY
+                null
+            } catch (e: FaceUnavailableException) {
+                Log.w(TAG, "Face detection is unavailable", e)
+                failure = FaceNotice.Kind.UNAVAILABLE
+                null
+            }
+            if (liquifySession !== session) return@launch
+            session.faces = faces
+            session.selectedFace = if (faces?.size == 1) 0 else -1
+            val kind = failure ?: when {
+                faces.isNullOrEmpty() -> FaceNotice.Kind.NOT_FOUND
+                faces.size > 1 -> FaceNotice.Kind.SEVERAL
+                else -> null
+            }
+            session.faceNotice = kind?.let { FaceNotice(it, faces?.size ?: 0, ++faceNoticeSerial) }
+            // 이 작업이 끝나기 전에 알려야 찾는 중 표시가 꺼진다
+            session.faceJob = null
+            republishLiquify()
+        }
+        republishLiquify()
+    }
+
+    /**
+     * 얼굴 모드에서 문서 좌표 ([x], [y])를 톡했다: 그 자리 얼굴을 고른다(얼굴 윤곽 안). 얼굴이 없는 곳이면 그대로다.
+     * 미리 보기는 손으로 민 만큼 비틀려 있어, 누른 자리가 보여 주는 원래 그림의 점(누른 자리 + 변위)으로 찾는다.
+     */
+    private fun pickLiquifyFace(x: Float, y: Float) {
+        val session = liquifySession ?: return
+        val faces = session.faces ?: return
+        if (!liquifyFaceMode || _liquify.value?.busy == true) return
+        val moved = FloatArray(2)
+        session.mesh.displacementAt(x, y, moved)
+        val index = faces.indexOfFirst { it.contains(x + moved[0], y + moved[1]) }
+        if (index < 0 || index == session.selectedFace) return
+        session.selectedFace = index
+        republishLiquify()
     }
 
     /** 미리 보기는 그대로 두고 도구·크기·되돌리기 상태만 새로 알린다 */
@@ -1168,6 +1297,7 @@ class EditorViewModel internal constructor(
     }
 
     private fun closeLiquify() {
+        liquifySession?.faceJob?.cancel()
         liquifySession = null
         liquifyRenderJob?.cancel()
         liquifyHoldJob?.cancel()
@@ -2623,12 +2753,13 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * AI 모델(채우기·분할)과 AI 선택이 읽어 둔 그림을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
+     * AI 모델(채우기·분할·얼굴)과 AI 선택이 읽어 둔 그림을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
      * 다음에 AI 제거·AI 선택을 고르거나 쓰면 다시 불러온다. 계산하는 중이면 그 일이 끝난 뒤 내려놓는다(모델은 한 스레드에서만 다룬다).
      */
     fun releaseAiModels() {
         inpaintModel.release()
         objectSegmenter.release()
+        faceFinder.release()
     }
 
     override fun onCleared() {

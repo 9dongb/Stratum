@@ -327,6 +327,14 @@
     <string name="liquify_pucker">Pucker</string>
     <string name="liquify_bloat">Bloat</string>
     <string name="liquify_reconstruct">Restore</string>
+    <string name="liquify_face">Face</string>
+    <string name="liquify_face_finding">Finding faces…</string>
+    <string name="liquify_face_none">No face found. Check that the layer with the photo is selected.</string>
+    <string name="liquify_face_several">Found %d faces. Tap the face to adjust.</string>
+    <string name="liquify_face_pick">Tap the face to adjust</string>
+    <string name="liquify_face_selected">Face %1$d of %2$d</string>
+    <string name="liquify_face_unavailable">Face detection isn\'t available on this device</string>
+    <string name="liquify_face_memory">Not enough memory to find faces</string>
     <string name="liquify_strength">Pressure</string>
     <string name="liquify_undo">Undo last stroke</string>
     <string name="liquify_redo">Redo stroke</string>

@@ -29,6 +29,23 @@ class LiquifyMeshTest {
     }
 
     @Test
+    fun forward_findsWhereAnOriginalPointIsShown_afterPushing() {
+        val mesh = LiquifyMesh.identity(size)
+        // 오른쪽으로 크게 민다: 결과의 (200, 150) 둘레는 왼쪽에서 가져온다
+        mesh.brush(LiquifyTool.PUSH, 200f, 150f, radius = 80f, strength = 1f, moveX = 30f, moveY = 10f)
+        val shown = FloatArray(2)
+        for ((x, y) in listOf(200f to 150f, 230f to 140f, 170f to 170f, 10f to 10f)) {
+            // 결과 자리 (x, y)가 보여 주는 원래 점
+            val (dx, dy) = at(mesh, x, y)
+
+            mesh.forward(x + dx, y + dy, shown)
+
+            assertEquals("x for ($x, $y)", x, shown[0], 0.05f)
+            assertEquals("y for ($x, $y)", y, shown[1], 0.05f)
+        }
+    }
+
+    @Test
     fun bigDocuments_useCoarserCells() {
         val mesh = LiquifyMesh.identity(PixelSize(8160, 6120))
 

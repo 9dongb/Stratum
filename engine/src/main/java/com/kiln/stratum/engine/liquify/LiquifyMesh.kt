@@ -72,6 +72,23 @@ class LiquifyMesh private constructor(
         out[1] = (dy[i00] * (1 - fx) + dy[i10] * fx) * (1 - fy) + (dy[i01] * (1 - fx) + dy[i11] * fx) * fy
     }
 
+    /**
+     * 원래 그림의 점 ([x], [y])이 비튼 결과에서 보이는 자리를 [out]에 담는다. 격자는 결과 자리에서 원래 자리를 가리키므로(거꾸로 찾음),
+     * q + 변위(q) = (x, y)인 q를 고정점 반복으로 찾는다(q ← (x, y) − 변위(q)). 유동화의 변위는 매끈해 몇 번 만에 1px 안으로 모인다.
+     * 얼굴 점처럼 몇백 개 점을 화면에 그릴 때 쓴다.
+     */
+    fun forward(x: Float, y: Float, out: FloatArray, iterations: Int = FORWARD_ITERATIONS) {
+        var qx = x
+        var qy = y
+        repeat(iterations) {
+            displacementAt(qx, qy, out)
+            qx = x - out[0]
+            qy = y - out[1]
+        }
+        out[0] = qx
+        out[1] = qy
+    }
+
     /** 움직인 곳이 하나도 없는지 */
     fun isIdentity(): Boolean = dx.all { abs(it) < EPSILON } && dy.all { abs(it) < EPSILON }
 
@@ -231,6 +248,9 @@ class LiquifyMesh private constructor(
     companion object {
         /** 이보다 작은 변위는 움직이지 않은 것으로 본다(픽셀) */
         const val EPSILON = 0.01f
+
+        /** [forward]의 반복 수 */
+        const val FORWARD_ITERATIONS = 8
 
         /** 꼭짓점 하나가 가질 수 있는 가장 큰 변위 길이(문서 픽셀) */
         const val MAX_DISPLACEMENT = 1000f
