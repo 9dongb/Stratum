@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -25,9 +26,12 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -65,6 +69,35 @@ class ToolSliderBarTest {
         }
     }
 
+    private val layerActions = object : LayerActions {
+        override fun select(id: LayerId) = Unit
+        override fun add() = Unit
+        override fun delete() = Unit
+        override fun move(id: LayerId, toIndex: Int) = Unit
+        override fun previewOpacity(opacity: Float) = Unit
+        override fun commitOpacity() = Unit
+        override fun setBlendMode(mode: BlendMode) = Unit
+        override fun duplicate() = Unit
+        override fun mergeDown() = Unit
+        override fun mergeVisible() = Unit
+        override fun setVisible(id: LayerId, visible: Boolean) = Unit
+    }
+
+    private val messages = Channel<EditorMessage>(Channel.UNLIMITED)
+    private var selectionOptions by mutableStateOf(SelectionOptions())
+    private val selectionActions = object : SelectionActions {
+        override fun shape(shape: SelectionShape) = Unit
+        override fun similar(x: Float, y: Float) = Unit
+        override fun all() = Unit
+        override fun none() = Unit
+        override fun invert() = Unit
+        override fun delete() = Unit
+        override fun copyToLayer(cut: Boolean) = Unit
+        override fun aiFill() = Unit
+        override fun objectAt(x: Float, y: Float) = Unit
+        override fun prepareObjects() = Unit
+    }
+
     private val document = PixelSize(1000, 1000)
     private val preview = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
 
@@ -87,7 +120,12 @@ class ToolSliderBarTest {
                         onBrush = { brush = it },
                         strokeActions = strokeActions,
                         toneOptions = toneOptions,
-                        onToneOptions = { toneOptions = it }
+                        onToneOptions = { toneOptions = it },
+                        layerActions = layerActions,
+                        messages = messages.receiveAsFlow(),
+                        selectionOptions = selectionOptions,
+                        onSelectionOptions = { selectionOptions = it },
+                        selectionActions = selectionActions
                     )
                 }
             }
@@ -236,6 +274,111 @@ class ToolSliderBarTest {
         pick(EditTool.Text)
         composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.TEXT_SIZE).assertIsDisplayed()
+    }
+
+    private fun toggleLayers() = composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
+
+    /** 바와 슬라이더가 아래 가운데에 가로 한 줄로 있는지: 화면 가로 가운데, 캔버스 아래 끝([bottom])에서 8dp 위, 왼쪽부터 [tags] 순서 */
+    private fun assertDockedRow(tags: List<String>, bottom: Float) {
+        val bar = bounds(EditScreenTags.TOOL_SLIDER_BAR)
+        val dp = dp(EditScreenTags.TOOL_SLIDER_BAR)
+        assertEquals(bounds(EditScreenTags.TOP_BAR).center.x, bar.center.x, 2 * dp)
+        assertEquals(bottom - 8 * dp, bar.bottom, 2 * dp)
+        assertEquals(56 * dp, bar.height, 2 * dp)
+        val sliders = tags.map { bounds(it) }
+        for (slider in sliders) {
+            assertTrue("$slider should be inside $bar", slider.left >= bar.left && slider.right <= bar.right && slider.top >= bar.top && slider.bottom <= bar.bottom)
+            assertEquals(48 * dp, slider.height, 2 * dp)
+            assertTrue("$slider should be wide", slider.width > slider.height)
+        }
+        assertEquals(sliders.map { it.left }.sorted(), sliders.map { it.left })
+    }
+
+    @Test
+    fun openingThePanel_movesTheBarToTheBottomCenter_asAHorizontalRow_andClosingBringsItBack() {
+        // 사용자 피드백 12차 1-1: "레이어 패널이 펼쳐지면 수치 조절 바가 부드러운 애니메이션과 함께 하단 중앙으로 이동합니다"
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        toggleLayers()
+        composeRule.waitForIdle()
+        assertDockedRow(listOf(EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS, EditScreenTags.BRUSH_OPACITY), bounds(EditScreenTags.CANVAS).bottom)
+        // 패널은 바 위에서 끝난다
+        val panel = bounds(EditScreenTags.FLOATING_PANEL)
+        assertTrue("panel $panel should end above the bar", panel.bottom <= bounds(EditScreenTags.TOOL_SLIDER_BAR).top + 1)
+
+        // 가로로 끌면(오른쪽이 큼) 값이 커진다
+        val before = brush.hardness
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performTouchInput {
+            down(centerLeft + Offset(10f, 0f))
+            moveBy(Offset(width / 4f, 0f))
+            moveBy(Offset(width / 4f, 0f))
+            up()
+        }
+        composeRule.runOnIdle { assertTrue("${brush.hardness} should be above $before", brush.hardness > before + 0.1f) }
+
+        // 닫으면 오른쪽 옆으로 돌아온다
+        toggleLayers()
+        composeRule.waitForIdle()
+        barIsOnTheRightEdge()
+    }
+
+    @Test
+    fun midway_theBarIsBetweenTheSideAndTheBottom() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        val side = bounds(EditScreenTags.TOOL_SLIDER_BAR)
+        composeRule.mainClock.autoAdvance = false
+        toggleLayers()
+        composeRule.mainClock.advanceTimeBy(DockMillis / 2L)
+        val midway = bounds(EditScreenTags.TOOL_SLIDER_BAR)
+        composeRule.mainClock.advanceTimeBy(DockMillis.toLong() + 100)
+        val docked = bounds(EditScreenTags.TOOL_SLIDER_BAR)
+        composeRule.mainClock.autoAdvance = true
+        assertTrue("$midway should be left of $side and right of $docked", midway.center.x < side.center.x - 10 && midway.center.x > docked.center.x + 10)
+        assertTrue("$midway should be below $side and above $docked", midway.center.y > side.center.y + 10 && midway.center.y < docked.center.y - 10)
+    }
+
+    @Test
+    fun theAdjustPanel_movesTheBarToo() {
+        show(MAIN_PORTRAIT)
+        pick(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).performClick()
+        composeRule.waitForIdle()
+        assertDockedRow(listOf(EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS, EditScreenTags.BRUSH_OPACITY), bounds(EditScreenTags.CANVAS).bottom)
+    }
+
+    @Test
+    fun withTheSelectionTool_theBarStacksAboveTheActionBar_andTheMessageBarAboveBoth() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Select)
+        toggleLayers()
+        composeRule.waitForIdle()
+        val actions = bounds(EditScreenTags.SELECTION_ACTION_BAR)
+        assertDockedRow(listOf(EditScreenTags.SELECTION_FEATHER), actions.top)
+
+        composeRule.runOnIdle { messages.trySend(EditorMessage.HiddenLayer) }
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.edit_hidden_layer)).assertExists()
+        val message = bounds(EditScreenTags.MESSAGE_BAR)
+        val bar = bounds(EditScreenTags.TOOL_SLIDER_BAR)
+        assertTrue("message $message should be above the bar $bar", message.bottom <= bar.top + 1)
+    }
+
+    @Test
+    fun whileDocked_theBubbleShowsAboveTheSlider() {
+        show(MAIN_LANDSCAPE)
+        pick(EditTool.Brush)
+        toggleLayers()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput {
+            down(center)
+            moveBy(Offset(width / 6f, 0f))
+        }
+        val bubble = bounds(EditScreenTags.TOOL_SLIDER_VALUE)
+        val slider = bounds(EditScreenTags.BRUSH_SIZE)
+        assertTrue("$bubble should be above $slider", bubble.bottom <= bounds(EditScreenTags.TOOL_SLIDER_BAR).top)
+        assertEquals(slider.center.x, bubble.center.x, 2 * dp(EditScreenTags.BRUSH_SIZE))
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput { up() }
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_VALUE).assertDoesNotExist()
     }
 
     private companion object {

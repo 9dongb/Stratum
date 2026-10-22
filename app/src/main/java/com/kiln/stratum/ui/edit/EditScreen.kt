@@ -383,6 +383,8 @@ fun EditScreen(
     var screenCenterX by remember { mutableFloatStateOf(0f) }
     // 선택 도구의 작업 표시줄이 캔버스 아래에서 차지하는 높이(픽셀). 알림 막대·떠 있는 패널을 그 위에 둔다(없으면 0).
     var selectionBarPx by remember { mutableIntStateOf(0) }
+    // 레이어·조정 패널을 열어 아래 가운데로 옮긴 수치 바가 캔버스 아래에서 차지하는 높이(픽셀, 작업 표시줄 포함). 옆에 있으면 0.
+    var sliderBarPx by remember { mutableIntStateOf(0) }
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
@@ -684,17 +686,31 @@ fun EditScreen(
         // 띠와 그 칸의 옵션 창. 캔버스를 줄이지 않고 위에 겹친다(열고 닫아도 사진이 튀지 않게).
         // 선택 도구의 동작(모두·해제·반전·지우기·복사·잘라내기·AI 채우기)은 메인 화면에서 화면 아래 가운데 작업 표시줄이다(사용자 피드백 10차 1)
         val selectionActionBar = selectionControls?.takeIf { widthClass != WidthClass.Compact }
-        val selectionBarInset = with(LocalDensity.current) { (if (selectionActionBar != null) selectionBarPx else 0).toDp() }
+        val selectionBarHeight = if (selectionActionBar != null) selectionBarPx else 0
+        val sliderBar = stripSplit?.sliders?.takeIf { it.isNotEmpty() }
+        // 패널이 떠 있으면 수치 바가 아래 가운데로 옮겨 간다(사용자 피드백 12차 1-1). 조정 패널도 같은 오른쪽 위 자리라 함께 옮긴다.
+        val sliderBarDocked = floating.panel != null && !cropMode
+        // 알림 막대·떠 있는 패널은 아래의 작업 표시줄·옮겨 간 수치 바 위에 둔다
+        val bottomBarInset = with(LocalDensity.current) { maxOf(selectionBarHeight, if (sliderBar != null) sliderBarPx else 0).toDp() }
         val floatingUi: @Composable BoxScope.(WindowInsets) -> Unit = { insets ->
             // 상단 바 버튼으로 여는 레이어·조정 패널(캔버스 오른쪽 위). 자르기 중에는 숨겼다가(조정·레이어를 막으므로) 끝나면 다시 보인다.
-            // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다. 선택 도구의 작업 표시줄이 있으면 그 위까지만 늘어난다.
-            if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(bottom = selectionBarInset))
+            // 좁은 화면에서 옵션 창과 겹치면 옵션 창이 위에 보이게 먼저 그린다. 아래 작업 표시줄·수치 바가 있으면 그 위까지만 늘어난다.
+            if (!cropMode) FloatingPanelHost(floating, adjustControls, layerControls, Modifier.fillMaxSize().windowInsetsPadding(insets).padding(bottom = bottomBarInset))
             selectionActionBar?.let {
                 SelectionActionBar(it, screenCenterX, Modifier.fillMaxSize().windowInsetsPadding(insets)) { inset -> selectionBarPx = inset }
             }
             // 수치(크기·경도·불투명도·그 밖, 최대 3개)는 캔버스 오른쪽 수치 바에서 고친다(사용자 피드백 12차). 띠·옵션 창이 그 위에 그려진다.
-            if (stripSplit != null && stripSplit.sliders.isNotEmpty()) {
-                ToolSliderBar(stripSplit.sliders, Modifier.fillMaxSize().windowInsetsPadding(insets), onTouch = floating::closeFlyout)
+            // 패널이 떠 있으면 아래 가운데(작업 표시줄이 있으면 그 위)로 옮겨 가로 한 줄이 된다.
+            if (sliderBar != null) {
+                ToolSliderBar(
+                    sliderBar,
+                    Modifier.fillMaxSize().windowInsetsPadding(insets),
+                    docked = sliderBarDocked,
+                    screenCenterX = screenCenterX,
+                    bottomInset = selectionBarHeight,
+                    onInset = { inset -> sliderBarPx = inset },
+                    onTouch = floating::closeFlyout
+                )
             }
             if (stripSplit != null && stripSplit.strip.isNotEmpty()) {
                 // 띠는 캔버스 왼쪽 위(옮겨 놓은 자리)에 칸만큼의 높이로 뜬다(사용자 피드백 9차). 수치 밖의 칸이 없으면(지우개 등) 띠가 없다.
@@ -1088,8 +1104,8 @@ fun EditScreen(
                         reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
                         orientation = shownOrientation,
                         onSpotHeal = useSpotHeal, onMagicWand = useMagicWand,
-                        // 알림 막대는 선택 도구의 작업 표시줄 위에 뜬다
-                        overlayBottom = selectionBarInset,
+                        // 알림 막대는 아래 가운데의 선택 도구 작업 표시줄·옮겨 간 수치 바 위에 뜬다
+                        overlayBottom = bottomBarInset,
                         // 배율 표시는 도구 옵션 띠를 피한다(띠가 왼쪽 위에 있으면 그 오른쪽)
                         avoid = { floating.stripRegion },
                         floating = floatingUi

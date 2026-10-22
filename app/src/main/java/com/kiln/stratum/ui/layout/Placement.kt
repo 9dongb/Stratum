@@ -1,5 +1,7 @@
 package com.kiln.stratum.ui.layout
 
+import kotlin.math.roundToInt
+
 /** 한 축 위의 구간(픽셀). [start] 이상 [end] 미만이다. */
 data class Span(val start: Int, val end: Int)
 
@@ -125,3 +127,30 @@ fun sideSliderBar(count: Int, area: Region, m: SliderBarMetrics): SliderBarLayou
     return SliderBarLayout(box, slots)
 }
 
+/**
+ * 레이어·조정 패널을 열면 아래 가운데로 옮겨 가로 한 줄이 된 수치 바(사용자 피드백 12차 1-1: "레이어 패널이 펼쳐지면 수치 조절 바가 부드러운
+ * 애니메이션과 함께 하단 중앙으로 이동합니다. (선택 도구의 액션 보여지는 위치로)"). 카드의 가로 가운데를 [center](화면 가운데, 영역 좌표)에 맞추되
+ * [area] 안으로 밀고, 아래 끝은 [area] 아래 끝에서 [bottomInset](선택 도구 작업 표시줄이 차지한 높이) + [SliderBarMetrics.margin] 위다.
+ * 슬라이더는 왼쪽부터 놓고, 길이는 영역 폭에 맞춰 [SliderBarMetrics.minLength]~[SliderBarMetrics.maxLength]다.
+ */
+fun bottomSliderBar(count: Int, area: Region, center: Int, bottomInset: Int, m: SliderBarMetrics): SliderBarLayout {
+    val room = area.width - 2 * m.margin - 2 * m.padding - (count - 1) * m.gap
+    val length = (room / count.coerceAtLeast(1)).coerceAtMost(m.maxLength).coerceAtLeast(m.minLength)
+    val width = count * length + (count - 1).coerceAtLeast(0) * m.gap + 2 * m.padding
+    val height = m.thickness + 2 * m.padding
+    val left = (center - width / 2).coerceAtMost(area.right - m.margin - width).coerceAtLeast(area.left + m.margin)
+    val bottom = area.bottom - bottomInset - m.margin
+    val box = Region(left, bottom - height, left + width, bottom)
+    val slots = List(count) { index ->
+        val start = left + m.padding + index * (length + m.gap)
+        Region(start, box.top + m.padding, start + length, box.bottom - m.padding)
+    }
+    return SliderBarLayout(box, slots)
+}
+
+/** [from]에서 [to]로 [fraction](0..1)만큼 옮긴 수치 바. 카드와 슬라이더 자리의 네 끝을 따로 잇는다(옆 ↔ 아래 옮겨 가는 애니메이션). */
+fun lerp(from: SliderBarLayout, to: SliderBarLayout, fraction: Float): SliderBarLayout {
+    fun mix(a: Int, b: Int) = a + ((b - a) * fraction).roundToInt()
+    fun mix(a: Region, b: Region) = Region(mix(a.left, b.left), mix(a.top, b.top), mix(a.right, b.right), mix(a.bottom, b.bottom))
+    return SliderBarLayout(mix(from.box, to.box), from.slots.zip(to.slots) { a, b -> mix(a, b) })
+}

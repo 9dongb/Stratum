@@ -137,4 +137,43 @@ class PlacementTest {
         assertEquals((800 - 168) / 2, one.box.top)
     }
 
+    @Test
+    fun bottomSliderBar_isAHorizontalRowCenteredOnTheScreen_aboveTheBottom() {
+        // 사용자 피드백 12차 1-1: 패널을 열면 아래 가운데(선택 작업 표시줄 자리)로 옮겨 가로 한 줄
+        val area = Region(0, 0, 1000, 700)
+        val docked = bottomSliderBar(3, area, center = 520, bottomInset = 0, m = bar)
+        // 카드 폭 = 160·3 + 8·2 + 4·2 = 504, 높이 = 48 + 8
+        assertEquals(Region(520 - 252, 700 - 8 - 56, 520 + 252, 700 - 8), docked.box)
+        // 왼쪽부터 크기·경도·불투명도, 가로로 길다
+        assertEquals(listOf(272, 440, 608), docked.slots.map { it.left })
+        for (slot in docked.slots) {
+            assertEquals(160, slot.width)
+            assertEquals(48, slot.height)
+            assertEquals(docked.box.top + 4, slot.top)
+        }
+        // 선택 도구의 작업 표시줄이 있으면 그 위에 쌓는다
+        assertEquals(700 - 60 - 8, bottomSliderBar(3, area, 520, bottomInset = 60, m = bar).box.bottom)
+    }
+
+    @Test
+    fun bottomSliderBar_staysInsideAndShrinksOnANarrowCanvas() {
+        // 가운데가 영역 끝에 가까우면 안으로 민다
+        assertEquals(992 - 504, bottomSliderBar(3, Region(0, 0, 1000, 700), center = 990, bottomInset = 0, m = bar).box.left)
+        // 폭 400: 남는 자리 400 - 16 - 8 - 16 = 360 → 길이 120
+        val narrow = bottomSliderBar(3, Region(0, 0, 400, 700), center = 200, bottomInset = 0, m = bar)
+        assertEquals(120, narrow.slots[0].width)
+        assertEquals(8, narrow.box.left)
+    }
+
+    @Test
+    fun lerp_movesEveryEdgeByTheFraction() {
+        val area = Region(0, 0, 1000, 700)
+        val side = sideSliderBar(3, area, bar)
+        val docked = bottomSliderBar(3, area, 500, 0, bar)
+        assertEquals(side, lerp(side, docked, 0f))
+        assertEquals(docked, lerp(side, docked, 1f))
+        val half = lerp(side, docked, 0.5f)
+        assertEquals((side.box.left + docked.box.left) / 2, half.box.left)
+        assertEquals((side.slots[2].bottom + docked.slots[2].bottom) / 2, half.slots[2].bottom)
+    }
 }
