@@ -56,14 +56,16 @@ private val SheetDragThreshold = 48.dp
 
 /**
  * 커버 화면 레이어 시트(결정 기록 '커버 화면 개편' Q2 A). 상단 바의 레이어 버튼으로 켜면 한 줄 막대 위(캔버스 아래쪽 위)에 올라온다.
+ * 도구를 고르지 않아 막대가 안내 글뿐이면 막대 자리까지 덮는다(편집 화면이 정함, 2026-10-22 사용자 요청). 그때는 덮은 막대 높이([extra])만큼 더 길어져
+ * 위 끝 자리가 막대 위에 뜰 때와 같다.
  * 머리(맨 위 가는 손잡이와 제목·버튼 줄)를 아래로 끌면 닫히고([onClose]) 위로 끌면 다 펼친다. 제목을 누르면 반 높이·전체 높이를 오간다.
  * 레이어 버튼을 다시 누르거나 뒤로 가기로도 닫힌다(편집 화면). 캔버스를 쓰거나 도구를 바꿔도 열려 있다(메인 패널의 '직접 끄기 전까지 유지'와 같다).
  * 내용은 메인 화면의 떠 있는 레이어 패널과 같다: 제목 줄의 버튼 줄([LayerToolbar]), 그 아래 목록·불투명도·혼합 모드([LayerColumn]).
- * 높이는 내용만큼이고, 반 높이는 [maxHeight](캔버스 높이)의 [HALF_SHEET_FRACTION], 전체 높이는 [maxHeight]까지다(넘치면 목록을 밀어 본다).
+ * 높이는 내용만큼이고, 반 높이는 [maxHeight](캔버스 높이)의 [HALF_SHEET_FRACTION], 전체 높이는 [maxHeight]까지다(넘치면 목록을 밀어 본다). 둘 다 [extra]를 더한다.
  * 화면 읽기 기능에는 창 이름 '레이어'와 '닫기' 동작을 알린다(메인 패널과 같다).
  */
 @Composable
-fun CoverLayerSheet(controls: LayerControls, onClose: () -> Unit, maxHeight: Dp, modifier: Modifier = Modifier) {
+fun CoverLayerSheet(controls: LayerControls, onClose: () -> Unit, maxHeight: Dp, modifier: Modifier = Modifier, extra: Dp = 0.dp) {
     val colors = StratumTheme.colors
     var full by rememberSaveable { mutableStateOf(false) }
     // 머리를 끄는 동안 아래로 끈 만큼 시트가 따라 내려간다(위로는 따라가지 않고 놓을 때 펼친다)
@@ -75,7 +77,7 @@ fun CoverLayerSheet(controls: LayerControls, onClose: () -> Unit, maxHeight: Dp,
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(max = if (full) maxHeight else maxHeight * HALF_SHEET_FRACTION)
+            .heightIn(max = (if (full) maxHeight else maxHeight * HALF_SHEET_FRACTION) + extra)
             .graphicsLayer { translationY = dragged.coerceAtLeast(0f) }
             .testTag(EditScreenTags.COVER_LAYER_SHEET)
             .semantics {

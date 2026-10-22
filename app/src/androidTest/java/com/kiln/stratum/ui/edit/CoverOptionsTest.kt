@@ -93,12 +93,15 @@ class CoverOptionsTest {
         assertEquals("layers canvas", before, canvasBounds())
         assertOverlapsTheCanvasBottom("layers", EditScreenTags.COVER_LAYER_SHEET, before)
         composeRule.togglePanel(MainPanel.LAYERS)
-        // 더보기 줄도 겹쳐 뜨고, 더보기 칸을 다시 누르면 닫힌다
+        // 더보기 줄은 사진을 가리지 않고 막대 자리에 뜨고(막대가 잠깐 더보기 줄로 바뀜, 2026-10-22 사용자 요청), 더보기 칸을 다시 누르면 닫힌다
         composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
         composeRule.waitForIdle()
-        assertOverlapsTheCanvasBottom("more", EditScreenTags.COVER_MORE_TOOLS, before)
+        assertEquals(bar, composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).fetchSemanticsNode().layoutBoundsInWindow())
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
+        assertEquals("more canvas", before, canvasBounds())
         composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
         composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertIsDisplayed()
         assertEquals(before, canvasBounds())
         // 고르고 바꾸고 닫는 동안 캔버스 크기가 한 번도 바뀌지 않았다(축소본을 다시 그리지 않음)
         composeRule.runOnIdle { assertTrue("canvas sizes $canvasSizes", canvasSizes.isEmpty()) }
