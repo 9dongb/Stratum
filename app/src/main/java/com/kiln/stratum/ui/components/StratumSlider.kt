@@ -147,35 +147,37 @@ private fun Modifier.thumbTouch(
         var moved = 0f
         var dragging = false
         var released = false
-        while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Initial)
-            val pointer = event.changes.firstOrNull { it.id == down.id }
-            event.changes.forEach { it.consume() }
-            if (pointer == null) break
-            if (!pointer.pressed) {
-                released = true
-                if (!dragging) {
-                    if (doubled) {
-                        lastTapUp = -1L
-                        doubleTap.value?.invoke()
-                    } else {
-                        lastTapUp = pointer.uptimeMillis
-                        lastTapX = down.position.x
+        try {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val pointer = event.changes.firstOrNull { it.id == down.id }
+                event.changes.forEach { it.consume() }
+                if (pointer == null) break
+                if (!pointer.pressed) {
+                    released = true
+                    if (!dragging) {
+                        if (doubled) {
+                            lastTapUp = -1L
+                            doubleTap.value?.invoke()
+                        } else {
+                            lastTapUp = pointer.uptimeMillis
+                            lastTapX = down.position.x
+                        }
                     }
+                    break
                 }
-                break
+                moved += pointer.position.x - pointer.previousPosition.x
+                if (!dragging && abs(moved) > viewConfiguration.touchSlop) dragging = true
+                if (dragging && span > 0f) change.value((start + moved / travel * span).coerceIn(values.start, values.endInclusive))
             }
-            moved += pointer.position.x - pointer.previousPosition.x
-            if (!dragging && abs(moved) > viewConfiguration.touchSlop) dragging = true
-            if (dragging && span > 0f) change.value((start + moved / travel * span).coerceIn(values.start, values.endInclusive))
+        } finally {
+            // 다른 손가락 등으로 끊기거나 끄는 도중 이 자리가 사라져도(두 번 톡을 끔 등) 끈 값은 놓은 것으로 보고 기록한다(M3 슬라이더와 같다)
+            if (dragging) {
+                lastTapUp = -1L
+                finished.value()
+            }
         }
-        if (dragging) {
-            lastTapUp = -1L
-            // 다른 손가락 등으로 끊겨도 끈 값은 놓은 것으로 보고 기록한다(M3 슬라이더와 같다)
-            finished.value()
-        } else if (!released) {
-            lastTapUp = -1L
-        }
+        if (!dragging && !released) lastTapUp = -1L
     }
 }
 

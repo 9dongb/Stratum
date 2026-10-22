@@ -7,9 +7,10 @@ import kotlin.math.sin
 /**
  * 시험용 얼굴: 두 눈동자 가운데 ([eyeX], [eyeY]), 눈 사이 거리 [eyeDistance], 기울기 [angle](라디안, 시계 방향 +).
  * [landmarks]는 그 얼굴의 478점을 얼굴 좌표계(눈 가운데가 0, 눈 선이 가로, 단위는 눈 사이 거리)의 틀로 만든다.
- * 이름이 있는 점은 사람 얼굴과 비슷한 자리, 윤곽은 타원, 나머지 점은 얼굴 안쪽 작은 타원에 둔다.
+ * 이름이 있는 점과 눈 윤곽·콧등·입술은 사람 얼굴과 비슷한 자리, 얼굴 윤곽은 타원, 나머지 점은 얼굴 안쪽 작은 타원에 둔다.
+ * [turn]이 0이 아니면 고개를 돌린 얼굴처럼 얼굴 윤곽의 u < 0 쪽(사람의 오른쪽)을 가로로 (1 − [turn])배 좁힌다(먼 쪽이 좁게 찍힘).
  */
-data class TestFace(val eyeX: Float, val eyeY: Float, val eyeDistance: Float, val angle: Float = 0f) {
+data class TestFace(val eyeX: Float, val eyeY: Float, val eyeDistance: Float, val angle: Float = 0f, val turn: Float = 0f) {
 
     /** 얼굴 좌표 (u, v)(눈 사이 거리 단위, v는 턱 쪽 +)의 그림 x·y */
     fun at(u: Float, v: Float): Pair<Float, Float> {
@@ -38,20 +39,32 @@ data class TestFace(val eyeX: Float, val eyeY: Float, val eyeDistance: Float, va
             val t = 2 * PI * i / FaceModel.LANDMARK_COUNT
             put(i, (0.5 * cos(t)).toFloat(), (0.3 + 0.6 * sin(t)).toFloat())
         }
-        // 윤곽: 가운데 (0, 0.3), 반폭 0.95, 반높이 1.35인 타원(이마 위 끝이 맨 위, 시계 방향)
+        // 윤곽: 가운데 (0, 0.3), 반폭 0.95, 반높이 1.35인 타원(이마 위 끝이 맨 위, 시계 방향). 돌린 얼굴은 u < 0 쪽이 좁다.
         FaceMeshIndex.FACE_OVAL.forEachIndexed { k, index ->
             val t = -PI / 2 + 2 * PI * k / FaceMeshIndex.FACE_OVAL.size
-            put(index, (0.95 * cos(t)).toFloat(), (0.3 + 1.35 * sin(t)).toFloat())
+            val u = 0.95 * cos(t)
+            put(index, (if (u < 0) u * (1 - turn) else u).toFloat(), (0.3 + 1.35 * sin(t)).toFloat())
+        }
+        // 눈 윤곽 16점: 눈꼬리부터 아래 꺼풀 → 눈머리 → 위 꺼풀(폭 0.47, 높이 0.18인 타원, 가운데 v 0.02)
+        for ((contour, side) in listOf(FaceMeshIndex.RIGHT_EYE to -1f, FaceMeshIndex.LEFT_EYE to 1f)) {
+            contour.forEachIndexed { k, index ->
+                val t = 2 * PI * k / contour.size
+                put(index, side * (0.485f + (0.235 * cos(t)).toFloat()), (0.02 + 0.09 * sin(t)).toFloat())
+            }
         }
         put(FaceMeshIndex.RIGHT_IRIS, -0.5f, 0f)
         put(FaceMeshIndex.LEFT_IRIS, 0.5f, 0f)
-        put(FaceMeshIndex.RIGHT_EYE_OUTER, -0.72f, 0.02f)
-        put(FaceMeshIndex.RIGHT_EYE_INNER, -0.25f, 0.03f)
-        put(FaceMeshIndex.LEFT_EYE_OUTER, 0.72f, 0.02f)
-        put(FaceMeshIndex.LEFT_EYE_INNER, 0.25f, 0.03f)
+        // 콧등(위 → 아래)과 코끝, 콧방울
+        FaceMeshIndex.NOSE_BRIDGE.forEachIndexed { k, index -> put(index, 0f, 0.08f + 0.12f * k) }
         put(FaceMeshIndex.NOSE_TIP, 0f, 0.6f)
+        put(FaceMeshIndex.NOSE_WING_RIGHT, -0.3f, 0.68f)
+        put(FaceMeshIndex.NOSE_WING_LEFT, 0.3f, 0.68f)
         put(FaceMeshIndex.MOUTH_RIGHT, -0.38f, 1.0f)
         put(FaceMeshIndex.MOUTH_LEFT, 0.38f, 1.0f)
+        put(FaceMeshIndex.UPPER_LIP_TOP, 0f, 0.92f)
+        put(FaceMeshIndex.UPPER_LIP_INNER, 0f, 0.99f)
+        put(FaceMeshIndex.LOWER_LIP_INNER, 0f, 1.01f)
+        put(FaceMeshIndex.LOWER_LIP_BOTTOM, 0f, 1.12f)
         return FaceLandmarks(points, presence = 15f)
     }
 }

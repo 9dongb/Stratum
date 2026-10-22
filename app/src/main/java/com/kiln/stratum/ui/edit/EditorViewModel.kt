@@ -49,9 +49,13 @@ import com.kiln.stratum.engine.inpaint.InpaintModel
 import com.kiln.stratum.engine.inpaint.InpaintUnavailableException
 import com.kiln.stratum.engine.segment.SegmentUnavailableException
 import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceUnavailableException
+import com.kiln.stratum.engine.face.FaceValues
+import com.kiln.stratum.engine.face.FaceWarps
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
+import com.kiln.stratum.engine.liquify.MeshWarp
 import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.EditTextLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
@@ -667,22 +671,26 @@ class EditorViewModel internal constructor(
     val liquify: StateFlow<LiquifyState?> = _liquify.asStateFlow()
 
     /**
-     * 열려 있는 유동화 작업: 고른 레이어, 미리 보기 단계, 그 레이어만 그린 축소본, 변위 격자와 GPU에 올릴 그림,
-     * 작업 모드 안의 되돌리기(획마다 앞 격자, 최대 [LIQUIFY_UNDO_STEPS]개), 끄는 손가락 자리.
+     * 열려 있는 유동화 작업: 고른 레이어, 미리 보기 단계, 그 레이어만 그린 축소본, 손으로 민 변위 격자와 GPU에 올릴 그림,
+     * 얼굴 보정 값, 작업 모드 안의 되돌리기(획·슬라이더마다 한 단계, 최대 [LIQUIFY_UNDO_STEPS]개), 끄는 손가락 자리.
+     * 미리 보기와 적용은 격자에 얼굴 보정([warps])을 합친 것을 그린다(결정 기록 '얼굴 인식 보정').
      */
     private class LiquifySession(val layer: LayerId, val level: Int, val image: Bitmap, var mesh: LiquifyMesh, val field: Bitmap) {
         val displacements = FloatArray(mesh.columns * mesh.rows * 2)
         val halves = ShortArray(mesh.columns * mesh.rows * 4)
-        val undo = ArrayList<LiquifyMesh>()
+        val undo = ArrayList<LiquifyStep>()
 
-        /** 되돌린 획(다시 실행). 되돌리면 그 획이 여기로 와서, 되돌리기와 합쳐도 단계 수가 늘지 않는다. */
-        val redo = ArrayList<LiquifyMesh>()
+        /** 되돌린 단계(다시 실행). 되돌리면 그 단계가 여기로 와서, 되돌리기와 합쳐도 단계 수가 늘지 않는다. */
+        val redo = ArrayList<LiquifyStep>()
         var lastX = 0f
         var lastY = 0f
         var pressed = false
 
         /** 찾은 얼굴(원래 그림의 문서 좌표, 왼쪽부터). 아직 찾지 않았거나 찾지 못하고 실패했으면 null */
         var faces: List<FaceLandmarks>? = null
+
+        /** 얼굴마다의 보정 값([faces]와 같은 차례). 얼굴이 없으면 비었다. */
+        var faceValues: List<FaceValues> = emptyList()
 
         /** 고른 얼굴의 번호([faces] 안). 없으면 -1 */
         var selectedFace = -1
@@ -692,7 +700,79 @@ class EditorViewModel internal constructor(
 
         /** 화면에 한 번 알릴 것(못 찾음 등) */
         var faceNotice: FaceNotice? = null
+
+        /** 얼굴 슬라이더를 끄는 중이다(그 끌기의 되돌리기 단계를 이미 남김) */
+        var sliding = false
+
+        /**
+         * 끌기를 시작할 때 비운 다시 실행 단계와 한도 때문에 버린 가장 오래된 단계. 끌어서 제자리로 돌아오면(바꾼 것이 없음)
+         * 그 끌기의 단계를 지우고 이것들을 되돌린다(아무것도 바꾸지 않은 끌기가 되돌리기 기록을 잃게 하지 않게).
+         */
+        var slideRedo: List<LiquifyStep> = emptyList()
+        var slideDropped: LiquifyStep? = null
+
+        /** 격자를 바꿀 때마다 는다. [snapshot]이 지금 격자와 같은지 본다. */
+        private var meshVersion = 0
+
+        /** 마지막으로 남긴 격자 사본과 그때의 [meshVersion]. 격자가 그대로면(슬라이더만 바꿈) 사본을 함께 쓴다. */
+        private var snapshot: LiquifyMesh? = null
+        private var snapshotVersion = -1
+
+        /** 격자나 얼굴 값이 바뀔 때마다 는다(화면에 보일 얼굴 자리를 다시 계산하는 열쇠) */
+        var fieldVersion = 0
+            private set
+
+        /** 화면에 보이는 얼굴 자리([fieldVersion]일 때 계산한 것) */
+        var shown: List<FaceLandmarks>? = null
+        var shownVersion = -1
+
+        /** 손으로 민 격자를 바꿨다 */
+        fun meshChanged() {
+            meshVersion++
+            fieldVersion++
+        }
+
+        /** 찾은 얼굴이나 얼굴 값을 바꿨다 */
+        fun facesChanged() {
+            fieldVersion++
+        }
+
+        /** 지금 상태(격자는 바뀌지 않았으면 앞 사본을 함께 씀). 남긴 사본은 바꾸지 않는다. */
+        fun step(): LiquifyStep {
+            if (snapshotVersion != meshVersion || snapshot == null) {
+                snapshot = mesh.copy()
+                snapshotVersion = meshVersion
+            }
+            return LiquifyStep(checkNotNull(snapshot), faceValues)
+        }
+
+        /** 지금 상태를 되돌리기에 남긴다. 한도를 넘어 버린 가장 오래된 단계가 있으면 돌려준다. */
+        fun pushUndo(): LiquifyStep? {
+            undo += step()
+            return if (undo.size > LIQUIFY_UNDO_STEPS) undo.removeAt(0) else null
+        }
+
+        /**
+         * [step]으로 돌아간다. 격자는 사본을 새로 만들어 쓴다(남긴 단계는 바꾸지 않게).
+         * 얼굴을 찾기 전에 남긴 단계는 얼굴 값이 비어 있어, 찾은 얼굴 수에 맞춰 0으로 채운다(슬라이더가 사라지지 않게).
+         */
+        fun restore(step: LiquifyStep) {
+            mesh = step.mesh.copy()
+            meshChanged()
+            snapshot = step.mesh
+            snapshotVersion = meshVersion
+            faceValues = faces?.let { found -> List(found.size) { step.faceValues.getOrNull(it) ?: FaceValues.ZERO } }.orEmpty()
+        }
+
+        /** 얼굴 보정 변형(얼굴마다 값이 있는 것) */
+        fun warps(): List<MeshWarp> = faces?.let { FaceWarps.of(it, faceValues) }.orEmpty()
+
+        /** 바꾼 것이 있는지(손으로 민 곳이나 얼굴 값) */
+        fun changed(): Boolean = faceValues.any { !it.isZero } || !mesh.isIdentity()
     }
+
+    /** 유동화 작업 모드 안의 되돌리기 한 단계: 손으로 민 격자(바꾸지 않는 사본)와 얼굴 값 */
+    private class LiquifyStep(val mesh: LiquifyMesh, val faceValues: List<FaceValues>)
 
     private var liquifySession: LiquifySession? = null
     private var liquifyRenderJob: Job? = null
@@ -736,6 +816,10 @@ class EditorViewModel internal constructor(
         override fun cancel() = cancelLiquify()
         override fun setFaceMode() = openFaceMode()
         override fun pickFace(x: Float, y: Float) = pickLiquifyFace(x, y)
+        override fun setFaceValue(slider: FaceSlider, value: Float) = setLiquifyFaceValue(slider, value)
+        override fun finishFaceValue() = finishLiquifyFaceValue()
+        override fun resetFaceValue(slider: FaceSlider) = resetLiquifyFace(slider)
+        override fun resetFace() = resetLiquifyFace(null)
     }
 
     /** 레이어 패널이 보내는 일 */
@@ -1043,31 +1127,43 @@ class EditorViewModel internal constructor(
             strength = liquifyStrength,
             canUndo = session.undo.isNotEmpty(),
             canRedo = session.redo.isNotEmpty(),
-            changed = !session.mesh.isIdentity(),
+            changed = session.changed(),
             busy = busy,
             colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB,
             faceMode = liquifyFaceMode,
             faces = if (liquifyFaceMode) shownFaces(session) else null,
             selectedFace = session.selectedFace,
             findingFaces = session.faceJob?.isActive == true,
-            faceNotice = session.faceNotice
+            faceNotice = session.faceNotice,
+            faceValues = session.faceValues.getOrNull(session.selectedFace)
         )
     }
 
-    /** 찾은 얼굴을 화면에 보이는 자리로(손으로 민 격자를 앞으로 따라감, 원래 그림의 점 → 비튼 미리 보기의 점) */
+    /**
+     * 찾은 얼굴을 화면에 보이는 자리로(원래 그림의 점 → 비튼 미리 보기의 점: 얼굴 보정과 손으로 민 격자를 앞으로 따라감).
+     * 격자·얼굴 값이 그대로면 앞서 계산한 것을 쓴다.
+     */
     private fun shownFaces(session: LiquifySession): List<FaceLandmarks>? {
         val faces = session.faces ?: return null
-        if (session.mesh.isIdentity()) return faces
-        val shown = FloatArray(2)
-        return faces.map { face ->
-            val points = FloatArray(face.points.size)
-            for (i in 0 until points.size / 2) {
-                session.mesh.forward(face.x(i), face.y(i), shown)
-                points[2 * i] = shown[0]
-                points[2 * i + 1] = shown[1]
+        if (session.shownVersion == session.fieldVersion) return session.shown
+        val warps = session.warps()
+        val shown = if (warps.isEmpty() && session.mesh.isIdentity()) {
+            faces
+        } else {
+            val at = FloatArray(2)
+            faces.map { face ->
+                val points = FloatArray(face.points.size)
+                for (i in 0 until points.size / 2) {
+                    session.mesh.forward(face.x(i), face.y(i), at, warps)
+                    points[2 * i] = at[0]
+                    points[2 * i + 1] = at[1]
+                }
+                FaceLandmarks(points, face.presence)
             }
-            FaceLandmarks(points, face.presence)
         }
+        session.shown = shown
+        session.shownVersion = session.fieldVersion
+        return shown
     }
 
     /** 얼굴 모드를 켠다(얼굴 인식 보정). 아직 찾지 않았으면 찾는다. 처리 중(적용)이면 무시한다. */
@@ -1115,6 +1211,8 @@ class EditorViewModel internal constructor(
             }
             if (liquifySession !== session) return@launch
             session.faces = faces
+            session.faceValues = faces?.map { FaceValues.ZERO }.orEmpty()
+            session.facesChanged()
             session.selectedFace = if (faces?.size == 1) 0 else -1
             val kind = failure ?: when {
                 faces.isNullOrEmpty() -> FaceNotice.Kind.NOT_FOUND
@@ -1131,17 +1229,80 @@ class EditorViewModel internal constructor(
 
     /**
      * 얼굴 모드에서 문서 좌표 ([x], [y])를 톡했다: 그 자리 얼굴을 고른다(얼굴 윤곽 안). 얼굴이 없는 곳이면 그대로다.
-     * 미리 보기는 손으로 민 만큼 비틀려 있어, 누른 자리가 보여 주는 원래 그림의 점(누른 자리 + 변위)으로 찾는다.
+     * 미리 보기는 얼굴 보정과 손으로 민 만큼 비틀려 있어, 누른 자리가 보여 주는 원래 그림의 점으로 찾는다.
      */
     private fun pickLiquifyFace(x: Float, y: Float) {
         val session = liquifySession ?: return
         val faces = session.faces ?: return
         if (!liquifyFaceMode || _liquify.value?.busy == true) return
-        val moved = FloatArray(2)
-        session.mesh.displacementAt(x, y, moved)
-        val index = faces.indexOfFirst { it.contains(x + moved[0], y + moved[1]) }
+        val source = FloatArray(2)
+        session.mesh.sourceOf(x, y, source, session.warps())
+        val index = faces.indexOfFirst { it.contains(source[0], source[1]) }
         if (index < 0 || index == session.selectedFace) return
         session.selectedFace = index
+        session.sliding = false
+        republishLiquify()
+    }
+
+    /**
+     * 고른 얼굴의 슬라이더 [slider]를 [value](−1..1, 0.01 단위로 맞춤)로 바꾸고 미리 보기를 다시 그린다. 한 번 끄는 동안(손을 뗄 때까지,
+     * [finishLiquifyFaceValue]) 처음 바뀔 때만 되돌리기 한 단계를 남긴다. 얼굴을 고르지 않았거나 처리 중이면 무시한다.
+     */
+    private fun setLiquifyFaceValue(slider: FaceSlider, value: Float) {
+        val session = liquifySession ?: return
+        val index = session.selectedFace
+        if (!liquifyFaceMode || index !in session.faceValues.indices || session.pressed || _liquify.value?.busy == true) return
+        val current = session.faceValues[index]
+        val next = current.with(slider, (value * 100).roundToInt() / 100f)
+        if (next == current) return
+        if (!session.sliding) {
+            session.slideDropped = session.pushUndo()
+            session.slideRedo = session.redo.toList()
+            session.redo.clear()
+            session.sliding = true
+        }
+        session.faceValues = session.faceValues.toMutableList().also { it[index] = next }
+        session.facesChanged()
+        requestLiquifyRender()
+        republishLiquify()
+    }
+
+    /**
+     * 얼굴 슬라이더에서 손을 뗐다: 다음에 끌면 새 되돌리기 단계다. 끄는 동안 바꾼 것이 없으면(제자리로 돌아옴) 그 단계를 지우고,
+     * 끌기를 시작할 때 비운 다시 실행 단계와 버린 오래된 단계를 되돌린다.
+     */
+    private fun finishLiquifyFaceValue() {
+        val session = liquifySession ?: return
+        if (!session.sliding) return
+        session.sliding = false
+        val last = session.undo.lastOrNull()
+        if (last != null && last.faceValues == session.faceValues && last.mesh === session.step().mesh) {
+            session.undo.removeAt(session.undo.lastIndex)
+            session.slideDropped?.let { session.undo.add(0, it) }
+            session.redo.addAll(session.slideRedo)
+            republishLiquify()
+        }
+        session.slideDropped = null
+        session.slideRedo = emptyList()
+    }
+
+    /**
+     * 고른 얼굴의 슬라이더 [slider]를 0으로(원 두 번 톡), [slider]가 null이면 그 얼굴의 값을 모두 0으로('얼굴 초기화'). 되돌리기 한 단계다.
+     * 이미 0이면 아무것도 하지 않는다.
+     */
+    private fun resetLiquifyFace(slider: FaceSlider?) {
+        val session = liquifySession ?: return
+        val index = session.selectedFace
+        if (index !in session.faceValues.indices || session.pressed || _liquify.value?.busy == true) return
+        val current = session.faceValues[index]
+        val next = if (slider == null) FaceValues.ZERO else current.with(slider, 0f)
+        if (next == current) return
+        session.sliding = false
+        session.pushUndo()
+        session.redo.clear()
+        session.faceValues = session.faceValues.toMutableList().also { it[index] = next }
+        session.facesChanged()
+        requestLiquifyRender()
         republishLiquify()
     }
 
@@ -1156,8 +1317,8 @@ class EditorViewModel internal constructor(
     private fun liquifyBegin(x: Float, y: Float) {
         val session = liquifySession ?: return
         if (_liquify.value?.busy == true) return
-        session.undo += session.mesh.copy()
-        if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        session.sliding = false
+        session.pushUndo()
         session.lastX = x
         session.lastY = y
         session.pressed = true
@@ -1201,17 +1362,21 @@ class EditorViewModel internal constructor(
         if (!session.pressed) return
         session.pressed = false
         liquifyHoldJob?.cancel()
-        if (session.undo.isNotEmpty()) session.mesh = session.undo.removeAt(session.undo.lastIndex)
+        if (session.undo.isNotEmpty()) session.restore(session.undo.removeAt(session.undo.lastIndex))
         requestLiquifyRender()
         republishLiquify()
     }
 
     private fun liquifyBrush(session: LiquifySession, x: Float, y: Float, moveX: Float, moveY: Float) {
         session.mesh.brush(liquifyTool, x, y, checkNotNull(liquifySize) / 2f, liquifyStrength, moveX, moveY)
+        session.meshChanged()
         requestLiquifyRender()
     }
 
-    /** 미리 보기를 다시 그린다. 그리는 중이면 끝난 뒤 한 번 더 그린다(여러 번 바뀌어도 한 번에). */
+    /**
+     * 미리 보기를 다시 그린다. 그리는 중이면 끝난 뒤 한 번 더 그린다(여러 번 바뀌어도 한 번에).
+     * 손으로 민 격자에 얼굴 보정을 합친 변위를 그린다(합치기는 백그라운드에서).
+     */
     private fun requestLiquifyRender() {
         liquifyDirty = true
         if (liquifyRenderJob?.isActive == true) return
@@ -1219,11 +1384,15 @@ class EditorViewModel internal constructor(
             while (liquifyDirty) {
                 liquifyDirty = false
                 val session = liquifySession ?: return@launch
-                // 격자는 메인 스레드에서만 바꾸므로, 여기서 사본을 받아 GPU에 올린다
+                // 격자·얼굴 값은 메인 스레드에서만 바꾸므로, 여기서 사본과 얼굴 변형(바꾸지 않는 값)을 받아 합친 뒤 GPU에 올린다
                 session.mesh.copyInto(session.displacements)
+                val warps = session.warps()
+                val columns = session.mesh.columns
+                val rows = session.mesh.rows
                 val cellSize = session.mesh.cellSize
                 val drawn = renderMutex.withLock {
                     withContext(Dispatchers.Default) {
+                        LiquifyMesh.compose(session.displacements, columns, rows, cellSize, warps)
                         LiquifyRenderer.fill(session.field, session.displacements, session.halves)
                         LiquifyRenderer.preview(session.image, session.level, session.field, cellSize)
                     }
@@ -1234,54 +1403,60 @@ class EditorViewModel internal constructor(
         }
     }
 
-    /** 작업 모드 안에서 마지막 한 획을 되돌린다 */
+    /** 작업 모드 안에서 마지막 한 단계(획·얼굴 슬라이더)를 되돌린다 */
     private fun undoLiquify() {
         val session = liquifySession ?: return
         if (session.pressed || session.undo.isEmpty() || _liquify.value?.busy == true) return
-        session.redo += session.mesh
-        session.mesh = session.undo.removeAt(session.undo.lastIndex)
+        session.sliding = false
+        session.redo += session.step()
+        session.restore(session.undo.removeAt(session.undo.lastIndex))
         requestLiquifyRender()
         republishLiquify()
     }
 
-    /** 되돌린 한 획을 다시 건다(작업 모드 안에서) */
+    /** 되돌린 한 단계를 다시 건다(작업 모드 안에서) */
     private fun redoLiquify() {
         val session = liquifySession ?: return
         if (session.pressed || session.redo.isEmpty() || _liquify.value?.busy == true) return
-        session.undo += session.mesh
+        session.sliding = false
+        session.undo += session.step()
         if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
-        session.mesh = session.redo.removeAt(session.redo.lastIndex)
+        session.restore(session.redo.removeAt(session.redo.lastIndex))
         requestLiquifyRender()
         republishLiquify()
     }
 
-    /** 모두 원래대로(되돌리기에 남긴다) */
+    /** 모두 원래대로(손으로 민 것과 모든 얼굴 값, 되돌리기에 남긴다) */
     private fun resetLiquify() {
         val session = liquifySession ?: return
-        if (session.pressed || session.mesh.isIdentity() || _liquify.value?.busy == true) return
-        session.undo += session.mesh.copy()
-        if (session.undo.size > LIQUIFY_UNDO_STEPS) session.undo.removeAt(0)
+        if (session.pressed || !session.changed() || _liquify.value?.busy == true) return
+        session.sliding = false
+        session.pushUndo()
         session.redo.clear()
         session.mesh.reset()
+        session.meshChanged()
+        session.faceValues = session.faceValues.map { FaceValues.ZERO }
         requestLiquifyRender()
         republishLiquify()
     }
 
     /**
-     * 비튼 것을 레이어에 적용해(원본 해상도, 실행 취소 한 단계) 작업 모드를 닫는다. 움직인 곳이 없으면 그냥 닫는다.
-     * 메모리가 모자라 적용하지 못하면 작업 모드를 그대로 두고 알린다(다시 해 보거나 취소할 수 있게).
+     * 비튼 것(손으로 민 격자에 얼굴 보정을 합친 것)을 레이어에 적용해(원본 해상도, 실행 취소 한 단계) 작업 모드를 닫는다.
+     * 바꾼 것이 없으면 그냥 닫는다. 메모리가 모자라 적용하지 못하면 작업 모드를 그대로 두고 알린다(다시 해 보거나 취소할 수 있게).
      */
     private fun applyLiquify() {
         val session = liquifySession ?: return
         if (session.pressed || editing) return
-        if (session.mesh.isIdentity()) {
+        // 얼굴 값이 아주 작으면 합친 변위가 움직였다고 볼 만큼(0.01px)도 안 될 수 있다. 그때 적용은 아무것도 하지 않으므로 그냥 닫는다.
+        val composed = session.mesh.composedWith(session.warps())
+        if (!session.changed() || composed.isIdentity()) {
             cancelLiquify()
             return
         }
         val shown = _liquify.value ?: return
         publishLiquify(session, shown.preview, busy = true)
         runEdit(
-            LiquifyLayer(session.layer, session.mesh.copy()),
+            LiquifyLayer(session.layer, composed),
             onCommitted = { closeLiquify() },
             onFinished = {
                 // 기록하지 못했으면 작업 모드가 남아 있다(다시 해 보거나 취소할 수 있게 버튼을 켠다)

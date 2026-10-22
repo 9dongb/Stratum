@@ -83,10 +83,26 @@ internal fun blurBar(mode: SubTool, controls: BlurControls, onChoose: (SubTool) 
 @Composable
 internal fun mosaicBar(controls: MosaicControls): List<BarItem> = valueChips(mosaicStrip(controls))
 
-/** 유동화 새 창(커버)의 막대: 크기, 압력. 도구(뒤틀기·오목·볼록·재구성)는 맨 아래 X와 ✓ 사이의 탭이다(새 창 공통 규칙). */
+/**
+ * 유동화 새 창(커버)의 막대: 크기, 압력. 도구(뒤틀기·오목·볼록·재구성·얼굴)는 맨 아래 X와 ✓ 사이의 탭이다(새 창 공통 규칙).
+ * 얼굴 모드에서 얼굴을 골랐으면 얼굴 슬라이더 칩(눈 크기·코 너비·얼굴 너비, 누르면 가운데 0인 슬라이더 한 줄)과 얼굴 초기화 칩이다.
+ * 고른 얼굴이 없으면 칩이 없어 막대에 안내 글(찾는 중·고르기)이 보인다.
+ */
 @Composable
-internal fun liquifyBar(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<BarItem> =
-    valueChips(liquifyStrip(state, actions, sizePreview))
+internal fun liquifyBar(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<BarItem> = buildList {
+    addAll(valueChips(liquifyStrip(state, actions, sizePreview)))
+    val face = state.faceValues.takeIf { state.faceMode } ?: return@buildList
+    add(
+        BarButton(
+            key = "face_reset",
+            label = stringResource(R.string.liquify_face_reset),
+            icon = R.drawable.ic_face_retouching_off,
+            onClick = actions::resetFace,
+            enabled = !state.busy && !face.isZero,
+            tag = EditScreenTags.LIQUIFY_FACE_RESET
+        )
+    )
+}
 
 /**
  * 선택의 막대: 하위 도구(사각형·원형·올가미·자동·개체), 합치는 방법(새로·더하기·빼기·교차), 페더(자동 선택은 허용치와 '이어진 곳만'),

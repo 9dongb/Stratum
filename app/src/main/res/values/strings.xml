@@ -335,9 +335,13 @@
     <string name="liquify_face_selected">Face %1$d of %2$d</string>
     <string name="liquify_face_unavailable">Face detection isn\'t available on this device</string>
     <string name="liquify_face_memory">Not enough memory to find faces</string>
+    <string name="liquify_face_eye_size">Eye size</string>
+    <string name="liquify_face_nose_width">Nose width</string>
+    <string name="liquify_face_width">Face width</string>
+    <string name="liquify_face_reset">Reset face</string>
     <string name="liquify_strength">Pressure</string>
-    <string name="liquify_undo">Undo last stroke</string>
-    <string name="liquify_redo">Redo stroke</string>
+    <string name="liquify_undo">Undo last step</string>
+    <string name="liquify_redo">Redo step</string>
     <string name="liquify_reset">Restore all</string>
 
     <!-- 리터칭 -->

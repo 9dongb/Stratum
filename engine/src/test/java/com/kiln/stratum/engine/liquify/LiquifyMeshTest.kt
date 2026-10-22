@@ -129,6 +129,86 @@ class LiquifyMeshTest {
         assertEquals(0f, mesh.maxDisplacementIn(PixelRect(0, 0, 50, 50)), 0f)
     }
 
+    /** 시험용 변형: 상자 안을 늘 ([shiftX], [shiftY])만큼 읽는다 */
+    private class Shift(
+        override val left: Float,
+        override val top: Float,
+        override val right: Float,
+        override val bottom: Float,
+        val shiftX: Float,
+        val shiftY: Float
+    ) : MeshWarp {
+        override fun displacement(x: Float, y: Float, out: FloatArray) {
+            out[0] = shiftX
+            out[1] = shiftY
+        }
+    }
+
+    @Test
+    fun compose_followsTheBrushedMeshFirst_thenEachWarpInTurn() {
+        val mesh = LiquifyMesh.identity(size)
+        mesh.brush(LiquifyTool.PUSH, 200f, 150f, radius = 60f, strength = 1f, moveX = 12f)
+        // 두 변형: 앞의 것이 옮긴 자리가 뒤의 것의 상자에 들어가면 이어 건다
+        val first = Shift(100f, 100f, 260f, 200f, 20f, 0f)
+        val second = Shift(230f, 100f, 300f, 200f, 0f, 5f)
+        val field = FloatArray(mesh.columns * mesh.rows * 2)
+        mesh.copyInto(field)
+
+        LiquifyMesh.compose(field, mesh.columns, mesh.rows, mesh.cellSize, listOf(first, second))
+
+        val out = FloatArray(2)
+        for (row in 0 until mesh.rows) {
+            for (column in 0 until mesh.columns) {
+                val x = (column * mesh.cellSize).toFloat()
+                val y = (row * mesh.cellSize).toFloat()
+                var sx = x + mesh.vertexX(column, row)
+                var sy = y + mesh.vertexY(column, row)
+                if (first.covers(sx, sy)) sx += 20f
+                if (second.covers(sx, sy)) sy += 5f
+                val i = (row * mesh.columns + column) * 2
+                assertEquals(sx - x, field[i], 1e-3f)
+                assertEquals(sy - y, field[i + 1], 1e-3f)
+            }
+        }
+        // 합친 새 격자도 같고, 아무 점의 읽는 자리(sourceOf)도 같은 차례다
+        val composed = mesh.composedWith(listOf(first, second))
+        assertEquals(field[(40 * mesh.columns + 55) * 2], composed.vertexX(55, 40), 0f)
+        mesh.sourceOf(240f, 150f, out, listOf(first, second))
+        val (dx, dy) = at(mesh, 240f, 150f)
+        assertEquals(240f + dx + 20f, out[0], 1e-3f)
+        assertEquals(150f + dy + 5f, out[1], 1e-3f)
+        // 손으로 민 격자는 그대로다
+        assertEquals(0f, mesh.vertexY(55, 40), 0f)
+    }
+
+    @Test
+    fun forwardWithWarps_findsWhereTheReadPointIsShown() {
+        val mesh = LiquifyMesh.identity(size)
+        mesh.brush(LiquifyTool.BLOAT, 200f, 150f, radius = 80f, strength = 1f)
+        val warps = listOf(Shift(150f, 100f, 260f, 200f, 6f, -3f))
+        val out = FloatArray(2)
+        for ((x, y) in listOf(205f to 152f, 180f to 140f, 10f to 10f)) {
+            mesh.sourceOf(x, y, out, warps)
+
+            mesh.forward(out[0], out[1], out, warps, iterations = 30)
+
+            assertEquals(x, out[0], 0.05f)
+            assertEquals(y, out[1], 0.05f)
+        }
+    }
+
+    @Test
+    fun compose_withoutWarps_keepsTheField_andClampsLongMoves() {
+        val mesh = LiquifyMesh.identity(size)
+        val field = FloatArray(mesh.columns * mesh.rows * 2) { 1f }
+
+        LiquifyMesh.compose(field, mesh.columns, mesh.rows, mesh.cellSize, emptyList())
+        assertTrue(field.all { it == 1f })
+
+        LiquifyMesh.compose(field, mesh.columns, mesh.rows, mesh.cellSize, listOf(Shift(0f, 0f, 400f, 300f, 5000f, 0f)))
+        assertEquals(LiquifyMesh.MAX_DISPLACEMENT, kotlin.math.hypot(field[0], field[1]), 0.5f)
+    }
+
     @Test
     fun zeroStrengthOrRadius_changesNothing() {
         val mesh = LiquifyMesh.identity(size)

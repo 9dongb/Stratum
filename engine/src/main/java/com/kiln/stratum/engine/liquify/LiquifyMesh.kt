@@ -73,17 +73,39 @@ class LiquifyMesh private constructor(
     }
 
     /**
-     * 원래 그림의 점 ([x], [y])이 비튼 결과에서 보이는 자리를 [out]에 담는다. 격자는 결과 자리에서 원래 자리를 가리키므로(거꾸로 찾음),
-     * q + 변위(q) = (x, y)인 q를 고정점 반복으로 찾는다(q ← (x, y) − 변위(q)). 유동화의 변위는 매끈해 몇 번 만에 1px 안으로 모인다.
-     * 얼굴 점처럼 몇백 개 점을 화면에 그릴 때 쓴다.
+     * 결과 자리 ([x], [y])가 읽는 원래 그림의 자리를 [out]에 담는다: 이 격자(손으로 민 것)를 따라간 뒤 [warps](얼굴 보정 등)를 차례로 따라간다.
+     * [warps]는 원래 그림에 먼저 걸리는 변형이라 거꾸로 따라갈 때는 격자 다음이다([compose]와 같은 순서).
      */
-    fun forward(x: Float, y: Float, out: FloatArray, iterations: Int = FORWARD_ITERATIONS) {
+    fun sourceOf(x: Float, y: Float, out: FloatArray, warps: List<MeshWarp> = emptyList()) {
+        displacementAt(x, y, out)
+        var sx = x + out[0]
+        var sy = y + out[1]
+        for (warp in warps) {
+            if (!warp.covers(sx, sy)) continue
+            warp.displacement(sx, sy, out)
+            sx += out[0]
+            sy += out[1]
+        }
+        out[0] = sx
+        out[1] = sy
+    }
+
+    /**
+     * 원래 그림의 점 ([x], [y])이 비튼 결과에서 보이는 자리를 [out]에 담는다. 격자는 결과 자리에서 원래 자리를 가리키므로(거꾸로 찾음),
+     * 읽는 자리([sourceOf], [warps]까지 합침)가 (x, y)인 결과 자리 q를 고정점 반복으로 찾는다(q ← q + (x, y) − 읽는 자리(q)).
+     * 유동화·얼굴 보정의 변위는 매끈해(접히지 않음) 몇 번 만에 1px 안으로 모인다. 얼굴 점처럼 몇백 개 점을 화면에 그릴 때 쓴다.
+     * 한 번에 [FORWARD_TOLERANCE]보다 덜 옮기면 그만한다(움직이지 않은 곳은 한 번).
+     */
+    fun forward(x: Float, y: Float, out: FloatArray, warps: List<MeshWarp> = emptyList(), iterations: Int = FORWARD_ITERATIONS) {
         var qx = x
         var qy = y
-        repeat(iterations) {
-            displacementAt(qx, qy, out)
-            qx = x - out[0]
-            qy = y - out[1]
+        for (i in 0 until iterations) {
+            sourceOf(qx, qy, out, warps)
+            val stepX = x - out[0]
+            val stepY = y - out[1]
+            qx += stepX
+            qy += stepY
+            if (abs(stepX) < FORWARD_TOLERANCE && abs(stepY) < FORWARD_TOLERANCE) break
         }
         out[0] = qx
         out[1] = qy
@@ -245,12 +267,27 @@ class LiquifyMesh private constructor(
         }
     }
 
+    /**
+     * 이 격자(손으로 민 것)에 [warps](얼굴 보정 등)를 합친 새 격자([compose]). 적용할 때 이것 하나를 원본 해상도에 그린다.
+     * [warps]가 없으면 사본이다.
+     */
+    fun composedWith(warps: List<MeshWarp>): LiquifyMesh {
+        if (warps.isEmpty()) return copy()
+        val field = FloatArray(columns * rows * 2)
+        copyInto(field)
+        compose(field, columns, rows, cellSize, warps)
+        return LiquifyMesh(size, cellSize, FloatArray(columns * rows) { field[it * 2] }, FloatArray(columns * rows) { field[it * 2 + 1] })
+    }
+
     companion object {
         /** 이보다 작은 변위는 움직이지 않은 것으로 본다(픽셀) */
         const val EPSILON = 0.01f
 
         /** [forward]의 반복 수 */
         const val FORWARD_ITERATIONS = 8
+
+        /** [forward]가 한 번에 이보다(픽셀) 덜 옮기면 모인 것으로 본다 */
+        const val FORWARD_TOLERANCE = 0.01f
 
         /** 꼭짓점 하나가 가질 수 있는 가장 큰 변위 길이(문서 픽셀) */
         const val MAX_DISPLACEMENT = 1000f
@@ -266,6 +303,47 @@ class LiquifyMesh private constructor(
 
         /** 가장 촘촘한 칸(픽셀) */
         const val MIN_CELL = 4
+
+        /**
+         * 꼭짓점 변위들([field], [copyInto] 형식: 손으로 민 격자)에 [warps]를 합친다. 결과 자리 q가 읽을 곳은 q + 격자 변위에서 시작해
+         * [warps]를 차례로 따라간 곳이다(원래 그림에 [warps]를 먼저 걸고, 손으로 민 것을 그 위에 건 것과 같다).
+         * 부위를 더하지 않고 이어 걸어 겹치는 부위도 접히지 않는다. 합친 변위도 [MAX_DISPLACEMENT]로 묶는다.
+         * 꼭짓점 하나에 몇 번의 덧셈으로 상자 밖을 건너뛰어 큰 문서(꼭짓점 40만 개)도 몇 ms다. 다른 스레드에서 불러도 된다.
+         */
+        fun compose(field: FloatArray, columns: Int, rows: Int, cellSize: Int, warps: List<MeshWarp>) {
+            if (warps.isEmpty()) return
+            require(field.size >= columns * rows * 2) { "Field too small" }
+            val left = warps.minOf { it.left }
+            val top = warps.minOf { it.top }
+            val right = warps.maxOf { it.right }
+            val bottom = warps.maxOf { it.bottom }
+            val step = FloatArray(2)
+            for (row in 0 until rows) {
+                val qy = (row * cellSize).toFloat()
+                for (column in 0 until columns) {
+                    val i = (row * columns + column) * 2
+                    val qx = (column * cellSize).toFloat()
+                    var sx = qx + field[i]
+                    var sy = qy + field[i + 1]
+                    if (sx < left || sx > right || sy < top || sy > bottom) continue
+                    for (warp in warps) {
+                        if (!warp.covers(sx, sy)) continue
+                        warp.displacement(sx, sy, step)
+                        sx += step[0]
+                        sy += step[1]
+                    }
+                    var mx = sx - qx
+                    var my = sy - qy
+                    val length = sqrt(mx * mx + my * my)
+                    if (length > MAX_DISPLACEMENT) {
+                        mx *= MAX_DISPLACEMENT / length
+                        my *= MAX_DISPLACEMENT / length
+                    }
+                    field[i] = mx
+                    field[i + 1] = my
+                }
+            }
+        }
 
         /** [size] 문서의 빈(움직이지 않은) 격자 */
         fun identity(size: PixelSize): LiquifyMesh {

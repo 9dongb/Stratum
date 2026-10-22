@@ -12,9 +12,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,6 +52,8 @@ internal fun EndPreviewOnDispose(preview: SizePreviewState?) {
 /**
  * 이름·가는 슬라이더(0..1)·숫자 한 줄(커버 옵션·유동화 옵션). 끄는 대로 바로 바꾼다(그리기 전 설정이라 기록이 따로 없다).
  * [onFinished]는 손을 뗄 때 부른다. 펼친 화면 띠의 슬라이더는 세로 슬라이더 창이다(`SliderCell`).
+ * [origin]이 0보다 크면 그 자리(0..1)를 0으로 보고 거기서 손잡이까지 칠한다(얼굴 보정처럼 양쪽으로 바꾸는 값).
+ * [onReset]이 있으면 원을 두 번 톡하면 그것을 부르고, 화면 읽기 기능에는 '초기화' 동작을 준다(조정 슬라이더와 같다).
  */
 @Composable
 internal fun OptionSlider(
@@ -63,7 +62,9 @@ internal fun OptionSlider(
     fraction: Float,
     onFraction: (Float) -> Unit,
     tag: String,
-    onFinished: () -> Unit = {}
+    onFinished: () -> Unit = {},
+    origin: Float = 0f,
+    onReset: (() -> Unit)? = null
 ) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -74,20 +75,19 @@ internal fun OptionSlider(
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
         )
+        // 0의 자리를 가운데로 옮겨 그린다(값 범위 -origin..1-origin, 0이 origin 자리)
         StratumSlider(
-            value = fraction,
-            onValueChange = onFraction,
+            value = fraction - origin,
+            onValueChange = { onFraction(it + origin) },
             onValueChangeFinished = onFinished,
-            valueRange = 0f..1f,
+            valueRange = -origin..(1f - origin),
             enabled = true,
-            centered = false,
+            centered = origin > 0f,
+            onThumbDoubleTap = onReset,
             modifier = Modifier
                 .weight(1f)
                 .testTag(tag)
-                .semantics {
-                    contentDescription = label
-                    stateDescription = shown
-                }
+                .sliderSemantics(label, shown, onReset)
         )
         Text(
             text = shown,

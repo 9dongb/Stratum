@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,7 +12,9 @@ import com.kiln.stratum.engine.brush.StrokeDabs
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceUnavailableException
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.PaintStroke
@@ -189,6 +192,170 @@ class EditorFaceTest {
         // 옮겨 보이는 자리(누른 자리 + 변위가 원래 얼굴 안)를 톡해도 그 얼굴이다
         onMain { viewModel.liquifyActions.pickFace(after.eyeCenterX, after.eyeCenterY + 40f) }
         assertEquals(0, awaitLiquify { it.faceMode }.selectedFace)
+    }
+
+    /** [ready]의 전체 축소본에서 문서 (x, y) 자리가 빨간지 */
+    private fun red(ready: EditorState.Ready, x: Int, y: Int): Boolean {
+        val shown = ready.base.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val scale = 1 shl ready.base.region.level
+        val pixel = shown.getPixel(x / scale, y / scale)
+        return Color.red(pixel) > 200 && Color.green(pixel) < 80
+    }
+
+    @Test
+    fun aFaceSliderDrag_isOneUndoStep_andUndoRedoBringTheValuesBack() {
+        openWithRedBlobs(400f to 450f)
+        startFaceMode()
+
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.FACE_WIDTH, 0.3f)
+            viewModel.liquifyActions.setFaceValue(FaceSlider.FACE_WIDTH, 0.65f)
+            viewModel.liquifyActions.setFaceValue(FaceSlider.FACE_WIDTH, 1f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        val changed = awaitLiquify { it.faceValues?.get(FaceSlider.FACE_WIDTH) == 1f }
+        assertTrue(changed.changed)
+        assertTrue(changed.canUndo)
+
+        onMain { viewModel.liquifyActions.undo() }
+        val undone = awaitLiquify { it.faceValues?.isZero == true }
+        assertFalse(undone.changed)
+        assertFalse("one drag is one step", undone.canUndo)
+        assertTrue(undone.canRedo)
+
+        onMain { viewModel.liquifyActions.redo() }
+        assertEquals(1f, awaitLiquify { it.faceValues?.isZero == false }.faceValues?.get(FaceSlider.FACE_WIDTH))
+    }
+
+    @Test
+    fun aWiderFace_movesTheShownOutline_andApplyChangesThePixelsInOneStep() {
+        openWithRedBlobs(400f to 450f)
+        val before = awaitReady { true }
+        val outline = checkNotNull(startFaceMode().faces)[0]
+        // 얼굴 윤곽의 오른쪽 볼 점(454)
+        val cheek = 454
+        assertTrue(red(before, 488, 500))
+        assertFalse(red(before, 497, 500))
+
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.FACE_WIDTH, 1f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        val wider = awaitLiquify { it.faceValues?.get(FaceSlider.FACE_WIDTH) == 1f && it.faces != null }
+        assertTrue("outline ${outline.x(cheek)} → ${wider.faces!![0].x(cheek)}", wider.faces!![0].x(cheek) > outline.x(cheek) + 2f)
+
+        onMain { viewModel.liquifyActions.apply() }
+        runBlocking { withTimeout(30_000) { viewModel.liquify.first { it == null } } }
+        val after = awaitReady { it.revision > before.revision }
+        assertTrue(after.canUndo)
+        // 덩어리 가장자리(y 500에서 x 495)가 바깥으로 약 6px(한쪽 0.08U = 6.4px, 윤곽 바로 바깥이라 조금 덜) 넓어졌다
+        assertTrue(red(after, 497, 500))
+
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > after.revision }
+        assertFalse(red(undone, 497, 500))
+    }
+
+    @Test
+    fun noSelectedFace_ignoresTheSliders_andResetFaceClearsOnlyThatFace() {
+        openWithRedBlobs(300f to 450f, 900f to 450f)
+        startFaceMode()
+
+        onMain { viewModel.liquifyActions.setFaceValue(FaceSlider.EYE_SIZE, 0.5f) }
+        val ignored = awaitLiquify { true }
+        assertNull(ignored.faceValues)
+        assertFalse(ignored.changed)
+
+        // 오른쪽 얼굴을 골라 바꾸고, 왼쪽으로 옮겨 바꾼 뒤 왼쪽만 초기화한다
+        onMain {
+            viewModel.liquifyActions.pickFace(900f, 450f)
+            viewModel.liquifyActions.setFaceValue(FaceSlider.NOSE_WIDTH, -0.4f)
+            viewModel.liquifyActions.finishFaceValue()
+            viewModel.liquifyActions.pickFace(300f, 450f)
+            viewModel.liquifyActions.setFaceValue(FaceSlider.EYE_SIZE, 0.5f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        assertEquals(0.5f, awaitLiquify { it.selectedFace == 0 && it.faceValues?.isZero == false }.faceValues?.get(FaceSlider.EYE_SIZE))
+        onMain { viewModel.liquifyActions.resetFace() }
+        val reset = awaitLiquify { it.faceValues?.isZero == true }
+        assertTrue("the other face keeps its change", reset.changed)
+        onMain { viewModel.liquifyActions.pickFace(900f, 450f) }
+        assertEquals(-0.4f, awaitLiquify { it.selectedFace == 1 }.faceValues?.get(FaceSlider.NOSE_WIDTH))
+    }
+
+    @Test
+    fun resetAll_clearsTheFaceValues_andCancelLeavesTheDocument() {
+        openWithRedBlobs(400f to 450f)
+        val before = awaitReady { true }
+        startFaceMode()
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.EYE_SIZE, 1f)
+            viewModel.liquifyActions.finishFaceValue()
+            viewModel.liquifyActions.resetFaceValue(FaceSlider.EYE_SIZE)
+        }
+        assertTrue(awaitLiquify { it.faceValues?.isZero == true }.canUndo)
+        onMain { viewModel.liquifyActions.undo() }
+        awaitLiquify { it.faceValues?.get(FaceSlider.EYE_SIZE) == 1f }
+
+        onMain { viewModel.liquifyActions.reset() }
+        assertFalse(awaitLiquify { it.faceValues?.isZero == true }.changed)
+        onMain { viewModel.liquifyActions.undo() }
+        awaitLiquify { it.faceValues?.get(FaceSlider.EYE_SIZE) == 1f }
+
+        onMain { viewModel.liquifyActions.cancel() }
+        runBlocking { withTimeout(30_000) { viewModel.liquify.first { it == null } } }
+        assertEquals(before.revision, (viewModel.state.value as EditorState.Ready).revision)
+    }
+
+    @Test
+    fun undoingAStrokeMadeBeforeTheFacesWereFound_keepsTheFaceSliders() {
+        openWithRedBlobs(400f to 450f)
+        onMain { viewModel.startLiquify() }
+        awaitLiquify { true }
+        // 얼굴을 찾기 전에 한 획(그 되돌리기 단계에는 얼굴 값이 없다)
+        onMain {
+            viewModel.liquifyActions.setTool(LiquifyTool.PUSH)
+            viewModel.liquifyActions.begin(1000f, 150f)
+            viewModel.liquifyActions.move(1040f, 150f)
+            viewModel.liquifyActions.end()
+        }
+        awaitLiquify { it.changed }
+        onMain { viewModel.liquifyActions.setFaceMode() }
+        awaitFaces()
+
+        onMain { viewModel.liquifyActions.undo() }
+
+        val undone = awaitLiquify { !it.changed }
+        assertEquals(FaceValues.ZERO, undone.faceValues)
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.EYE_SIZE, 0.4f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        assertEquals(0.4f, awaitLiquify { it.faceValues?.isZero == false }.faceValues?.get(FaceSlider.EYE_SIZE))
+    }
+
+    @Test
+    fun aSliderDragBackToItsStart_leavesUndoAndRedoAsTheyWere() {
+        openWithRedBlobs(400f to 450f)
+        startFaceMode()
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.NOSE_WIDTH, 0.5f)
+            viewModel.liquifyActions.finishFaceValue()
+            viewModel.liquifyActions.undo()
+        }
+        assertFalse(awaitLiquify { it.faceValues?.isZero == true && it.canRedo }.canUndo)
+
+        // 끌었다가 제자리로 돌아오면 아무 단계도 남기지 않고, 다시 실행도 그대로다
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.NOSE_WIDTH, 0.3f)
+            viewModel.liquifyActions.setFaceValue(FaceSlider.NOSE_WIDTH, 0f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        val after = awaitLiquify { true }
+        assertFalse(after.canUndo)
+        assertTrue(after.canRedo)
+        onMain { viewModel.liquifyActions.redo() }
+        assertEquals(0.5f, awaitLiquify { it.faceValues?.isZero == false }.faceValues?.get(FaceSlider.NOSE_WIDTH))
     }
 
     @Test

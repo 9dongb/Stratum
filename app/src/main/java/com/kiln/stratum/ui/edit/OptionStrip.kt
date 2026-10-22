@@ -58,9 +58,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
@@ -191,13 +193,17 @@ class SliderCell(
 /**
  * 슬라이더 칸의 값과 할 일. [fraction]은 0(아래 끝)~1(위 끝), [onFraction]은 끄는 대로 부르고 [onFinished]는 손을 뗄 때 부른다.
  * [tag]는 슬라이더 이름표(커버 옵션의 슬라이더와 같다). [preview]가 있으면 슬라이더 창이 사라질 때 크기 원을 끈다.
+ * [origin]은 0의 자리(0..1)다: 0에서 양쪽으로 바꾸는 값(얼굴 보정)은 0.5를 넘겨 그 자리부터 손잡이까지 칠한다.
+ * [onReset]이 있으면 손잡이를 두 번 톡하면 그것을 부른다(0으로, 조정 슬라이더와 같다). 화면 읽기 기능은 '초기화' 동작으로 쓴다.
  */
 class StripSlider(
     val fraction: Float,
     val onFraction: (Float) -> Unit,
     val tag: String,
     val onFinished: () -> Unit = {},
-    val preview: SizePreviewState? = null
+    val preview: SizePreviewState? = null,
+    val origin: Float = 0f,
+    val onReset: (() -> Unit)? = null
 )
 
 /** 칸 묶음 사이의 가는 구분선 */
@@ -620,14 +626,13 @@ internal fun VerticalSliderFlyout(cell: SliderCell, valueOnLeft: Boolean = false
                 onValueChange = slider.onFraction,
                 onValueChangeFinished = slider.onFinished,
                 enabled = cell.enabled,
+                origin = slider.origin,
+                onThumbDoubleTap = slider.onReset,
                 modifier = Modifier
                     .width(VerticalSliderWidth)
                     .height(VerticalSliderHeight)
                     .testTag(slider.tag)
-                    .semantics {
-                        contentDescription = cell.caption
-                        stateDescription = cell.value
-                    }
+                    .sliderSemantics(cell.caption, cell.value, slider.onReset.takeIf { cell.enabled })
             )
         }
     }
@@ -677,6 +682,26 @@ internal fun VerticalSliderFlyout(cell: SliderCell, valueOnLeft: Boolean = false
         } else {
             sliderCard()
             valueColumn()
+        }
+    }
+}
+
+/**
+ * 슬라이더의 화면 읽기: 이름 [caption]과 값 [value]. [onReset]이 있으면 '<이름> 초기화' 동작을 준다(손잡이 두 번 톡과 같다).
+ */
+@Composable
+internal fun Modifier.sliderSemantics(caption: String, value: String, onReset: (() -> Unit)?): Modifier {
+    val resetLabel = stringResource(R.string.adjust_reset_item, caption)
+    return semantics {
+        contentDescription = caption
+        stateDescription = value
+        if (onReset != null) {
+            customActions = listOf(
+                CustomAccessibilityAction(resetLabel) {
+                    onReset()
+                    true
+                }
+            )
         }
     }
 }

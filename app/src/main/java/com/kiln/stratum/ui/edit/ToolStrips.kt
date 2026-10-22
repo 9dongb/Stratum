@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,12 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.selection.ColorRegion
@@ -310,16 +314,36 @@ internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
 
 /**
  * 유동화 작업 모드의 띠(사용자 피드백 8차 1-5 정정: "도구 표시를 왼쪽 상단에 기존 도구들처럼", 새 창이라 도구 막대는 없다):
- * 뒤틀기·오목·볼록·재구성·얼굴(고른 것이 켜진 칸, 누르면 바로 바꿈) | 크기·압력(수치 칸, 끌어서 조절, 얼굴 모드에는 없음).
+ * 뒤틀기·오목·볼록·재구성·얼굴(고른 것이 켜진 칸, 누르면 바로 바꿈) | 크기·압력(수치 칸, 끌어서 조절).
+ * 얼굴 모드는 칠하지 않아 크기·압력 대신, 얼굴을 골랐으면 얼굴 초기화 | 얼굴 슬라이더(가운데 0인 ± 칸, [faceSliderCells])다.
  */
 @Composable
-internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<StripItem> =
-    numbersLast(
-        // 얼굴 모드는 칠하지 않아 크기·압력이 없다
-        numbers = if (state.faceMode) {
-            emptyList()
-        } else {
-            listOf(
+internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<StripItem> {
+    val face = state.faceValues.takeIf { state.faceMode }
+    val tools = LiquifyTool.entries.map { tool ->
+        IconCell(
+            key = "liquify_${tool.name}",
+            icon = liquifyToolIcon(tool),
+            description = stringResource(liquifyToolLabel(tool)),
+            onClick = { actions.setTool(tool) },
+            enabled = !state.busy,
+            checked = !state.faceMode && state.tool == tool,
+            tag = EditScreenTags.liquifyTool(tool)
+        )
+    } + IconCell(
+        key = "liquify_face",
+        icon = R.drawable.ic_face_retouching_natural,
+        description = stringResource(R.string.liquify_face),
+        onClick = actions::setFaceMode,
+        enabled = !state.busy,
+        checked = state.faceMode,
+        tag = EditScreenTags.LIQUIFY_FACE
+    )
+    return numbersLast(
+        numbers = when {
+            face != null -> faceSliderCells(face, enabled = !state.busy, actions)
+            state.faceMode -> emptyList()
+            else -> listOf(
                 sizeCell(state.size, EditScreenTags.LIQUIFY_SIZE, sizePreview, actions::setSize),
                 SliderCell(
                     key = "strength",
@@ -333,26 +357,60 @@ internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePrev
                 )
             )
         },
-        rest = LiquifyTool.entries.map { tool ->
-            IconCell(
-                key = "liquify_${tool.name}",
-                icon = liquifyToolIcon(tool),
-                description = stringResource(liquifyToolLabel(tool)),
-                onClick = { actions.setTool(tool) },
-                enabled = !state.busy,
-                checked = !state.faceMode && state.tool == tool,
-                tag = EditScreenTags.liquifyTool(tool)
+        rest = if (face == null) {
+            tools
+        } else {
+            tools + StripDivider("face") + IconCell(
+                key = "face_reset",
+                icon = R.drawable.ic_face_retouching_off,
+                description = stringResource(R.string.liquify_face_reset),
+                onClick = actions::resetFace,
+                enabled = !state.busy && !face.isZero,
+                tag = EditScreenTags.LIQUIFY_FACE_RESET
             )
-        } + IconCell(
-            key = "liquify_face",
-            icon = R.drawable.ic_face_retouching_natural,
-            description = stringResource(R.string.liquify_face),
-            onClick = actions::setFaceMode,
-            enabled = !state.busy,
-            checked = state.faceMode,
-            tag = EditScreenTags.LIQUIFY_FACE
-        )
+        }
     )
+}
+
+/**
+ * 고른 얼굴의 슬라이더 칸(눈 크기·코 너비·얼굴 너비, 결정 기록 '얼굴 인식 보정'): 값은 −100..+100(가운데 0, 세로 슬라이더는 가운데부터 칠함),
+ * 끄는 대로 미리 보고 손을 떼면 작업 창 되돌리기 한 단계, 손잡이를 두 번 톡하면 0이다. 커버 막대의 칩도 이 칸을 그대로 쓴다.
+ */
+@Composable
+private fun faceSliderCells(values: FaceValues, enabled: Boolean, actions: LiquifyActions): List<StripItem> =
+    FaceSlider.entries.map { slider ->
+        val value = values[slider]
+        SliderCell(
+            key = "face_${slider.name.lowercase()}",
+            caption = stringResource(faceSliderLabel(slider)),
+            value = faceValueText(value),
+            slider = StripSlider(
+                fraction = (value + 1f) / 2f,
+                onFraction = { actions.setFaceValue(slider, ((it * 200f).roundToInt() - 100) / 100f) },
+                tag = EditScreenTags.faceSlider(slider),
+                onFinished = actions::finishFaceValue,
+                origin = 0.5f,
+                onReset = { actions.resetFaceValue(slider) }
+            ),
+            enabled = enabled
+        )
+    }
+
+/** 얼굴 슬라이더의 이름 */
+@StringRes
+internal fun faceSliderLabel(slider: FaceSlider): Int = when (slider) {
+    FaceSlider.EYE_SIZE -> R.string.liquify_face_eye_size
+    FaceSlider.NOSE_WIDTH -> R.string.liquify_face_nose_width
+    FaceSlider.FACE_WIDTH -> R.string.liquify_face_width
+}
+
+/** 얼굴 슬라이더 값(−1..1)의 글자: 조정 값처럼 −100..+100 정수이고 0에는 부호를 붙이지 않는다 */
+@Composable
+internal fun faceValueText(value: Float): String {
+    val percent = (value * 100).roundToInt()
+    val locale = LocalConfiguration.current.locales[0]
+    return if (percent == 0) String.format(locale, "%d", 0) else String.format(locale, "%+d", percent)
+}
 
 /** 크기 칸(1~1000px, 로그 눈금). 끄는 동안 캔버스 가운데에 크기 원([preview]), 손을 떼거나 슬라이더 창이 닫히면 사라진다 */
 @Composable

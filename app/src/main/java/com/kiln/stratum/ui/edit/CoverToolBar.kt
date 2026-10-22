@@ -387,7 +387,9 @@ private fun BarExpanded(item: BarItem, state: CoverBarState) {
                 fraction = slider.fraction,
                 onFraction = slider.onFraction,
                 tag = slider.tag,
-                onFinished = slider.onFinished
+                onFinished = slider.onFinished,
+                origin = slider.origin,
+                onReset = slider.onReset.takeIf { item.cell.enabled }
             )
         }
         is BarChoice -> Row(

@@ -85,11 +85,4 @@ object FaceMeshIndex {
     /** 눈썹(오른쪽·왼쪽, 위 줄) */
     val RIGHT_BROW = intArrayOf(70, 63, 105, 66, 107)
     val LEFT_BROW = intArrayOf(300, 293, 334, 296, 336)
-
-    /** 얼굴 보정 계산에 쓰는 점(확인 화면에 번호를 보인다) */
-    val CALCULATION_POINTS: IntArray = intArrayOf(
-        RIGHT_IRIS, LEFT_IRIS, RIGHT_EYE_OUTER, RIGHT_EYE_INNER, LEFT_EYE_OUTER, LEFT_EYE_INNER,
-        NOSE_TIP, NOSE_WING_RIGHT, NOSE_WING_LEFT, MOUTH_RIGHT, MOUTH_LEFT, UPPER_LIP_TOP, LOWER_LIP_BOTTOM,
-        UPPER_LIP_INNER, LOWER_LIP_INNER, FOREHEAD, CHIN, JAW_RIGHT, JAW_LEFT
-    ) + NOSE_BRIDGE
 }

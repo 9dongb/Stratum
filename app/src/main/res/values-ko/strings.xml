@@ -333,9 +333,13 @@
     <string name="liquify_face_selected">얼굴 %1$d / %2$d</string>
     <string name="liquify_face_unavailable">이 기기에서는 얼굴을 찾을 수 없어요</string>
     <string name="liquify_face_memory">메모리가 모자라 얼굴을 찾지 못했어요</string>
+    <string name="liquify_face_eye_size">눈 크기</string>
+    <string name="liquify_face_nose_width">코 너비</string>
+    <string name="liquify_face_width">얼굴 너비</string>
+    <string name="liquify_face_reset">얼굴 초기화</string>
     <string name="liquify_strength">압력</string>
-    <string name="liquify_undo">한 획 되돌리기</string>
-    <string name="liquify_redo">한 획 다시 실행</string>
+    <string name="liquify_undo">한 단계 되돌리기</string>
+    <string name="liquify_redo">한 단계 다시 실행</string>
     <string name="liquify_reset">모두 되돌리기</string>
 
     <!-- 리터칭 -->

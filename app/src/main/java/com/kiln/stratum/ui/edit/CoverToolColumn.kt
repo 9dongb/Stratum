@@ -35,7 +35,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -211,15 +210,14 @@ private fun BarExpandedColumn(item: BarItem, state: CoverBarState) {
                     onValueChange = slider.onFraction,
                     onValueChangeFinished = slider.onFinished,
                     enabled = item.cell.enabled,
+                    origin = slider.origin,
+                    onThumbDoubleTap = slider.onReset,
                     modifier = Modifier
                         .weight(1f)
                         .width(SliderThickness)
                         .padding(vertical = 8.dp)
                         .testTag(slider.tag)
-                        .semantics {
-                            contentDescription = item.cell.caption
-                            stateDescription = item.cell.value
-                        }
+                        .sliderSemantics(item.cell.caption, item.cell.value, slider.onReset.takeIf { item.cell.enabled })
                 )
             }
         }

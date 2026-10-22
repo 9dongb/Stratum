@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.StripPosition
@@ -89,6 +91,7 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * @property selectedFace 고른 얼굴의 번호([faces] 안). 없으면 -1
  * @property findingFaces 얼굴을 찾는 중이다
  * @property faceNotice 화면에 한 번 알릴 것(얼굴을 못 찾음 등)
+ * @property faceValues 고른 얼굴의 보정 값(얼굴 슬라이더). 고른 얼굴이 없으면 null
  */
 data class LiquifyState(
     val preview: PreviewImage,
@@ -105,7 +108,8 @@ data class LiquifyState(
     val faces: List<FaceLandmarks>? = null,
     val selectedFace: Int = -1,
     val findingFaces: Boolean = false,
-    val faceNotice: FaceNotice? = null
+    val faceNotice: FaceNotice? = null,
+    val faceValues: FaceValues? = null
 )
 
 /** 얼굴 모드가 한 번 알릴 것([kind], 여럿 찾았으면 그 수 [count]). 같은 알림도 다시 알리게 [serial]이 늘 바뀐다. */
@@ -168,6 +172,18 @@ interface LiquifyActions {
     /** 얼굴 모드에서 문서 좌표 ([x], [y])를 톡했다: 그 자리 얼굴을 고른다 */
     fun pickFace(x: Float, y: Float) {}
 
+    /** 고른 얼굴의 슬라이더 [slider]를 [value](−1..1)로 바꾼다(끄는 대로 미리 보기). 손을 떼면 [finishFaceValue]. */
+    fun setFaceValue(slider: FaceSlider, value: Float) {}
+
+    /** 얼굴 슬라이더에서 손을 뗐다(그 끌기가 되돌리기 한 단계) */
+    fun finishFaceValue() {}
+
+    /** 고른 얼굴의 슬라이더 [slider]를 0으로(원 두 번 톡, 되돌리기 한 단계) */
+    fun resetFaceValue(slider: FaceSlider) {}
+
+    /** 고른 얼굴의 값을 모두 0으로('얼굴 초기화', 되돌리기 한 단계) */
+    fun resetFace() {}
+
     object None : LiquifyActions {
         override fun begin(x: Float, y: Float) = Unit
         override fun move(x: Float, y: Float) = Unit
@@ -187,7 +203,7 @@ interface LiquifyActions {
 /**
  * 픽셀 유동화 작업 모드. 편집 화면 위를 덮는 전체 화면이다(CLAUDE.md 6장). 화면 이동이 아니라 덮개라, 닫으면 편집 화면이 그대로 있다.
  *
- * - 위: 취소(버림), 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용(실행 취소 한 단계로 기록).
+ * - 위: 취소(버림), 이름, 한 단계 되돌리기(획·얼굴 슬라이더), 한 단계 다시 실행, 모두 되돌리기, 적용(실행 취소 한 단계로 기록).
  * - 가운데: 고른 레이어를 비튼 미리 보기. 한 손가락으로 끌어 비틀고, 두 손가락으로 확대·이동한다. 브러시 크기만큼 동그라미를 보인다.
  *   [twoFingerTapUndo](설정)면 두 손가락으로 톡 눌러 한 획 되돌린다(편집 화면과 같다, 결정 기록 '제스처 알림').
  *   [threeFingerGestures](설정)면 세 손가락으로 톡 눌러 한 획 다시 실행하고, 위아래로 밀어 크기, 좌우로 밀어 압력을 바꾼다
@@ -356,7 +372,7 @@ fun LiquifyMode(
 }
 
 /**
- * 위쪽 막대: 취소, 이름, 한 획 되돌리기, 한 획 다시 실행, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(상태 표시줄 높이)다.
+ * 위쪽 막대: 취소, 이름, 한 단계 되돌리기, 한 단계 다시 실행, 모두 되돌리기, 적용. 편집 화면 상단 바와 같은 높이(상태 표시줄 높이)다.
  * 모두 되돌리기는 자리를 아끼려고 아이콘 버튼이다(커버 폭에서도 이름이 잘리지 않게).
  * [cancelAndApplyOnTop]이 거짓이면(닫힌 화면) 취소·적용은 맨 아래 X·✓ 줄([CoverWorkBar])에 있어 여기에는 두지 않는다.
  */

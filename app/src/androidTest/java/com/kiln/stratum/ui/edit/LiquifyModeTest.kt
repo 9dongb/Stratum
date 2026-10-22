@@ -9,6 +9,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.TouchInjectionScope
@@ -41,6 +45,8 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceMeshIndex
 import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
@@ -49,6 +55,7 @@ import com.kiln.stratum.ui.layout.Hinge
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.layout.workBarContentPx
+import com.kiln.stratum.ui.components.SLIDER_THUMB_TAG
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -136,6 +143,26 @@ class LiquifyModeTest {
         override fun pickFace(x: Float, y: Float) {
             calls += "pickFace"
             points += x to y
+        }
+
+        /** 받은 얼굴 슬라이더 값(차례로) */
+        val faceValues = mutableListOf<Pair<FaceSlider, Float>>()
+
+        override fun setFaceValue(slider: FaceSlider, value: Float) {
+            if (calls.lastOrNull() != "setFaceValue") calls += "setFaceValue"
+            faceValues += slider to value
+        }
+
+        override fun finishFaceValue() {
+            calls += "finishFaceValue"
+        }
+
+        override fun resetFaceValue(slider: FaceSlider) {
+            calls += "resetFaceValue:${slider.name}"
+        }
+
+        override fun resetFace() {
+            calls += "resetFace"
         }
     }
 
@@ -286,6 +313,96 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.strip("size")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.strip("strength")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).assertIsDisplayed()
+    }
+
+    /** 얼굴 하나를 골랐고 눈 크기 +35, 코 너비 -20인 얼굴 모드 */
+    private fun selectFace() {
+        state = state.copy(
+            faceMode = true,
+            faces = listOf(testFace()),
+            selectedFace = 0,
+            faceValues = FaceValues.ZERO.with(FaceSlider.EYE_SIZE, 0.35f).with(FaceSlider.NOSE_WIDTH, -0.2f)
+        )
+    }
+
+    @Test
+    fun mainScreens_aSelectedFace_hasCenteredFaceSliders_andAResetCell() {
+        selectFace()
+        show(930, 700)
+
+        for ((key, shown) in listOf("face_eye_size" to "+35", "face_nose_width" to "-20", "face_face_width" to "0")) {
+            composeRule.onNodeWithTag(EditScreenTags.strip(key)).assertIsDisplayed()
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
+        }
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_RESET).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(listOf("resetFace"), actions.calls) }
+
+        // 눈 크기 칸을 누르면 세로 슬라이더: 아래 끝을 누르면 -100, 위 끝까지 끌면 +100, 손을 떼면 끝
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).performTouchInput {
+            swipe(bottomCenter - Offset(0f, 2f), topCenter + Offset(0f, 2f), 300)
+        }
+        composeRule.runOnIdle {
+            assertEquals(listOf("resetFace", "setFaceValue", "finishFaceValue"), actions.calls)
+            assertEquals(FaceSlider.EYE_SIZE to -1f, actions.faceValues.first())
+            assertEquals(FaceSlider.EYE_SIZE to 1f, actions.faceValues.last())
+        }
+    }
+
+    @Test
+    fun mainScreens_doubleTapOnTheFaceSliderThumb_resetsIt_withoutMovingIt() {
+        selectFace()
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performClick()
+
+        // 손잡이(+35 → 위에서 0.325 자리)를 두 번 톡
+        composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).performTouchInput {
+            val inset = 16.dp.toPx()
+            doubleClick(Offset(width / 2f, inset + 0.325f * (height - 2 * inset)))
+        }
+
+        composeRule.runOnIdle {
+            assertTrue("${actions.calls}", "resetFaceValue:EYE_SIZE" in actions.calls)
+            assertTrue("${actions.faceValues}", actions.faceValues.isEmpty())
+        }
+    }
+
+    @Test
+    fun cover_aSelectedFace_hasFaceChips_andTheChipSliderIsCentered() {
+        selectFace()
+        show(411, 800)
+
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_eye_size")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_RESET).performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_nose_width")).performScrollTo().performClick()
+
+        // 원을 두 번 톡하면 0으로
+        composeRule.onNode(hasTestTag(SLIDER_THUMB_TAG) and hasAnyAncestor(hasTestTag(EditScreenTags.faceSlider(FaceSlider.NOSE_WIDTH))), useUnmergedTree = true)
+            .performTouchInput { doubleClick(center) }
+        composeRule.runOnIdle { assertTrue("${actions.calls}", "resetFaceValue:NOSE_WIDTH" in actions.calls) }
+        // 슬라이더 값은 가운데가 0이다(-0.5..0.5): 오른쪽 끝(0.5)이 +100, 왼쪽 끝이 -100
+        val slider = composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.NOSE_WIDTH))
+        slider.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "-20"))
+        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(-0.5f) }
+        composeRule.runOnIdle {
+            assertEquals(listOf(FaceSlider.NOSE_WIDTH to 1f, FaceSlider.NOSE_WIDTH to -1f), actions.faceValues)
+            assertTrue("${actions.calls}", "finishFaceValue" in actions.calls)
+        }
+    }
+
+    @Test
+    fun coverLandscape_aSelectedFace_hasFaceCellsInTheColumn() {
+        selectFace()
+        show(800, 411)
+
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_face_width")).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.FACE_WIDTH)).performTouchInput {
+            swipe(bottomCenter - Offset(0f, 2f), topCenter + Offset(0f, 2f), 300)
+        }
+
+        composeRule.runOnIdle { assertEquals(FaceSlider.FACE_WIDTH to 1f, actions.faceValues.last()) }
     }
 
     @Test

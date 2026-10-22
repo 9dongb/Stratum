@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
+import com.kiln.stratum.engine.face.FaceSlider
 
 /** 화면 테스트가 편집 화면의 부분을 찾을 때 쓰는 이름표(testTag). 화면에는 보이지 않는다. */
 object EditScreenTags {
@@ -213,9 +214,13 @@ object EditScreenTags {
     const val LIQUIFY_SIZE = "liquifySize"
     const val LIQUIFY_STRENGTH = "liquifyStrength"
 
-    /** 유동화의 얼굴 도구(얼굴 인식 보정)와 얼굴 모드의 캔버스 */
+    /** 유동화의 얼굴 도구(얼굴 인식 보정)와 얼굴 모드의 캔버스, 얼굴 초기화 */
     const val LIQUIFY_FACE = "liquifyFace"
     const val LIQUIFY_FACE_OVERLAY = "liquifyFaceOverlay"
+    const val LIQUIFY_FACE_RESET = "liquifyFaceReset"
+
+    /** 얼굴 슬라이더(띠의 세로 슬라이더·커버 막대의 슬라이더) */
+    fun faceSlider(slider: FaceSlider): String = "faceSlider_${slider.name}"
 
     const val RETOUCH_OVERLAY = "retouchOverlay"
     const val RETOUCH_SIZE = "retouchSize"
