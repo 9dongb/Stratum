@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Build
 import android.util.Log
+import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.HdrGainmap
@@ -24,6 +25,9 @@ import java.io.IOException
 
 /** 사진 파일의 머리 정보. 픽셀을 풀지 않고 읽는다. */
 data class PhotoInfo(val size: PixelSize, val mimeType: String?)
+
+/** 문서에 넣으려고 푼 사진([PhotoImporter.decodeLayer]): [size] 크기 그림의 타일 */
+internal class DecodedImage(val raster: Raster, val size: PixelSize)
 
 /**
  * 사진 파일을 원본 해상도 문서로 불러온다.
@@ -80,24 +84,10 @@ object PhotoImporter {
         require(sampleSize >= 1 && (sampleSize and (sampleSize - 1)) == 0) {
             "Sample size must be a power of two: $sampleSize"
         }
-        var colorSpace = DocumentColorSpace.SRGB
-        val decoded = try {
-            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                // 타일로 나누려면 CPU에서 읽을 수 있어야 하므로, GPU 전용(하드웨어) 비트맵이 아닌 소프트웨어 비트맵으로 푼다
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                // sRGB보다 넓은 색 사진(P3·Adobe RGB·BT.2020 등)은 Display P3로, 나머지는 sRGB로 푼다(결정 기록 '넓은 색')
-                if (DocumentColors.isWiderThanSrgb(info.colorSpace)) colorSpace = DocumentColorSpace.DISPLAY_P3
-                decoder.setTargetColorSpace(DocumentColors.androidColorSpace(colorSpace))
-                if (sampleSize > 1) decoder.setTargetSampleSize(sampleSize)
-            }
-        } catch (e: OutOfMemoryError) {
-            return failure(ImportFailure.NOT_ENOUGH_MEMORY, e)
-        } catch (e: IOException) {
-            // 해독기 안의 메모리 부족과 한도 초과도 IOException으로 온다(에뮬레이터에서 확인)
-            val outOfMemory = e.message?.let { "out of memory" in it || "allocation limit" in it } == true
-            return failure(if (outOfMemory) ImportFailure.NOT_ENOUGH_MEMORY else ImportFailure.UNREADABLE, e)
-        } catch (e: SecurityException) {
-            return failure(ImportFailure.UNREADABLE, e)
+        val (decoded, colorSpace) = try {
+            decodeSoftware(source, sampleSize, colorSpace = null)
+        } catch (e: DecodeFailure) {
+            return failure(e.reason, e.cause)
         }
         try {
             val raster = splitIntoTiles(decoded, colorSpace, checkCanceled)
@@ -115,6 +105,59 @@ object PhotoImporter {
             // 해독본은 타일로 옮긴 뒤에는 쓰지 않으므로 바로 메모리를 돌려준다(타일은 돌려주지 않는다)
             decoded.recycle()
         }
+    }
+
+    /**
+     * [source] 사진을 [colorSpace] 값의 타일로 푼다(편집 중인 문서에 새 레이어로 넣을 때, [InsertImageLayer]). 게인맵(HDR)은 읽지 않는다.
+     * [sampleSize]가 2, 4…이면 해독하면서 줄인다. [checkCanceled]는 타일 사이마다 부른다.
+     * 사진을 읽지 못하면 [PhotoUnreadableException], 메모리가 모자라면 [NotEnoughMemoryException]을 던진다.
+     */
+    internal fun decodeLayer(
+        source: ImageDecoder.Source,
+        colorSpace: DocumentColorSpace,
+        sampleSize: Int,
+        checkCanceled: () -> Unit
+    ): DecodedImage {
+        val (decoded, _) = try {
+            decodeSoftware(source, sampleSize, colorSpace)
+        } catch (e: DecodeFailure) {
+            Log.w(TAG, "Photo insert failed: ${e.reason}", e.cause)
+            throw if (e.reason == ImportFailure.NOT_ENOUGH_MEMORY) NotEnoughMemoryException(e.cause) else PhotoUnreadableException(e.cause)
+        }
+        try {
+            val raster = splitIntoTiles(decoded, colorSpace, checkCanceled) ?: throw NotEnoughMemoryException()
+            return DecodedImage(raster, PixelSize(decoded.width, decoded.height))
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        } finally {
+            decoded.recycle()
+        }
+    }
+
+    /**
+     * [source]를 소프트웨어 비트맵으로 푼다(타일로 나누려면 CPU에서 읽을 수 있어야 해서 GPU 전용 비트맵이 아니다).
+     * [colorSpace]를 주면 그 값으로 풀고(사진 넣기: 문서 색 공간), 없으면 sRGB보다 넓은 색 사진(P3·Adobe RGB·BT.2020 등)은 Display P3로,
+     * 나머지는 sRGB로 푼다(결정 기록 '넓은 색'). 푼 비트맵과 그 값의 색 공간을 돌려주고, 풀지 못하면 [DecodeFailure]를 던진다.
+     */
+    private fun decodeSoftware(source: ImageDecoder.Source, sampleSize: Int, colorSpace: DocumentColorSpace?): Pair<Bitmap, DocumentColorSpace> {
+        var chosen = colorSpace ?: DocumentColorSpace.SRGB
+        val bitmap = try {
+            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                if (colorSpace == null && DocumentColors.isWiderThanSrgb(info.colorSpace)) chosen = DocumentColorSpace.DISPLAY_P3
+                decoder.setTargetColorSpace(DocumentColors.androidColorSpace(chosen))
+                if (sampleSize > 1) decoder.setTargetSampleSize(sampleSize)
+            }
+        } catch (e: OutOfMemoryError) {
+            throw DecodeFailure(ImportFailure.NOT_ENOUGH_MEMORY, e)
+        } catch (e: IOException) {
+            // 해독기 안의 메모리 부족과 한도 초과도 IOException으로 온다(에뮬레이터에서 확인)
+            val outOfMemory = e.message?.let { "out of memory" in it || "allocation limit" in it } == true
+            throw DecodeFailure(if (outOfMemory) ImportFailure.NOT_ENOUGH_MEMORY else ImportFailure.UNREADABLE, e)
+        } catch (e: SecurityException) {
+            throw DecodeFailure(ImportFailure.UNREADABLE, e)
+        }
+        return bitmap to chosen
     }
 
     /**
@@ -165,6 +208,9 @@ object PhotoImporter {
     }
 
     private const val TAG = "PhotoImporter"
+
+    /** 사진을 풀지 못한 까닭([reason])과 그 예외. [decodeSoftware]가 던지고 밖으로 나가지 않는다. */
+    private class DecodeFailure(val reason: ImportFailure, override val cause: Throwable) : RuntimeException(cause)
 
     /** 머리 정보만 읽고 해독을 멈추려고 던지는 예외. 밖으로 나가지 않으므로 호출 위치는 기록하지 않는다. */
     private class HeaderRead : RuntimeException() {

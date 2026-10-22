@@ -28,6 +28,7 @@ import com.kiln.stratum.R
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.components.FitTitle
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
@@ -126,12 +127,8 @@ private fun FloatingPanelCard(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                    color = StratumTheme.colors.textPrimary,
-                    style = MaterialTheme.typography.titleSmall
-                )
+                // 버튼 줄이 길면(레이어: 버튼 다섯) 제목이 한 줄로 들어가지 않아 두지 않는다. 창 이름은 화면 읽기 기능이 그대로 읽는다(paneTitle).
+                FitTitle(title, StratumTheme.colors.textPrimary, MaterialTheme.typography.titleSmall, Modifier.weight(1f))
                 action()
             }
             HorizontalDivider(color = StratumTheme.colors.divider)

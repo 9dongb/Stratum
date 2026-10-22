@@ -171,6 +171,7 @@ import kotlinx.coroutines.flow.first
  * @param stripPosition 메인 화면 도구 옵션 띠를 옮겨 놓은 자리(없으면 캔버스 왼쪽 위), [onStripPosition]으로 바꾼다(손잡이를 놓을 때)
  * @param toolHelpSeen 이번 실행에서 안내 글을 이미 보인 하위 도구(리터칭·명암을 처음 고를 때 알림, 편집 상태가 들어 접기·펼치기에도 남는다)
  * @param onOpenSettings 상단 바 맨 오른쪽 설정 버튼을 눌렀다(사용자 피드백 11차 4). 설정에서 뒤로 가면 보던 그대로 돌아온다.
+ * @param onAddPhoto 레이어 패널·시트의 사진 넣기 버튼을 눌렀다(사용자 피드백 12차). 앱이 사진 선택기를 띄운다.
  */
 @Composable
 fun EditScreen(
@@ -233,7 +234,8 @@ fun EditScreen(
     stripPosition: StripPosition? = null,
     onStripPosition: (StripPosition) -> Unit = {},
     toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onAddPhoto: () -> Unit = {}
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -527,7 +529,8 @@ fun EditScreen(
             LayerControls(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
                 viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
-                onRename = { id -> renamingLayer = id.value }
+                onRename = { id -> renamingLayer = id.value },
+                onAddPhoto = onAddPhoto
             )
         }
         // 고른 브러시·지우개의 설정
@@ -1518,6 +1521,7 @@ private fun EditCanvas(
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
     val pickUnavailable = stringResource(R.string.edit_pick_unavailable)
     val magicWand = stringResource(R.string.subtool_select_wand)
+    val photoInsertFailed = stringResource(R.string.edit_photo_insert_failed)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1557,6 +1561,7 @@ private fun EditCanvas(
                     if (result == SnackbarResult.ActionPerformed) currentOnSpotHeal()
                 }
                 EditorMessage.PickUnavailable -> snackbarHostState.showSnackbar(pickUnavailable, duration = SnackbarDuration.Long)
+                EditorMessage.PhotoUnreadable -> snackbarHostState.showSnackbar(photoInsertFailed)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

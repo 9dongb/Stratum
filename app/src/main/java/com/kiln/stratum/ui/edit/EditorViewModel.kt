@@ -60,6 +60,7 @@ import com.kiln.stratum.engine.platform.Deselect
 import com.kiln.stratum.engine.platform.EffectStroke
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.InpaintRegion
+import com.kiln.stratum.engine.platform.InsertImageLayer
 import com.kiln.stratum.engine.platform.InvertSelection
 import com.kiln.stratum.engine.platform.LayerPreviewCache
 import com.kiln.stratum.engine.platform.LayerShift
@@ -75,6 +76,7 @@ import com.kiln.stratum.engine.platform.ObjectSegmenter
 import com.kiln.stratum.engine.platform.OrientLayer
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
+import com.kiln.stratum.engine.platform.PhotoUnreadableException
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
@@ -184,6 +186,9 @@ sealed interface EditorMessage {
 
     /** 이 기기에서는 AI 제거에서 톡 눌러 물체를 고를 수 없다(분할 모델). 칠해서 지우기는 그대로 쓸 수 있다. */
     data object PickUnavailable : EditorMessage
+
+    /** 넣으려던 사진을 읽지 못했다(사진 넣기, 사용자 피드백 12차). 문서는 그대로다. */
+    data object PhotoUnreadable : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -1228,6 +1233,36 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues) return
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
         runEdit(AddLayer(name, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * [uri] 사진을 고른 레이어 바로 위 새 레이어로 넣고 그 레이어를 고른다(실행 취소 한 단계, 사용자 피드백 12차: 레이어 패널의 사진 넣기).
+     * 문서보다 크면 문서 안에 맞게 줄여 가운데에 놓는다([InsertImageLayer]). 이름은 사진 파일 이름(확장자 뺌)이고,
+     * 사진 선택기가 주는 사진 번호 이름이면 '사진 N'이다(N은 문서의 다음 레이어 번호). 읽지 못하면 [EditorMessage.PhotoUnreadable]로 알린다.
+     * 다른 편집을 처리하는 중이면 그 편집이 끝난 뒤에 넣는다.
+     */
+    fun insertPhoto(uri: Uri) {
+        if (history == null) return
+        val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+        insertImage(source) { displayNameOf(uri) }
+    }
+
+    /** [source] 사진을 새 레이어로 넣는다([insertPhoto]). [fileName]은 백그라운드에서 읽는 표시 이름이다. */
+    private fun insertImage(source: ImageDecoder.Source, fileName: () -> String?) {
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { ProjectNames.photoLayerName(fileName()) }
+            val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
+            if (info == null) {
+                _messages.trySend(EditorMessage.PhotoUnreadable)
+                return@launch
+            }
+            // 처리하던 편집이 있으면 끝나기를 기다린다(그 사이 문서가 바뀌므로 넣을 자리는 그 뒤에 정한다)
+            editJob?.join()
+            val document = history?.document ?: return@launch
+            if (editing || hasLiveValues) return@launch
+            val layerName = name ?: getApplication<Application>().getString(R.string.layer_photo_name, document.nextLayerId)
+            runEdit(InsertImageLayer(source, info, layerName, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId))
+        }
     }
 
     /**
@@ -2292,6 +2327,12 @@ class EditorViewModel internal constructor(
                 Log.w(TAG, "AI select is unavailable for $command", e)
                 onFinished()
                 finishEditing(EditorMessage.SelectUnavailable)
+                return@launch
+            } catch (e: PhotoUnreadableException) {
+                // 넣으려던 사진을 읽지 못했다(사진 넣기). 문서는 그대로다.
+                Log.w(TAG, "Could not read the photo for $command", e)
+                onFinished()
+                finishEditing(EditorMessage.PhotoUnreadable)
                 return@launch
             }
             if (!history.commit(command, before, after)) {

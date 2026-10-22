@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
+import com.kiln.stratum.ui.components.FitTitle
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /** 레이어 시트가 반 높이일 때 캔버스 높이에서 차지할 수 있는 몫 */
@@ -197,17 +198,16 @@ fun CoverLayerPanel(controls: LayerControls, onClose: () -> Unit, modifier: Modi
                     .padding(end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    modifier = Modifier
+                // 패널 폭(280dp)에는 버튼 다섯 옆에 제목이 한 줄로 들어가지 않아 두지 않는다(메인 화면 떠 있는 패널과 같다, 사용자 피드백 12차)
+                FitTitle(
+                    title,
+                    colors.textPrimary,
+                    MaterialTheme.typography.titleSmall,
+                    Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
                         .padding(start = 16.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .semantics { heading() }
-                        .testTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE),
-                    color = colors.textPrimary,
-                    style = MaterialTheme.typography.titleSmall
+                        .testTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE)
                 )
                 LayerToolbar(controls)
             }

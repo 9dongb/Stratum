@@ -52,6 +52,11 @@ fun StratumApp(editor: EditorViewModel) {
         }
     }
 
+    // 레이어 패널의 사진 넣기(사용자 피드백 12차): 고른 사진을 편집 중인 문서의 새 레이어로 넣는다. 열기와 같은 까닭으로 늘 등록해 둔다.
+    val insertPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) editor.insertPhoto(uri)
+    }
+
     when (screen) {
         AppScreen.Home -> {
             val projects by editor.projects.collectAsState()
@@ -170,6 +175,7 @@ fun StratumApp(editor: EditorViewModel) {
                     onChooseColor = editor::chooseColor,
                     onSwapColors = editor::swapColors,
                     moveActions = editor.moveActions,
+                    onAddPhoto = { insertPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     eyedropper = { eyedropper.value },
                     eyedropperActions = editor.eyedropperActions,
                     // 메인 화면 도구 옵션 띠를 손잡이로 옮겨 놓은 자리는 설정에 남는다(사용자 피드백 9차)

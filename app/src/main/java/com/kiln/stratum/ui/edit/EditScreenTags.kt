@@ -144,6 +144,7 @@ object EditScreenTags {
     const val RASTERIZE_CONFIRM = "rasterizeConfirm"
     const val LAYER_LIST = "layerList"
     const val LAYER_ADD = "layerAdd"
+    const val LAYER_ADD_PHOTO = "layerAddPhoto"
     const val LAYER_DELETE = "layerDelete"
     /** 레이어 탭 버튼 줄의 화면 반전(보기만 뒤집음) */
     const val VIEW_FLIP_HORIZONTAL = "viewFlipHorizontal"

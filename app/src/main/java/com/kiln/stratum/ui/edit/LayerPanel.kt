@@ -162,7 +162,9 @@ class LayerControls(
     val viewFlip: ViewFlip = ViewFlip.None,
     val onViewFlip: (ViewFlip) -> Unit = {},
     /** 레이어 메뉴의 '이름 바꾸기': 편집 화면이 그 레이어의 이름 바꾸기 창을 띄운다 */
-    val onRename: (LayerId) -> Unit = {}
+    val onRename: (LayerId) -> Unit = {},
+    /** 사진 넣기 버튼(사용자 피드백 12차): 편집 화면이 사진 선택기를 띄우고, 고른 사진을 고른 레이어 위 새 레이어로 넣는다 */
+    val onAddPhoto: () -> Unit = {}
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -217,6 +219,10 @@ fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
     val flip = controls.viewFlip
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         ToolbarButton(R.drawable.ic_add, R.string.layer_add, controls.canEdit, EditScreenTags.LAYER_ADD) { actions.add() }
+        // + 오른쪽에 사진 넣기(사용자 요청: "레이어 패널의 + 오른쪽에 이미지 아이콘이나 카메라 아이콘으로 사진 추가 가능하도록 하세요.")
+        ToolbarButton(R.drawable.ic_add_photo_alternate, R.string.layer_add_photo, controls.canEdit, EditScreenTags.LAYER_ADD_PHOTO) {
+            controls.onAddPhoto()
+        }
         ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.layers.size > 1, EditScreenTags.LAYER_DELETE) {
             actions.delete()
         }

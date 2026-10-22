@@ -2,20 +2,28 @@ package com.kiln.stratum.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
@@ -139,5 +147,22 @@ fun Modifier.horizontalScrollFadeEdges(state: ScrollState, color: Color, length:
     if (state.canScrollForward) {
         val left = size.width - fade
         drawRect(Brush.horizontalGradient(listOf(clear, color), startX = left, endX = size.width), Offset(left, 0f), Size(fade, size.height))
+    }
+}
+
+
+/**
+ * 받은 폭 안에 한 줄로 다 들어갈 때만 두는 제목 글자(모자라면 글자를 아예 두지 않는다). 상자는 받은 자리를 그대로 차지해 줄 높이가 바뀌지 않는다.
+ * 버튼 줄과 함께 놓인 제목에 쓴다(사용자 피드백 12차: 레이어 패널 버튼이 다섯이 되어 좁은 패널에는 '레이어' 제목이 들어가지 않음).
+ * 글자는 화면 읽기 기능의 제목(heading)이고, 창 이름은 부르는 쪽이 따로 둔다(paneTitle).
+ */
+@Composable
+fun FitTitle(text: String, color: Color, style: TextStyle, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
+        val measurer = rememberTextMeasurer()
+        val width = remember(text, style, measurer) { measurer.measure(text, style, maxLines = 1, softWrap = false).size.width }
+        if (width <= constraints.maxWidth) {
+            Text(text, Modifier.semantics { heading() }, color = color, style = style, maxLines = 1)
+        }
     }
 }

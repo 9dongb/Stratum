@@ -22,5 +22,12 @@ object ProjectNames {
         return clean(base)
     }
 
+    /**
+     * 사진 넣기로 만든 레이어의 이름(사용자 피드백 12차): 파일 이름([fromFileName])이 있으면 그것이다.
+     * 사진 선택기는 파일 이름 대신 사진 번호(예: 161.jpg)를 주므로, 숫자뿐이거나 비면 null이고 부르는 쪽이 '사진 N'으로 짓는다.
+     */
+    fun photoLayerName(displayName: String?): String? =
+        fromFileName(displayName).takeIf { name -> name.isNotEmpty() && !name.all { it.isDigit() } }
+
     private val WHITESPACE = Regex("\\s+")
 }

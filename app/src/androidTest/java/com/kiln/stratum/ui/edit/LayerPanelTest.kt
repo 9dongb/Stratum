@@ -21,6 +21,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -143,6 +144,9 @@ class LayerPanelTest {
     private val document = PixelSize(400, 300)
     private val preview = Bitmap.createBitmap(document.width, document.height, Bitmap.Config.ARGB_8888)
 
+    /** 사진 넣기 버튼을 누른 횟수(앱이 사진 선택기를 띄우는 자리) */
+    private var photoRequests = 0
+
     private fun show(fake: FakeLayers, widthDp: Int, heightDp: Int) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
@@ -159,7 +163,8 @@ class LayerPanelTest {
                         onViewport = {},
                         onChooseSize = {},
                         liveOpacity = { fake.liveOpacity },
-                        layerActions = fake
+                        layerActions = fake,
+                        onAddPhoto = { photoRequests++ }
                     )
                 }
             }
@@ -552,5 +557,46 @@ class LayerPanelTest {
         composeRule.onNode(hasTestTag(EditScreenTags.LAYER_PANEL) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
             .assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).assertIsDisplayed()
+    }
+
+    @Test
+    fun addPhoto_sitsRightOfAdd_andAsksTheAppForAPhoto() {
+        // 사용자 요청: "레이어 패널의 + 오른쪽에 이미지 아이콘이나 카메라 아이콘으로 사진 추가 가능하도록 하세요."
+        val fake = FakeLayers(1)
+        openCompactLayers(fake)
+        val add = bounds(EditScreenTags.LAYER_ADD)
+        val photo = bounds(EditScreenTags.LAYER_ADD_PHOTO)
+        assertEquals(add.center.y, photo.center.y, 1f)
+        assertTrue("$photo should be right next to $add", photo.left >= add.right - 1f && photo.left - add.right < add.width / 2)
+        // 넓은 커버 시트에는 제목도 보인다
+        composeRule.onNode(hasText(composeRule.activity.getString(R.string.tool_layers)) and hasAnyAncestor(hasTestTag(EditScreenTags.COVER_LAYER_SHEET)))
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_PHOTO).performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, photoRequests)
+            // 레이어 일은 앱이 사진을 고른 뒤에 한다
+            assertTrue(fake.calls.isEmpty())
+        }
+    }
+
+    @Test
+    fun main_layersPanel_dropsItsTitleWhenTheFiveButtonsLeaveNoRoom_butKeepsThePaneName() {
+        val fake = FakeLayers(2)
+        show(fake, 930, 700)
+        composeRule.togglePanel(MainPanel.LAYERS)
+        val title = composeRule.activity.getString(R.string.tool_layers)
+
+        // 패널 폭(280dp)에 버튼 다섯이 다 보이고, 한 줄로 들어가지 않는 제목은 두지 않는다
+        for (tag in listOf(EditScreenTags.LAYER_ADD, EditScreenTags.LAYER_ADD_PHOTO, EditScreenTags.LAYER_DELETE, EditScreenTags.VIEW_FLIP_VERTICAL, EditScreenTags.VIEW_FLIP_HORIZONTAL)) {
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        }
+        composeRule.onNode(hasText(title) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL))).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, title))
+        // 버튼이 하나인 조정 패널은 제목이 그대로 보인다
+        composeRule.togglePanel(MainPanel.ADJUST)
+        composeRule.onNode(hasText(composeRule.activity.getString(R.string.tool_adjust)) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL)))
+            .assertIsDisplayed()
     }
 }

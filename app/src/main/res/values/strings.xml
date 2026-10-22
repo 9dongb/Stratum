@@ -167,6 +167,9 @@
     <!-- 레이어 패널 -->
     <string name="layer_new_name">Layer %1$d</string>
     <string name="layer_add">Add layer</string>
+    <string name="layer_add_photo">Add photo</string>
+    <string name="layer_photo_name">Photo %1$d</string>
+    <string name="edit_photo_insert_failed">Couldn\'t add this photo.</string>
     <string name="layer_delete">Delete layer</string>
     <string name="layer_rasterize">Convert to pixels</string>
     <string name="layer_move_up">Move layer up</string>
