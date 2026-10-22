@@ -33,11 +33,12 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 다른 앱에서 끌어 온 사진을 받는 자리(사용자 피드백 12차 4: "사진 끌어다 놓아 열기"). 사진(image/…)을 끄는 동안만 받으며,
  * 받을 자리 위에 있는지를 [onHover]로 알린다. 놓으면 첫 사진 하나의 주소와 받은 읽기 권한을 놓을 일을 [onDrop]에 넘긴다.
  * 받은 쪽은 바로 앱 임시 폴더에 복사한 뒤 권한을 놓는다(권한은 화면이 다시 만들어지면 사라진다). 새 권한·라이브러리는 없다.
- * 이 수식어를 단 자리 전체가 받는 자리다.
+ * 이 수식어를 단 자리 전체가 받는 자리다. [enabled]가 false인 동안(창·작업 모드가 떠 있을 때 등)은 받지 않는다(받을 자리 표시도 없다).
  */
 @Composable
-fun rememberPhotoDropTarget(onHover: (Boolean) -> Unit, onDrop: (Uri, release: () -> Unit) -> Unit): Modifier {
+fun rememberPhotoDropTarget(enabled: Boolean = true, onHover: (Boolean) -> Unit, onDrop: (Uri, release: () -> Unit) -> Unit): Modifier {
     val activity = LocalContext.current.findActivity()
+    val currentEnabled by rememberUpdatedState(enabled)
     val currentHover by rememberUpdatedState(onHover)
     val currentDrop by rememberUpdatedState(onDrop)
     val target = remember(activity) {
@@ -50,16 +51,22 @@ fun rememberPhotoDropTarget(onHover: (Boolean) -> Unit, onDrop: (Uri, release: (
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 currentHover(false)
+                // 끄는 사이 창·작업 모드가 떴으면 받지 않는다
+                if (!currentEnabled) return false
                 val dragEvent = event.toAndroidDragEvent()
-                val uri = firstPhoto(dragEvent.clipData) ?: return false
                 // 다른 앱의 주소를 읽으려면 놓는 바로 그때 권한을 받아야 한다
                 val permissions = activity?.requestDragAndDropPermissions(dragEvent)
+                val uri = firstPhoto(dragEvent.clipData) { activity?.typeOf(it) }
+                if (uri == null) {
+                    permissions?.release()
+                    return false
+                }
                 currentDrop(uri) { permissions?.release() }
                 return true
             }
         }
     }
-    return Modifier.dragAndDropTarget(shouldStartDragAndDrop = { event -> isPhotoDrag(event.mimeTypes()) }, target = target)
+    return Modifier.dragAndDropTarget(shouldStartDragAndDrop = { event -> currentEnabled && isPhotoDrag(event.mimeTypes()) }, target = target)
 }
 
 /**
@@ -91,12 +98,23 @@ fun PhotoDropHighlight(visible: Boolean, text: String, modifier: Modifier = Modi
 /** 끄는 것이 사진인지(사진 형식이 하나라도 있으면) */
 internal fun isPhotoDrag(mimeTypes: Set<String>): Boolean = mimeTypes.any { it.startsWith("image/") }
 
-/** 끌어 온 것 가운데 첫 주소(사진 여러 장이면 첫 장만 받는다) */
-internal fun firstPhoto(clip: ClipData?): Uri? {
+/**
+ * 끌어 온 것 가운데 첫 사진의 주소(사진 여러 장이면 첫 장만 받는다). 형식([typeOf])이 사진인 첫 주소이고,
+ * 형식을 아는 사진이 없으면 첫 주소다(여러 형식을 함께 끌어 와도 사진이 아닌 것을 고르지 않게).
+ */
+internal fun firstPhoto(clip: ClipData?, typeOf: (Uri) -> String? = { null }): Uri? {
     if (clip == null) return null
-    for (index in 0 until clip.itemCount) clip.getItemAt(index).uri?.let { return it }
-    return null
+    val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+    return uris.firstOrNull { typeOf(it)?.startsWith("image/") == true } ?: uris.firstOrNull()
 }
+
+/** [uri]의 형식(MIME). 공급자가 알려 주지 않거나 물을 수 없으면 null이다. */
+private fun Context.typeOf(uri: Uri): String? =
+    try {
+        contentResolver.getType(uri)
+    } catch (e: RuntimeException) {
+        null
+    }
 
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {

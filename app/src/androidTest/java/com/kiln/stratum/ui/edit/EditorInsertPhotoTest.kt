@@ -8,6 +8,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.brush.BrushSettings
+import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.raster.PixelSize
@@ -86,6 +88,29 @@ class EditorInsertPhotoTest {
         val undone = awaitReady { !it.busy && it.layers.size == 1 }
         assertEquals(LayerId(0), undone.activeLayer)
         assertEquals(CANVAS, pixel(undone, 200, 150))
+    }
+
+    @Test
+    fun aPhotoPickedWhileStrokesAreBeingRecorded_isInsertedAfterThem() {
+        openCanvas()
+        // 첫 획을 기록하는 동안 둘째 획을 긋고(첫 획이 끝나면 곧바로 이어 기록된다) 바로 사진을 고른다.
+        // 넣기는 이어 기록하는 획까지 기다린 뒤 해야 한다(전에는 첫 획만 기다리고 사진을 버렸다, 12차 검토).
+        onMain {
+            viewModel.setBrush(BrushSettings(size = 10f, hardness = 1f, color = Color.BLACK))
+            for (y in listOf(40f, 260f)) {
+                viewModel.beginStroke(StrokePoint(20f, y), erase = false)
+                for (x in 30..380 step 10) viewModel.extendStroke(StrokePoint(x.toFloat(), y))
+                viewModel.endStroke()
+            }
+            viewModel.insertPhoto(png("after-strokes.png", 100, 50, Color.BLUE))
+        }
+        val inserted = awaitReady { !it.busy && it.layers.size == 2 }
+
+        // 두 획은 아래 레이어에 남고, 사진은 그 위 새 레이어로 가운데에 들어가 그 레이어를 고른다
+        assertEquals(Color.BLUE, pixel(inserted, 200, 150))
+        assertEquals(Color.BLACK, pixel(inserted, 200, 40))
+        assertEquals(Color.BLACK, pixel(inserted, 200, 260))
+        assertEquals(inserted.layers.last().id, inserted.activeLayer)
     }
 
     @Test

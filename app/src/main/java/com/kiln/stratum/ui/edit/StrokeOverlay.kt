@@ -134,8 +134,8 @@ fun PaintGestureOverlay(
     Box(
         modifier
             .testTag(tag)
-            // 캔버스 위 마우스 포인터는 십자다
-            .pointerHoverIcon(PointerIcon.Crosshair)
+            // 붓을 쓰는 도구(붓 원이 있음)는 캔버스 위 마우스 포인터가 십자다. 이동 도구는 기본 포인터다.
+            .then(if (cursorSize != null) Modifier.pointerHoverIcon(PointerIcon.Crosshair) else Modifier)
             .trackMouseHover { hover = it }
             .pointerInput(document) {
             awaitEachGesture {

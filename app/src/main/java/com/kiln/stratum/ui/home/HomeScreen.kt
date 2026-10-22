@@ -110,9 +110,15 @@ fun HomeScreen(
         selected = emptyList()
     }
 
-    // 다른 앱에서 사진을 끌어다 놓으면 연다(홈 전체가 받는 자리, 사용자 피드백 12차 4: "사진 끌어다 놓아 열기")
+    // 다른 앱에서 사진을 끌어다 놓으면 연다(홈 전체가 받는 자리, 사용자 피드백 12차 4: "사진 끌어다 놓아 열기").
+    // 창(지우기 묻기·이름 바꾸기·새 캔버스)이 떠 있으면 받지 않는다(창의 몫).
     var dropHover by remember { mutableStateOf(false) }
-    val dropTarget = if (onDropPhoto != null) rememberPhotoDropTarget(onHover = { dropHover = it }, onDrop = onDropPhoto) else Modifier
+    val dropEnabled = confirmDelete == null && renaming == null && !showNewCanvas
+    val dropTarget = if (onDropPhoto != null) {
+        rememberPhotoDropTarget(enabled = dropEnabled, onHover = { dropHover = it }, onDrop = onDropPhoto)
+    } else {
+        Modifier
+    }
 
     // 창 전체 폭으로 시트·창을 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize().then(dropTarget)) {
@@ -193,7 +199,7 @@ fun HomeScreen(
             )
         }
         // 사진을 끌어 오는 동안 받을 자리 위에 있으면 알린다
-        PhotoDropHighlight(dropHover, stringResource(R.string.drop_to_open))
+        PhotoDropHighlight(dropHover && dropEnabled, stringResource(R.string.drop_to_open))
     }
 }
 

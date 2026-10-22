@@ -127,6 +127,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.async
@@ -806,7 +807,12 @@ class EditorViewModel internal constructor(
         openedDrop?.delete()
         openedDrop = null
         val copy = viewModelScope.async {
-            copyDropped(uri).also { releasePermission() }
+            // 복사하지 못해도 받은 권한은 놓는다
+            try {
+                copyDropped(uri)
+            } finally {
+                releasePermission()
+            }
         }
         openSource { copy.await()?.let { dropped -> openedDrop = dropped.file; ImageDecoder.createSource(dropped.file) to dropped.name } }
     }
@@ -1290,8 +1296,12 @@ class EditorViewModel internal constructor(
             return
         }
         viewModelScope.launch {
-            val dropped = copyDropped(uri)
-            releasePermission()
+            // 복사하지 못해도 받은 권한은 놓는다
+            val dropped = try {
+                copyDropped(uri)
+            } finally {
+                releasePermission()
+            }
             if (dropped == null) {
                 _messages.trySend(EditorMessage.PhotoUnreadable)
                 return@launch
@@ -1309,9 +1319,10 @@ class EditorViewModel internal constructor(
             return
         }
         // 처리하던 편집이 있으면 끝나기를 기다린다(그 사이 문서가 바뀌므로 넣을 자리는 그 뒤에 정한다)
-        editJob?.join()
+        awaitEditsSettled()
         val document = history?.document
-        if (document == null || editing || hasLiveValues) {
+        // 문서를 닫았거나 유동화 작업 모드가 열렸으면 넣지 않는다(작업 모드를 취소하면 그대로여야 한다)
+        if (document == null || editing || hasLiveValues || liquifySession != null) {
             onDone()
             return
         }
@@ -1319,25 +1330,45 @@ class EditorViewModel internal constructor(
         runEdit(InsertImageLayer(source, info, layerName, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId), onFinished = onDone)
     }
 
+    /**
+     * 처리하던 편집과, 그 편집이 끝나며 이어서 기록하는 편집(기다리던 획·놓은 슬라이더 값), 끄던 슬라이더 값이 모두 끝나기를 기다린다.
+     * 끝난 편집이 곧바로 다음 편집을 시작할 수 있어 한 번 기다리는 것으로는 모자라다.
+     */
+    private suspend fun awaitEditsSettled() {
+        while (true) {
+            val job = editJob
+            when {
+                editing && job != null && job.isActive -> job.join()
+                hasLiveValues -> combine(_liveAdjustments, _liveOpacity) { adjustments, opacity -> adjustments == null && opacity == null }.first { it }
+                else -> return
+            }
+        }
+    }
+
     /** 끌어다 놓은 사진의 앱 임시 폴더 복사본([file])과 표시 이름 */
     private class DroppedPhoto(val file: File, val name: String?)
 
-    /** 끌어다 놓은 [uri]를 앱 임시 폴더([DROPPED_DIR])에 복사한다. 읽지 못하면 null이다. */
+    /**
+     * 끌어다 놓은 [uri]를 앱 임시 폴더([DROPPED_DIR])에 복사한다. 읽지 못하면 null이다.
+     * 다른 앱의 공급자가 던지는 예외(권한·잘못된 주소·지원하지 않음 등)와 임시 파일을 만들지 못한 경우도 읽지 못한 것으로 본다(앱이 멈추지 않게).
+     */
     private suspend fun copyDropped(uri: Uri): DroppedPhoto? = withContext(Dispatchers.IO) {
         val app = getApplication<Application>()
         val name = displayNameOf(uri)
-        val dir = File(app.cacheDir, DROPPED_DIR).apply { mkdirs() }
-        val file = File.createTempFile("drop", null, dir)
-        val copied = try {
-            app.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } } != null
-        } catch (e: IOException) {
+        var file: File? = null
+        try {
+            val dir = File(app.cacheDir, DROPPED_DIR).apply { mkdirs() }
+            val copy = File.createTempFile("drop", null, dir).also { file = it }
+            val copied = app.contentResolver.openInputStream(uri)?.use { input -> copy.outputStream().use { input.copyTo(it) } } != null
+            if (copied) DroppedPhoto(copy, name) else null.also { copy.delete() }
+        } catch (e: CancellationException) {
+            file?.delete()
+            throw e
+        } catch (e: Exception) {
             Log.w(TAG, "Could not copy the dropped photo", e)
-            false
-        } catch (e: SecurityException) {
-            Log.w(TAG, "No permission for the dropped photo", e)
-            false
+            file?.delete()
+            null
         }
-        if (copied) DroppedPhoto(file, name) else null.also { file.delete() }
     }
 
     /**

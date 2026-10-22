@@ -397,13 +397,16 @@ fun EditScreen(
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
+    // 창(크기 변경·글자·내보내기·팔레트·레이어 이름·큰 사진)이나 유동화 작업 모드가 떠 있는지
+    val dialogOpen = resizeInput != null || textDraft != null || rasterizeAsk != null || exportDraft != null || palette != null ||
+        renamingLayer != null || state is EditorState.AskSize || liquify != null
+
     // 다른 앱에서 사진을 끌어 오는 동안 받을 자리 위에 있는지(편집 화면 전체가 받는 자리, 사용자 피드백 12차 4)
     var dropHover by remember { mutableStateOf(false) }
+    // 자르는 중에는 문서를 바꾸지 않고(레이어 버튼과 같다), 창·유동화 작업 모드가 떠 있으면 그 뒤에 넣지 않는다(작업 모드를 취소하면 그대로여야 한다)
+    val dropEnabled = ready != null && !cropMode && !dialogOpen
     val dropTarget = if (onDropPhoto != null) {
-        rememberPhotoDropTarget(onHover = { dropHover = it }) { uri, release ->
-            // 자르는 중에는 문서를 바꾸지 않는다(레이어 버튼과 같다)
-            if (cropMode || ready == null) release() else onDropPhoto(uri, release)
-        }
+        rememberPhotoDropTarget(enabled = dropEnabled, onHover = { dropHover = it }, onDrop = onDropPhoto)
     } else {
         Modifier
     }
@@ -491,8 +494,6 @@ fun EditScreen(
         LaunchedEffect(activeTool, activeMode, widthClass, cropMode, ready?.documentSize, liquify != null) { floating.closeFlyout() }
         // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 옵션 창을 닫는다.
         // 패널은 그대로 둔다(창·작업 모드 아래에 남았다가, 닫히면 다시 보인다)
-        val dialogOpen = resizeInput != null || textDraft != null || rasterizeAsk != null || exportDraft != null || palette != null ||
-            renamingLayer != null || state is EditorState.AskSize || liquify != null
         LaunchedEffect(dialogOpen) {
             if (dialogOpen) {
                 floating.closeFlyout()
@@ -1312,7 +1313,7 @@ fun EditScreen(
         // 세로는 캔버스 위쪽 끝 조금 아래다. 떠 있는 띠·패널보다 위에 그리고, 터치는 받지 않아 그 밑을 그대로 누를 수 있다.
         GestureToast(gestureToast, Modifier.fillMaxSize().padding(top = with(LocalDensity.current) { (canvasTop - screenTop).coerceAtLeast(0f).toDp() }))
         // 사진을 끌어 오는 동안 받을 자리 위에 있으면 알린다
-        PhotoDropHighlight(dropHover, stringResource(R.string.drop_to_add_layer))
+        PhotoDropHighlight(dropHover && dropEnabled, stringResource(R.string.drop_to_add_layer))
         // 하위 도구 메뉴는 캔버스·띠 위에 뜬다(창보다는 아래). 고르면 닫고 하위 도구를 고른다(크기 변경은 창을 띄움).
         SubToolMenuHost(
             state = subToolMenu,

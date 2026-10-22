@@ -90,7 +90,12 @@ class MainActivity : ComponentActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val typing = currentFocus?.onCheckIsTextEditor() == true
-        if (!typing && shortcuts.onKey(event)) return true
+        if (typing) {
+            // 스페이스바를 누른 채 글자 칸으로 옮겨 가 뗐어도 뗀 것으로 본다(그 뒤 캔버스를 끌면 옮기기로 남지 않게)
+            if (event.keyCode == KeyEvent.KEYCODE_SPACE && event.action == KeyEvent.ACTION_UP) shortcuts.release()
+        } else if (shortcuts.onKey(event)) {
+            return true
+        }
         return super.dispatchKeyEvent(event)
     }
 

@@ -51,7 +51,6 @@ import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
-/** 하위 도구 메뉴가 뜨는 쪽: 도구 막대 버튼 오른쪽(메인 화면), 탭 위(커버) */
 /** 하위 도구 메뉴가 버튼의 어느 쪽에 뜨는지: 도구 막대는 오른쪽([END]), 커버 탭 줄은 위([ABOVE]), 커버를 가로로 돌린 세로 탭 줄은 왼쪽([START]) */
 enum class MenuSide { END, ABOVE, START }
 

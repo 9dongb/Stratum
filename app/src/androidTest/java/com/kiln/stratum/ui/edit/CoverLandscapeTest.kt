@@ -151,7 +151,8 @@ class CoverLandscapeTest {
     fun aValueCell_becomesAVerticalSlider_draggingUpGrowsIt_andDoneReturns() {
         show()
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.bar("hardness")).performClick()
+        // 접은 에뮬레이터에서는 강제 크기를 줄여 넣어 기둥이 낮아져 경도 칸이 밀려 있다(기술 주의점). 밀어 보이게 한 뒤 누른다.
+        composeRule.onNodeWithTag(EditScreenTags.bar("hardness")).performScrollTo().performClick()
 
         val slider = bounds(EditScreenTags.BRUSH_HARDNESS)
         assertTrue("$slider should be tall", slider.height > slider.width)

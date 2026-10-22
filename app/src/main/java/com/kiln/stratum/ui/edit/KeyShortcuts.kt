@@ -100,8 +100,10 @@ class KeyShortcutHost {
                 spaceHeld = false
                 return held
             }
+            // 누르고 있는 동안 되풀이되는 키는 처음 누름을 받았을 때만 받는다(창이 받은 스페이스바를 가로채지 않게)
+            if (event.repeatCount > 0) return spaceHeld
             // 편집 화면이 받을 때만 누른 것으로 본다(창이 떠 있으면 창의 몫)
-            if (event.repeatCount == 0 && !spaceHeld && !handle(Shortcut.Pan)) return false
+            if (!spaceHeld && !handle(Shortcut.Pan)) return false
             spaceHeld = true
             return true
         }

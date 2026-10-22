@@ -174,6 +174,24 @@ class KeyShortcutsUiTest {
     }
 
     @Test
+    fun aRefusedSpace_isNotHeldByItsRepeats() {
+        // 창이 떠 있어 편집 화면이 스페이스바를 받지 않으면, 누르고 있는 동안 되풀이되는 키도 받지 않는다(창의 몫, 12차 검토)
+        val refusing = KeyShortcutHost().apply { handler = { false } }
+        assertFalse(refusing.onKey(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, 0)))
+        assertFalse(refusing.onKey(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, 1)))
+        assertFalse(refusing.spaceHeld)
+        assertFalse(refusing.onKey(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SPACE, 0)))
+
+        // 받은 스페이스바는 되풀이도 받고, 떼면 놓는다
+        val accepting = KeyShortcutHost().apply { handler = { true } }
+        assertTrue(accepting.onKey(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, 0)))
+        assertTrue(accepting.onKey(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, 1)))
+        assertTrue(accepting.spaceHeld)
+        assertTrue(accepting.onKey(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SPACE, 0)))
+        assertFalse(accepting.spaceHeld)
+    }
+
+    @Test
     fun holdingSpace_dragsTheCanvas_insteadOfPainting() {
         show()
         press(KeyEvent.KEYCODE_B)

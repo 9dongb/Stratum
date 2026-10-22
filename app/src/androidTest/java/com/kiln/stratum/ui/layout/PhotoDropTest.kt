@@ -35,4 +35,18 @@ class PhotoDropTest {
         assertNull(firstPhoto(null))
         assertNull(firstPhoto(ClipData.newPlainText("note", "not a photo")))
     }
+
+    @Test
+    fun withKnownTypes_theFirstPhotoIsTaken_notAnotherFile() {
+        // 사진과 다른 파일을 함께 끌어 오면 형식이 사진인 첫 주소를 고른다(12차 검토)
+        val document = Uri.parse("content://files/report.pdf")
+        val photo = Uri.parse("content://media/external/images/media/162")
+        val clip = ClipData(ClipDescription("files", arrayOf("application/pdf", "image/jpeg")), ClipData.Item(document))
+        clip.addItem(ClipData.Item(photo))
+        val types = mapOf(document to "application/pdf", photo to "image/jpeg")
+
+        assertEquals(photo, firstPhoto(clip) { types[it] })
+        // 형식을 알 수 없으면 첫 주소다
+        assertEquals(document, firstPhoto(clip) { null })
+    }
 }
