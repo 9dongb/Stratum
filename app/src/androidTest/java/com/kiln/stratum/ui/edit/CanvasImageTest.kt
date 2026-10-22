@@ -3,8 +3,10 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -164,5 +166,69 @@ class CanvasImageTest {
         for (column in transform.toScreenX(1.0).roundToInt() until transform.toScreenX(2.0).roundToInt()) {
             assertEquals("x=$column", hex(AndroidColor.RED), hex(shot.getPixel(column, y)))
         }
+    }
+
+    @Test
+    fun zoomedIn_drawsNothingOutsideTheCanvas() {
+        // 확대해서 문서 왼쪽 끝과 아래 끝이 캔버스 바로 밖에 오면, 문서 테두리 선과 선택 윤곽선이 캔버스 밖(펼친 화면의 도구 막대·아래 빈 줄)에
+        // 그려지면 안 된다(사용자 피드백: 도구 막대 위에 선이 겹쳐 보였다). 바탕을 한 색으로 칠해 두고 캔버스 밖 픽셀이 그대로인지 본다.
+        val document = PixelSize(100, 100)
+        val preview = Bitmap.createBitmap(document.width, document.height, Bitmap.Config.ARGB_8888).apply { eraseColor(AndroidColor.GRAY) }
+        // 문서 전체를 고른 선택 영역: 윤곽선이 문서 네 변을 따라간다
+        val whole = SelectionOutline(listOf(floatArrayOf(0f, 0f, 100f, 0f, 100f, 100f, 0f, 100f, 0f, 0f)))
+        val ready = EditorState.Ready(PreviewImage(preview, PreviewLevels.wholeRegion(document, 0)), document, selection = whole)
+        val viewState = CanvasViewState(CanvasView.Fit)
+        composeRule.setContent {
+            StratumTheme {
+                Box(Modifier.size(300.dp, 260.dp).background(Color(BACKDROP)).testTag("frame")) {
+                    CanvasViewport(
+                        ready,
+                        viewState,
+                        Modifier.padding(start = 60.dp, top = 20.dp, end = 20.dp, bottom = 40.dp).fillMaxSize().testTag("canvas")
+                    )
+                }
+            }
+        }
+        val canvasSize = composeRule.onNodeWithTag("canvas").fetchSemanticsNode().size
+        // 문서 한 픽셀이 화면 8픽셀이고, 문서 왼쪽 끝은 캔버스 왼쪽에서, 아래 끝은 캔버스 아래에서 10픽셀 밖이다(위·오른쪽 끝은 멀리 밖)
+        val scale = 8.0
+        composeRule.runOnIdle {
+            viewState.view = CanvasView.Free(
+                scale = scale,
+                centerX = (canvasSize.width / 2.0 + 10) / scale,
+                centerY = document.height - (canvasSize.height / 2.0 + 10) / scale
+            )
+        }
+        composeRule.waitForIdle()
+
+        val shot = composeRule.onNodeWithTag("frame").captureToImage().asAndroidBitmap()
+        val frame = composeRule.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+        val canvas = composeRule.onNodeWithTag("canvas").fetchSemanticsNode().boundsInRoot
+        val left = (canvas.left - frame.left).roundToInt()
+        val top = (canvas.top - frame.top).roundToInt()
+        val right = (canvas.right - frame.left).roundToInt()
+        val bottom = (canvas.bottom - frame.top).roundToInt()
+        val pixels = IntArray(shot.width * shot.height)
+        shot.getPixels(pixels, 0, shot.width, 0, 0, shot.width, shot.height)
+        var leaked = 0
+        var first: String? = null
+        for (y in 0 until shot.height) {
+            for (x in 0 until shot.width) {
+                if (x in left until right && y in top until bottom) continue
+                val color = pixels[y * shot.width + x]
+                if (color != BACKDROP) {
+                    leaked++
+                    if (first == null) first = "($x, $y) ${hex(color)}"
+                }
+            }
+        }
+        assertEquals("canvas $left..$right × $top..$bottom, first leaked pixel $first", 0, leaked)
+        // 캔버스 안은 문서(회색)가 다 덮는다
+        assertEquals(hex(AndroidColor.GRAY), hex(shot.getPixel((left + right) / 2, (top + bottom) / 2)))
+    }
+
+    private companion object {
+        /** 캔버스 밖 바탕색(테두리·윤곽선 색과 다른 초록) */
+        val BACKDROP = 0xFF00A000.toInt()
     }
 }

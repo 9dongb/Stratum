@@ -116,6 +116,7 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  *
  * [overlay]는 문서 위에 겹치는 도구 화면(자르기 테두리 등)이다. 두 손가락 감지를 그 부모에 두어,
  * 도구 화면이 터치를 받아도 두 손가락 확대·이동이 된다. 형제로 겹치면 위의 것만 터치를 받는다(소스로 확인).
+ * 문서와 도구 화면은 이 영역 안에서만 보인다(밖은 잘라 그린다). 그래서 확대해도 옆의 도구 막대·아래 빈 줄에 선이 새어 나오지 않는다.
  *
  * [onTwoFingerTap]이 있으면 캔버스를 두 손가락으로 톡 눌렀을 때 부른다(설정의 '두 손가락으로 톡: 실행 취소').
  * 그 터치는 도구 화면이 한 손가락 톡으로 받지 않는다.
@@ -173,9 +174,12 @@ fun CanvasViewport(
     Box(
         modifier
             // 화면 반전: 그릴 때 거는 변환 하나(가운데를 기준으로 뒤집음). 터치는 Compose가 거꾸로 바꿔 넘긴다.
+            // 이 영역 안에 그리는 것(문서 테두리 선·선택 윤곽선·도구 표시)은 영역 밖으로 나가지 않게 잘라 그린다.
+            // 확대해서 문서 끝이 영역 바로 밖에 오면 테두리 선이 옆의 도구 막대 위에 겹쳐 보였다(사용자 피드백).
             .graphicsLayer {
                 scaleX = flip.scaleX
                 scaleY = flip.scaleY
+                clip = true
             }
             .onSizeChanged { area = it }
             .pointerInput(viewState, tapEnabled, threeEnabled) {
