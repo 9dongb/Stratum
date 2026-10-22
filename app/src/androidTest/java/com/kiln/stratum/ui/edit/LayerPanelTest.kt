@@ -128,7 +128,7 @@ class LayerPanelTest {
 
         override fun rasterize() {
             calls += "rasterize ${active.value}"
-            layers = layers.map { if (it.id == active) it.copy(text = null) else it }
+            layers = layers.map { if (it.id == active) it.copy(text = null, liquify = false) else it }
         }
 
         override fun rename(id: LayerId, name: String) {
@@ -377,6 +377,24 @@ class LayerPanelTest {
 
         composeRule.runOnIdle { assertEquals("rasterize 1", fake.calls.last()) }
         composeRule.onNodeWithTag(EditScreenTags.layerTextBadge(LayerId(1)), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun liquifyLayer_hasABadge_andTheMenuBakesIt() {
+        // 다시 고칠 수 있는 유동화(결정 기록 '얼굴 인식 보정' 3단계)도 작은 그림 구석에 표시, 메뉴의 '픽셀로 바꾸기'로 굳힌다
+        val fake = FakeLayers(2)
+        fake.layers = fake.layers.map { if (it.id == LayerId(0)) it.copy(liquify = true) else it }
+        openCompactLayers(fake)
+
+        composeRule.onNodeWithTag(EditScreenTags.layerLiquifyBadge(LayerId(0)), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.layerLiquifyBadge(LayerId(1)), useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.layerTextBadge(LayerId(0)), useUnmergedTree = true).assertDoesNotExist()
+
+        row(0).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals("rasterize 0", fake.calls.last()) }
+        composeRule.onNodeWithTag(EditScreenTags.layerLiquifyBadge(LayerId(0)), useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

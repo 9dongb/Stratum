@@ -415,7 +415,12 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_RESET).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).assertIsNotEnabled()
 
-        composeRule.runOnIdle { state = state.copy(canUndo = true, canRedo = true, changed = true) }
+        // 다시 연 유동화(기록이 있음): 바꾼 것은 있지만(모두 되돌리기) 연 뒤 바꾸기 전에는 적용할 것이 없다
+        composeRule.runOnIdle { state = state.copy(changed = true, canApply = false) }
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_RESET).assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_APPLY).assertIsNotEnabled()
+
+        composeRule.runOnIdle { state = state.copy(canUndo = true, canRedo = true, changed = true, canApply = true) }
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_UNDO).assertIsEnabled().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_REDO).assertIsEnabled().performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_RESET).assertIsEnabled().performClick()

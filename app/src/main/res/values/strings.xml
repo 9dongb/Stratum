@@ -170,6 +170,7 @@
     <string name="layer_add_photo">Add photo</string>
     <string name="layer_photo_name">Photo %1$d</string>
     <string name="edit_photo_insert_failed">Couldn\'t add this photo.</string>
+    <string name="edit_liquify_baked">Liquify is now part of the pixels. Undo to edit it again.</string>
     <string name="drop_to_add_layer">Drop to add as a new layer</string>
     <string name="drop_to_open">Drop to open this photo</string>
     <string name="shortcut_group_edit">Editing</string>
@@ -206,6 +207,7 @@
     <string name="layer_visibility">Show layer</string>
     <string name="layer_hidden">Hidden</string>
     <string name="layer_text_badge">Text layer</string>
+    <string name="layer_liquify_badge">Editable liquify</string>
     <string name="rasterize_title">Convert the text to pixels?</string>
     <string name="rasterize_message">To paint on it, the text needs to be pixels. After converting, you can\'t edit the text again.</string>
     <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>

@@ -45,6 +45,8 @@ data class RasterContent(val raster: Raster) : LayerContent
  * @property visible 보이는지(레이어 줄의 눈 버튼). 불투명도와 따로이고, 숨긴 레이어는 그리기·내보내기·병합에서 빠진다(결정 기록 '레이어 보이기').
  * @property text 다시 고칠 수 있는 글자 레이어의 글자(사용자 피드백 8차 1-6). 픽셀은 그 글자를 그린 것이고, 픽셀을 바꾸면 지운다([withPixels]).
  *   없으면 보통 픽셀 레이어다.
+ * @property liquify 다시 고칠 수 있는 픽셀 유동화의 기록(결정 기록 '얼굴 인식 보정' 3단계). 픽셀은 그 기록을 원래 픽셀에 건 결과이고,
+ *   픽셀을 바꾸면 지운다([withPixels], 사용자 결정 "묻지 않고 굳히기"). 없으면 null.
  */
 data class Layer(
     val id: LayerId,
@@ -55,7 +57,8 @@ data class Layer(
     val adjustments: Adjustments = Adjustments.NONE,
     val gainmap: HdrGainmap? = null,
     val visible: Boolean = true,
-    val text: TextSpec? = null
+    val text: TextSpec? = null,
+    val liquify: LiquifyRecord? = null
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }
@@ -66,13 +69,18 @@ data class Layer(
         get() = visible && opacity > 0f
 
     /**
-     * 픽셀을 [raster](게인맵은 [gainmap])로 바꾼 레이어. 글자 정보는 지운다: 바꾼 픽셀은 더 이상 그 글자를 그린 것이 아니다(사용자 피드백 8차 1-6).
-     * 레이어 픽셀을 바꾸는 명령은 모두 이것(또는 글자를 다시 그린 [withText])을 쓴다(`LayerPixelsGuardTest`가 지킨다).
+     * 픽셀을 [raster](게인맵은 [gainmap])로 바꾼 레이어. 글자 정보와 유동화 기록은 지운다: 바꾼 픽셀은 더 이상 그 글자를 그린 것도,
+     * 그 유동화의 결과도 아니다(사용자 피드백 8차 1-6, 유동화는 사용자 결정 "묻지 않고 굳히기").
+     * 레이어 픽셀을 바꾸는 명령은 모두 이것(또는 글자를 다시 그린 [withText], 유동화를 다시 건 [withLiquify])을 쓴다(`LayerPixelsGuardTest`가 지킨다).
      */
     fun withPixels(raster: Raster, gainmap: HdrGainmap? = this.gainmap): Layer =
-        copy(content = RasterContent(raster), gainmap = gainmap, text = null)
+        copy(content = RasterContent(raster), gainmap = gainmap, text = null, liquify = null)
 
-    /** 글자 [text]를 다시 그린 픽셀 [raster]로 바꾼 글자 레이어(글자 고치기·옮기기). 글자 레이어에는 게인맵이 없다. */
+    /** 글자 [text]를 다시 그린 픽셀 [raster]로 바꾼 글자 레이어(글자 고치기·옮기기). 글자 레이어에는 게인맵·유동화 기록이 없다. */
     fun withText(raster: Raster, text: TextSpec): Layer =
-        copy(content = RasterContent(raster), gainmap = null, text = text)
+        copy(content = RasterContent(raster), gainmap = null, text = text, liquify = null)
+
+    /** 유동화 기록 [record]를 원래 픽셀에 건 결과 [raster](게인맵은 [gainmap])로 바꾼 레이어(유동화 적용). 글자 정보는 지운다. */
+    fun withLiquify(raster: Raster, gainmap: HdrGainmap?, record: LiquifyRecord): Layer =
+        copy(content = RasterContent(raster), gainmap = gainmap, text = null, liquify = record)
 }

@@ -168,6 +168,7 @@
     <string name="layer_add_photo">사진 넣기</string>
     <string name="layer_photo_name">사진 %1$d</string>
     <string name="edit_photo_insert_failed">이 사진을 넣을 수 없어요.</string>
+    <string name="edit_liquify_baked">유동화를 픽셀로 굳혔어요. 실행 취소하면 다시 고칠 수 있어요.</string>
     <string name="drop_to_add_layer">여기에 놓으면 새 레이어로 넣어요</string>
     <string name="drop_to_open">여기에 놓으면 사진을 열어요</string>
     <string name="shortcut_group_edit">편집</string>
@@ -204,6 +205,7 @@
     <string name="layer_visibility">레이어 보이기</string>
     <string name="layer_hidden">숨김</string>
     <string name="layer_text_badge">글자 레이어</string>
+    <string name="layer_liquify_badge">다시 고칠 수 있는 유동화</string>
     <string name="rasterize_title">글자를 픽셀로 바꿀까요?</string>
     <string name="rasterize_message">칠하려면 픽셀이어야 해요. 바꾸면 글자를 다시 고칠 수 없어요.</string>
     <string name="edit_hidden_layer">숨긴 레이어에는 그릴 수 없어요. 레이어 목록에서 눈을 켜 주세요.</string>

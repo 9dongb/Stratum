@@ -83,7 +83,9 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * @property strength 압력(0..1)
  * @property canUndo 작업 모드 안에서 한 획 되돌릴 수 있는지
  * @property canRedo 되돌린 획을 다시 걸 수 있는지
- * @property changed 움직인 곳이 있는지(적용·모두 되돌리기를 켠다)
+ * @property changed 움직인 곳이 있는지(모두 되돌리기를 켠다)
+ * @property canApply 적용할 것이 있는지(✓·적용을 켠다): 이번에 바꾼 것이 있다. 다시 연 유동화(기록이 있는 레이어)는 모두 0으로 되돌린 것도
+ *   적용할 것이다(원래 픽셀로 돌아감, 결정 기록 '얼굴 인식 보정' 3단계). 정하지 않으면 [changed]와 같다.
  * @property busy 적용하는 중이다
  * @property colorSpace 문서 색 공간(미리 보기를 그 꼬리표로 보인다)
  * @property faceMode 얼굴 모드(얼굴 인식 보정)를 골랐는지. 고르면 칠하지 않고 얼굴을 톡해서 고른다.
@@ -109,7 +111,8 @@ data class LiquifyState(
     val selectedFace: Int = -1,
     val findingFaces: Boolean = false,
     val faceNotice: FaceNotice? = null,
-    val faceValues: FaceValues? = null
+    val faceValues: FaceValues? = null,
+    val canApply: Boolean = changed
 )
 
 /** 얼굴 모드가 한 번 알릴 것([kind], 여럿 찾았으면 그 수 [count]). 같은 알림도 다시 알리게 [serial]이 늘 바뀐다. */
@@ -324,7 +327,7 @@ fun LiquifyMode(
                         CoverWorkBar(
                             onCancel = actions::cancel,
                             onDone = actions::apply,
-                            doneEnabled = state.changed && !state.busy,
+                            doneEnabled = state.canApply && !state.busy,
                             cancelEnabled = !state.busy,
                             cancelTag = EditScreenTags.LIQUIFY_CANCEL,
                             doneTag = EditScreenTags.LIQUIFY_APPLY,
@@ -343,7 +346,7 @@ fun LiquifyMode(
                     CoverWorkBar(
                         onCancel = actions::cancel,
                         onDone = actions::apply,
-                        doneEnabled = state.changed && !state.busy,
+                        doneEnabled = state.canApply && !state.busy,
                         cancelEnabled = !state.busy,
                         cancelTag = EditScreenTags.LIQUIFY_CANCEL,
                         doneTag = EditScreenTags.LIQUIFY_APPLY,
@@ -414,7 +417,7 @@ private fun LiquifyTopBar(state: LiquifyState, actions: LiquifyActions, cancelAn
                     TopBarAccentButton(
                         onClick = actions::apply,
                         height = barHeight,
-                        enabled = state.changed && !state.busy,
+                        enabled = state.canApply && !state.busy,
                         modifier = Modifier.padding(start = 4.dp, end = 8.dp).testTag(EditScreenTags.LIQUIFY_APPLY)
                     ) {
                         Text(stringResource(R.string.action_apply))

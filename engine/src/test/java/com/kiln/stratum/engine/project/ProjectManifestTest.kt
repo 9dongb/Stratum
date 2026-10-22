@@ -8,6 +8,9 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.GainRgb
 import com.kiln.stratum.engine.document.HdrInfo
 import com.kiln.stratum.engine.document.HdrPrimaries
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
+import com.kiln.stratum.engine.face.TestFace
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -15,6 +18,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.EOFException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -177,5 +181,93 @@ class ProjectManifestTest {
 
         assertEquals(text, ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(text))))
         assertTrue(ProjectManifestCodec.read(ByteArrayInputStream(bytesOf(manifest))).layers.all { it.text == null })
+    }
+
+    private val face = TestFace(eyeX = 1800f, eyeY = 1200f, eyeDistance = 300f, angle = 0.2f).landmarks()
+
+    /** 유동화 기록(결정 기록 '얼굴 인식 보정' 3단계): 원래 픽셀의 타일, 원래 게인맵, 격자 파일, 두 얼굴과 그 값 */
+    private val liquify = LiquifyEntry(
+        version = 1,
+        base = listOf(TileEntry(0, 0, TileRef.File("base.tile")), TileEntry(1, 0, TileRef.File("a.tile")), TileEntry(2, 0, TileRef.Solid(0xFF102030.toInt()))),
+        baseGainmap = GainmapEntry(1000, 750, listOf(TileEntry(0, 0, TileRef.File("g.tile")))),
+        meshFile = "m.mesh",
+        faces = listOf(face, TestFace(eyeX = 600f, eyeY = 900f, eyeDistance = 120f).landmarks()),
+        faceValues = listOf(FaceValues.ZERO.with(FaceSlider.EYE_SIZE, 0.35f).with(FaceSlider.FACE_WIDTH, -1f), FaceValues.ZERO)
+    )
+
+    private fun read(bytes: ByteArray): ProjectManifest = ProjectManifestCodec.read(ByteArrayInputStream(bytes))
+
+    @Test
+    fun liquifyRecord_roundTrips_andOtherLayersWriteNothingExtra() {
+        val edited = manifest.copy(layers = listOf(manifest.layers[0], manifest.layers[1].copy(liquify = liquify)))
+        // 게인맵·격자·얼굴이 없는 기록(손으로 민 것만 있거나, 손으로 민 것 없이 얼굴만)도 그대로다
+        val plain = manifest.copy(
+            layers = listOf(manifest.layers[0].copy(liquify = liquify.copy(baseGainmap = null, meshFile = null)), manifest.layers[1].copy(liquify = liquify.copy(faces = emptyList(), faceValues = emptyList())))
+        )
+
+        assertEquals(edited, read(bytesOf(edited)))
+        assertEquals(plain, read(bytesOf(plain)))
+        assertTrue(read(bytesOf(manifest)).layers.all { it.liquify == null })
+    }
+
+    /** [manifest]의 맨 위 레이어(덧붙임 없음)에 꼬리표 [tag] 덧붙임 [payload]를 단 목차 바이트 */
+    private fun withTopLayerExtra(tag: Int, payload: ByteArray): ByteArray {
+        val bytes = bytesOf(manifest)
+        return ByteArrayOutputStream().also { buffer ->
+            // 끝의 8바이트는 맨 위 레이어의 덧붙임 수(0)와 문서 덧붙임 수(0)다
+            buffer.write(bytes, 0, bytes.size - 8)
+            DataOutputStream(buffer).apply {
+                writeInt(1)
+                writeInt(tag)
+                writeInt(payload.size)
+                write(payload)
+                writeInt(0)
+                flush()
+            }
+        }.toByteArray()
+    }
+
+    /** 얼굴 하나인 유동화 기록 바이트(손으로 만듦): 점 좌표 [pointCount]개, 슬라이더 값들 [values](저장 번호, 값) */
+    private fun liquifyPayload(pointCount: Int = face.points.size, values: List<Pair<Int, Float>>): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            DataOutputStream(buffer).apply {
+                writeInt(1)
+                writeInt(0)
+                writeBoolean(false)
+                writeUTF("")
+                writeInt(1)
+                writeFloat(face.presence)
+                writeInt(pointCount)
+                repeat(pointCount) { writeFloat(face.points[it % face.points.size]) }
+                writeInt(values.size)
+                for ((code, value) in values) {
+                    writeInt(code)
+                    writeFloat(value)
+                }
+                flush()
+            }
+        }.toByteArray()
+
+    @Test
+    fun brokenLiquifyRecord_isDropped_andTheProjectStillOpens() {
+        // 기록만 버리고(결과 픽셀은 타일에 있다) 프로젝트는 연다
+        for (payload in listOf(ByteArray(0), ByteArray(3) { 7 }, liquifyPayload(pointCount = 10, values = emptyList()))) {
+            val read = read(withTopLayerExtra(5, payload))
+
+            assertNull(read.layers[1].liquify)
+            assertEquals(manifest, read)
+        }
+    }
+
+    @Test
+    fun liquifyValues_skipSlidersThisAppDoesNotKnow_andValuesThatAreNotNumbers() {
+        val payload = liquifyPayload(
+            values = listOf(FaceSlider.NOSE_WIDTH.code to 0.5f, 99 to 0.25f, FaceSlider.EYE_SIZE.code to Float.NaN)
+        )
+
+        val read = read(withTopLayerExtra(5, payload)).layers[1].liquify
+
+        assertEquals(listOf(face), read?.faces)
+        assertEquals(listOf(FaceValues.ZERO.with(FaceSlider.NOSE_WIDTH, 0.5f)), read?.faceValues)
     }
 }

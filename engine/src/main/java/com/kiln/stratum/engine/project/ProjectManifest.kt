@@ -8,6 +8,9 @@ import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.GainRgb
 import com.kiln.stratum.engine.document.HdrInfo
 import com.kiln.stratum.engine.document.HdrPrimaries
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -53,8 +56,9 @@ data class ProjectManifest(
 
 /**
  * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에, 숨김은 덧붙임(꼬리표 3)에,
- * 다시 고칠 수 있는 글자는 덧붙임(꼬리표 4)에 적고, 없으면(보이면) 적지 않는다. 그래서 숨김을 모르는 앞 판의 프로젝트는 모두 보이는 레이어로 열리고,
- * 글자를 모르는 앞 판 앱은 글자 레이어를 픽셀 레이어로 연다(픽셀은 늘 타일에 있다).
+ * 다시 고칠 수 있는 글자는 덧붙임(꼬리표 4)에, 다시 고칠 수 있는 유동화 기록은 덧붙임(꼬리표 5)에 적고, 없으면(보이면) 적지 않는다.
+ * 그래서 숨김을 모르는 앞 판의 프로젝트는 모두 보이는 레이어로 열리고, 글자·유동화 기록을 모르는 앞 판 앱은 그 레이어를 픽셀 레이어로 연다
+ * (픽셀은 늘 타일에 있다).
  */
 data class LayerEntry(
     val id: Long,
@@ -65,8 +69,30 @@ data class LayerEntry(
     val adjustments: Adjustments = Adjustments.NONE,
     val gainmap: GainmapEntry? = null,
     val visible: Boolean = true,
-    val text: TextSpec? = null
+    val text: TextSpec? = null,
+    val liquify: LiquifyEntry? = null
 )
+
+/**
+ * 레이어의 다시 고칠 수 있는 유동화 기록(document.LiquifyRecord, 결정 기록 '얼굴 인식 보정' 3단계). 유동화 전 원래 픽셀·게인맵의 타일과
+ * 찾은 얼굴·값은 목차에 적고, 손으로 민 격자는 liquify 폴더의 파일 [meshFile](손으로 민 것이 없으면 null)에 둔다(목차를 작게).
+ *
+ * @property version 얼굴 보정 계산식의 판(LiquifyRecord.version)
+ * @property base 유동화 전 원래 픽셀의 타일(문서 격자). 결과와 바뀌지 않은 타일은 같은 타일 파일을 가리킨다.
+ * @property faceValues 얼굴마다의 슬라이더 값([faces]와 같은 차례)
+ */
+data class LiquifyEntry(
+    val version: Int,
+    val base: List<TileEntry>,
+    val baseGainmap: GainmapEntry?,
+    val meshFile: String?,
+    val faces: List<FaceLandmarks>,
+    val faceValues: List<FaceValues>
+) {
+    init {
+        require(faceValues.size == faces.size) { "${faceValues.size} face values for ${faces.size} faces" }
+    }
+}
 
 /** 레이어의 게인맵: 크기와, 게인맵 격자의 자리마다 어떤 타일이 있는지(Layer.gainmap) */
 data class GainmapEntry(val width: Int, val height: Int, val tiles: List<TileEntry>)
@@ -126,6 +152,9 @@ object ProjectManifestCodec {
     /** 레이어 덧붙임 꼬리표: 다시 고칠 수 있는 글자(사용자 피드백 8차 1-6) */
     private const val EXTRA_TEXT = 4
 
+    /** 레이어 덧붙임 꼬리표: 다시 고칠 수 있는 유동화 기록(결정 기록 '얼굴 인식 보정' 3단계) */
+    private const val EXTRA_LIQUIFY = 5
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
 
@@ -162,6 +191,7 @@ object ProjectManifestCodec {
             layer.gainmap?.let { extras += EXTRA_GAINMAP to gainmapBytes(it) }
             if (!layer.visible) extras += EXTRA_HIDDEN to ByteArray(0)
             layer.text?.let { extras += EXTRA_TEXT to textBytes(it) }
+            layer.liquify?.let { extras += EXTRA_LIQUIFY to liquifyBytes(it) }
             writeExtras(out, extras)
         }
         // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
@@ -193,15 +223,17 @@ object ProjectManifestCodec {
                 var gainmap: GainmapEntry? = null
                 var visible = true
                 var text: TextSpec? = null
+                var liquify: LiquifyEntry? = null
                 data.readExtras { tag, bytes ->
                     when (tag) {
                         EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
                         EXTRA_GAINMAP -> gainmap = gainmapOf(bytes)
                         EXTRA_HIDDEN -> visible = false
                         EXTRA_TEXT -> text = textOf(bytes)
+                        EXTRA_LIQUIFY -> liquify = liquifyOrNull(bytes)
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap, visible, text)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap, visible, text, liquify)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null
@@ -312,6 +344,71 @@ object ProjectManifestCodec {
         val style = TextStyle(size = data.readFloat(), color = data.readInt())
         return TextSpec(text, x, y, style, width = data.readFloat(), height = data.readFloat())
     }
+
+    /**
+     * 유동화 기록: 계산식 판, 원래 픽셀의 타일 목록, 원래 게인맵(있음 표시와 게인맵), 격자 파일 이름(빈 글자는 없음),
+     * 얼굴 수와 얼굴마다 점수·점 좌표 수·좌표들·0이 아닌 슬라이더 수·(저장 번호, 값)들
+     */
+    private fun liquifyBytes(liquify: LiquifyEntry): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeInt(liquify.version)
+            writeTiles(out, liquify.base)
+            out.writeBoolean(liquify.baseGainmap != null)
+            liquify.baseGainmap?.let { out.write(gainmapBytes(it)) }
+            out.writeUTF(liquify.meshFile.orEmpty())
+            out.writeInt(liquify.faces.size)
+            liquify.faces.forEachIndexed { index, face ->
+                out.writeFloat(face.presence)
+                out.writeInt(face.points.size)
+                for (value in face.points) out.writeFloat(value)
+                val values = liquify.faceValues[index].nonZero()
+                out.writeInt(values.size)
+                for ((code, value) in values) {
+                    out.writeInt(code)
+                    out.writeFloat(value)
+                }
+            }
+            out.flush()
+        }.toByteArray()
+
+    /**
+     * 유동화 기록을 읽는다. 망가졌으면 null이다: 기록만 버리고(결과 픽셀은 타일에 있다) 프로젝트는 연다(계획 '저장 방식').
+     * 숫자가 아닌 슬라이더 값은 건너뛰고, 점이 숫자가 아닌 얼굴이 있으면 망가진 것으로 본다.
+     */
+    private fun liquifyOrNull(bytes: ByteArray): LiquifyEntry? =
+        try {
+            val data = DataInputStream(ByteArrayInputStream(bytes))
+            val version = data.readInt()
+            val base = readTiles(data)
+            val baseGainmap = if (data.readBoolean()) {
+                val width = data.readInt()
+                val height = data.readInt()
+                if (width <= 0 || height <= 0) throw UnreadableProjectException("Broken gainmap size ${width}x$height")
+                GainmapEntry(width, height, readTiles(data))
+            } else {
+                null
+            }
+            val meshFile = data.readUTF().ifEmpty { null }
+            val faces = ArrayList<FaceLandmarks>()
+            val values = ArrayList<FaceValues>()
+            repeat(data.readCount()) {
+                val presence = data.readFloat()
+                val count = data.readInt()
+                if (count != FaceModel.LANDMARK_COUNT * 2) throw UnreadableProjectException("Broken face points $count")
+                val points = FloatArray(count) { data.readFloat() }
+                val face = FaceLandmarks(points, presence)
+                if (!face.isFinite) throw UnreadableProjectException("Broken face points")
+                val pairs = List(data.readCount()) { data.readInt() to data.readFloat() }.filter { it.second.isFinite() }
+                faces += face
+                values += FaceValues.of(pairs)
+            }
+            LiquifyEntry(version, base, baseGainmap, meshFile, faces, values)
+        } catch (e: IOException) {
+            null
+        } catch (e: IllegalArgumentException) {
+            null
+        }
 
     /** 게인맵: 가로, 세로, 타일 목록 */
     private fun gainmapBytes(gainmap: GainmapEntry): ByteArray =

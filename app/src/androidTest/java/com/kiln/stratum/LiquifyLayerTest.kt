@@ -10,6 +10,11 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.liquifySource
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.BlankCanvas
@@ -22,6 +27,8 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -104,5 +111,74 @@ class LiquifyLayerTest {
         fun lineTop(x: Int): Int = (0 until 800).first { dark(pixel(after, x, it)) }
         assertTrue("bent ${lineTop(1024)}", lineTop(1024) > 300)
         assertTrue(abs(lineTop(1023) - lineTop(1024)) <= 1)
+    }
+
+    /** 줄 가운데를 오른쪽으로 [distance]픽셀 민 격자 */
+    private fun pushed(distance: Int): LiquifyMesh =
+        LiquifyMesh.identity(PixelSize(1200, 800)).apply {
+            repeat(distance / 5) { step -> brush(LiquifyTool.PUSH, 600f + step * 5f, 400f, radius = 120f, strength = 1f, moveX = 5f, moveY = 0f) }
+        }
+
+    private fun assertSamePixels(expected: Raster, actual: Raster) {
+        assertEquals(expected.tiles.keys, actual.tiles.keys)
+        for ((key, tile) in expected.tiles) {
+            val other = checkNotNull(actual.tiles[key])
+            if (other === tile) continue
+            for (y in 0 until TILE_SIZE) for (x in 0 until TILE_SIZE) assertEquals("tile $key ($x, $y)", tile.pixelAt(x, y), other.pixelAt(x, y))
+        }
+    }
+
+    @Test
+    fun apply_keepsARecord_andReapplyingStartsFromTheOriginalPixels() {
+        // 다시 고칠 수 있게 원래 픽셀·손으로 민 격자·얼굴 값을 남긴다(결정 기록 '얼굴 인식 보정' 3단계)
+        val document = document()
+        val original = rasterOf(document)
+        val face = FaceLandmarks(FloatArray(FaceModel.LANDMARK_COUNT * 2) { it.toFloat() }, 20f)
+        val values = FaceValues.ZERO.with(FaceSlider.EYE_SIZE, 0.3f)
+        val mesh = pushed(40)
+
+        val applied = LiquifyLayer(LayerId(0), mesh.copy(), manual = mesh.copy(), faces = listOf(face), faceValues = listOf(values)).applyTo(document)
+
+        val record = checkNotNull(applied.layers[0].liquify)
+        assertSame(original, record.base)
+        assertEquals(listOf(face), record.faces)
+        assertEquals(listOf(values), record.faceValues)
+        assertEquals(mesh.changedBounds(), record.mesh?.changedBounds())
+        // 다시 연 유동화는 원래 픽셀에서 시작한다
+        assertSame(original, rasterOf(applied.copy(layers = listOf(applied.layers[0].liquifySource))))
+
+        // 같은 격자로 다시 적용하면 원래 픽셀에서 다시 계산해 같은 픽셀이다(두 번 밀리지 않는다)
+        val again = LiquifyLayer(LayerId(0), mesh.copy(), manual = mesh.copy()).applyTo(applied)
+        assertSamePixels(rasterOf(applied), rasterOf(again))
+        // 더 밀면 원래 픽셀에서 계산한 그만큼이다
+        val more = pushed(60)
+        assertSamePixels(rasterOf(LiquifyLayer(LayerId(0), more.copy()).applyTo(document)), rasterOf(LiquifyLayer(LayerId(0), more.copy()).applyTo(applied)))
+    }
+
+    @Test
+    fun allBackToZero_restoresTheOriginalPixels_andDropsTheRecord() {
+        val document = document()
+        val applied = LiquifyLayer(LayerId(0), pushed(40), manual = pushed(40)).applyTo(document)
+
+        val restored = LiquifyLayer(LayerId(0), LiquifyMesh.identity(PixelSize(1200, 800))).applyTo(applied)
+
+        assertNull(restored.layers[0].liquify)
+        assertSame(rasterOf(document), rasterOf(restored))
+        // 손으로 민 것이 없으면(얼굴만) 격자는 남기지 않는다
+        val faceOnly = LiquifyLayer(LayerId(0), pushed(40), manual = LiquifyMesh.identity(PixelSize(1200, 800))).applyTo(document)
+        assertNull(faceOnly.layers[0].liquify?.mesh)
+        assertNotNull(faceOnly.layers[0].liquify)
+    }
+
+    @Test
+    fun paintingTheLayer_bakesTheLiquify() {
+        val applied = LiquifyLayer(LayerId(0), pushed(40), manual = pushed(40)).applyTo(document())
+        val dot = StrokeDabs.place(listOf(StrokePoint(100f, 100f)), 1f)
+
+        val painted = PaintStroke(LayerId(0), dot, BrushSettings(size = 10f, hardness = 1f, color = Color.RED), false).applyTo(applied)
+
+        // 묻지 않고 굳힌다(사용자 결정). 실행 취소하면 기록이 있던 문서로 돌아간다.
+        assertNull(painted.layers[0].liquify)
+        assertNotNull(applied.layers[0].liquify)
     }
 }

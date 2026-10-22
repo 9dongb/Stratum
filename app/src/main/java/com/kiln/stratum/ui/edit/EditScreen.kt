@@ -1605,6 +1605,7 @@ private fun EditCanvas(
     val pickUnavailable = stringResource(R.string.edit_pick_unavailable)
     val magicWand = stringResource(R.string.subtool_select_wand)
     val photoInsertFailed = stringResource(R.string.edit_photo_insert_failed)
+    val liquifyBaked = stringResource(R.string.edit_liquify_baked)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1645,6 +1646,7 @@ private fun EditCanvas(
                 }
                 EditorMessage.PickUnavailable -> snackbarHostState.showSnackbar(pickUnavailable, duration = SnackbarDuration.Long)
                 EditorMessage.PhotoUnreadable -> snackbarHostState.showSnackbar(photoInsertFailed)
+                EditorMessage.LiquifyBaked -> snackbarHostState.showSnackbar(liquifyBaked)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

@@ -268,6 +268,9 @@ object EditScreenTags {
     /** 레이어 줄 작은 그림 구석의 글자 레이어 표시 */
     fun layerTextBadge(id: com.kiln.stratum.engine.document.LayerId): String = "layerTextBadge_${id.value}"
 
+    /** 다시 고칠 수 있는 유동화가 있는 레이어 줄의 유동화 표시 */
+    fun layerLiquifyBadge(id: com.kiln.stratum.engine.document.LayerId): String = "layerLiquifyBadge_${id.value}"
+
     /** 색 줄의 전경색·배경색 칸 */
     fun colorSlot(slot: com.kiln.stratum.settings.ColorSlot): String = "colorSlot_${slot.name}"
 

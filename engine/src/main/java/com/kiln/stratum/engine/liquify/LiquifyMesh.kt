@@ -258,6 +258,14 @@ class LiquifyMesh private constructor(
     /** 같은 값의 새 격자 */
     fun copy(): LiquifyMesh = LiquifyMesh(size, cellSize, dx.copyOf(), dy.copyOf())
 
+    /** [other]와 크기·칸·모든 꼭짓점 값이 같은지(다시 연 유동화에서 바꾼 것이 있는지 볼 때) */
+    fun sameAs(other: LiquifyMesh): Boolean =
+        other === this || (size == other.size && cellSize == other.cellSize && dx.contentEquals(other.dx) && dy.contentEquals(other.dy))
+
+    /** 이 격자가 쓰는 메모리(바이트): 꼭짓점마다 dx·dy 두 float. 실행 취소 기록의 메모리 셈(유동화 기록의 격자)에 쓴다. */
+    val byteCount: Long
+        get() = columns.toLong() * rows * 2 * Float.SIZE_BYTES
+
     /** 꼭짓점 변위들(앱이 그대로 GPU에 올리는 데 쓴다). 한 줄씩 위에서 아래로, dx·dy 순서다. */
     fun copyInto(target: FloatArray) {
         require(target.size >= columns * rows * 2) { "Target too small" }
@@ -347,10 +355,25 @@ class LiquifyMesh private constructor(
 
         /** [size] 문서의 빈(움직이지 않은) 격자 */
         fun identity(size: PixelSize): LiquifyMesh {
-            val cell = max(MIN_CELL, ceil(sqrt(size.width.toDouble() * size.height / MAX_VERTICES)).toInt())
+            val cell = cellSizeFor(size)
             val columns = size.width / cell + 2
             val rows = size.height / cell + 2
             return LiquifyMesh(size, cell, FloatArray(columns * rows), FloatArray(columns * rows))
         }
+
+        /** [size] 문서 격자의 칸(꼭짓점이 [MAX_VERTICES]쯤을 넘지 않는 가장 촘촘한 칸, [MIN_CELL] 이상) */
+        fun cellSizeFor(size: PixelSize): Int = max(MIN_CELL, ceil(sqrt(size.width.toDouble() * size.height / MAX_VERTICES)).toInt())
+
+        /** [size] 문서 격자 하나가 쓰는 메모리(바이트, [byteCount]). 격자를 만들지 않고 어림할 때 쓴다(불러올 메모리 어림). */
+        fun byteCountFor(size: PixelSize): Long {
+            val cell = cellSizeFor(size)
+            return (size.width / cell + 2).toLong() * (size.height / cell + 2) * 2 * Float.SIZE_BYTES
+        }
+
+        /**
+         * 꼭짓점 변위 [dx]·[dy]로 만든 격자(저장한 격자를 읽을 때, [LiquifyMeshCodec]). 칸·배열 크기가 [size]와 맞지 않으면 IllegalArgumentException이다.
+         * 배열은 그대로 쓴다(부르는 쪽이 넘긴 뒤 바꾸지 않는다).
+         */
+        internal fun of(size: PixelSize, cellSize: Int, dx: FloatArray, dy: FloatArray): LiquifyMesh = LiquifyMesh(size, cellSize, dx, dy)
     }
 }

@@ -31,6 +31,11 @@ class FaceLandmarks(val points: FloatArray, val presence: Float) {
     val eyeCenterY: Float
         get() = (y(FaceMeshIndex.LEFT_IRIS) + y(FaceMeshIndex.RIGHT_IRIS)) / 2f
 
+    /** 같은 점·점수면 같은 얼굴이다(저장했다 다시 읽은 얼굴을 견줄 때) */
+    override fun equals(other: Any?): Boolean = other is FaceLandmarks && presence == other.presence && points.contentEquals(other.points)
+
+    override fun hashCode(): Int = 31 * points.contentHashCode() + presence.hashCode()
+
     /** 모든 점이 숫자인지(모델이 NaN을 내면 아니다) */
     val isFinite: Boolean
         get() = points.all { it.isFinite() } && presence.isFinite()

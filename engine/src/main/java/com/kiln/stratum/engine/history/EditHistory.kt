@@ -3,8 +3,11 @@ package com.kiln.stratum.engine.history
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.selection.MaskTile
+import java.util.Collections
+import java.util.IdentityHashMap
 
 /**
  * 실행 취소·다시 실행 기록.
@@ -69,11 +72,10 @@ class EditHistory(
      */
     val bytesInUse: Long
         get() {
-            val tiles = HashSet<Tile>()
-            val masks = HashSet<MaskTile>()
-            addTiles(base, tiles, masks)
-            for (step in steps) addTiles(step.after, tiles, masks)
-            return tiles.sumOf { it.byteCount.toLong() } + masks.sumOf { it.byteCount.toLong() }
+            val usage = Usage()
+            usage.add(base)
+            for (step in steps) usage.add(step.after)
+            return usage.bytes
         }
 
     /**
@@ -82,11 +84,10 @@ class EditHistory(
      */
     val unreleasableBytes: Long
         get() {
-            val tiles = HashSet<Tile>()
-            val masks = HashSet<MaskTile>()
-            addTiles(document, tiles, masks)
-            for (index in position until steps.size) addTiles(steps[index].after, tiles, masks)
-            return tiles.sumOf { it.byteCount.toLong() } + masks.sumOf { it.byteCount.toLong() }
+            val usage = Usage()
+            usage.add(document)
+            for (index in position until steps.size) usage.add(steps[index].after)
+            return usage.bytes
         }
 
     /**
@@ -152,14 +153,32 @@ class EditHistory(
         position--
     }
 
-    private fun addTiles(document: Document, into: MutableSet<Tile>, masks: MutableSet<MaskTile>) {
-        document.selection?.let { masks.addAll(it.tiles.values) }
-        for (layer in document.layers) {
-            when (val content = layer.content) {
-                is RasterContent -> into.addAll(content.raster.tiles.values)
+    /**
+     * 문서들이 쓰는 메모리 셈. 같은 타일·마스크 타일·격자 객체는 한 번만 센다(바뀌지 않은 부분은 단계끼리 함께 쓴다).
+     * 레이어 픽셀·게인맵과, 유동화 기록의 원래 픽셀·게인맵·격자를 센다(원래 픽셀은 결과와 바뀌지 않은 타일을 함께 쓴다).
+     */
+    private class Usage {
+        private val tiles = HashSet<Tile>()
+        private val masks = HashSet<MaskTile>()
+        private val meshes = Collections.newSetFromMap(IdentityHashMap<LiquifyMesh, Boolean>())
+
+        fun add(document: Document) {
+            document.selection?.let { masks.addAll(it.tiles.values) }
+            for (layer in document.layers) {
+                when (val content = layer.content) {
+                    is RasterContent -> tiles.addAll(content.raster.tiles.values)
+                }
+                layer.gainmap?.let { tiles.addAll(it.raster.tiles.values) }
+                layer.liquify?.let { record ->
+                    tiles.addAll(record.base.tiles.values)
+                    record.baseGainmap?.let { tiles.addAll(it.raster.tiles.values) }
+                    record.mesh?.let { meshes += it }
+                }
             }
-            layer.gainmap?.let { into.addAll(it.raster.tiles.values) }
         }
+
+        val bytes: Long
+            get() = tiles.sumOf { it.byteCount.toLong() } + masks.sumOf { it.byteCount.toLong() } + meshes.sumOf { it.byteCount }
     }
 
     companion object {

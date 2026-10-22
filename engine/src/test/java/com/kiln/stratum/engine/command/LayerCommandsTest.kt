@@ -3,10 +3,14 @@ package com.kiln.stratum.engine.command
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.documentWithLayers
 import com.kiln.stratum.engine.layerIds
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.document.Document
@@ -303,5 +307,49 @@ class LayerCommandsTest {
         assertNull(layer.withPixels(Raster.EMPTY).text)
         val moved = spec.moved(5f, -5f)
         assertEquals(moved, layer.withText(Raster.EMPTY, moved).text)
+    }
+
+    /** 유동화 기록이 있는 레이어: 원래 픽셀 [base] 위에 결과 [result]가 있다 */
+    private val base = Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.solid(0xFF336699.toInt())))
+    private val result = Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.solid(0xFF996633.toInt())))
+    private val record = LiquifyRecord(base, null, null, emptyList(), emptyList())
+
+    private fun withLiquify(document: Document, index: Int): Document =
+        document.copy(layers = document.layers.toMutableList().apply { set(index, this[index].withLiquify(result, null, record)) })
+
+    @Test
+    fun rasterizeLayer_dropsTheLiquifyRecord_andKeepsThePixels() {
+        val document = withLiquify(documentWithLayers(2), 1)
+
+        val rasterized = RasterizeLayer(LayerId(1)).applyTo(document)
+
+        assertNull(rasterized.layers[1].liquify)
+        assertSame(result, (rasterized.layers[1].content as RasterContent).raster)
+        assertSame(document.layers[0], rasterized.layers[0])
+    }
+
+    @Test
+    fun duplicateLayer_keepsTheLiquifyRecord_soTheCopyCanBeEditedToo() {
+        val document = withLiquify(documentWithLayers(1), 0)
+
+        val result = DuplicateLayer(LayerId(0), "copy").applyTo(document)
+
+        assertSame(record, result.layers[1].liquify)
+    }
+
+    @Test
+    fun changingThePixels_bakesTheLiquify_andTheSourceIsTheOriginalPixels() {
+        val layer = withLiquify(documentWithLayers(1), 0).layers[0]
+
+        // 다른 명령이 픽셀을 바꾸면 기록을 지운다(사용자 결정 "묻지 않고 굳히기"), 글자로 바꿔도 같다
+        assertNull(layer.withPixels(Raster.EMPTY).liquify)
+        assertNull(layer.withText(Raster.EMPTY, spec).liquify)
+        // 속성만 바꾸면 기록이 남는다
+        assertSame(record, SetLayerOpacity(LayerId(0), 0.4f).applyTo(withLiquify(documentWithLayers(1), 0)).layers[0].liquify)
+        // 다시 연 유동화는 원래 픽셀에서 시작한다
+        assertSame(base, (layer.liquifySource.content as RasterContent).raster)
+        assertNull(layer.liquifySource.liquify)
+        val plain = documentWithLayers(1).layers[0]
+        assertSame(plain, plain.liquifySource)
     }
 }

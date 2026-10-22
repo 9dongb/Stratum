@@ -346,8 +346,13 @@ private fun LayerRow(
     val selectedLabel = stringResource(R.string.layer_selected)
     val hiddenLabel = stringResource(R.string.layer_hidden)
     val textLabel = stringResource(R.string.layer_text_badge)
-    val rowState = listOfNotNull(selectedLabel.takeIf { selected }, hiddenLabel.takeIf { !layer.visible }, textLabel.takeIf { layer.text != null })
-        .joinToString(", ")
+    val liquifyLabel = stringResource(R.string.layer_liquify_badge)
+    val rowState = listOfNotNull(
+        selectedLabel.takeIf { selected },
+        hiddenLabel.takeIf { !layer.visible },
+        textLabel.takeIf { layer.text != null },
+        liquifyLabel.takeIf { layer.liquify }
+    ).joinToString(", ")
     val upLabel = stringResource(R.string.layer_move_up)
     val downLabel = stringResource(R.string.layer_move_down)
     val menuLabel = stringResource(R.string.layer_menu)
@@ -428,18 +433,24 @@ private fun LayerRow(
                         .longPressFirst(openMenu),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를 단다
+                    // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를,
+                    // 다시 고칠 수 있는 유동화가 있는 레이어(결정 기록 '얼굴 인식 보정' 3단계)는 유동화 표시(유동화 도구 아이콘)를 단다
                     Box(Modifier.size(ThumbnailSize)) {
                         LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
-                        if (layer.text != null) {
+                        val badge = when {
+                            layer.text != null -> R.drawable.ic_text_fields to EditScreenTags.layerTextBadge(layer.id)
+                            layer.liquify -> R.drawable.ic_waves to EditScreenTags.layerLiquifyBadge(layer.id)
+                            else -> null
+                        }
+                        if (badge != null) {
                             Icon(
-                                painterResource(R.drawable.ic_text_fields),
+                                painterResource(badge.first),
                                 contentDescription = null,
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .size(TextBadgeSize)
                                     .background(colors.panel, StratumShapes.Thumbnail)
-                                    .testTag(EditScreenTags.layerTextBadge(layer.id)),
+                                    .testTag(badge.second),
                                 tint = colors.textSecondary
                             )
                         }
@@ -493,7 +504,8 @@ private fun LayerRow(
 }
 
 /**
- * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 픽셀로 바꾸기(글자 레이어에만 보임), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
+ * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 픽셀로 바꾸기(글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어에만 보임),
+ * 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
  * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다(이름 바꾸기는 창에서 이름을 받은 뒤). 할 수 없는 항목은 꺼 둔다
  * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
  */
@@ -507,8 +519,9 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
         LayerMenuItem(R.string.layer_rename, canEdit, EditScreenTags.LAYER_MENU_RENAME, onDismiss) { controls.onRename(layers[documentIndex].id) }
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
         // 픽셀로 바꾸기는 글자 레이어에만 보인다(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6).
-        // 다른 레이어에서는 꺼 두지 않고 뺀다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요")
-        if (layers[documentIndex].text != null) {
+        // 다른 레이어에서는 꺼 두지 않고 뺀다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요").
+        // 다시 고칠 수 있는 유동화도 같은 항목으로 직접 굳힌다(결정 기록 '얼굴 인식 보정' 3단계)
+        if (layers[documentIndex].text != null || layers[documentIndex].liquify) {
             LayerMenuItem(R.string.layer_rasterize, canEdit, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
         }
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)

@@ -8,16 +8,24 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-/** 얼굴 보정 슬라이더(결정 기록 '얼굴 인식 보정'). 값은 −1..1(화면의 −100..+100)이고 + = 크게·넓게다. */
-enum class FaceSlider {
+/**
+ * 얼굴 보정 슬라이더(결정 기록 '얼굴 인식 보정'). 값은 −1..1(화면의 −100..+100)이고 + = 크게·넓게다.
+ * [code]는 저장할 때 쓰는 바뀌지 않는 번호다(순서와 상관없이, 새 슬라이더는 새 번호를 더한다).
+ */
+enum class FaceSlider(val code: Int) {
     /** 눈 크기: 두 눈을 저마다의 가운데에서 함께 키우거나 줄인다 */
-    EYE_SIZE,
+    EYE_SIZE(1),
 
     /** 코 너비: 콧방울 사이를 콧방울 선 쪽으로만 넓히거나 좁힌다 */
-    NOSE_WIDTH,
+    NOSE_WIDTH(2),
 
     /** 얼굴 너비: 볼·턱 윤곽을 얼굴 가로축(눈 선) 쪽으로만 밖·안으로 옮긴다 */
-    FACE_WIDTH
+    FACE_WIDTH(3);
+
+    companion object {
+        /** 저장 번호 [code]의 슬라이더. 모르는 번호(더 새 앱이 저장함)면 null */
+        fun ofCode(code: Int): FaceSlider? = entries.firstOrNull { it.code == code }
+    }
 }
 
 /** 얼굴 하나의 슬라이더 값(−1..1). 한 번 만들면 바꾸지 않는다([with]는 새 값). */
@@ -37,6 +45,9 @@ class FaceValues private constructor(private val values: FloatArray) {
     val isZero: Boolean
         get() = values.all { it == 0f }
 
+    /** 0이 아닌 값들(저장용): 슬라이더 저장 번호와 값 */
+    fun nonZero(): List<Pair<Int, Float>> = FaceSlider.entries.filter { this[it] != 0f }.map { it.code to this[it] }
+
     override fun equals(other: Any?): Boolean = other is FaceValues && values.contentEquals(other.values)
 
     override fun hashCode(): Int = values.contentHashCode()
@@ -46,6 +57,10 @@ class FaceValues private constructor(private val values: FloatArray) {
     companion object {
         /** 고친 것이 없는 값 */
         val ZERO = FaceValues(FloatArray(FaceSlider.entries.size))
+
+        /** 저장한 값([nonZero])에서 되살린다. 모르는 번호(더 새 앱의 슬라이더)는 건너뛴다. */
+        fun of(pairs: List<Pair<Int, Float>>): FaceValues =
+            pairs.fold(ZERO) { values, (code, value) -> FaceSlider.ofCode(code)?.let { values.with(it, value) } ?: values }
     }
 }
 

@@ -14,7 +14,11 @@ import com.kiln.stratum.engine.document.BlendMode as LayerBlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.liquifySource
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
@@ -27,34 +31,53 @@ import java.nio.ShortBuffer
 import kotlin.math.ceil
 
 /**
- * [layerId] 레이어에 픽셀 유동화를 적용한다(변위 격자 [mesh]). 픽셀을 다시 계산하는 일이라 원본 해상도에서 GPU로 그린다.
- * 움직인 곳([LiquifyMesh.changedBounds])에 닿는 타일만 다시 그리고, 나머지 타일은 앞 문서와 함께 쓴다.
+ * [layerId] 레이어에 픽셀 유동화를 적용한다(변위 격자 [mesh]: 손으로 민 격자에 얼굴 보정을 합친 것). 픽셀을 다시 계산하는 일이라 원본 해상도에서 GPU로 그린다.
+ * 움직인 곳([LiquifyMesh.changedBounds])에 닿는 타일만 다시 그리고, 나머지 타일은 원래 픽셀과 함께 쓴다.
  * 문서 밖을 읽는 곳은 가장자리 픽셀을 늘인다. 선택 영역과 상관없이 레이어에 건다(포토샵과 같다).
- * [mesh]는 이 명령이 가진 복사본이라 바뀌지 않는다(작업 모드가 [LiquifyMesh.copy]로 넘긴다).
+ *
+ * 다시 고칠 수 있게 레이어에 유동화 기록을 남긴다(결정 기록 '얼굴 인식 보정' 3단계): 유동화 전 원래 픽셀, 손으로 민 격자 [manual],
+ * 찾은 얼굴 [faces]와 그 값 [faceValues]. 레이어에 이미 기록이 있으면(다시 연 유동화) 그 원래 픽셀에서 다시 계산하므로,
+ * 값을 0으로 되돌린 곳은 원래 픽셀로 돌아가고, 움직인 곳이 하나도 없으면 원래 픽셀로 돌리고 기록을 지운다.
+ * [mesh]·[manual]은 이 명령이 가진 사본이라 바뀌지 않는다(작업 모드가 사본을 넘긴다).
  */
-class LiquifyLayer(val layerId: LayerId, val mesh: LiquifyMesh) : CancellableCommand {
+class LiquifyLayer(
+    val layerId: LayerId,
+    val mesh: LiquifyMesh,
+    val manual: LiquifyMesh? = null,
+    val faces: List<FaceLandmarks> = emptyList(),
+    val faceValues: List<FaceValues> = emptyList()
+) : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         val index = document.indexOfLayer(layerId)
         if (index < 0) return document
         val layer = document.layers[index]
-        val raster = (layer.content as? RasterContent)?.raster ?: return document
+        val record = layer.liquify
+        // 다시 연 유동화는 유동화 전 원래 픽셀에서 다시 계산한다
+        val base = record?.base ?: (layer.content as? RasterContent)?.raster ?: return document
+        val baseGainmap = if (record != null) record.baseGainmap else layer.gainmap
         val size = PixelSize(document.width, document.height)
-        if (mesh.size != size || raster.tiles.isEmpty()) return document
-        val changed = mesh.changedBounds() ?: return document
+        if (mesh.size != size || base.tiles.isEmpty()) return document
+        val changed = mesh.changedBounds()
+        if (changed == null) {
+            // 움직인 곳이 없다(모두 되돌림): 기록이 있으면 원래 픽셀로 돌리고 기록을 지운다
+            if (record == null) return document
+            return document.copy(layers = document.layers.toMutableList().apply { set(index, layer.withPixels(base, baseGainmap)) })
+        }
         val warped = try {
-            LiquifyRenderer.warp(raster, size, mesh, changed, checkCanceled)
+            LiquifyRenderer.warp(base, size, mesh, changed, checkCanceled)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
-        if (warped === raster) return document
+        if (warped === base && record == null) return document
         // 게인맵도 같은 변위로 비튼다(결정 기록 'HDR')
         val gainmap = try {
-            layer.gainmap?.let { LiquifyRenderer.warpGainmap(it, size, mesh) }
+            baseGainmap?.let { LiquifyRenderer.warpGainmap(it, size, mesh) }
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
-        val layers = document.layers.toMutableList().apply { set(index, layer.withPixels(warped, gainmap)) }
+        val kept = LiquifyRecord(base, baseGainmap, manual?.takeUnless { it.isIdentity() }, faces, faceValues)
+        val layers = document.layers.toMutableList().apply { set(index, layer.withLiquify(warped, gainmap, kept)) }
         return document.copy(layers = layers)
     }
 
@@ -286,9 +309,12 @@ object LiquifyRenderer {
         }
     """
 
-    /** 미리 보기용 레이어 축소본: [document]에서 [layerId] 레이어만, 불투명도·혼합 모드 없이(보정은 건 채) [level] 단계로 */
+    /**
+     * 미리 보기용 레이어 축소본: [document]에서 [layerId] 레이어만, 불투명도·혼합 모드 없이(보정은 건 채) [level] 단계로.
+     * 유동화 기록이 있는 레이어는 유동화 전 원래 픽셀이다(다시 연 유동화는 원래 픽셀에 격자·얼굴 보정을 다시 건다, [liquifySource]).
+     */
     fun layerPreview(document: Document, layerId: LayerId, level: Int): Bitmap? {
-        val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return null
+        val layer = document.layers.getOrNull(document.indexOfLayer(layerId))?.liquifySource ?: return null
         val alone = document.copy(layers = listOf(layer.copy(opacity = 1f, blendMode = LayerBlendMode.NORMAL)), selection = null)
         return PreviewRenderer.render(alone, level)
     }

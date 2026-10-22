@@ -8,8 +8,11 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.documentWithLayers
+import com.kiln.stratum.engine.liquify.LiquifyMesh
+import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
@@ -221,6 +224,23 @@ class EditHistoryTest {
         val history = EditHistory(photo)
 
         assertEquals(2 * tileBytes, history.bytesInUse)
+    }
+
+    @Test
+    fun bytesInUse_countsTheLiquifyRecord_sharingUnchangedTiles_andItsMeshOnce() {
+        // 유동화 기록의 원래 픽셀은 결과와 바뀌지 않은 타일을 함께 쓴다: 다시 그린 한 장과 격자만 더 센다
+        val base = (canvas.layers[0].content as RasterContent).raster
+        val warped = newTile()
+        val mesh = LiquifyMesh.identity(PixelSize(canvas.width, canvas.height))
+        val record = LiquifyRecord(base, null, mesh, emptyList(), emptyList())
+        val liquified = canvas.copy(layers = listOf(canvas.layers[0].withLiquify(base.withTiles(mapOf(TileKey(1, 0) to warped)), null, record)))
+
+        val history = EditHistory(liquified)
+
+        assertEquals(2 * tileBytes + mesh.byteCount, history.bytesInUse)
+        // 같은 기록을 지닌 다음 단계(불투명도만 바꿈)는 더 쓰지 않는다
+        history.execute(SetLayerOpacity(LayerId(0), 0.5f))
+        assertEquals(2 * tileBytes + mesh.byteCount, history.bytesInUse)
     }
 
     @Test

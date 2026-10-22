@@ -15,13 +15,25 @@ import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.command.RasterizeLayer
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.liquifySource
+import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FaceSlider
+import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.importing.ImportResult
+import com.kiln.stratum.engine.liquify.LiquifyMesh
+import com.kiln.stratum.engine.liquify.LiquifyTool
+import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.ProjectFolder
 import com.kiln.stratum.engine.project.ProjectHeader
+import com.kiln.stratum.engine.project.ProjectManifestCodec
+import com.kiln.stratum.engine.project.RasterEntry
+import com.kiln.stratum.engine.project.TileRef
 import com.kiln.stratum.engine.project.UnreadableProjectException
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
@@ -34,6 +46,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -202,5 +215,92 @@ class ProjectFolderTest {
         assertEquals("", ProjectFolder.readName(directory))
         // 이름을 바꿔도 목차(고친 시각)는 그대로다
         assertEquals(ProjectHeader(40, 30, 1, 2), ProjectFolder.readHeader(directory))
+    }
+
+    private fun meshFiles(): Set<String> = File(directory, "liquify").list()?.toSet() ?: emptySet()
+
+    /** 700×300 사진(6타일)의 가운데를 오른쪽으로 민 유동화(얼굴 하나와 값을 지님) */
+    private fun liquified(): Pair<Document, Document> {
+        val document = photo(700, 300) { x, y -> Color.rgb(x and 0xFF, y and 0xFF, 128) }
+        val mesh = LiquifyMesh.identity(PixelSize(700, 300))
+        repeat(6) { step -> mesh.brush(LiquifyTool.PUSH, 350f + step * 5f, 150f, radius = 60f, strength = 1f, moveX = 5f, moveY = 0f) }
+        val face = FaceLandmarks(FloatArray(FaceModel.LANDMARK_COUNT * 2) { (it % 600).toFloat() }, 18f)
+        val values = FaceValues.ZERO.with(FaceSlider.EYE_SIZE, 0.25f).with(FaceSlider.FACE_WIDTH, -0.5f)
+        return document to LiquifyLayer(LayerId(0), mesh.copy(), manual = mesh, faces = listOf(face), faceValues = listOf(values)).applyTo(document)
+    }
+
+    @Test
+    fun liquifyRecord_roundTrips_sharingUnchangedTiles() {
+        val (original, document) = liquified()
+        val record = checkNotNull(document.layers[0].liquify)
+        val folder = ProjectFolder(directory)
+
+        folder.save(document, 1, 1)
+        val loaded = ProjectFolder(directory).load().document
+        val read = checkNotNull(loaded.layers[0].liquify)
+
+        // 원래 픽셀과 결과가 함께 쓰는 타일은 한 번만 쓴다(6타일 + 다시 그린 타일)
+        val changed = document.raster().tiles.count { (key, tile) -> original.raster().tiles[key] !== tile }
+        assertTrue(changed in 1..4)
+        assertEquals(6 + changed, tileFiles().size)
+        assertEquals(1, meshFiles().size)
+        assertSamePixels(document, loaded)
+        assertSamePixels(original, loaded.copy(layers = listOf(loaded.layers[0].liquifySource)))
+        assertEquals(record.faces, read.faces)
+        assertEquals(record.faceValues, read.faceValues)
+        val mesh = checkNotNull(record.mesh)
+        val readMesh = checkNotNull(read.mesh)
+        for (row in 0 until mesh.rows) for (column in 0 until mesh.columns) {
+            assertEquals(mesh.vertexX(column, row), readMesh.vertexX(column, row), 0f)
+            assertEquals(mesh.vertexY(column, row), readMesh.vertexY(column, row), 0f)
+        }
+
+        // 같은 문서를 다시 저장하면 새로 쓰지 않는다. 굳히면(픽셀로 바꾸기) 원래 픽셀만 쓰던 타일과 격자 파일을 지운다.
+        val files = tileFiles()
+        folder.save(document, 1, 2)
+        assertEquals(files, tileFiles())
+        folder.save(RasterizeLayer(LayerId(0)).applyTo(document), 1, 3)
+        assertEquals(6, tileFiles().size)
+        assertTrue(meshFiles().isEmpty())
+        assertNull(ProjectFolder(directory).load().document.layers[0].liquify)
+    }
+
+    @Test
+    fun missingLiquifyFiles_dropOnlyTheRecord() {
+        val (_, document) = liquified()
+        ProjectFolder(directory).save(document, 1, 1)
+        // 원래 픽셀만 쓰는 타일 파일(결과에 없는 것). 새 폴더 객체로 저장하면 파일 이름이 새로 생기므로 그때마다 목차에서 읽는다.
+        fun baseOnly(): TileRef.File {
+            val manifest = File(directory, ProjectFolder.MANIFEST).inputStream().use { ProjectManifestCodec.read(it) }
+            val used = (manifest.layers[0].content as RasterEntry).tiles.map { it.ref }.toSet()
+            return checkNotNull(manifest.layers[0].liquify).base.map { it.ref }.filterIsInstance<TileRef.File>().first { it !in used }
+        }
+
+        // 격자 파일이 없으면 기록만 버리고 결과 픽셀로 연다
+        File(File(directory, "liquify"), meshFiles().first()).delete()
+        val withoutMesh = ProjectFolder(directory).load().document
+        assertNull(withoutMesh.layers[0].liquify)
+        assertSamePixels(document, withoutMesh)
+
+        // 원래 픽셀의 타일 파일이 없어도 같다
+        ProjectFolder(directory).save(document, 1, 2)
+        assertTrue(File(File(directory, "tiles"), baseOnly().name).delete())
+        val withoutBase = ProjectFolder(directory).load().document
+        assertNull(withoutBase.layers[0].liquify)
+        assertSamePixels(document, withoutBase)
+    }
+
+    @Test
+    fun estimatedBytes_countsTheLiquifyRecord() {
+        val (original, document) = liquified()
+        val folder = ProjectFolder(directory)
+        folder.save(original, 1, 1)
+        val plain = folder.estimatedBytes()
+
+        folder.save(document, 1, 2)
+
+        val tileBytes = TILE_SIZE.toLong() * TILE_SIZE * 4
+        assertEquals(plain + (tileFiles().size - 6) * tileBytes + LiquifyMesh.byteCountFor(PixelSize(700, 300)), folder.estimatedBytes())
+        assertNotNull(document.layers[0].liquify)
     }
 }

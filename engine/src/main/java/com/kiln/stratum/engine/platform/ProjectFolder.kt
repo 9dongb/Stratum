@@ -6,9 +6,13 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.liquify.LiquifyMesh
+import com.kiln.stratum.engine.liquify.LiquifyMeshCodec
 import com.kiln.stratum.engine.project.GainmapEntry
 import com.kiln.stratum.engine.project.LayerEntry
+import com.kiln.stratum.engine.project.LiquifyEntry
 import com.kiln.stratum.engine.project.ProjectHeader
 import com.kiln.stratum.engine.project.ProjectManifest
 import com.kiln.stratum.engine.project.ProjectManifestCodec
@@ -16,6 +20,7 @@ import com.kiln.stratum.engine.project.RasterEntry
 import com.kiln.stratum.engine.project.TileEntry
 import com.kiln.stratum.engine.project.TileRef
 import com.kiln.stratum.engine.project.UnreadableProjectException
+import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.Tile
@@ -42,11 +47,13 @@ class LoadedProject(val document: Document, val createdMillis: Long)
  * - tiles/: 타일 파일. 타일 객체마다 하나이고, 같은 객체를 여러 자리가 함께 쓰면 한 번만 쓴다.
  * - thumbnail.webp: 홈 목록용 작은 그림(앱이 그려서 넘긴다)
  * - name.txt: 프로젝트 이름(UTF-8 글자). 없으면 이름이 없는 것('제목 없음')이다. 목차와 따로 두어 이름만 바꿀 때 목차를 다시 쓰지 않는다.
+ * - liquify/: 유동화 기록의 손으로 민 격자 파일(LiquifyMeshCodec). 격자 객체마다 하나다(결정 기록 '얼굴 인식 보정' 3단계).
  *
- * - 타일은 한 번 만들면 바뀌지 않으므로, 이 폴더에 이미 쓴 타일 객체는 다시 쓰지 않는다. 그래서 바뀐 타일만 새로 쓴다.
+ * - 타일은 한 번 만들면 바뀌지 않으므로, 이 폴더에 이미 쓴 타일 객체는 다시 쓰지 않는다. 그래서 바뀐 타일만 새로 쓴다(격자도 같다).
  * - 한 가지 색 타일(새 캔버스)은 파일 없이 색만 적는다.
  * - 목차는 임시 파일에 다 쓴 뒤 이름을 바꿔 한 번에 바꾼다. 저장하다 앱이 꺼져도 앞 저장본이 그대로 남는다.
- * - 목차가 더 쓰지 않는 타일 파일은 목차를 바꾼 뒤 지운다.
+ * - 목차가 더 쓰지 않는 타일·격자 파일은 목차를 바꾼 뒤 지운다.
+ * - 유동화 기록의 파일이 없거나 망가졌으면 그 기록만 버리고 연다(결과 픽셀은 레이어 타일에 있다).
  *
  * 한 폴더를 여러 스레드에서 동시에 저장·불러오지 않는다(부르는 쪽이 한 번에 하나씩 한다). 파일을 다루므로 메인 스레드가 아닌 곳에서 부른다.
  */
@@ -54,8 +61,13 @@ class ProjectFolder(val directory: File) {
 
     private val tilesDirectory = File(directory, TILES)
 
+    private val liquifyDirectory = File(directory, LIQUIFY)
+
     /** 이 폴더에 이미 쓴(또는 여기서 불러온) 타일 객체와 그 파일 이름 */
     private val savedTiles = IdentityHashMap<Tile, String>()
+
+    /** 이 폴더에 이미 쓴(또는 여기서 불러온) 유동화 격자 객체와 그 파일 이름. 기록의 격자는 바뀌지 않는 사본이다. */
+    private val savedMeshes = IdentityHashMap<LiquifyMesh, String>()
 
     /** 목차 파일 */
     val manifestFile: File
@@ -77,26 +89,33 @@ class ProjectFolder(val directory: File) {
     fun save(document: Document, createdMillis: Long, modifiedMillis: Long, checkCanceled: () -> Unit = {}) {
         if (!tilesDirectory.isDirectory && !tilesDirectory.mkdirs()) throw IOException("Couldn't create $tilesDirectory")
         val referenced = HashSet<String>()
+        val referencedMeshes = HashSet<String>()
+        fun entriesOf(raster: Raster): List<TileEntry> =
+            raster.tiles.map { (key, tile) ->
+                checkCanceled()
+                TileEntry(key.column, key.row, refOf(tile, referenced))
+            }
+        // 게인맵 타일도 같은 타일 파일로 둔다(같은 객체는 한 번만 쓴다)
+        fun entryOf(gainmap: HdrGainmap): GainmapEntry = GainmapEntry(gainmap.width, gainmap.height, entriesOf(gainmap.raster))
         val layers = document.layers.map { layer ->
             val raster = when (val content = layer.content) {
                 is RasterContent -> content.raster
             }
-            val tiles = raster.tiles.map { (key, tile) ->
-                checkCanceled()
-                TileEntry(key.column, key.row, refOf(tile, referenced))
-            }
-            // 게인맵 타일도 같은 타일 파일로 둔다(같은 객체는 한 번만 쓴다)
-            val gainmap = layer.gainmap?.let { gainmap ->
-                GainmapEntry(
-                    gainmap.width,
-                    gainmap.height,
-                    gainmap.raster.tiles.map { (key, tile) ->
-                        checkCanceled()
-                        TileEntry(key.column, key.row, refOf(tile, referenced))
-                    }
+            // 유동화 기록: 원래 픽셀은 결과와 바뀌지 않은 타일을 함께 써서 바뀐 타일만 더 쓴다
+            val liquify = layer.liquify?.let { record ->
+                LiquifyEntry(
+                    record.version,
+                    entriesOf(record.base),
+                    record.baseGainmap?.let { entryOf(it) },
+                    record.mesh?.let { meshFileOf(it, referencedMeshes) },
+                    record.faces,
+                    record.faceValues
                 )
             }
-            LayerEntry(layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(tiles), layer.adjustments, gainmap, layer.visible, layer.text)
+            LayerEntry(
+                layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(entriesOf(raster)), layer.adjustments,
+                layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify
+            )
         }
         val manifest = ProjectManifest(
             width = document.width,
@@ -113,6 +132,8 @@ class ProjectFolder(val directory: File) {
         // 목차를 바꾼 뒤에만 지운다. 그 전에 꺼지면 앞 목차가 이 파일들을 아직 쓴다.
         tilesDirectory.listFiles()?.forEach { if (it.name !in referenced) it.delete() }
         savedTiles.values.retainAll(referenced)
+        liquifyDirectory.listFiles()?.forEach { if (it.name !in referencedMeshes) it.delete() }
+        savedMeshes.values.retainAll(referencedMeshes)
     }
 
     /**
@@ -145,13 +166,33 @@ class ProjectFolder(val directory: File) {
             }
             return Raster.EMPTY.withTiles(tiles)
         }
+        val loadedMeshes = IdentityHashMap<LiquifyMesh, String>()
+        // 유동화 기록. 더 새 계산식이거나 파일이 없거나 망가졌으면 기록만 버린다(결과 픽셀은 레이어 타일에 있다).
+        fun recordOf(entry: LiquifyEntry): LiquifyRecord? {
+            if (entry.version !in 1..LiquifyRecord.VERSION) return null
+            return try {
+                val base = rasterOf(entry.base, grid)
+                val baseGainmap = entry.baseGainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
+                val mesh = entry.meshFile?.let { name ->
+                    BufferedInputStream(FileInputStream(File(liquifyDirectory, name))).use {
+                        LiquifyMeshCodec.read(it, PixelSize(manifest.width, manifest.height))
+                    }.also { loadedMeshes[it] = name }
+                }
+                LiquifyRecord(base, baseGainmap, mesh, entry.faces, entry.faceValues, entry.version)
+            } catch (e: IOException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
         val layers = manifest.layers.map { entry ->
             val raster = when (val content = entry.content) {
                 is RasterEntry -> rasterOf(content.tiles, grid)
             }
             try {
                 val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
-                Layer(LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text)
+                val liquify = entry.liquify?.let { recordOf(it) }
+                Layer(LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text, liquify)
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")
             }
@@ -161,32 +202,37 @@ class ProjectFolder(val directory: File) {
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken document: ${e.message}")
         }
-        // 불러온 타일은 이미 이 폴더에 있으니 다음 저장에서 다시 쓰지 않는다
+        // 불러온 타일·격자는 이미 이 폴더에 있으니 다음 저장에서 다시 쓰지 않는다
         savedTiles.clear()
         savedTiles.putAll(loaded)
+        savedMeshes.clear()
+        savedMeshes.putAll(loadedMeshes)
         return LoadedProject(document, manifest.createdMillis)
     }
 
     /**
-     * 불러오는 데 들 메모리(바이트)의 어림. 목차만 읽어, 타일 파일 수(같은 파일은 한 번)와 한 가지 색 수에 꽉 찬 타일 크기를 곱한다.
-     * 목차를 읽지 못하면 [load]와 같은 예외를 던진다.
+     * 불러오는 데 들 메모리(바이트)의 어림. 목차만 읽어, 타일 파일 수(같은 파일은 한 번)와 한 가지 색 수에 꽉 찬 타일 크기를 곱하고,
+     * 유동화 기록의 격자 파일마다 문서 격자 하나만큼을 더한다. 목차를 읽지 못하면 [load]와 같은 예외를 던진다.
      */
     fun estimatedBytes(): Long {
         val manifest = BufferedInputStream(FileInputStream(manifestFile)).use { ProjectManifestCodec.read(it) }
         val files = HashSet<String>()
         val solids = HashSet<Int>()
+        val meshes = HashSet<String>()
         for (layer in manifest.layers) {
             val entries = when (val content = layer.content) {
                 is RasterEntry -> content.tiles
-            } + layer.gainmap?.tiles.orEmpty()
+            } + layer.gainmap?.tiles.orEmpty() + layer.liquify?.base.orEmpty() + layer.liquify?.baseGainmap?.tiles.orEmpty()
             for (tile in entries) {
                 when (val ref = tile.ref) {
                     is TileRef.File -> files += ref.name
                     is TileRef.Solid -> solids += ref.argb
                 }
             }
+            layer.liquify?.meshFile?.let { meshes += it }
         }
-        return (files.size + solids.size).toLong() * TILE_PIXEL_COUNT * Int.SIZE_BYTES
+        return (files.size + solids.size).toLong() * TILE_PIXEL_COUNT * Int.SIZE_BYTES +
+            meshes.size * LiquifyMesh.byteCountFor(PixelSize(manifest.width, manifest.height))
     }
 
     /** 홈 목록용 작은 그림 [bitmap]을 쓴다(소프트웨어 비트맵). 임시 파일에 다 쓴 뒤 이름을 바꾼다. */
@@ -211,6 +257,7 @@ class ProjectFolder(val directory: File) {
     fun delete() {
         directory.deleteRecursively()
         savedTiles.clear()
+        savedMeshes.clear()
     }
 
     /** [tile]이 있는 곳. 한 가지 색이면 색만, 아니면 파일(처음 보는 타일 객체면 새로 쓴다). 쓴 파일 이름은 [referenced]에 넣는다. */
@@ -224,6 +271,19 @@ class ProjectFolder(val directory: File) {
         }
         referenced += name
         return TileRef.File(name)
+    }
+
+    /** [mesh]의 격자 파일 이름. 처음 보는 격자 객체면 새로 쓴다. 쓴 파일 이름은 [referenced]에 넣는다. */
+    private fun meshFileOf(mesh: LiquifyMesh, referenced: MutableSet<String>): String {
+        val name = savedMeshes[mesh] ?: run {
+            if (!liquifyDirectory.isDirectory && !liquifyDirectory.mkdirs()) throw IOException("Couldn't create $liquifyDirectory")
+            val name = UUID.randomUUID().toString() + MESH_EXTENSION
+            writeAtomically(File(liquifyDirectory, name)) { LiquifyMeshCodec.write(mesh, it) }
+            savedMeshes[mesh] = name
+            name
+        }
+        referenced += name
+        return name
     }
 
     /** [target]을 임시 파일에 다 쓰고 디스크에 내린 뒤 이름을 바꿔 한 번에 바꾼다. */
@@ -249,6 +309,8 @@ class ProjectFolder(val directory: File) {
         const val NAME = "name.txt"
         private const val TILES = "tiles"
         private const val TILE_EXTENSION = ".tile"
+        private const val LIQUIFY = "liquify"
+        private const val MESH_EXTENSION = ".mesh"
         private const val THUMBNAIL_QUALITY = 80
 
         /** 이름 파일에서 읽는 가장 긴 글자 수. 망가진 큰 파일을 다 읽지 않게 한다(앱이 쓰는 이름은 이보다 짧다). */

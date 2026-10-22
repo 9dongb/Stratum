@@ -9,6 +9,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -224,5 +225,20 @@ class FaceWarpsTest {
         }
         assertTrue(abs(worst) < 10f)
         return worst
+    }
+
+    @Test
+    fun values_saveAndRestoreBySliderCode_skippingUnknownSliders() {
+        val values = FaceValues.ZERO.with(FaceSlider.EYE_SIZE, 0.4f).with(FaceSlider.FACE_WIDTH, -0.75f)
+
+        assertEquals(listOf(FaceSlider.EYE_SIZE.code to 0.4f, FaceSlider.FACE_WIDTH.code to -0.75f), values.nonZero())
+        assertEquals(values, FaceValues.of(values.nonZero()))
+        // 더 새 앱의 슬라이더(모르는 번호)는 건너뛴다
+        assertEquals(values, FaceValues.of(values.nonZero() + (999 to 0.5f)))
+        assertTrue(FaceValues.ZERO.nonZero().isEmpty())
+        // 저장 번호는 겹치지 않고, 번호로 슬라이더를 찾는다
+        assertEquals(FaceSlider.entries.size, FaceSlider.entries.map { it.code }.toSet().size)
+        for (slider in FaceSlider.entries) assertEquals(slider, FaceSlider.ofCode(slider.code))
+        assertNull(FaceSlider.ofCode(999))
     }
 }

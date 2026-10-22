@@ -36,6 +36,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.effect.EffectKind
 import com.kiln.stratum.engine.effect.EffectMath
@@ -200,6 +201,12 @@ sealed interface EditorMessage {
 
     /** 넣으려던 사진을 읽지 못했다(사진 넣기, 사용자 피드백 12차). 문서는 그대로다. */
     data object PhotoUnreadable : EditorMessage
+
+    /**
+     * 다시 고칠 수 있던 유동화를 다른 편집(칠하기·옮기기·자르기 등)이 픽셀로 굳혔다(묻지 않음, 사용자 결정 "묻지 않고 굳히기").
+     * 실행 취소하면 다시 고칠 수 있다(결정 기록 '얼굴 인식 보정' 3단계).
+     */
+    data object LiquifyBaked : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -211,6 +218,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * @property thumbnail 레이어 목록의 작은 그림(보정을 건 레이어 픽셀, 하드웨어 비트맵). 빈 레이어는 null이다.
  * @property visible 보이는지(레이어 줄의 눈). 불투명도와 따로다.
  * @property text 다시 고칠 수 있는 글자 레이어의 글자(사용자 피드백 8차 1-6). 글자 도구로 그 상자 안을 누르면 고치고, 레이어 줄에 글자 표시를 단다.
+ * @property liquify 다시 고칠 수 있는 유동화 기록이 있는지(결정 기록 '얼굴 인식 보정' 3단계). 레이어 줄에 유동화 표시를 단다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -220,7 +228,8 @@ data class LayerSummary(
     val adjustments: Adjustments,
     val thumbnail: Bitmap? = null,
     val visible: Boolean = true,
-    val text: TextSpec? = null
+    val text: TextSpec? = null,
+    val liquify: Boolean = false
 )
 
 /**
@@ -674,8 +683,9 @@ class EditorViewModel internal constructor(
      * 열려 있는 유동화 작업: 고른 레이어, 미리 보기 단계, 그 레이어만 그린 축소본, 손으로 민 변위 격자와 GPU에 올릴 그림,
      * 얼굴 보정 값, 작업 모드 안의 되돌리기(획·슬라이더마다 한 단계, 최대 [LIQUIFY_UNDO_STEPS]개), 끄는 손가락 자리.
      * 미리 보기와 적용은 격자에 얼굴 보정([warps])을 합친 것을 그린다(결정 기록 '얼굴 인식 보정').
+     * [reopened]면 유동화 기록이 있는 레이어를 다시 연 것이다: 축소본은 유동화 전 원래 픽셀이고, 격자·얼굴·값은 기록에서 이어받는다(3단계).
      */
-    private class LiquifySession(val layer: LayerId, val level: Int, val image: Bitmap, var mesh: LiquifyMesh, val field: Bitmap) {
+    private class LiquifySession(val layer: LayerId, val level: Int, val image: Bitmap, var mesh: LiquifyMesh, val field: Bitmap, val reopened: Boolean = false) {
         val displacements = FloatArray(mesh.columns * mesh.rows * 2)
         val halves = ShortArray(mesh.columns * mesh.rows * 4)
         val undo = ArrayList<LiquifyStep>()
@@ -769,6 +779,20 @@ class EditorViewModel internal constructor(
 
         /** 바꾼 것이 있는지(손으로 민 곳이나 얼굴 값) */
         fun changed(): Boolean = faceValues.any { !it.isZero } || !mesh.isIdentity()
+
+        /** 연 때의 상태(다시 연 유동화는 기록의 격자·얼굴 값, 아니면 빈 격자). [canApply]가 견준다. */
+        var start: LiquifyStep? = null
+
+        /**
+         * 적용할 것이 있는지. 처음 여는 유동화는 바꾼 것이 있을 때([changed]), 다시 연 유동화는 연 때와 달라졌을 때다
+         * (모두 0으로 되돌린 것도 적용할 것이다: 원래 픽셀로 돌아감). 얼굴을 연 뒤에 찾았으면 그 값은 0에서 시작한 것으로 본다.
+         */
+        fun canApply(): Boolean {
+            if (!reopened) return changed()
+            val from = start ?: return true
+            val count = maxOf(faceValues.size, from.faceValues.size)
+            return !mesh.sameAs(from.mesh) || (0 until count).any { (faceValues.getOrNull(it) ?: FaceValues.ZERO) != (from.faceValues.getOrNull(it) ?: FaceValues.ZERO) }
+        }
     }
 
     /** 유동화 작업 모드 안의 되돌리기 한 단계: 손으로 민 격자(바꾸지 않는 사본)와 얼굴 값 */
@@ -1088,9 +1112,12 @@ class EditorViewModel internal constructor(
         val layer = activeLayerIn(document)
         if (!document.layers[document.indexOfLayer(layer)].visible) return tellHiddenLayer()
         if (document.layers[document.indexOfLayer(layer)].text != null) return askRasterize(layer)
+        // 다시 고칠 수 있는 유동화면 그 기록에서 이어서 고친다(결정 기록 '얼굴 인식 보정' 3단계)
+        val record = document.layers[document.indexOfLayer(layer)].liquify
         val level = levelFor(document)
         startEditing()
         editJob = viewModelScope.launch {
+            // 기록이 있으면 유동화 전 원래 픽셀을 그린다
             val image = renderMutex.withLock {
                 withContext(Dispatchers.Default) { LiquifyRenderer.layerPreview(document, layer, level) }
             }
@@ -1104,14 +1131,24 @@ class EditorViewModel internal constructor(
                 return@launch
             }
             val size = PixelSize(document.width, document.height)
-            val mesh = LiquifyMesh.identity(size)
-            val session = LiquifySession(layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh))
+            val mesh = record?.mesh?.copy() ?: LiquifyMesh.identity(size)
+            val session = LiquifySession(layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh), reopened = record != null)
+            if (record != null && record.faces.isNotEmpty()) {
+                session.faces = record.faces
+                session.faceValues = record.faceValues
+                // 하나면 그 얼굴, 여럿이면 고친 첫 얼굴을 고른다(슬라이더가 바로 보이게)
+                session.selectedFace = if (record.faces.size == 1) 0 else record.faceValues.indexOfFirst { !it.isZero }
+                session.facesChanged()
+            }
+            session.start = session.step()
             liquifySession = session
             if (liquifySize == null) liquifySize = defaultLiquifySize(size)
+            // 다시 연 유동화는 처음부터 기록대로 비튼 모습을 보인다(원래 픽셀이 잠깐 보이지 않게)
+            val preview = if (record != null) drawLiquify(session) else null
             finishEditing()
-            publishLiquify(session, PreviewImage(image, PreviewLevels.wholeRegion(size, level)))
-            // 얼굴 모드로 닫았으면 열자마자 얼굴을 찾는다
-            if (liquifyFaceMode) findFaces(session)
+            publishLiquify(session, PreviewImage(preview ?: image, PreviewLevels.wholeRegion(size, level)))
+            // 얼굴 모드로 닫았으면 열자마자 얼굴을 찾는다(기록에 얼굴이 있으면 다시 찾지 않는다)
+            if (liquifyFaceMode && session.faces == null) findFaces(session)
         }
     }
 
@@ -1128,6 +1165,7 @@ class EditorViewModel internal constructor(
             canUndo = session.undo.isNotEmpty(),
             canRedo = session.redo.isNotEmpty(),
             changed = session.changed(),
+            canApply = session.canApply(),
             busy = busy,
             colorSpace = history?.document?.colorSpace ?: DocumentColorSpace.SRGB,
             faceMode = liquifyFaceMode,
@@ -1189,7 +1227,8 @@ class EditorViewModel internal constructor(
             val faces = try {
                 val picture = renderMutex.withLock {
                     makeRoom(history, needed = 0L, work = faceFinder.workBytes(document))
-                    withContext(Dispatchers.Default) { faceFinder.render(document, layer) { ensureActive() } }
+                    // 얼굴은 유동화 전 원래 픽셀에서 찾는다(기록의 얼굴과 같은 좌표, 3단계)
+                    withContext(Dispatchers.Default) { faceFinder.render(document, layer.liquifySource) { ensureActive() } }
                 }
                 try {
                     withContext(Dispatchers.Default) { faceFinder.search(picture) { ensureActive() } }
@@ -1384,21 +1423,28 @@ class EditorViewModel internal constructor(
             while (liquifyDirty) {
                 liquifyDirty = false
                 val session = liquifySession ?: return@launch
-                // 격자·얼굴 값은 메인 스레드에서만 바꾸므로, 여기서 사본과 얼굴 변형(바꾸지 않는 값)을 받아 합친 뒤 GPU에 올린다
-                session.mesh.copyInto(session.displacements)
-                val warps = session.warps()
-                val columns = session.mesh.columns
-                val rows = session.mesh.rows
-                val cellSize = session.mesh.cellSize
-                val drawn = renderMutex.withLock {
-                    withContext(Dispatchers.Default) {
-                        LiquifyMesh.compose(session.displacements, columns, rows, cellSize, warps)
-                        LiquifyRenderer.fill(session.field, session.displacements, session.halves)
-                        LiquifyRenderer.preview(session.image, session.level, session.field, cellSize)
-                    }
-                }
+                val drawn = drawLiquify(session)
                 if (drawn == null || liquifySession !== session) continue
                 publishLiquify(session, PreviewImage(drawn, PreviewLevels.wholeRegion(session.mesh.size, session.level)), _liquify.value?.busy == true)
+            }
+        }
+    }
+
+    /**
+     * [session]의 지금 격자·얼굴 값으로 비튼 미리 보기를 그린다. 그리지 못하면 null.
+     * 격자·얼굴 값은 메인 스레드에서만 바꾸므로, 메인 스레드에서 사본과 얼굴 변형(바꾸지 않는 값)을 받아 합친 뒤 GPU에 올린다.
+     */
+    private suspend fun drawLiquify(session: LiquifySession): Bitmap? {
+        session.mesh.copyInto(session.displacements)
+        val warps = session.warps()
+        val columns = session.mesh.columns
+        val rows = session.mesh.rows
+        val cellSize = session.mesh.cellSize
+        return renderMutex.withLock {
+            withContext(Dispatchers.Default) {
+                LiquifyMesh.compose(session.displacements, columns, rows, cellSize, warps)
+                LiquifyRenderer.fill(session.field, session.displacements, session.halves)
+                LiquifyRenderer.preview(session.image, session.level, session.field, cellSize)
             }
         }
     }
@@ -1442,21 +1488,25 @@ class EditorViewModel internal constructor(
 
     /**
      * 비튼 것(손으로 민 격자에 얼굴 보정을 합친 것)을 레이어에 적용해(원본 해상도, 실행 취소 한 단계) 작업 모드를 닫는다.
-     * 바꾼 것이 없으면 그냥 닫는다. 메모리가 모자라 적용하지 못하면 작업 모드를 그대로 두고 알린다(다시 해 보거나 취소할 수 있게).
+     * 다시 고칠 수 있게 손으로 민 격자·얼굴·값을 레이어의 유동화 기록으로 남긴다(결정 기록 '얼굴 인식 보정' 3단계).
+     * 적용할 것이 없으면 그냥 닫는다. 메모리가 모자라 적용하지 못하면 작업 모드를 그대로 두고 알린다(다시 해 보거나 취소할 수 있게).
      */
     private fun applyLiquify() {
         val session = liquifySession ?: return
         if (session.pressed || editing) return
         // 얼굴 값이 아주 작으면 합친 변위가 움직였다고 볼 만큼(0.01px)도 안 될 수 있다. 그때 적용은 아무것도 하지 않으므로 그냥 닫는다.
+        // 다시 연 유동화는 움직인 곳이 없어도 적용한다(원래 픽셀로 돌리고 기록을 지움).
         val composed = session.mesh.composedWith(session.warps())
-        if (!session.changed() || composed.isIdentity()) {
+        if (!session.canApply() || (!session.reopened && composed.isIdentity())) {
             cancelLiquify()
             return
         }
         val shown = _liquify.value ?: return
         publishLiquify(session, shown.preview, busy = true)
+        val faces = session.faces.orEmpty()
+        val values = List(faces.size) { session.faceValues.getOrNull(it) ?: FaceValues.ZERO }
         runEdit(
-            LiquifyLayer(session.layer, composed),
+            LiquifyLayer(session.layer, composed, manual = session.mesh.copy(), faces = faces, faceValues = values),
             onCommitted = { closeLiquify() },
             onFinished = {
                 // 기록하지 못했으면 작업 모드가 남아 있다(다시 해 보거나 취소할 수 있게 버튼을 켠다)
@@ -2184,12 +2234,15 @@ class EditorViewModel internal constructor(
         _rasterizeAsk.value = null
     }
 
-    /** 레이어 메뉴의 '픽셀로 바꾸기': 고른 글자 레이어를 픽셀 레이어로 바꾼다(실행 취소 한 단계). 다른 편집을 처리하는 중이면 무시한다. */
+    /**
+     * 레이어 메뉴의 '픽셀로 바꾸기': 고른 글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어를 보통 픽셀 레이어로 바꾼다(실행 취소 한 단계).
+     * 다른 편집을 처리하는 중이면 무시한다.
+     */
     fun rasterizeActiveLayer() {
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
         val layer = document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document))) ?: return
-        if (layer.text != null) edit(RasterizeLayer(layer.id))
+        if (layer.text != null || layer.liquify != null) edit(RasterizeLayer(layer.id))
     }
 
     /**
@@ -2759,6 +2812,8 @@ class EditorViewModel internal constructor(
             var finished = false
             if (showPreview(after, finishEdit = true) { finished = true; onFinished() }) {
                 scheduleSave()
+                // 다시 고칠 수 있던 유동화를 다른 편집이 굳혔으면 짧게 알린다(묻지 않음, 사용자 결정)
+                if (command !is LiquifyLayer && command !is RasterizeLayer && bakesLiquify(before, after)) _messages.trySend(EditorMessage.LiquifyBaked)
                 runPendingLive()
             } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
@@ -2769,6 +2824,10 @@ class EditorViewModel internal constructor(
             }
         }
     }
+
+    /** [before]에서 유동화 기록이 있던 레이어가 [after]에도 있는데 기록이 없어졌는지(다른 편집이 픽셀을 바꿔 굳힘) */
+    private fun bakesLiquify(before: Document, after: Document): Boolean =
+        before.layers.any { layer -> layer.liquify != null && after.layers.getOrNull(after.indexOfLayer(layer.id))?.let { it.liquify == null } == true }
 
     /**
      * 지금 문서를 [choice]대로 [target]에 내보낸다. 문서와 실행 취소 기록은 바꾸지 않는다(CLAUDE.md 5장).
@@ -3035,7 +3094,7 @@ class EditorViewModel internal constructor(
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
                 busy = editing,
-                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text) },
+                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null) },
                 activeLayer = activeLayerIn(document),
                 selection = outline,
                 selectionDetail = selectionDetail,
