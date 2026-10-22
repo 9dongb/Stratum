@@ -3,7 +3,6 @@ package com.kiln.stratum.ui.edit
 import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -75,6 +75,7 @@ import com.kiln.stratum.ui.components.StratumDropdownMenu
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
 import com.kiln.stratum.ui.components.StratumSlider
+import com.kiln.stratum.ui.components.onSecondaryClick
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import com.kiln.stratum.ui.theme.HiddenContentAlpha
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -418,7 +419,13 @@ private fun LayerRow(
             // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
             MenuLongPress {
                 Row(
-                    Modifier.weight(1f).fillMaxHeight().alpha(if (layer.visible) 1f else HiddenContentAlpha).longPressFirst(openMenu),
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .alpha(if (layer.visible) 1f else HiddenContentAlpha)
+                        // 마우스 오른쪽 버튼으로도 메뉴를 연다(사용자 피드백 12차 4)
+                        .onSecondaryClick(openMenu)
+                        .longPressFirst(openMenu),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를 단다

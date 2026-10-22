@@ -17,13 +17,16 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.editLongPressMillis
+import com.kiln.stratum.ui.components.trackMouseHover
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
@@ -126,8 +129,15 @@ fun PaintGestureOverlay(
     val currentHold by rememberUpdatedState(hold)
     // 칠하는 손가락의 화면 자리(브러시 커서). 칠하지 않으면 null.
     var finger by remember { mutableStateOf<Offset?>(null) }
+    // 마우스를 올려 둔 자리(사용자 피드백 12차 4: 칠하기 전에도 붓 원을 보인다). 마우스가 없거나 나가면 null.
+    var hover by remember { mutableStateOf<Offset?>(null) }
     Box(
-        modifier.testTag(tag).pointerInput(document) {
+        modifier
+            .testTag(tag)
+            // 캔버스 위 마우스 포인터는 십자다
+            .pointerHoverIcon(PointerIcon.Crosshair)
+            .trackMouseHover { hover = it }
+            .pointerInput(document) {
             awaitEachGesture {
                 // 두 손가락 조작이 가져간 터치는 받지 않는다
                 val down = awaitFirstDown()
@@ -196,7 +206,7 @@ fun PaintGestureOverlay(
             }
         }
     ) {
-        val at = finger
+        val at = finger ?: hover
         if (cursorSize != null && at != null) BrushCursor(at, cursorSize, view, document)
     }
 }

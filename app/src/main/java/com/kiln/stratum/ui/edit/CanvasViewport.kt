@@ -22,6 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
@@ -31,10 +38,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.transform.Orientation
 import kotlin.math.abs
+import kotlin.math.pow
 
 /**
  * 캔버스 보기 상태를 들고 있는 곳. 두 손가락으로 움직이는 동안 자주 바뀌므로, 그리는 쪽은 그리는 순간에 읽는다.
@@ -128,6 +137,12 @@ class CanvasViewState(initial: CanvasView) {
     }
 }
 
+/** 마우스 휠 한 칸에 확대·축소하는 배율(Ctrl+휠) */
+private const val WHEEL_ZOOM_STEP = 1.15
+
+/** 마우스 휠 한 칸에 옮기는 거리 */
+private val WheelPanStep = 48.dp
+
 /**
  * 문서 크기가 [documentSize]인 문서의 보기 상태. 처음에는 맞춤이고, 다른 문서가 열리면 맞춤으로 돌아간다.
  * 화면 폭에 따라 배치가 바뀌어도 이어지도록, 배치를 고르기 전(편집 화면 맨 위)에서 부른다.
@@ -211,11 +226,16 @@ fun CanvasViewport(
                 clip = true
             }
             .onSizeChanged { area = it }
-            // 스페이스바를 누른 채 끌면 캔버스를 옮긴다(포토샵과 같다). 도구·두 손가락 조작보다 먼저 받아 그 터치는 도구에 가지 않는다.
+            // 스페이스바를 누른 채 끌거나 마우스 가운데 버튼으로 끌면 캔버스를 옮긴다(포토샵과 같다, 사용자 피드백 12차 4).
+            // 마우스의 다른 버튼(오른쪽 등)은 칠하지 않는다. 도구·두 손가락 조작보다 먼저 받아 그 누름은 도구에 가지 않는다.
             .pointerInput(viewState) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    if (!shortcutHost.spaceHeld) return@awaitEachGesture
+                    val buttons = currentEvent.buttons
+                    val mouse = down.type == PointerType.Mouse
+                    val pan = shortcutHost.spaceHeld || (mouse && buttons.isTertiaryPressed)
+                    val otherButton = mouse && !buttons.isPrimaryPressed
+                    if (!pan && !otherButton) return@awaitEachGesture
                     down.consume()
                     var last = down.position
                     while (true) {
@@ -225,7 +245,31 @@ fun CanvasViewport(
                         if (!change.pressed) break
                         val delta = change.position - last
                         last = change.position
-                        if (delta != Offset.Zero) viewState.panBy(delta.x.toDouble(), delta.y.toDouble(), documentSize)
+                        if (pan && delta != Offset.Zero) viewState.panBy(delta.x.toDouble(), delta.y.toDouble(), documentSize)
+                    }
+                }
+            }
+            // 마우스 휠: 굴리면 위아래로, Shift를 누르면 좌우로 옮기고, Ctrl(맥 키보드는 Command)을 누르면 마우스 자리를 기준으로 확대·축소한다.
+            // 화면을 뒤집었으면(화면 반전) 화면에서 보이는 방향 그대로 옮긴다.
+            .pointerInput(viewState) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type != PointerEventType.Scroll) continue
+                        val change = event.changes.firstOrNull() ?: continue
+                        val delta = change.scrollDelta
+                        val modifiers = event.keyboardModifiers
+                        if (modifiers.isCtrlPressed || modifiers.isMetaPressed) {
+                            viewState.zoomBy(WHEEL_ZOOM_STEP.pow(-delta.y.toDouble()), documentSize, change.position.x.toDouble(), change.position.y.toDouble())
+                        } else {
+                            val step = WheelPanStep.toPx().toDouble()
+                            var dx = if (modifiers.isShiftPressed) -delta.y * step else -delta.x * step
+                            var dy = if (modifiers.isShiftPressed) 0.0 else -delta.y * step
+                            if (currentFlip.horizontal) dx = -dx
+                            if (currentFlip.vertical) dy = -dy
+                            viewState.panBy(dx, dy, documentSize)
+                        }
+                        change.consume()
                     }
                 }
             }

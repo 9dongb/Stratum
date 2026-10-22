@@ -5,8 +5,8 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -51,20 +53,21 @@ import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.DividerEdge
-import com.kiln.stratum.ui.components.TopBarAccentButton
-import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
+import com.kiln.stratum.ui.components.TopBarAccentButton
+import com.kiln.stratum.ui.components.TopBarIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
-import com.kiln.stratum.ui.layout.WidthClass
+import com.kiln.stratum.ui.components.trackMouseHover
 import com.kiln.stratum.ui.layout.BarButtonContentInset
-import com.kiln.stratum.ui.layout.workTopBarHeight
-import com.kiln.stratum.ui.layout.rememberTopBarInsets
-import com.kiln.stratum.ui.layout.topBarItem
+import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.isCoverLandscape
 import com.kiln.stratum.ui.layout.layoutClassOf
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.windowInsets
+import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -421,9 +424,14 @@ fun LiquifyOverlay(
     val currentEnabled by rememberUpdatedState(enabled)
     // 손가락 자리(화면 좌표). 떼면 null.
     var finger by remember { mutableStateOf<Offset?>(null) }
+    // 마우스를 올려 둔 자리(사용자 피드백 12차 4: 끌기 전에도 붓 원을 보인다). 마우스가 없거나 나가면 null.
+    var hover by remember { mutableStateOf<Offset?>(null) }
     Box(
         modifier
             .testTag(EditScreenTags.LIQUIFY_OVERLAY)
+            // 캔버스 위 마우스 포인터는 십자다
+            .pointerHoverIcon(PointerIcon.Crosshair)
+            .trackMouseHover { hover = it }
             .pointerInput(document) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -462,7 +470,7 @@ fun LiquifyOverlay(
                 }
             }
     ) {
-        val at = finger
+        val at = finger ?: hover
         if (at != null) BrushCursor(at, brushSize, view, document)
     }
 }

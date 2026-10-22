@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
@@ -146,6 +148,20 @@ class HomeProjectsTest {
         composeRule.onNodeWithTag(HomeTags.DELETE_CONFIRM).performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("p0"), deleted) }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun rightClick_opensTheCardMenu() {
+        // 마우스 오른쪽 버튼으로도 꾹 누르기와 같은 메뉴를 연다(사용자 피드백 12차 4). 카드를 열지는 않는다.
+        show(projects(2))
+        composeRule.onNodeWithTag(HomeTags.project("p0")).performMouseInput {
+            moveTo(center)
+            press(MouseButton.Secondary)
+            release(MouseButton.Secondary)
+        }
+        composeRule.onNodeWithText(text(R.string.action_delete)).assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue(opened.isEmpty()) }
     }
 
     // 이름으로 화면 읽기 동작을 부르는 테스트 함수가 아직 실험 기능이다

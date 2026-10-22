@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -44,6 +46,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.ui.components.editLongPressMillis
+import com.kiln.stratum.ui.components.trackMouseHover
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
 
@@ -210,6 +213,8 @@ fun RetouchOverlay(
     val haptic = LocalHapticFeedback.current
     // 누르고 있는 손가락의 화면 자리. 놓으면 null.
     var finger by remember { mutableStateOf<Offset?>(null) }
+    // 마우스를 올려 둔 자리(사용자 피드백 12차 4: 칠하기 전에도 붓 원을 보인다). 마우스가 없거나 나가면 null.
+    var hover by remember { mutableStateOf<Offset?>(null) }
     // 칠하는 획이 가져오는 간격(문서 픽셀, 칠한 곳 - 가져올 곳). 표시가 붓과 같은 간격으로 따라가게 그린다.
     var strokeOffset by remember { mutableStateOf<SourceOffset?>(null) }
     // 끌어 옮기는 표시의 자리(문서 좌표). 손을 뗀 뒤에는 새 가져올 곳이 들어올 때까지 이 자리에 그린다(옛 자리가 번쩍이지 않게).
@@ -226,6 +231,9 @@ fun RetouchOverlay(
     Box(
         modifier
             .testTag(EditScreenTags.RETOUCH_OVERLAY)
+            // 캔버스 위 마우스 포인터는 십자다
+            .pointerHoverIcon(PointerIcon.Crosshair)
+            .trackMouseHover { hover = it }
             .pointerInput(document) {
                 awaitEachGesture {
                     // 두 손가락 조작이 가져간 터치는 받지 않는다
@@ -347,8 +355,8 @@ fun RetouchOverlay(
             }
             SelectionAnts(pick.outline, null, view, document, Modifier.matchParentSize())
         }
-        // 칠하는 손가락 자리의 브러시 커서
-        val touching = finger
+        // 칠하는 손가락(또는 올려 둔 마우스) 자리의 브러시 커서
+        val touching = finger ?: hover
         if (touching != null) BrushCursor(touching, radius * 2f, view, document)
         if (usesSource) {
             val offset = strokeOffset

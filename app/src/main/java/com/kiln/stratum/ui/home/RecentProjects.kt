@@ -75,6 +75,7 @@ import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumDropdownMenu
+import com.kiln.stratum.ui.components.onSecondaryClick
 import com.kiln.stratum.ui.layout.HideStatusBarInSheet
 import com.kiln.stratum.ui.layout.StratumDialog
 import com.kiln.stratum.ui.layout.WidthClass
@@ -199,6 +200,8 @@ private fun ProjectCard(
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(StratumShapes.Card)
+                        // 마우스 오른쪽 버튼으로도 메뉴를 연다(사용자 피드백 12차 4). 고르는 중에는 꾹 누르기처럼 고르기다.
+                        .onSecondaryClick(if (selecting) onToggle else ({ menuOpen = true }))
                         .combinedClickable(
                             onClick = if (selecting) onToggle else onOpen,
                             onLongClick = if (selecting) onToggle else ({ menuOpen = true }),
