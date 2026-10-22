@@ -105,20 +105,21 @@ class PlacementTest {
     }
 
     /** 수치 바 크기: 자리 굵기 48, 길이 80~160, 안쪽 여백 4, 사이 8, 캔버스 끝과 8 */
-    private val bar = SliderBarMetrics(thickness = 48, minLength = 80, maxLength = 160, padding = 4, gap = 8, margin = 8)
+    private val bar = SliderBarMetrics(thickness = 48, track = 32, minLength = 80, maxLength = 160, padding = 4, gap = 8, margin = 8)
 
     @Test
     fun sideSliderBar_sitsOnTheRightEdge_centeredVertically_withSlotsFromTheTop() {
         // 사용자 피드백 12차: 캔버스 오른쪽 가장자리, 세로 가운데. 슬라이더는 위부터 크기·경도·불투명도 순서로 쌓는다
         val area = Region(100, 50, 1000, 750)
         val layout = sideSliderBar(3, area, bar)
-        // 카드 폭 = 자리 48 + 안쪽 여백 4×2, 높이 = 160×3 + 8×2 + 4×2
-        assertEquals(Region(1000 - 8 - 56, 50 + (700 - 504) / 2, 1000 - 8, 50 + (700 - 504) / 2 + 504), layout.box)
+        // 카드 폭 = 트랙 32 + 여백 4×2(위아래와 같은 여백, 사용자 요청), 높이 = 160×3 + 8×2 + 4×2
+        assertEquals(Region(1000 - 8 - 40, 50 + (700 - 504) / 2, 1000 - 8, 50 + (700 - 504) / 2 + 504), layout.box)
         assertEquals(3, layout.slots.size)
+        // 누르는 영역(48)은 카드 가운데에 맞춰 양옆으로 4씩 나온다
         val top = layout.box.top + 4
-        assertEquals(Region(layout.box.left + 4, top, layout.box.right - 4, top + 160), layout.slots[0])
-        assertEquals(Region(layout.box.left + 4, top + 168, layout.box.right - 4, top + 328), layout.slots[1])
-        assertEquals(Region(layout.box.left + 4, top + 336, layout.box.right - 4, top + 496), layout.slots[2])
+        assertEquals(Region(layout.box.left - 4, top, layout.box.right + 4, top + 160), layout.slots[0])
+        assertEquals(Region(layout.box.left - 4, top + 168, layout.box.right + 4, top + 328), layout.slots[1])
+        assertEquals(Region(layout.box.left - 4, top + 336, layout.box.right + 4, top + 496), layout.slots[2])
     }
 
     @Test
@@ -142,14 +143,14 @@ class PlacementTest {
         // 사용자 피드백 12차 1-1: 패널을 열면 아래 가운데(선택 작업 표시줄 자리)로 옮겨 가로 한 줄
         val area = Region(0, 0, 1000, 700)
         val docked = bottomSliderBar(3, area, center = 520, bottomInset = 0, m = bar)
-        // 카드 폭 = 160·3 + 8·2 + 4·2 = 504, 높이 = 48 + 8
-        assertEquals(Region(520 - 252, 700 - 8 - 56, 520 + 252, 700 - 8), docked.box)
-        // 왼쪽부터 크기·경도·불투명도, 가로로 길다
+        // 카드 폭 = 160·3 + 8·2 + 4·2 = 504, 높이 = 트랙 32 + 4×2
+        assertEquals(Region(520 - 252, 700 - 8 - 40, 520 + 252, 700 - 8), docked.box)
+        // 왼쪽부터 크기·경도·불투명도, 가로로 길다. 누르는 영역(48)은 카드 위아래로 4씩 나온다
         assertEquals(listOf(272, 440, 608), docked.slots.map { it.left })
         for (slot in docked.slots) {
             assertEquals(160, slot.width)
             assertEquals(48, slot.height)
-            assertEquals(docked.box.top + 4, slot.top)
+            assertEquals(docked.box.top - 4, slot.top)
         }
         // 선택 도구의 작업 표시줄이 있으면 그 위에 쌓는다
         assertEquals(700 - 60 - 8, bottomSliderBar(3, area, 520, bottomInset = 60, m = bar).box.bottom)

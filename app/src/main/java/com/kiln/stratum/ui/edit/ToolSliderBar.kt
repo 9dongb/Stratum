@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.ToolSliderTrack
+import com.kiln.stratum.ui.components.ToolSliderTrackThickness
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.SliderBarMetrics
 import com.kiln.stratum.ui.layout.Span
@@ -44,7 +45,7 @@ import kotlin.math.roundToInt
 /**
  * 펼친 화면의 도구 수치 바(사용자 피드백 12차: "펼친 화면 기준 도구 수치 조절을 오른쪽에 바에서 일괄 조절합니다. (최대 3개까지)").
  * 고른 도구의 수치 칸([sliders], 크기 → 경도 → 불투명도 → 그 밖, [splitSliders])을 캔버스 오른쪽 가장자리의 세로 슬라이더로 둔다.
- * 프로크리에이트 슬라이더 느낌으로, 패널 색 카드 안에 둥근 트랙과 밝은 알약 손잡이([ToolSliderTrack])가 위부터 쌓인다.
+ * 프로크리에이트 슬라이더 느낌으로, 패널 색 카드 안에 둥근 트랙과 밝은 알약 손잡이([ToolSliderTrack])가 위부터 쌓인다. 카드와 트랙 사이 여백은 네 변이 같다.
  * 이름표는 늘 두지 않고, 끄는 동안 바 옆(아래 가운데에서는 위)에 '크기 60 px' 말풍선을 띄운다. 크기·경도는 지금처럼 캔버스 가운데에 크기 원이 보인다.
  * 받은 영역(캔버스)을 다 차지하지만 터치는 카드만 받는다(카드 위를 눌러도 캔버스에 칠하지 않음). 슬라이더를 끌기 시작하면 [onTouch]를 부른다
  * (띠의 옵션 창을 닫음, 다른 칸을 누를 때와 같다).
@@ -188,7 +189,9 @@ private fun ValueBubble(cell: SliderCell) {
 
 /**
  * 수치 바의 크기(사용자 피드백 12차). 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다.
- * 슬라이더 자리(누르는 영역) 굵기 48dp에 트랙 32dp, 카드 폭은 도구 막대와 같은 56dp다. 슬라이더 길이는 캔버스 높이에 맞춰 80~160dp.
+ * 슬라이더 자리(누르는 영역) 굵기 48dp에 보이는 트랙 32dp([ToolSliderTrackThickness])이고, 카드는 트랙을 네 변 모두 [SliderBarPadding]만큼
+ * 감싼다(폭 40dp, 사용자 요청: "상하랑 동일하게 좌우 여백도 맞춰주세요"). 누르는 영역은 카드 양옆으로 4dp씩 나온다.
+ * 슬라이더 길이는 캔버스 높이에 맞춰 80~160dp.
  */
 private val SliderBarThickness = 48.dp
 private val SliderBarMinLength = 80.dp
@@ -205,6 +208,7 @@ internal const val DockMillis = 250
 
 private fun Density.sliderBarMetrics() = SliderBarMetrics(
     thickness = SliderBarThickness.roundToPx(),
+    track = ToolSliderTrackThickness.roundToPx(),
     minLength = SliderBarMinLength.roundToPx(),
     maxLength = SliderBarMaxLength.roundToPx(),
     padding = SliderBarPadding.roundToPx(),

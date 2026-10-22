@@ -156,19 +156,25 @@ class ToolSliderBarTest {
         val canvas = bounds(EditScreenTags.CANVAS)
         val bar = bounds(EditScreenTags.TOOL_SLIDER_BAR)
         val dp = dp(EditScreenTags.TOOL_SLIDER_BAR)
-        // 캔버스 오른쪽 끝에서 8dp 안, 세로 가운데. 카드 폭은 도구 막대와 같은 56dp다.
+        // 캔버스 오른쪽 끝에서 8dp 안, 세로 가운데
         assertEquals(canvas.right - 8 * dp, bar.right, 2 * dp)
         assertEquals(canvas.center.y, bar.center.y, 2 * dp)
-        assertEquals(56 * dp, bar.width, 2 * dp)
         // 사용자: "슬라이더 우선순위는 1. 크기 2. 경도 3. 불투명도"
         val size = bounds(EditScreenTags.BRUSH_SIZE)
         val hardness = bounds(EditScreenTags.BRUSH_HARDNESS)
         val opacity = bounds(EditScreenTags.BRUSH_OPACITY)
         assertTrue("$size $hardness $opacity", size.bottom <= hardness.top && hardness.bottom <= opacity.top)
+        // 카드는 트랙(32dp)을 네 변 모두 4dp로 감싼다: 폭 40dp, 위아래 끝에서 트랙까지도 4dp
+        // (사용자: "상하랑 동일하게 좌우 여백도 맞춰주세요")
+        assertEquals(40 * dp, bar.width, 2 * dp)
+        assertEquals(4 * dp, size.top - bar.top, 1 * dp)
+        assertEquals(4 * dp, bar.bottom - opacity.bottom, 1 * dp)
+        assertEquals((bar.width - 32 * dp) / 2, size.top - bar.top, 1 * dp)
         for (slider in listOf(size, hardness, opacity)) {
-            assertTrue("$slider should be inside $bar", slider.left >= bar.left && slider.right <= bar.right && slider.top >= bar.top && slider.bottom <= bar.bottom)
-            // 누르는 영역은 48dp 폭, 세로로 길다
+            // 누르는 영역은 48dp 폭으로 카드 가운데에 맞춰 양옆으로 4dp씩 나온다. 세로로 길다.
             assertEquals(48 * dp, slider.width, 2 * dp)
+            assertEquals(bar.center.x, slider.center.x, 1 * dp)
+            assertTrue("$slider should be within $bar", slider.top >= bar.top && slider.bottom <= bar.bottom)
             assertTrue("$slider should be tall", slider.height > slider.width)
         }
     }
@@ -284,13 +290,16 @@ class ToolSliderBarTest {
         val dp = dp(EditScreenTags.TOOL_SLIDER_BAR)
         assertEquals(bounds(EditScreenTags.TOP_BAR).center.x, bar.center.x, 2 * dp)
         assertEquals(bottom - 8 * dp, bar.bottom, 2 * dp)
-        assertEquals(56 * dp, bar.height, 2 * dp)
+        // 옆에 있을 때와 같이 카드는 트랙을 네 변 모두 4dp로 감싸고(높이 40dp), 누르는 영역(48dp)은 위아래로 4dp씩 나온다
+        assertEquals(40 * dp, bar.height, 2 * dp)
         val sliders = tags.map { bounds(it) }
         for (slider in sliders) {
-            assertTrue("$slider should be inside $bar", slider.left >= bar.left && slider.right <= bar.right && slider.top >= bar.top && slider.bottom <= bar.bottom)
+            assertTrue("$slider should be within $bar", slider.left >= bar.left && slider.right <= bar.right)
             assertEquals(48 * dp, slider.height, 2 * dp)
+            assertEquals(bar.center.y, slider.center.y, 1 * dp)
             assertTrue("$slider should be wide", slider.width > slider.height)
         }
+        assertEquals(4 * dp, sliders.first().left - bar.left, 1 * dp)
         assertEquals(sliders.map { it.left }.sorted(), sliders.map { it.left })
     }
 
