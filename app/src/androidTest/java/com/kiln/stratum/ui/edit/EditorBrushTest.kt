@@ -172,6 +172,43 @@ class EditorBrushTest {
     }
 
     @Test
+    fun renameLayer_cleansTheName_asOneStep_andIgnoresABlankName() {
+        // 2026-10-22 사용자 요청: 레이어 메뉴에 이름 바꾸기. 이름은 프로젝트 이름과 같은 규칙으로 다듬는다.
+        val opened = openWhite()
+        val layer = opened.layers.single()
+
+        onMain { viewModel.renameLayer(layer.id, "  Sky \n  blue  ") }
+
+        val renamed = awaitReady { !it.busy && it.revision > opened.revision }
+        assertEquals("Sky blue", renamed.layers.single().name)
+        // 빈 이름·같은 이름은 바꾸지 않는다(기록도 하지 않음)
+        onMain {
+            viewModel.renameLayer(layer.id, "   ")
+            viewModel.renameLayer(layer.id, "Sky blue")
+        }
+        val same = awaitReady { !it.busy }
+        assertEquals(renamed.revision, same.revision)
+        onMain { viewModel.undo() }
+        val undone = awaitReady { !it.busy && it.revision > renamed.revision }
+        assertEquals(layer.name, undone.layers.single().name)
+    }
+
+    @Test
+    fun editText_keepsANameTheUserChose() {
+        // 이름을 바꾼 글자 레이어는 글자를 고쳐도 그 이름을 지킨다(포토샵과 같다). 바꾸지 않았으면 새 첫 줄을 따른다(위 테스트).
+        val added = withText()
+        val layer = added.layers.last()
+        onMain { viewModel.renameLayer(layer.id, "Title") }
+        val renamed = awaitReady { !it.busy && it.revision > added.revision }
+
+        onMain { viewModel.editText(layer.id, "Hello", TextStyle(size = 40f, color = Color.BLACK)) }
+
+        val edited = awaitReady { !it.busy && it.revision > renamed.revision }
+        assertEquals("Hello", edited.layers.last().text?.text)
+        assertEquals("Title", edited.layers.last().name)
+    }
+
+    @Test
     fun brushOnATextLayer_doesNotPaint_andAsksToConvertWhenTheFingerLifts() {
         val added = withText()
         onMain { viewModel.setBrush(BrushSettings(size = 20f, hardness = 1f, color = Color.RED)) }

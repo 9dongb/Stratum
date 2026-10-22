@@ -137,6 +137,31 @@ class LayerCommandsTest {
     }
 
     @Test
+    fun renameLayer_changesOnlyTheName_andKeepsPixels() {
+        val document = documentWithLayers(3)
+
+        val result = RenameLayer(LayerId(1), "Sky").applyTo(document)
+
+        assertEquals("Sky", result.layers[1].name)
+        // 픽셀(같은 객체)·불투명도·혼합 모드는 그대로이고, 다른 레이어와 원래 문서도 그대로다
+        assertSame(document.layers[1].content, result.layers[1].content)
+        assertEquals(document.layers[1].copy(name = "Sky"), result.layers[1])
+        assertSame(document.layers[0], result.layers[0])
+        assertSame(document.layers[2], result.layers[2])
+        assertEquals(listOf(0L, 1L, 2L), result.layerIds())
+    }
+
+    @Test
+    fun renameLayer_keepsDocumentWhenSameNameOrUnknown_andRejectsBlank() {
+        val document = documentWithLayers(2)
+        val name = document.layers[0].name
+
+        assertSame(document, RenameLayer(LayerId(0), name).applyTo(document))
+        assertSame(document, RenameLayer(LayerId(9), "Sky").applyTo(document))
+        assertThrows(IllegalArgumentException::class.java) { RenameLayer(LayerId(0), " ") }
+    }
+
+    @Test
     fun setLayerOpacity_changesOnlyTargetLayer() {
         val document = documentWithLayers(3)
 

@@ -189,7 +189,7 @@ private fun RowScope.TabToolItem(
                     }
                 }
         ) {
-            ToolIcon(tool, contentDescription = null)
+            ToolIcon(tool, selection.iconOf(tool), contentDescription = null)
         }
     }
 }
@@ -226,7 +226,7 @@ private fun RowScope.MoreTabItem(selection: ToolSelection, enabled: Boolean, ope
             }
     ) {
         // 더보기 칸은 하위 도구 메뉴를 열지 않아 삼각형 없이 아이콘만 그린다(하위 도구는 막대에서 고른다)
-        Icon(painterResource(active?.icon ?: R.drawable.ic_grid_view), contentDescription = null)
+        Icon(painterResource(active?.let { selection.iconOf(it) } ?: R.drawable.ic_grid_view), contentDescription = null)
     }
 }
 
@@ -279,7 +279,8 @@ fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool
                                 }
                             }
                     ) {
-                        Icon(painterResource(tool.icon), contentDescription = null)
+                        // 고른 하위 도구의 아이콘(명암은 닷지·번, 흐림은 흐림·선명·스머지)
+                        Icon(painterResource(selection.iconOf(tool)), contentDescription = null)
                     }
                 }
             }

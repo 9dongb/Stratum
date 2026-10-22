@@ -113,4 +113,24 @@ class ToolSelectionTest {
         assertEquals(SubTool.SELECT_LASSO, restored.modeOf(EditTool.Select))
         assertNull(checkNotNull(ToolSelection.Saver.restore(listOf("Spin"))).active)
     }
+
+    @Test
+    fun iconOf_showsTheChosenSubTool_likePhotoshop() {
+        // 도구 막대·탭 줄의 아이콘은 고른 하위 도구의 아이콘이다(펼친 화면에서도 지금 하위 도구가 보이게, 2026-10-22)
+        val selection = ToolSelection(active = null)
+        assertEquals(SubTool.RETOUCH_SPOT.icon, selection.iconOf(EditTool.Retouch))
+        assertEquals(SubTool.TONE_DODGE.icon, selection.iconOf(EditTool.Tone))
+
+        selection.choose(SubTool.RETOUCH_CLONE)
+        selection.choose(SubTool.TONE_BURN)
+        assertEquals(SubTool.RETOUCH_CLONE.icon, selection.iconOf(EditTool.Retouch))
+        // 지금 고르지 않은 도구도 마지막에 고른 하위 도구로 보인다
+        assertEquals(SubTool.RETOUCH_CLONE.icon, selection.iconOf(EditTool.Retouch).also { assertEquals(EditTool.Tone, selection.active) })
+        assertEquals(SubTool.TONE_BURN.icon, selection.iconOf(EditTool.Tone))
+
+        // 한 번 하고 끝나는 하위 도구(크기 변경)는 아이콘을 바꾸지 않고, 하위 도구가 없는 도구는 도구 아이콘이다
+        selection.choose(SubTool.RESIZE)
+        assertEquals(SubTool.CROP.icon, selection.iconOf(EditTool.Transform))
+        assertEquals(EditTool.Brush.icon, selection.iconOf(EditTool.Brush))
+    }
 }

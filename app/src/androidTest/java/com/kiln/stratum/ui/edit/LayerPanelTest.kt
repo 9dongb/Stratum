@@ -18,14 +18,17 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
@@ -38,10 +41,12 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.LongPressTimes
+import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -123,6 +128,11 @@ class LayerPanelTest {
         override fun rasterize() {
             calls += "rasterize ${active.value}"
             layers = layers.map { if (it.id == active) it.copy(text = null) else it }
+        }
+
+        override fun rename(id: LayerId, name: String) {
+            calls += "rename ${id.value} $name"
+            layers = layers.map { if (it.id == id) it.copy(name = name) else it }
         }
 
         companion object {
@@ -365,13 +375,56 @@ class LayerPanelTest {
     }
 
     @Test
-    fun pixelLayer_hasNothingToConvert() {
+    fun pixelLayer_menuHasNoConvertItem() {
+        // 픽셀로 바꾸기는 글자 레이어에만 보인다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요")
         val fake = FakeLayers(2)
         openCompactLayers(fake)
 
         row(0).performTouchInput { longClick() }
 
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertDoesNotExist()
+    }
+
+    @Test
+    fun rename_opensAPromptWithTheName_andSendsTheCleanedName() {
+        // 2026-10-22 사용자 요청: "옵션에 레이어 이름 변경 옵션도 넣으려 합니다"(메뉴 맨 위, 커버는 아래 시트)
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        row(0).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RENAME).assertIsEnabled().performClick()
+
+        val field = composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD)
+        field.assertTextContains("Layer 0")
+        field.performTextReplacement("  Sky \n  blue ")
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals("rename 0 Sky blue", fake.calls.last()) }
+    }
+
+    @Test
+    fun rename_onTheMainScreen_isACenteredDialog_andABlankNameTurnsOffOk() {
+        val fake = FakeLayers(2)
+        show(fake, 930, 700)
+        composeRule.togglePanel(MainPanel.LAYERS)
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RENAME).performClick()
+
+        // 펼친 화면은 아래 시트가 아니라 화면 가운데의 창이다(키보드가 열리기 전에 잰다)
+        composeRule.waitForIdle()
+        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
+        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("card $card not centered in $screen", abs(card.center.x - screen.center.x) <= 2f)
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).performTextReplacement("   ")
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).performTextReplacement("Sky")
+        // 접은 에뮬레이터에 큰 화면을 줄여 넣으면 키보드가 창을 거의 덮어 누르는 자리가 빗나간다(기술 주의점). 누르기 동작을 바로 부른다
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.runOnIdle { assertEquals("rename 1 Sky", fake.calls.last()) }
     }
 
     @Test

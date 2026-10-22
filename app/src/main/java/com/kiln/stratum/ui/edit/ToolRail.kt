@@ -146,7 +146,7 @@ private fun RailToolButton(
                     )
                     .semantics { this.selected = selected }
             ) {
-                ToolIcon(tool, contentDescription = stringResource(tool.label))
+                ToolIcon(tool, selection.iconOf(tool), contentDescription = stringResource(tool.label))
             }
         }
     }

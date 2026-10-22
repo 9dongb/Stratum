@@ -103,6 +103,21 @@ data class SetLayerVisible(val layerId: LayerId, val visible: Boolean) : EditCom
         }
 }
 
+/**
+ * [layerId] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기', 2026-10-22 사용자 요청). 픽셀·글자 정보는 그대로다.
+ * 없는 레이어이거나 이름이 같으면 그대로 둔다. 이름 다듬기(공백·길이)는 화면 쪽이 하고, 빈 이름은 받지 않는다.
+ */
+data class RenameLayer(val layerId: LayerId, val name: String) : EditCommand {
+    init {
+        require(name.isNotBlank()) { "Layer name must not be blank" }
+    }
+
+    override fun applyTo(document: Document): Document =
+        document.updateLayer(layerId) { layer ->
+            if (layer.name == name) layer else layer.copy(name = name)
+        }
+}
+
 /** [layerId] 레이어의 혼합 모드를 [blendMode]로 바꾼다. 없는 레이어이거나 값이 같으면 그대로 둔다. */
 data class SetLayerBlendMode(val layerId: LayerId, val blendMode: BlendMode) : EditCommand {
     override fun applyTo(document: Document): Document =

@@ -179,6 +179,8 @@
     <string name="layer_row_description">%1$s, %2$s, opacity %3$d%%</string>
     <string name="layer_selected">Selected</string>
     <string name="layer_menu">Layer menu</string>
+    <string name="layer_rename">Rename layer</string>
+    <string name="layer_rename_label">Name</string>
     <string name="layer_duplicate">Duplicate layer</string>
     <string name="layer_merge_down">Merge down</string>
     <string name="layer_merge_visible">Merge visible</string>

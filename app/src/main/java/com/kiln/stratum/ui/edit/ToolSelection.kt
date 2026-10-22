@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -32,6 +33,13 @@ class ToolSelection(active: EditTool?, modes: Map<EditTool, SubTool> = emptyMap(
 
     /** [tool]을 고르면 시작할 하위 도구. 하위 도구가 없는 도구면 null. */
     fun modeOf(tool: EditTool): SubTool? = modes[tool] ?: tool.subTools.firstOrNull { !it.oneShot }
+
+    /**
+     * 도구 막대·탭 줄·더보기 줄에 보일 [tool]의 아이콘: 그 도구에서 고른 하위 도구의 아이콘이다(포토샵처럼, 2026-10-22 펼친 화면 점검).
+     * 그래서 펼친 화면에서도 지금 하위 도구(스팟 복구·복제 도장 등)가 보인다. 하위 도구가 없는 도구는 도구 아이콘이다.
+     */
+    @DrawableRes
+    fun iconOf(tool: EditTool): Int = modeOf(tool)?.icon ?: tool.icon
 
     /** 자르기·변형 도구를 고르면 시작할 하위 도구(자르기 또는 회전·뒤집기) */
     val transformMode: SubTool

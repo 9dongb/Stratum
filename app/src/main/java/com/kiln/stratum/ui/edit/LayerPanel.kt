@@ -120,6 +120,9 @@ interface LayerActions {
     /** 고른 글자 레이어를 픽셀 레이어로 바꾼다(레이어 메뉴의 '픽셀로 바꾸기', 사용자 피드백 8차 1-6) */
     fun rasterize() {}
 
+    /** [id] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청) */
+    fun rename(id: LayerId, name: String) {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : LayerActions {
         override fun select(id: LayerId) = Unit
@@ -157,7 +160,9 @@ class LayerControls(
     val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
     /** 화면 반전(보기). 레이어 탭 버튼 줄에 그 버튼이 있어 함께 넘긴다(사용자 피드백 7차, 결정 기록 '화면 반전'). */
     val viewFlip: ViewFlip = ViewFlip.None,
-    val onViewFlip: (ViewFlip) -> Unit = {}
+    val onViewFlip: (ViewFlip) -> Unit = {},
+    /** 레이어 메뉴의 '이름 바꾸기': 편집 화면이 그 레이어의 이름 바꾸기 창을 띄운다 */
+    val onRename: (LayerId) -> Unit = {}
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -475,8 +480,8 @@ private fun LayerRow(
 }
 
 /**
- * 레이어 줄을 길게 누르면 뜨는 메뉴: 복제, 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
- * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다. 할 수 없는 항목은 꺼 둔다
+ * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 픽셀로 바꾸기(글자 레이어에만 보임), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
+ * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다(이름 바꾸기는 창에서 이름을 받은 뒤). 할 수 없는 항목은 꺼 둔다
  * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
  */
 @Composable
@@ -484,10 +489,15 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
     val actions = controls.actions
     val canEdit = controls.canEdit
     StratumDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
         val layers = controls.layers
-        // 글자 레이어만: 픽셀로 바꾸기(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6)
-        LayerMenuItem(R.string.layer_rasterize, canEdit && layers[documentIndex].text != null, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
+        // 이름 바꾸기: 창에서 새 이름을 받는다(2026-10-22 사용자 요청: "옵션에 레이어 이름 변경 옵션도 넣으려 합니다")
+        LayerMenuItem(R.string.layer_rename, canEdit, EditScreenTags.LAYER_MENU_RENAME, onDismiss) { controls.onRename(layers[documentIndex].id) }
+        LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
+        // 픽셀로 바꾸기는 글자 레이어에만 보인다(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6).
+        // 다른 레이어에서는 꺼 두지 않고 뺀다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요")
+        if (layers[documentIndex].text != null) {
+            LayerMenuItem(R.string.layer_rasterize, canEdit, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
+        }
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
         val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible
         LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)

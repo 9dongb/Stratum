@@ -676,6 +676,16 @@ class RetouchToolTest {
     }
 
     @Test
+    fun editScreen_switchingToAnotherTool_clearsTheHintAtOnce() {
+        // 2026-10-22 펼친 화면 점검: 선택 도구로 바꾼 뒤에도 리터칭 안내가 몇 초 남았다. 떠난 도구의 안내는 바로 지운다.
+        openRetouchOnTheCover()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(hint(R.string.retouch_hint_spot))
+
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+    }
+
+    @Test
     fun editScreen_choosingHealOrClone_putsTheSourceInTheMiddleOfTheVisibleCanvas() {
         // 사용자 피드백 10차 4: "버튼 없어도 기본적으로 화면에 가져올 곳이 보여지고 사용자가 이를 옮기기만하면 됩니다"
         openRetouchOnTheCover()

@@ -171,11 +171,14 @@ enum class EditTool(
     }
 }
 
-/** 도구 아이콘. 하위 도구가 있으면 오른쪽 아래에 작은 삼각형을 겹쳐 그린다. */
+/**
+ * 도구 아이콘. 하위 도구가 있으면 오른쪽 아래에 작은 삼각형을 겹쳐 그린다.
+ * [icon]은 보일 그림이다. 도구 막대·탭 줄은 고른 하위 도구의 아이콘([ToolSelection.iconOf])을 넘긴다.
+ */
 @Composable
-fun ToolIcon(tool: EditTool, contentDescription: String?) {
+fun ToolIcon(tool: EditTool, @DrawableRes icon: Int, contentDescription: String?) {
     Box {
-        Icon(painter = painterResource(tool.icon), contentDescription = contentDescription)
+        Icon(painter = painterResource(icon), contentDescription = contentDescription)
         if (tool.hasSubTools) {
             SubToolMark(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 2.dp))
         }

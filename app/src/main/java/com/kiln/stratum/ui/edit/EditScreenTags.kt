@@ -152,11 +152,16 @@ object EditScreenTags {
     const val LAYER_BLEND = "layerBlend"
 
     /** 레이어 줄을 길게 누르면 뜨는 메뉴의 항목 */
+    const val LAYER_MENU_RENAME = "layerMenuRename"
     const val LAYER_MENU_DUPLICATE = "layerMenuDuplicate"
     const val LAYER_MENU_MERGE_DOWN = "layerMenuMergeDown"
     const val LAYER_MENU_MERGE_VISIBLE = "layerMenuMergeVisible"
     const val LAYER_MENU_DELETE = "layerMenuDelete"
     const val LAYER_MENU_RASTERIZE = "layerMenuRasterize"
+
+    /** 레이어 이름 바꾸기 창의 이름 칸과 확인 버튼 */
+    const val LAYER_RENAME_FIELD = "layerRenameField"
+    const val LAYER_RENAME_OK = "layerRenameOk"
 
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"

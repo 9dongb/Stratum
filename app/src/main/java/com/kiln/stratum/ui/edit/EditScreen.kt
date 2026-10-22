@@ -110,6 +110,7 @@ import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -322,6 +323,8 @@ fun EditScreen(
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
     // 색 팔레트에서 고르던 색. 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var palette by rememberSaveable(stateSaver = PaletteDraft.Saver) { mutableStateOf<PaletteDraft?>(null) }
+    // 이름을 바꾸는 레이어(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청). 접기·펼치기에도 창이 남는다.
+    var renamingLayer by rememberSaveable { mutableStateOf<Long?>(null) }
     // 스포이드 버튼을 켠 곳(브러시·글자). 켜면 다음에 캔버스를 누른 자리의 색을 고르고 꺼진다. 도구를 바꾸면 꺼진다.
     var eyedropperTarget by rememberSaveable { mutableStateOf<ColorTarget?>(null) }
     LaunchedEffect(selection.active) { eyedropperTarget = null }
@@ -465,7 +468,7 @@ fun EditScreen(
         // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 뜨면 옵션 창을 닫는다.
         // 패널은 그대로 둔다(창·작업 모드 아래에 남았다가, 닫히면 다시 보인다)
         val dialogOpen = resizeInput != null || textDraft != null || rasterizeAsk != null || exportDraft != null || palette != null ||
-            state is EditorState.AskSize || liquify != null
+            renamingLayer != null || state is EditorState.AskSize || liquify != null
         LaunchedEffect(dialogOpen) {
             if (dialogOpen) {
                 floating.closeFlyout()
@@ -518,7 +521,8 @@ fun EditScreen(
         val layerControls = ready?.let {
             LayerControls(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
-                viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits }
+                viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
+                onRename = { id -> renamingLayer = id.value }
             )
         }
         // 고른 브러시·지우개의 설정
@@ -558,9 +562,16 @@ fun EditScreen(
         LaunchedEffect(helpMode, helpText) {
             if (helpMode == null || helpText == null || toolHelpSeen.hasSeen(helpMode)) return@LaunchedEffect
             gestureToast.show(helpText, toolHelpToastMillis(helpText))
-            // 다른 알림(두 손가락 톡 등)에 곧 가렸거나 하위 도구를 곧 바꿨으면 본 것으로 적지 않아, 다음에 고를 때 다시 보인다
-            delay(TOOL_HELP_SEEN_MILLIS)
-            if (gestureToast.text == helpText) toolHelpSeen.markSeen(helpMode)
+            try {
+                // 다른 알림(두 손가락 톡 등)에 곧 가렸거나 하위 도구를 곧 바꿨으면 본 것으로 적지 않아, 다음에 고를 때 다시 보인다
+                delay(TOOL_HELP_SEEN_MILLIS)
+                if (gestureToast.text == helpText) toolHelpSeen.markSeen(helpMode)
+                awaitCancellation()
+            } finally {
+                // 하위 도구·도구를 바꾸거나 내려놓으면 떠난 도구의 안내는 바로 지운다(2026-10-22 펼친 화면 점검: 선택 도구로 바꾼 뒤에도
+                // 리터칭 안내가 남았다). 그 사이 다른 알림이 떴으면 그대로 둔다.
+                if (gestureToast.text == helpText) gestureToast.hide()
+            }
         }
         // AI 제거를 고르면 채우기 모델을 미리 불러 둔다(처음 지울 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val removeChosen = ready != null && activeTool == EditTool.Retouch && retouchRemoving
@@ -1147,6 +1158,21 @@ fun EditScreen(
             ) {
                 Text(stringResource(R.string.rasterize_message), style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
             }
+        }
+        // 레이어 이름 바꾸기 창(레이어 메뉴, 2026-10-22 사용자 요청). 그 레이어가 없어지면(실행 취소 등) 창도 사라진다.
+        val renaming = renamingLayer?.let { id -> ready?.layers?.firstOrNull { it.id.value == id } }
+        if (renaming != null && ready != null) {
+            LayerNamePrompt(
+                layerId = renaming.id,
+                initial = renaming.name,
+                widthClass = widthClass,
+                busy = ready.busy,
+                onDismiss = { renamingLayer = null },
+                onRename = { name ->
+                    layerActions.rename(renaming.id, name)
+                    renamingLayer = null
+                }
+            )
         }
         val draft = exportDraft
         if (draft != null && ready != null) {

@@ -26,6 +26,7 @@ import com.kiln.stratum.engine.command.EditSequence
 import com.kiln.stratum.engine.command.MoveLayer
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.command.RasterizeLayer
+import com.kiln.stratum.engine.command.RenameLayer
 import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
@@ -709,6 +710,7 @@ class EditorViewModel internal constructor(
         override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
         override fun setVisible(id: LayerId, visible: Boolean) = setLayerVisible(id, visible)
         override fun rasterize() = rasterizeActiveLayer()
+        override fun rename(id: LayerId, name: String) = renameLayer(id, name)
     }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
@@ -1308,6 +1310,20 @@ class EditorViewModel internal constructor(
     }
 
     /**
+     * [id] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기', 실행 취소 한 단계, 2026-10-22 사용자 요청).
+     * 이름은 프로젝트 이름과 같은 규칙으로 다듬는다(줄바꿈·연속 공백은 공백 하나, 앞뒤 공백을 지우고 50자까지, [ProjectNames.clean]).
+     * 다듬은 이름이 비거나 지금 이름과 같으면 바꾸지 않는다. 다른 편집을 처리하는 중이거나 슬라이더를 끄는 중이면 무시한다.
+     */
+    fun renameLayer(id: LayerId, name: String) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val layer = document.layers.getOrNull(document.indexOfLayer(id)) ?: return
+        val cleaned = ProjectNames.clean(name)
+        if (cleaned.isEmpty() || cleaned == layer.name) return
+        edit(RenameLayer(id, cleaned))
+    }
+
+    /**
      * 전경색·배경색 중 [slot]을 [color]로 바꾼다(팔레트 확인·스포이드). 브러시·글자는 전경색으로 칠한다.
      * 두 색은 설정 저장소에 남아 앱을 다시 켜도 그대로다(결정 기록 '전경색·배경색').
      */
@@ -1417,13 +1433,16 @@ class EditorViewModel internal constructor(
 
     /**
      * [layerId] 글자 레이어의 글자를 [text]·[style]로 고쳐 같은 자리에 다시 그리고 그 레이어를 고른다(실행 취소 한 단계, 사용자 피드백 8차 1-6).
-     * 레이어 이름도 새 글자의 첫 줄로 바꾼다. 다른 편집을 처리하는 중이거나 글자 레이어가 아니면 무시한다.
+     * 레이어 이름도 새 글자의 첫 줄로 바꾼다. 다만 사용자가 이름을 바꾼 레이어(이름이 지금 글자의 첫 줄과 다름)는 그 이름을 지킨다
+     * (레이어 이름 바꾸기, 2026-10-22, 포토샵과 같다). 다른 편집을 처리하는 중이거나 글자 레이어가 아니면 무시한다.
      */
     fun editText(layerId: LayerId, text: String, style: TextStyle) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || drawing != null || text.isBlank()) return
-        if (document.layers.getOrNull(document.indexOfLayer(layerId))?.text == null) return
-        runEdit(EditTextLayer(layerId, text.take(TextStyle.MAX_LENGTH), style, textLayerName(text)), select = layerId)
+        val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return
+        val spec = layer.text ?: return
+        val name = if (layer.name == textLayerName(spec.text)) textLayerName(text) else layer.name
+        runEdit(EditTextLayer(layerId, text.take(TextStyle.MAX_LENGTH), style, name), select = layerId)
     }
 
     /** 글자 레이어의 이름: 글자의 첫 줄(앞 20자) */
