@@ -394,23 +394,21 @@ class SelectionToolTest {
         composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.ADD)).assertIsOn()
         composeRule.onNodeWithTag(EditScreenTags.selectionMode(SelectionMode.REPLACE)).assertIsOff()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
-        // 페더는 띠가 아니라 오른쪽 수치 바의 슬라이더다(사용자 피드백 12차)
-        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
         composeRule.runOnIdle {
             assertEquals(SelectionMode.ADD, options.mode)
             assertEquals(fractionToFeather(0.2f), options.feather, 0f)
         }
 
-        // 자동 선택은 수치 바에 허용치, 띠에 '이어진 곳만' 켜고 끄는 칸이 있다(사용자 피드백 12차, 전에는 허용치 창 안)
+        // 자동 선택은 허용치 칸이고, 그 창에 '이어진 곳만'이 있다
         // 하위 도구는 고른 도구를 다시 눌러 연 메뉴에서 고른다(띠에는 하위 도구 칸이 없다)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_WAND)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.SELECTION_FEATHER).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_TOLERANCE).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
-        composeRule.onNode(hasTestTag(EditScreenTags.SELECTION_CONTIGUOUS) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
-            .assertIsOn()
-            .performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_CONTIGUOUS).performClick()
         composeRule.runOnIdle {
             assertEquals(128, options.tolerance)
             assertEquals(false, options.contiguous)
@@ -427,8 +425,8 @@ class SelectionToolTest {
         for (mode in SelectionMode.entries) {
             composeRule.onNode(hasTestTag(EditScreenTags.selectionMode(mode)) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
         }
-        // 개체 선택은 수치가 없어 오른쪽 수치 바가 없다
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("feather")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.strip("tolerance")).assertDoesNotExist()
         // 수치 칸이 없어 띠 맨 끝에 구분선이 남지 않는다(검토에서 찾음): 마지막 칸 아래는 칸 바탕 둘레와 띠의 아래 여백(약 9dp)뿐이고,
         // 구분선이 남으면 간격·구분선만큼(11dp) 더 내려간다
         val strip = composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).fetchSemanticsNode()

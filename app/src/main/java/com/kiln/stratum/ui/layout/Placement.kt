@@ -1,7 +1,5 @@
 package com.kiln.stratum.ui.layout
 
-import kotlin.math.roundToInt
-
 /** 한 축 위의 구간(픽셀). [start] 이상 [end] 미만이다. */
 data class Span(val start: Int, val end: Int)
 
@@ -97,73 +95,4 @@ fun stripTop(anchor: Span, height: Int, area: Span): Int {
         else -> centered
     }
     return top.coerceAtMost(area.end - height).coerceAtLeast(area.start)
-}
-
-/**
- * 도구 수치 바의 크기(픽셀, 사용자 피드백 12차: "펼친 화면 기준 도구 수치 조절을 오른쪽에 바에서 일괄 조절합니다"). [thickness]는 슬라이더 자리의
- * 굵기(누르는 영역), [track]은 보이는 트랙의 굵기, [minLength]~[maxLength]는 슬라이더 길이, [padding]은 카드와 트랙 사이 여백(네 변 같음),
- * [gap]은 슬라이더 사이, [margin]은 카드와 캔버스 끝 사이다.
- */
-data class SliderBarMetrics(
-    val thickness: Int,
-    val track: Int,
-    val minLength: Int,
-    val maxLength: Int,
-    val padding: Int,
-    val gap: Int,
-    val margin: Int
-)
-
-/** 도구 수치 바 카드([box])와 그 안 슬라이더 자리([slots], 위·왼쪽부터)(창 좌표) */
-data class SliderBarLayout(val box: Region, val slots: List<Region>)
-
-/**
- * 캔버스 오른쪽 가장자리의 세로 수치 바: [area](캔버스 영역) 오른쪽 끝에서 [SliderBarMetrics.margin] 안, 세로 가운데. 슬라이더 [count]개를 위부터
- * 쌓고, 길이는 영역 높이에 맞춰 [SliderBarMetrics.minLength]~[SliderBarMetrics.maxLength]다(캔버스가 낮으면 줄인다). 그래도 넘치면 위 끝부터 놓는다.
- * 카드는 보이는 트랙을 네 변 모두 [SliderBarMetrics.padding]만큼 감싸고(사용자 요청: "상하랑 동일하게 좌우 여백도 맞춰주세요"), 슬라이더 자리
- * (누르는 영역)는 카드 가운데에 맞춰 트랙보다 넓은 만큼 카드 양옆으로 나온다.
- */
-fun sideSliderBar(count: Int, area: Region, m: SliderBarMetrics): SliderBarLayout {
-    val room = area.height - 2 * m.margin - 2 * m.padding - (count - 1) * m.gap
-    val length = (room / count.coerceAtLeast(1)).coerceAtMost(m.maxLength).coerceAtLeast(m.minLength)
-    val width = m.track + 2 * m.padding
-    val height = count * length + (count - 1).coerceAtLeast(0) * m.gap + 2 * m.padding
-    val right = area.right - m.margin
-    val top = (area.top + (area.height - height) / 2).coerceAtLeast(area.top + m.margin)
-    val box = Region(right - width, top, right, top + height)
-    val slotLeft = box.left + (width - m.thickness) / 2
-    val slots = List(count) { index ->
-        val start = top + m.padding + index * (length + m.gap)
-        Region(slotLeft, start, slotLeft + m.thickness, start + length)
-    }
-    return SliderBarLayout(box, slots)
-}
-
-/**
- * 레이어·조정 패널을 열면 아래 가운데로 옮겨 가로 한 줄이 된 수치 바(사용자 피드백 12차 1-1: "레이어 패널이 펼쳐지면 수치 조절 바가 부드러운
- * 애니메이션과 함께 하단 중앙으로 이동합니다. (선택 도구의 액션 보여지는 위치로)"). 카드의 가로 가운데를 [center](화면 가운데, 영역 좌표)에 맞추되
- * [area] 안으로 밀고, 아래 끝은 [area] 아래 끝에서 [bottomInset](선택 도구 작업 표시줄이 차지한 높이) + [SliderBarMetrics.margin] 위다.
- * 슬라이더는 왼쪽부터 놓고, 길이는 영역 폭에 맞춰 [SliderBarMetrics.minLength]~[SliderBarMetrics.maxLength]다. 카드·누르는 영역은 옆에 있을 때와 같다([sideSliderBar]).
- */
-fun bottomSliderBar(count: Int, area: Region, center: Int, bottomInset: Int, m: SliderBarMetrics): SliderBarLayout {
-    val room = area.width - 2 * m.margin - 2 * m.padding - (count - 1) * m.gap
-    val length = (room / count.coerceAtLeast(1)).coerceAtMost(m.maxLength).coerceAtLeast(m.minLength)
-    val width = count * length + (count - 1).coerceAtLeast(0) * m.gap + 2 * m.padding
-    val height = m.track + 2 * m.padding
-    val left = (center - width / 2).coerceAtMost(area.right - m.margin - width).coerceAtLeast(area.left + m.margin)
-    val bottom = area.bottom - bottomInset - m.margin
-    val box = Region(left, bottom - height, left + width, bottom)
-    val slotTop = box.top + (height - m.thickness) / 2
-    val slots = List(count) { index ->
-        val start = left + m.padding + index * (length + m.gap)
-        Region(start, slotTop, start + length, slotTop + m.thickness)
-    }
-    return SliderBarLayout(box, slots)
-}
-
-/** [from]에서 [to]로 [fraction](0..1)만큼 옮긴 수치 바. 카드와 슬라이더 자리의 네 끝을 따로 잇는다(옆 ↔ 아래 옮겨 가는 애니메이션). */
-fun lerp(from: SliderBarLayout, to: SliderBarLayout, fraction: Float): SliderBarLayout {
-    fun mix(a: Int, b: Int) = a + ((b - a) * fraction).roundToInt()
-    fun mix(a: Region, b: Region) = Region(mix(a.left, b.left), mix(a.top, b.top), mix(a.right, b.right), mix(a.bottom, b.bottom))
-    return SliderBarLayout(mix(from.box, to.box), from.slots.zip(to.slots) { a, b -> mix(a, b) })
 }

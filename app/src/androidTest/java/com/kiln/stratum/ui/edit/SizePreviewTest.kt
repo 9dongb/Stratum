@@ -117,15 +117,14 @@ class SizePreviewTest {
     }
 
     /** [sliderTag] 슬라이더를 누른 채 끄는 동안 크기 원이 보이고, 손을 떼면 바로 사라진다 */
-    private fun dragShowsTheSizeUntilRelease(sliderTag: String, vertical: Boolean = false) {
+    private fun dragShowsTheSizeUntilRelease(sliderTag: String) {
         composeRule.waitForIdle()
         composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
 
         composeRule.onNodeWithTag(sliderTag).performTouchInput {
             down(center)
-            // 오른쪽 수치 바의 슬라이더는 세로라 위로 끈다(트랙 방향으로 끌어야 값이 바뀐다)
-            moveBy(if (vertical) Offset(0f, -height / 8f) else Offset(width / 8f, 0f))
+            moveBy(Offset(width / 8f, 0f))
         }
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
@@ -149,40 +148,44 @@ class SizePreviewTest {
         dragShowsTheSizeUntilRelease(EditScreenTags.BRUSH_HARDNESS)
     }
 
-    /** 도구 막대로 [tool]을 고르고, 오른쪽 수치 바의 [tags] 슬라이더마다 끄는 동안만 크기 원이 보이는지 본다(사용자 피드백 12차) */
-    private fun barSlidersShowTheSize(tool: EditTool, vararg tags: String) {
+    /** 도구 막대로 [tool]을 고르고, 띠의 [cells] 칸(칸 이름 → 슬라이더 이름표)마다 옵션 창을 열어 끄는 동안만 크기 원이 보이는지 본다 */
+    private fun stripSlidersShowTheSize(tool: EditTool, vararg cells: Pair<String, String>) {
         composeRule.onNodeWithTag(EditScreenTags.railTool(tool)).performScrollTo().performClick()
-        for (tag in tags) dragShowsTheSizeUntilRelease(tag, vertical = true)
+        for ((cell, tag) in cells) {
+            composeRule.onNodeWithTag(EditScreenTags.strip(cell)).performScrollTo().performClick()
+            dragShowsTheSizeUntilRelease(tag)
+        }
     }
 
     @Test
     fun mainPortrait_retouchAndToneSizeAndHardness_showTheSize() {
         showEditScreen(700, 900)
 
-        barSlidersShowTheSize(EditTool.Retouch, EditScreenTags.RETOUCH_SIZE, EditScreenTags.RETOUCH_HARDNESS)
-        barSlidersShowTheSize(EditTool.Tone, EditScreenTags.TONE_SIZE, EditScreenTags.TONE_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Retouch, "size" to EditScreenTags.RETOUCH_SIZE, "hardness" to EditScreenTags.RETOUCH_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Tone, "size" to EditScreenTags.TONE_SIZE, "hardness" to EditScreenTags.TONE_HARDNESS)
     }
 
     @Test
     fun mainLandscape_eraserSizeAndHardness_showTheSize() {
         showEditScreen(930, 700)
 
-        barSlidersShowTheSize(EditTool.Eraser, EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS)
+        stripSlidersShowTheSize(EditTool.Eraser, "size" to EditScreenTags.BRUSH_SIZE, "hardness" to EditScreenTags.BRUSH_HARDNESS)
     }
 
     @Test
-    fun barGoneMidDrag_doesNotLeaveTheSizeBehind() {
+    fun flyoutClosedMidDrag_doesNotLeaveTheSizeBehind() {
         showEditScreen(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performTouchInput {
             down(center)
-            moveBy(Offset(0f, -height / 8f))
+            moveBy(Offset(width / 8f, 0f))
         }
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertExists()
 
-        // 손을 떼지 않은 채 뒤로 가기로 도구를 닫아 수치 바가 사라져도 크기 원은 사라진다
+        // 손을 떼지 않은 채 뒤로 가기로 옵션 창이 닫혀도 크기 원은 사라진다
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.SIZE_PREVIEW).assertDoesNotExist()
     }
 

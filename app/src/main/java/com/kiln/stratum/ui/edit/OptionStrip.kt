@@ -2,14 +2,18 @@ package com.kiln.stratum.ui.edit
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,6 +46,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
@@ -57,6 +63,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -69,7 +76,7 @@ import com.kiln.stratum.settings.StripPosition
 import com.kiln.stratum.ui.components.AccentIconButton
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumIconToggleButton
-import com.kiln.stratum.ui.components.ToolSliderTrack
+import com.kiln.stratum.ui.components.StratumVerticalSlider
 import com.kiln.stratum.ui.components.scrollFadeEdges
 import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.layout.placeInside
@@ -166,28 +173,24 @@ class IconCell(
 ) : StripItem
 
 /**
- * 수치 칸(크기·경도·불투명도·그 밖): 이름([caption])·값([value])과 슬라이더([slider]).
- * 펼친 화면에서는 띠에 두지 않고 캔버스 오른쪽 수치 바의 슬라이더가 된다([splitSliders]·[ToolSliderBar], 사용자 피드백 12차). 바에 들어가지 않는
- * 칸(셋을 넘음, 지금은 없음)만 띠에 남아, 값 칸처럼 위에 이름, 아래에 값을 보이고 누르면 옵션 창에 가로 슬라이더가 뜬다([SliderFlyout]).
- * 커버 한 줄 막대에서는 값 칩이다(이름표·값·슬라이더가 같다).
+ * 슬라이더 칸: 값 칸처럼 위에 작은 이름([caption]), 아래에 값([value])을 보이고, 누르면 칸 옆에 얇은 세로 슬라이더 창이 뜬다
+ * (사용자 요청 '세로 슬라이더', 결정 기록 '도구 옵션 띠'). [extra]는 값 표시 아래에 함께 둘 것(허용치의 '이어진 곳만')이다.
  */
 class SliderCell(
     override val key: String,
     val caption: String,
     val value: String,
     val slider: StripSlider,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val extra: (@Composable () -> Unit)? = null
 ) : StripItem {
     override val title: String
         get() = caption
-
-    override val flyout: @Composable () -> Unit
-        get() = { SliderFlyout(this) }
 }
 
 /**
- * 수치 칸의 값과 할 일. [fraction]은 0(아래·왼쪽 끝)~1(위·오른쪽 끝), [onFraction]은 끄는 대로 부르고 [onFinished]는 손을 뗄 때 부른다.
- * [tag]는 슬라이더 이름표(커버 막대·오른쪽 수치 바의 슬라이더가 같다). [preview]가 있으면 슬라이더가 사라질 때 크기 원을 끈다.
+ * 슬라이더 칸의 값과 할 일. [fraction]은 0(아래 끝)~1(위 끝), [onFraction]은 끄는 대로 부르고 [onFinished]는 손을 뗄 때 부른다.
+ * [tag]는 슬라이더 이름표(커버 옵션의 슬라이더와 같다). [preview]가 있으면 슬라이더 창이 사라질 때 크기 원을 끈다.
  */
 class StripSlider(
     val fraction: Float,
@@ -379,7 +382,7 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
     ) {
         when (item) {
             is ValueCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
-            is SliderCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open) { state.toggleFlyout(item.key) }
+            is SliderCell -> ValueCellView(item.key, item.caption, item.value, item.enabled, open, scrub = item.slider) { state.toggleFlyout(item.key) }
             is ChoiceCell -> ChoiceCellView(item, open) { state.toggleFlyout(item.key) }
             is ColorCell -> ColorCellView(item) {
                 // 다른 칸의 옵션 창은 닫고 바로 팔레트를 연다
@@ -399,6 +402,7 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
 /**
  * 누를 수 있는 칸의 바탕: 띠 폭에서 양쪽 4dp를 뺀 모서리 8dp 칸(폭 48dp, 누르는 영역 그대로). 옵션 창이 열려 있으면 선택 배경이다.
  * 화면 읽기 기능에는 [description]과 [state](값)를 읽히고, 안쪽 글자는 따로 읽지 않는다.
+ * [touch]는 누르기보다 먼저 터치를 받는 것(수치 끌기)이다. 그것이 터치를 가지면(끌면) 누르기는 되지 않는다.
  */
 @Composable
 private fun CellBox(
@@ -408,6 +412,7 @@ private fun CellBox(
     open: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    touch: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val colors = StratumTheme.colors
@@ -430,7 +435,9 @@ private fun CellBox(
             }
             .clip(StratumShapes.Control)
             .background(if (open) colors.selectedBackground else Color.Transparent)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            // 누르기 안쪽에 두어 끌기가 먼저 터치를 받는다(끌어서 가진 터치는 누르기가 아니다)
+            .then(touch),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -438,7 +445,18 @@ private fun CellBox(
     }
 }
 
-/** 값 칸·수치 칸의 모양: 위에 작은 이름, 아래에 값. 누르면 [onClick](옵션 창). 옵션 창이 열려 있으면 칸은 선택 배경이다. */
+/**
+ * 수치 끌기(사용자 피드백 9차: "수치를 터치하고 위나 아래로 슬라이딩하면 해당 옵션값(100~0)이 조절되도록 해주세요."):
+ * 슬라이더 칸을 누른 채 이만큼 끌면 값이 슬라이더 처음부터 끝까지 바뀐다(위로 끌면 커짐, 슬라이더와 같은 눈금).
+ * 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다.
+ */
+internal val ScrubFullRange = 200.dp
+
+/**
+ * 값 칸·슬라이더 칸의 모양: 위에 작은 이름, 아래에 값. 누르면 [onClick](옵션 창).
+ * [scrub]가 있으면(슬라이더 칸) 칸을 누른 채 위아래로 끌어 값을 바꾼다: 끄는 동안 [StripSlider.onFraction], 손을 떼면
+ * [StripSlider.onFinished](슬라이더와 같다, 크기·경도는 크기 원도). 끄는 동안 칸은 선택 배경이고, 끈 터치로는 옵션 창이 뜨지 않는다.
+ */
 @Composable
 private fun ValueCellView(
     key: String,
@@ -446,16 +464,50 @@ private fun ValueCellView(
     value: String,
     enabled: Boolean,
     open: Boolean,
+    scrub: StripSlider? = null,
     onClick: () -> Unit
 ) {
     val colors = StratumTheme.colors
-    CellBox(EditScreenTags.strip(key), caption, value, open, enabled, onClick) {
+    var scrubbing by remember { mutableStateOf(false) }
+    // 끄는 동안 값이 바뀌어 칸이 다시 그려져도 끌기를 다시 시작하지 않고 지금 슬라이더에 보낸다
+    val currentScrub by rememberUpdatedState(scrub)
+    val touch = if (scrub != null && enabled) {
+        Modifier.pointerInput(key) {
+            val fullRange = ScrubFullRange.toPx()
+            var start = 0f
+            var moved = 0f
+            detectVerticalDragGestures(
+                onDragStart = {
+                    start = currentScrub?.fraction ?: 0f
+                    moved = 0f
+                    scrubbing = true
+                },
+                onDragEnd = {
+                    scrubbing = false
+                    currentScrub?.onFinished?.invoke()
+                },
+                onDragCancel = {
+                    scrubbing = false
+                    currentScrub?.onFinished?.invoke()
+                },
+                onVerticalDrag = { change, dy ->
+                    change.consume()
+                    moved += dy
+                    // 화면에서 위가 작은 y라, 위로 끈 만큼(-dy) 커진다
+                    currentScrub?.onFraction?.invoke((start - moved / fullRange).coerceIn(0f, 1f))
+                }
+            )
+        }
+    } else {
+        Modifier
+    }
+    CellBox(EditScreenTags.strip(key), caption, value, open || scrubbing, enabled, onClick, touch) {
         CompactLabel(caption, if (enabled) colors.textDescription else colors.textDisabled)
         Text(
             text = value,
             color = when {
                 !enabled -> colors.textDisabled
-                open -> colors.selectedContent
+                open || scrubbing -> colors.selectedContent
                 else -> colors.textPrimary
             },
             style = MaterialTheme.typography.labelLarge,
@@ -537,41 +589,126 @@ private fun IconCellView(cell: IconCell, onClick: () -> Unit) {
     }
 }
 
-/** 띠에 남은 수치 칸의 옵션 창 슬라이더 높이(누르는 영역) */
-private val FlyoutSliderHeight = 48.dp
+/** 세로 슬라이더 창의 슬라이더 카드 크기: 폭은 누르는 영역(48dp), 높이는 받은 영역보다 길면 줄인다 */
+private val VerticalSliderWidth = 48.dp
+private val VerticalSliderHeight = 240.dp
+
+/** 값 표시 줄 아래에 남기는 여백: 밀어 보는 줄이 끝에서 잘라 그리므로, 맨 아래 카드의 그림자가 들어갈 자리 */
+private val ValueShadowRoom = 8.dp
 
 /**
- * 띠에 남은 수치 칸([SliderCell], 오른쪽 수치 바에 들어가지 않은 것)의 옵션 창: 이름과 값('경도 82%'), 그 아래 가로 슬라이더(오른쪽이 큼).
- * 슬라이더는 오른쪽 수치 바와 같은 부품이다([ToolSliderTrack]). 창이 사라지면 크기 원을 끈다.
+ * 슬라이더 칸의 옵션 창(사진: 태블릿 포토샵): 얇은 세로 슬라이더 카드와 그 옆 위의 값 표시('경도 82%'),
+ * 값 표시 아래에는 [SliderCell.extra]. 카드를 가리키는 삼각형은 [FlyoutHost]가 칸 쪽에 그린다.
+ * 칸 오른쪽에 뜨면 값 표시는 카드 오른쪽, 띠를 오른쪽 끝에 옮겨 칸 왼쪽에 뜨면([valueOnLeft]) 카드 왼쪽이다(카드가 늘 칸 쪽).
+ * 값 표시는 슬라이더와 같은 내용이라 화면 읽기 기능에서는 빼고, 슬라이더가 이름·값을 읽는다.
  */
 @Composable
-internal fun SliderFlyout(cell: SliderCell) {
+internal fun VerticalSliderFlyout(cell: SliderCell, valueOnLeft: Boolean = false) {
     val slider = cell.slider
     EndPreviewOnDispose(slider.preview)
-    Column(Modifier.width(FlyoutSliderWidth), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = stringResource(R.string.strip_slider_value, cell.caption, cell.value),
-            color = StratumTheme.colors.textPrimary,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            modifier = Modifier.clearAndSetSemantics {}
-        )
-        ToolSliderTrack(
-            value = slider.fraction,
-            onValueChange = slider.onFraction,
-            onValueChangeFinished = slider.onFinished,
-            enabled = cell.enabled,
+    val colors = StratumTheme.colors
+    val sliderCard: @Composable () -> Unit = {
+        Surface(
+            shape = StratumShapes.Card,
+            color = colors.panel,
+            border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+            shadowElevation = 6.dp
+        ) {
+            StratumVerticalSlider(
+                value = slider.fraction,
+                onValueChange = slider.onFraction,
+                onValueChangeFinished = slider.onFinished,
+                enabled = cell.enabled,
+                modifier = Modifier
+                    .width(VerticalSliderWidth)
+                    .height(VerticalSliderHeight)
+                    .testTag(slider.tag)
+                    .semantics {
+                        contentDescription = cell.caption
+                        stateDescription = cell.value
+                    }
+            )
+        }
+    }
+    val valueColumn: @Composable () -> Unit = {
+        // 폭은 내용만큼이다('이어진 곳만'처럼 폭을 채우는 칸이 창 영역 끝까지 늘어나지 않게).
+        // 창 영역이 낮으면 아래로 넘치지 않고 그 안에서 밀어 본다(아래 여백은 카드 그림자 자리).
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(FlyoutSliderHeight)
-                .testTag(slider.tag)
-                .semantics {
-                    contentDescription = cell.caption
-                    stateDescription = cell.value
+                .width(IntrinsicSize.Max)
+                .verticalScroll(rememberScrollState())
+                .padding(start = if (valueOnLeft) 0.dp else 6.dp, end = if (valueOnLeft) 6.dp else 0.dp, bottom = ValueShadowRoom),
+            horizontalAlignment = if (valueOnLeft) Alignment.End else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                modifier = Modifier.testTag(EditScreenTags.STRIP_SLIDER_VALUE).clearAndSetSemantics {},
+                shape = StratumShapes.Card,
+                color = colors.panel,
+                border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+                shadowElevation = 6.dp
+            ) {
+                Text(
+                    text = stringResource(R.string.strip_slider_value, cell.caption, cell.value),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = colors.textPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+            }
+            cell.extra?.let { extra ->
+                Surface(
+                    shape = StratumShapes.Card,
+                    color = colors.panel,
+                    contentColor = colors.textPrimary,
+                    border = BorderStroke(StratumDimens.Divider, colors.fieldBorder),
+                    shadowElevation = 6.dp
+                ) {
+                    Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { extra() }
                 }
-        )
+            }
+        }
+    }
+    Row(Modifier.testTag(EditScreenTags.OPTION_FLYOUT).semantics { paneTitle = cell.caption }, verticalAlignment = Alignment.Top) {
+        if (valueOnLeft) {
+            valueColumn()
+            sliderCard()
+        } else {
+            sliderCard()
+            valueColumn()
+        }
     }
 }
+
+/** 세로 슬라이더 창이 칸을 가리키는 작은 삼각형의 크기 */
+internal val FlyoutArrowWidth = 8.dp
+private val FlyoutArrowHeight = 16.dp
+
+/** 세로 슬라이더 창 왼쪽에서 칸을 가리키는 삼각형(패널 색, 바깥 두 변만 테두리). 창 카드의 테두리를 덮도록 조금 겹쳐 놓는다. */
+@Composable
+internal fun FlyoutArrow() {
+    val colors = StratumTheme.colors
+    Canvas(Modifier.size(width = FlyoutArrowWidth + 2.dp, height = FlyoutArrowHeight)) {
+        val tip = Offset(0f, size.height / 2)
+        val baseX = FlyoutArrowWidth.toPx()
+        val fill = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(baseX, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width, size.height)
+            lineTo(baseX, size.height)
+            close()
+        }
+        drawPath(fill, colors.panel)
+        val edge = Path().apply {
+            moveTo(baseX, 0f)
+            lineTo(tip.x, tip.y)
+            lineTo(baseX, size.height)
+        }
+        drawPath(edge, colors.fieldBorder, style = Stroke(StratumDimens.Divider.toPx()))
+    }
+}
+
 
 /** 불투명한 색의 알파 */
 private const val OPAQUE_ALPHA = 0xFF000000.toInt()

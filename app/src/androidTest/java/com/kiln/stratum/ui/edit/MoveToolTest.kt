@@ -111,9 +111,8 @@ class MoveToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Move)).performClick()
 
-        // 띠에 고른 레이어 돌리기·뒤집기 칸 넷(사용자 피드백 12차 2). 수치가 없어 오른쪽 수치 바는 없고, 안내 알림도 없다(8차 1-7).
+        // 띠에 고른 레이어 돌리기·뒤집기 칸 넷(사용자 피드백 12차 2). 안내 알림은 없다(8차 1-7).
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
         for (turn in LayerTurns) composeRule.onNodeWithTag(EditScreenTags.strip(turn.key)).performClick()
         composeRule.runOnIdle {

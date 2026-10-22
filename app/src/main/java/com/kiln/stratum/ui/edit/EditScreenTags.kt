@@ -17,9 +17,8 @@ object EditScreenTags {
     /** 도구 옵션 띠 맨 위의 손잡이(끌어 띠를 옮김, 사용자 피드백 9차) */
     const val STRIP_HANDLE = "stripHandle"
 
-    /** 펼친 화면 캔버스 오른쪽의 도구 수치 바 카드와, 끄는 동안 그 옆에 뜨는 이름·값 말풍선('경도 82%', 사용자 피드백 12차) */
-    const val TOOL_SLIDER_BAR = "toolSliderBar"
-    const val TOOL_SLIDER_VALUE = "toolSliderValue"
+    /** 세로 슬라이더 창의 값 표시('경도 82%') */
+    const val STRIP_SLIDER_VALUE = "stripSliderValue"
     const val OPTION_FLYOUT = "optionFlyout"
     const val FLOATING_DISMISS = "floatingDismiss"
 

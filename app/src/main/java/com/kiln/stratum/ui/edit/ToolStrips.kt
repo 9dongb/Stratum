@@ -57,31 +57,6 @@ internal fun moveStrip(onOrient: (Orientation) -> Unit, enabled: Boolean): List<
         IconCell(turn.key, turn.icon, stringResource(turn.description), { onOrient(turn.orientation) }, enabled = enabled, iconRotation = turn.iconRotation)
     }
 
-/** 오른쪽 수치 바에 두는 슬라이더 수(사용자 피드백 12차: "최대 3개까지") */
-internal const val MAX_BAR_SLIDERS = 3
-
-/** 펼친 화면에서 띠 목록을 띠에 남길 칸([strip])과 오른쪽 수치 바에 둘 슬라이더([sliders])로 나눈 것 */
-internal class StripSplit(val strip: List<StripItem>, val sliders: List<SliderCell>)
-
-/**
- * 띠 목록 [items]를 나눈다(사용자 피드백 12차: "펼친 화면 기준 도구 수치 조절을 오른쪽에 바에서 일괄 조절합니다. (최대 3개까지)").
- * 수치 칸([SliderCell])은 앞에서부터 [MAX_BAR_SLIDERS]개까지 오른쪽 수치 바로 가고, 나머지 칸은 띠에 남는다. 띠의 수치 칸은 이미
- * 크기 → 경도 → 불투명도 → 그 밖 순서라([numbersLast]) 바도 그 순서다(사용자: "1. 크기 2. 경도 3. 불투명도 4.그외").
- * 수치 칸을 뺀 띠의 앞뒤·겹친 구분선은 지운다. 띠 목록 자체는 그대로라 커버 한 줄 막대는 바뀌지 않는다.
- */
-internal fun splitSliders(items: List<StripItem>): StripSplit {
-    val sliders = items.filterIsInstance<SliderCell>().take(MAX_BAR_SLIDERS)
-    val strip = buildList {
-        for (item in items) {
-            if (item in sliders) continue
-            if (item is StripDivider && (isEmpty() || last() is StripDivider)) continue
-            add(item)
-        }
-        if (lastOrNull() is StripDivider) removeAt(lastIndex)
-    }
-    return StripSplit(strip, sliders)
-}
-
 /** 브러시·지우개의 띠: (브러시만) 색·바꾸기·스포이드, 구분선 아래 크기, 경도, 불투명도 */
 @Composable
 internal fun brushStrip(controls: BrushControls): List<StripItem> {
@@ -155,8 +130,7 @@ internal fun transformStrip(crop: CropControls, busy: Boolean, close: () -> Unit
 
 /**
  * 선택의 띠(사용자 피드백 10차 1: "선택도구 방식을 띠에서 한번 더 클릭하면 목록이 나오는데, 아이콘으로 띠에 일렬로 4개가 다 나오게 해주고"):
- * 합치는 방법 넷(새로·더하기·빼기·교차, 고른 것이 켜진 아이콘 칸, 누르면 바로 바꿈), (자동 선택) 구분선 아래 '이어진 곳만' 켜고 끄는 칸,
- * 수치 칸 페더(자동 선택은 허용치). 수치 칸은 펼친 화면에서 오른쪽 수치 바에 있다([splitSliders], 사용자 피드백 12차).
+ * 합치는 방법 넷(새로·더하기·빼기·교차, 고른 것이 켜진 아이콘 칸, 누르면 바로 바꿈), 구분선 아래 페더(자동 선택은 허용치와 '이어진 곳만').
  * 개체 선택은 경계가 이미 부드러워 페더가 없다. 모두 선택·해제 같은 동작은 화면 아래 가운데 작업 표시줄([SelectionActionBar])에 있다.
  */
 @Composable
@@ -184,7 +158,9 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls): List<St
                         fraction = options.tolerance / ColorRegion.MAX_TOLERANCE.toFloat(),
                         onFraction = { controls.onOptions(options.copy(tolerance = (it * ColorRegion.MAX_TOLERANCE).roundToInt())) },
                         tag = EditScreenTags.SELECTION_TOLERANCE
-                    )
+                    ),
+                    // '이어진 곳만'은 값 표시 아래에 둔다
+                    extra = { ContiguousRow(options.contiguous) { controls.onOptions(options.copy(contiguous = it)) } }
                 )
             )
         } else if (mode != SubTool.SELECT_AI) {
@@ -205,20 +181,7 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls): List<St
             )
         }
     }
-    // 자동 선택의 '이어진 곳만'은 켜고 끄는 칸이다(전에는 허용치 슬라이더 창 안에 있었다, 사용자 피드백 12차)
-    val rest = if (mode == SubTool.SELECT_WAND) {
-        modes + StripDivider("contiguous") + IconCell(
-            key = "contiguous",
-            icon = R.drawable.ic_link,
-            description = stringResource(R.string.selection_contiguous),
-            onClick = { controls.onOptions(options.copy(contiguous = !options.contiguous)) },
-            checked = options.contiguous,
-            tag = EditScreenTags.SELECTION_CONTIGUOUS
-        )
-    } else {
-        modes
-    }
-    return numbersLast(numbers, rest)
+    return numbersLast(numbers, modes)
 }
 
 /**

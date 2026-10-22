@@ -509,29 +509,30 @@ class LiquifyModeTest {
         assertEquals(mode.width, canvas.width, 2 * dp)
         assertEquals(canvas.left + 4 * dp, strip.left, 2 * dp)
         assertEquals(canvas.top + 8 * dp, strip.top, 2 * dp)
-        // 띠의 칸: 뒤틀기·오목·볼록·재구성(고른 것이 켜짐)
+        // 칸: 뒤틀기·오목·볼록·재구성(고른 것이 켜짐), 구분선 아래 크기 → 압력(사용자 피드백 10차 9: 수치 칸은 아래)
         var above = Float.NEGATIVE_INFINITY
         for (tool in LiquifyTool.entries) {
             val cell = composeRule.onNodeWithTag(EditScreenTags.liquifyTool(tool)).fetchSemanticsNode().layoutBoundsInWindow()
             assertTrue("$tool $cell should be below $above", cell.top > above)
             above = cell.top
         }
-        composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsOn()
-        // 크기 → 압력은 편집 화면처럼 캔버스 오른쪽 수치 바다(사용자 피드백 12차)
-        val bar = composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertIsDisplayed().fetchSemanticsNode().layoutBoundsInWindow()
-        assertEquals(canvas.right - 8 * dp, bar.right, 2 * dp)
-        val size = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).fetchSemanticsNode().layoutBoundsInWindow()
-        val strength = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_STRENGTH).fetchSemanticsNode().layoutBoundsInWindow()
+        val size = composeRule.onNodeWithTag(EditScreenTags.strip("size")).fetchSemanticsNode().layoutBoundsInWindow()
+        val strength = composeRule.onNodeWithTag(EditScreenTags.strip("strength")).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("size $size should be below the tools ($above)", size.top > above)
         assertTrue("size $size should be above strength $strength", size.top < strength.top)
-        composeRule.onNodeWithTag(EditScreenTags.strip("size")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsOn()
     }
 
     @Test
-    fun mainScreens_theToolCellsAndTheBarChangeTheToolSizeAndPressure() {
+    fun mainScreens_stripCellsChangeTheToolSizeAndPressure() {
         show(930, 700)
 
         composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.RECONSTRUCT)).performClick()
+        // 수치 칸을 누르면 옆에 세로 슬라이더 창이 뜬다(편집 화면의 띠와 같다)
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(sizeToFraction(300f)) }
+        composeRule.onNodeWithTag(EditScreenTags.strip("strength")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
 
         composeRule.runOnIdle {
@@ -542,11 +543,11 @@ class LiquifyModeTest {
     }
 
     @Test
-    fun mainScreens_draggingTheSizeSliderUp_raisesTheSize() {
-        // 수치 바의 슬라이더는 끈 만큼 움직인다(위로 끌면 커짐, 사용자 피드백 12차)
+    fun mainScreens_draggingTheSizeCellUp_raisesTheSize() {
+        // 사용자 피드백 9차 1-1: 수치 칸을 누른 채 위로 끌면 커진다(옵션 창은 뜨지 않음)
         show(930, 700)
 
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).performTouchInput {
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performTouchInput {
             down(center)
             moveBy(Offset(0f, -60f))
             moveBy(Offset(0f, -60f))
@@ -554,15 +555,33 @@ class LiquifyModeTest {
         }
 
         composeRule.runOnIdle { assertTrue("${actions.chosenSize}", checkNotNull(actions.chosenSize) > 150f) }
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
     }
 
     @Test
-    fun mainScreens_systemBackCancels() {
-        // 띠에 옵션 창이 있는 칸이 없어(수치는 바) 뒤로 가기는 바로 취소다
+    fun mainScreens_systemBackClosesTheSliderFirst_thenCancels() {
         show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertExists()
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.runOnIdle { assertTrue("${actions.calls}", "cancel" !in actions.calls) }
 
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.runOnIdle { assertEquals(listOf("cancel"), actions.calls) }
+    }
+
+    @Test
+    fun mainScreens_touchingTheCanvasWhileTheSliderIsOpen_onlyClosesIt() {
+        // 편집 화면과 같다: 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 하고 비틀지 않는다
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_CANVAS).performTouchInput { swipe(center, center + Offset(120f, 0f)) }
+
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
+        composeRule.runOnIdle { assertTrue("${actions.calls}", "begin" !in actions.calls) }
     }
 
     @Test

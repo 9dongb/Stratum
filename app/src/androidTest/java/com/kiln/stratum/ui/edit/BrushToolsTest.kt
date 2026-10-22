@@ -204,21 +204,20 @@ class BrushToolsTest {
     }
 
     @Test
-    fun mainScreens_showBrushColorsInTheStrip_andNumbersInTheBar() {
-        // 메인 화면은 색이 도구 막대 오른쪽 띠, 크기 등 수치는 캔버스 오른쪽 수치 바에 보인다(사용자 피드백 12차, 자세한 것은 OptionStripTest·ToolSliderBarTest)
+    fun mainScreens_showBrushOptionsInTheStrip() {
+        // 메인 화면은 패널이 아니라 도구 막대 오른쪽 띠에 보인다(자세한 것은 OptionStripTest)
         show(700, 900)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
-        composeRule.onNode(hasTestTag(EditScreenTags.strip("foreground")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
+        composeRule.onNode(hasTestTag(EditScreenTags.strip("size")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
             .assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
     }
 
     @Test
-    fun expanded_eraserOptionsInTheBar() {
+    fun expanded_eraserOptionsInTheStrip() {
         show(930, 700)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Eraser)).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        composeRule.onNode(hasTestTag(EditScreenTags.strip("hardness")) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP)))
+            .assertIsDisplayed()
     }
 }
