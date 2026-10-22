@@ -9,6 +9,7 @@ import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.contentBounds
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.transform.RasterTransform
 import com.kiln.stratum.engine.transform.TransformPlan
@@ -97,17 +98,53 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         }
     }
 
-    /** 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵 타일만큼이 새로 생길 수 있다 */
-    override fun estimateNewBytes(document: Document): Long {
-        val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
-        val raster = (target.content as? RasterContent)?.raster ?: return 0L
-        val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
-        return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
+    override fun estimateNewBytes(document: Document): Long = layerTileBytes(document, layer)
+}
+
+/**
+ * [layer] 레이어만 [orientation] 방향으로 돌리거나 뒤집는다(이동 도구, 사용자 피드백 12차 2, 결정 기록 '레이어 돌리기·뒤집기').
+ * 축은 레이어 내용(투명하지 않은 곳)을 담는 사각형의 가운데이고([Orientation.turnedOrigin]), 문서 크기는 그대로다.
+ * 캔버스 밖으로 나간 부분은 버리고 빈 자리는 투명이다(옮기기와 같다). 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사).
+ * 게인맵(HDR)도 같은 비율로 돌린다. 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없거나 다 투명하면 그대로 둔다.
+ * 글자 레이어는 돌린 글자를 다시 그릴 수 없어 픽셀 레이어가 된다(화면이 먼저 '글자를 픽셀로 바꿀까요?'를 묻는다).
+ */
+data class OrientLayer(val layer: LayerId, val orientation: Orientation) : CancellableCommand {
+
+    override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
+        if (orientation == Orientation.IDENTITY) return document
+        val index = document.indexOfLayer(layer)
+        if (index < 0) return document
+        val target = document.layers[index]
+        val raster = (target.content as? RasterContent)?.raster ?: return document
+        val bounds = raster.contentBounds(document.size, checkCanceled) ?: return document
+        val origin = orientation.turnedOrigin(bounds)
+        return try {
+            val plan = TransformPlan.place(document.size, bounds, orientation, document.size, origin.x, origin.y)
+            val turned = RasterTransform.transform(raster, plan, CanvasTileComposer, checkCanceled)
+            val gainmap = target.gainmap?.let {
+                RasterTransform.orientGainmap(it, document.size, bounds, orientation, origin, CanvasTileComposer, checkCanceled)
+            }
+            val layers = document.layers.toMutableList()
+            layers[index] = target.withPixels(turned, gainmap)
+            document.copy(layers = layers)
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
     }
+
+    override fun estimateNewBytes(document: Document): Long = layerTileBytes(document, layer)
 }
 
 private val Document.size: PixelSize
     get() = PixelSize(width, height)
+
+/** 레이어 하나를 옮기거나 돌릴 때 새로 생길 수 있는 메모리: 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵 타일 */
+private fun layerTileBytes(document: Document, layer: LayerId): Long {
+    val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
+    val raster = (target.content as? RasterContent)?.raster ?: return 0L
+    val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
+    return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
+}
 
 /**
  * [area]에 걸친 타일을 옮길 때 새로 생길 메모리의 어림값. 한 가지 색 타일은 그대로 쓰므로 세지 않는다.

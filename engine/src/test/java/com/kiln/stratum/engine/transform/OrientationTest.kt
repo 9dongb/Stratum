@@ -120,6 +120,33 @@ class OrientationTest {
         }
     }
 
+    @Test
+    fun turnedOrigin_keepsTheCenter_andTurningBackComesHome() {
+        // 레이어 돌리기(사용자 피드백 12차 2): 내용 사각형의 가운데를 축으로 돌린다
+        assertEquals(PixelPoint(150, -50), Orientation.ROTATE_CLOCKWISE.turnedOrigin(PixelRect(100, 0, 500, 300)))
+        // 뒤집기·180°는 자리가 그대로다
+        for (orientation in listOf(Orientation.FLIP_HORIZONTAL, Orientation.FLIP_VERTICAL, Orientation.ROTATE_180)) {
+            assertEquals("$orientation", PixelPoint(7, 9), orientation.turnedOrigin(PixelRect(7, 9, 20, 40)))
+        }
+        // 가로·세로 차이가 홀수라 가운데가 반 픽셀에 걸려도, 왼쪽으로 돌린 뒤 오른쪽으로 돌리면(그 반대도) 제자리다
+        val rects = listOf(PixelRect(10, 20, 13, 22), PixelRect(0, 0, 4, 1), PixelRect(5, 5, 6, 10), PixelRect(31, 17, 132, 66))
+        for (rect in rects) {
+            for (orientation in Orientation.entries) {
+                val first = orientation.turnedOrigin(rect)
+                val turned = orientation.targetSize(PixelSize(rect.width, rect.height))
+                val back = orientation.inverse.turnedOrigin(PixelRect(first.x, first.y, first.x + turned.width, first.y + turned.height))
+                assertEquals("$rect $orientation", PixelPoint(rect.left, rect.top), back)
+            }
+            // 오른쪽으로 네 번 돌려도 제자리다
+            var current = rect
+            repeat(4) {
+                val origin = Orientation.ROTATE_CLOCKWISE.turnedOrigin(current)
+                current = PixelRect(origin.x, origin.y, origin.x + current.height, origin.y + current.width)
+            }
+            assertEquals("$rect", rect, current)
+        }
+    }
+
     private inline fun forEachPixel(size: PixelSize, action: (x: Int, y: Int) -> Unit) {
         for (y in 0 until size.height) {
             for (x in 0 until size.width) action(x, y)

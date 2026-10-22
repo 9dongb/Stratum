@@ -15,7 +15,7 @@ data class TilePart(val source: TileKey, val sourceRect: PixelRect, val targetRe
 
 /**
  * 대상 타일 한 장. [width]×[height]는 캔버스 안쪽 크기이고, [parts]가 그 안을 한 번씩 덮는다.
- * 돌리기·뒤집기·자르기는 빈틈없이 덮고, 옮기기([TransformPlan.translate])는 옮겨서 빈 자리를 덮지 않는다(투명).
+ * 돌리기·뒤집기·자르기는 빈틈없이 덮고, 옮기기([TransformPlan.translate])·놓기([TransformPlan.place])는 덮지 않는 자리가 있다(투명).
  */
 data class TargetTile(val key: TileKey, val width: Int, val height: Int, val parts: List<TilePart>) {
 
@@ -25,7 +25,7 @@ data class TargetTile(val key: TileKey, val width: Int, val height: Int, val par
 }
 
 /**
- * 문서를 돌리거나 뒤집거나 자르거나 레이어를 옮길 때, 대상 타일마다 어느 원본 타일의 어느 부분을 가져올지 정한 계획.
+ * 문서를 돌리거나 뒤집거나 자르거나 레이어를 옮기거나 돌릴 때, 대상 타일마다 어느 원본 타일의 어느 부분을 가져올지 정한 계획.
  *
  * 픽셀 값은 그대로 두고 자리만 옮긴다. 실제 복사는 플랫폼 코드가 이 계획대로 한다.
  * 크기는 캔버스 안쪽 크기([TileGrid.bounds])로 계산하고, 끝 타일의 캔버스 밖 부분은 가져오지 않는다.
@@ -33,7 +33,7 @@ data class TargetTile(val key: TileKey, val width: Int, val height: Int, val par
 class TransformPlan private constructor(
     val sourceSize: PixelSize,
     val targetSize: PixelSize,
-    /** 원본에서 남기는 사각형(돌리기·뒤집기는 원본 전체) */
+    /** 원본에서 가져오는 사각형(돌리기·뒤집기·옮기기는 원본 전체, 레이어 돌리기는 레이어 내용을 담는 사각형) */
     val crop: PixelRect,
     val orientation: Orientation,
     /** 대상 타일들. 위 줄부터, 한 줄 안에서는 왼쪽부터 놓인다. */
@@ -63,43 +63,20 @@ class TransformPlan private constructor(
          * 캔버스 밖으로 나간 부분은 버리며(놓을 때 잘림, 사용자 결정) 옮겨서 빈 자리는 어느 조각도 덮지 않는다(투명).
          * 타일 크기(256)의 배수만큼 옮기면 대상 타일마다 원본 타일 하나를 꼭 맞게 가져온다(그대로 쓸 수 있다).
          */
-        fun translate(source: PixelSize, dx: Int, dy: Int): TransformPlan {
-            val grid = TileGrid(source.width, source.height)
-            val image = PixelRect.of(source)
-            val targets = grid.keys().map { key ->
-                val bounds = grid.bounds(key)
-                val targetTile = PixelRect(bounds.left, bounds.top, bounds.left + bounds.width, bounds.top + bounds.height)
-                val parts = ArrayList<TilePart>(4)
-                // 이 대상 타일로 오는 원본 사각형(이미지 밖은 없다)
-                val from = targetTile.offset(-dx, -dy).intersect(image)
-                if (from != null) {
-                    for (row in from.top / TILE_SIZE..(from.bottom - 1) / TILE_SIZE) {
-                        for (column in from.left / TILE_SIZE..(from.right - 1) / TILE_SIZE) {
-                            val sourceKey = TileKey(column, row)
-                            val sourceBounds = grid.bounds(sourceKey)
-                            val sourceTile = PixelRect(
-                                sourceBounds.left,
-                                sourceBounds.top,
-                                sourceBounds.left + sourceBounds.width,
-                                sourceBounds.top + sourceBounds.height
-                            )
-                            val piece = from.intersect(sourceTile) ?: continue
-                            parts += TilePart(
-                                source = sourceKey,
-                                sourceRect = piece.offset(-sourceTile.left, -sourceTile.top),
-                                targetRect = piece.offset(dx - targetTile.left, dy - targetTile.top)
-                            )
-                        }
-                    }
-                }
-                TargetTile(key, bounds.width, bounds.height, parts)
-            }
-            return TransformPlan(source, source, image, Orientation.IDENTITY, targets)
-        }
+        fun translate(source: PixelSize, dx: Int, dy: Int): TransformPlan =
+            place(source, PixelRect.of(source), Orientation.IDENTITY, source, dx, dy)
 
-        /** [source]에서 [crop]을 잘라 [orientation] 방향으로 바꾸는 계획. */
-        private fun build(source: PixelSize, crop: PixelRect, orientation: Orientation): TransformPlan {
-            val target = orientation.targetSize(PixelSize(crop.width, crop.height))
+        /**
+         * [source] 크기 이미지에서 [rect]를 [orientation] 방향으로 바꿔, [target] 크기 캔버스의 ([left], [top])에 왼쪽 위를 두는 계획.
+         * 캔버스 밖으로 나간 부분은 버리고, 바꾼 [rect]가 덮지 않는 자리는 어느 조각도 덮지 않는다(투명).
+         * 자르기·돌리기([cropThenOrient])와 레이어 옮기기([translate]), 레이어 돌리기·뒤집기(사용자 피드백 12차 2)가 모두 이것이다.
+         * [rect]는 이미지 안에 있고 비어 있지 않아야 한다.
+         */
+        fun place(source: PixelSize, rect: PixelRect, orientation: Orientation, target: PixelSize, left: Int, top: Int): TransformPlan {
+            require(rect.width > 0 && rect.height > 0) { "Source rect must not be empty: $rect" }
+            require(rect in PixelRect.of(source)) { "Source rect outside image: $rect in $source" }
+            val turned = orientation.targetSize(PixelSize(rect.width, rect.height))
+            val placed = PixelRect(left, top, left + turned.width, top + turned.height)
             val sourceGrid = TileGrid(source.width, source.height)
             val targetGrid = TileGrid(target.width, target.height)
             val targets = targetGrid.keys().map { key ->
@@ -110,34 +87,41 @@ class TransformPlan private constructor(
                     targetBounds.left + targetBounds.width,
                     targetBounds.top + targetBounds.height
                 )
-                // 이 대상 타일로 오는 원본 사각형. 방향을 되돌린 뒤 자른 위치만큼 옮긴다.
-                val from = orientation.inverse
-                    .mapRect(targetTile, target.width, target.height)
-                    .offset(crop.left, crop.top)
                 val parts = ArrayList<TilePart>(4)
-                for (row in from.top / TILE_SIZE..(from.bottom - 1) / TILE_SIZE) {
-                    for (column in from.left / TILE_SIZE..(from.right - 1) / TILE_SIZE) {
-                        val sourceKey = TileKey(column, row)
-                        val sourceBounds = sourceGrid.bounds(sourceKey)
-                        val sourceTile = PixelRect(
-                            sourceBounds.left,
-                            sourceBounds.top,
-                            sourceBounds.left + sourceBounds.width,
-                            sourceBounds.top + sourceBounds.height
-                        )
-                        val piece = from.intersect(sourceTile) ?: continue
-                        val moved = orientation.mapRect(piece.offset(-crop.left, -crop.top), crop.width, crop.height)
-                        parts += TilePart(
-                            source = sourceKey,
-                            sourceRect = piece.offset(-sourceTile.left, -sourceTile.top),
-                            targetRect = moved.offset(-targetTile.left, -targetTile.top)
-                        )
+                val covered = targetTile.intersect(placed)
+                if (covered != null) {
+                    // 이 대상 부분으로 오는 원본 사각형. 놓은 자리만큼 되돌리고, 방향을 되돌린 뒤 [rect]의 자리만큼 옮긴다.
+                    val from = orientation.inverse
+                        .mapRect(covered.offset(-left, -top), turned.width, turned.height)
+                        .offset(rect.left, rect.top)
+                    for (row in from.top / TILE_SIZE..(from.bottom - 1) / TILE_SIZE) {
+                        for (column in from.left / TILE_SIZE..(from.right - 1) / TILE_SIZE) {
+                            val sourceKey = TileKey(column, row)
+                            val sourceBounds = sourceGrid.bounds(sourceKey)
+                            val sourceTile = PixelRect(
+                                sourceBounds.left,
+                                sourceBounds.top,
+                                sourceBounds.left + sourceBounds.width,
+                                sourceBounds.top + sourceBounds.height
+                            )
+                            val piece = from.intersect(sourceTile) ?: continue
+                            val moved = orientation.mapRect(piece.offset(-rect.left, -rect.top), rect.width, rect.height).offset(left, top)
+                            parts += TilePart(
+                                source = sourceKey,
+                                sourceRect = piece.offset(-sourceTile.left, -sourceTile.top),
+                                targetRect = moved.offset(-targetTile.left, -targetTile.top)
+                            )
+                        }
                     }
                 }
                 TargetTile(key, targetBounds.width, targetBounds.height, parts)
             }
-            return TransformPlan(source, target, crop, orientation, targets)
+            return TransformPlan(source, target, rect, orientation, targets)
         }
+
+        /** [source]에서 [crop]을 잘라 [orientation] 방향으로 바꾸는 계획. */
+        private fun build(source: PixelSize, crop: PixelRect, orientation: Orientation): TransformPlan =
+            place(source, crop, orientation, orientation.targetSize(PixelSize(crop.width, crop.height)), 0, 0)
     }
 }
 

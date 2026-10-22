@@ -81,6 +81,16 @@ enum class Orientation(val quarterTurns: Int, val mirrored: Boolean) {
         )
     }
 
+    /**
+     * 레이어 내용을 담는 사각형 [bounds]를 이 방향으로 바꿔 같은 가운데에 놓을 때의 왼쪽 위(레이어 돌리기·뒤집기, 사용자 피드백 12차 2).
+     * 가운데가 반 픽셀에 걸리면 0 쪽으로 버린다(가로·세로 차이의 반을 정수 나눗셈). 그래서 왼쪽으로 돌린 뒤 오른쪽으로 돌리면,
+     * 캔버스 밖으로 나가 잘린 곳이 없는 한 제자리다.
+     */
+    fun turnedOrigin(bounds: PixelRect): PixelPoint {
+        val turned = targetSize(PixelSize(bounds.width, bounds.height))
+        return PixelPoint(bounds.left + (bounds.width - turned.width) / 2, bounds.top + (bounds.height - turned.height) / 2)
+    }
+
     companion object {
         /** 시계 방향 [quarterTurns]×90°(음수면 반시계)와 [mirrored]로 정한 방향. */
         fun of(quarterTurns: Int, mirrored: Boolean): Orientation {

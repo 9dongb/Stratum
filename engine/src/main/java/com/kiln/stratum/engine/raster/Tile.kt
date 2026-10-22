@@ -37,6 +37,16 @@ class Tile private constructor(internal val pixels: TilePixels, val solidColor: 
         return pixels.pixelAt(x, y)
     }
 
+    /**
+     * 타일 안쪽 [width]×[height](캔버스 안쪽 크기)에서 알파가 0이 아닌 픽셀을 모두 담는 가장 작은 사각형(타일 안 좌표). 모두 투명하면 null.
+     * 한 가지 색 타일은 읽지 않는다([contentBounds]).
+     */
+    fun opaqueBounds(width: Int, height: Int): PixelRect? =
+        when (val color = solidColor) {
+            null -> pixels.opaqueBounds(width, height)
+            else -> if (color ushr 24 != 0) PixelRect(0, 0, width, height) else null
+        }
+
     companion object {
         /** [pixels]를 복사해서 타일을 만든다. 크기는 [TILE_PIXEL_COUNT]이고, 한 줄씩 위에서 아래로 놓인다. */
         fun of(pixels: IntArray): Tile = Tile(HeapTilePixels(pixels), solidColor = null)

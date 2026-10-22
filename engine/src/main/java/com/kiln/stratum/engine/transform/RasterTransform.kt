@@ -12,7 +12,7 @@ import com.kiln.stratum.engine.raster.TileKey
 import kotlin.math.roundToInt
 
 /**
- * [TransformPlan]대로 문서의 모든 레이어를 돌리거나 뒤집거나 자른다.
+ * [TransformPlan]대로 문서의 모든 레이어를 돌리거나 뒤집거나 자르고, 레이어 하나를 옮기거나 돌린다.
  *
  * 타일을 새로 만들지 않아도 되는 자리는 원본 타일 객체를 그대로 쓴다.
  * - 한 가지 색 타일(새 캔버스) 하나가 대상 자리를 다 덮을 때. 그래서 빈 캔버스는 돌려도 타일 한 장이다.
@@ -103,6 +103,38 @@ object RasterTransform {
         val gy = (dy.toDouble() * gainmap.height / documentSize.height).roundToInt()
         if (gx == 0 && gy == 0) return gainmap
         val plan = TransformPlan.translate(PixelSize(gainmap.width, gainmap.height), gx, gy)
+        return HdrGainmap(gainmap.width, gainmap.height, transform(gainmap.raster, plan, composer, checkCanceled))
+    }
+
+    /**
+     * 게인맵을 레이어 픽셀과 함께 돌리거나 뒤집는다(레이어 돌리기·뒤집기, 사용자 피드백 12차 2). 레이어 내용 사각형 [rect]를
+     * [orientation]으로 바꿔 왼쪽 위 [origin](문서 좌표)에 놓은 것과 같은 비율 자리로 옮긴다. 게인맵은 레이어 전체를 늘여 덮으므로
+     * 사각형과 자리를 가장 가까운 게인맵 픽셀(적어도 한 칸)로 맞춘다(원본 약 2픽셀까지 어긋날 수 있지만 밝기 지도는 부드럽다).
+     */
+    fun orientGainmap(
+        gainmap: HdrGainmap,
+        documentSize: PixelSize,
+        rect: PixelRect,
+        orientation: Orientation,
+        origin: PixelPoint,
+        composer: TileComposer,
+        checkCanceled: () -> Unit = {}
+    ): HdrGainmap {
+        val scaleX = gainmap.width.toDouble() / documentSize.width
+        val scaleY = gainmap.height.toDouble() / documentSize.height
+        val left = (rect.left * scaleX).roundToInt().coerceIn(0, gainmap.width - 1)
+        val top = (rect.top * scaleY).roundToInt().coerceIn(0, gainmap.height - 1)
+        val right = (rect.right * scaleX).roundToInt().coerceIn(left + 1, gainmap.width)
+        val bottom = (rect.bottom * scaleY).roundToInt().coerceIn(top + 1, gainmap.height)
+        val size = PixelSize(gainmap.width, gainmap.height)
+        val plan = TransformPlan.place(
+            size,
+            PixelRect(left, top, right, bottom),
+            orientation,
+            size,
+            (origin.x * scaleX).roundToInt(),
+            (origin.y * scaleY).roundToInt()
+        )
         return HdrGainmap(gainmap.width, gainmap.height, transform(gainmap.raster, plan, composer, checkCanceled))
     }
 

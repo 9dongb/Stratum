@@ -1,8 +1,11 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TilePixels
+import com.kiln.stratum.engine.raster.opaqueRect
+import java.nio.ByteBuffer
 
 /**
  * 안드로이드 비트맵 한 장에 담은 타일 픽셀. 비트맵 픽셀은 자바 힙 밖 네이티브 메모리에 있다.
@@ -29,4 +32,15 @@ internal class BitmapTilePixels(val bitmap: Bitmap) : TilePixels {
     // 끝 타일은 캔버스 안쪽 크기만 담아 꽉 찬 타일보다 작다
     override val byteCount: Int
         get() = bitmap.allocationByteCount
+
+    // 픽셀을 한 번에 꺼내(줄마다 rowBytes, 픽셀마다 알파를 곱한 R·G·B·A) 알파 바이트만 본다. 알파는 곱해도 그대로다.
+    override fun opaqueBounds(width: Int, height: Int): PixelRect? {
+        val w = minOf(width, bitmap.width)
+        val h = minOf(height, bitmap.height)
+        if (w <= 0 || h <= 0) return null
+        val bytes = ByteArray(bitmap.byteCount)
+        bitmap.copyPixelsToBuffer(ByteBuffer.wrap(bytes))
+        val rowBytes = bitmap.rowBytes
+        return opaqueRect(w, h) { x, y -> bytes[y * rowBytes + x * 4 + 3].toInt() != 0 }
+    }
 }

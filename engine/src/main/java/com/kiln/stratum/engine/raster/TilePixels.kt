@@ -16,6 +16,12 @@ interface TilePixels {
     /** 픽셀이 차지하는 메모리(바이트). 기본은 꽉 찬 타일 한 장(ARGB 4바이트)이다. */
     val byteCount: Int
         get() = TILE_PIXEL_COUNT * Int.SIZE_BYTES
+
+    /**
+     * 타일 안쪽 [width]×[height]에서 알파가 0이 아닌 픽셀을 모두 담는 가장 작은 사각형(타일 안 좌표). 모두 투명하면 null.
+     * 기본은 [pixelAt]으로 하나씩 읽는다(힙 타일). 비트맵 타일은 픽셀을 한 번에 꺼내 읽는다.
+     */
+    fun opaqueBounds(width: Int, height: Int): PixelRect? = opaqueRect(width, height) { x, y -> pixelAt(x, y) ushr 24 != 0 }
 }
 
 /** 자바 힙의 배열에 담는 픽셀. 테스트와 작은 데이터용이다. 받은 배열을 복사해 두므로 나중에 바뀌지 않는다. */

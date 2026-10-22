@@ -176,6 +176,89 @@ class TransformPlanTest {
     }
 
     @Test
+    fun place_turnsTheRect_putsItThere_andDropsWhatLeavesTheCanvas() {
+        // 레이어 돌리기(사용자 피드백 12차 2): 같은 캔버스 안에서 내용 사각형을 돌려 그 가운데에 놓는다
+        val size = PixelSize(601, 301)
+        val rects = listOf(PixelRect.of(size), PixelRect(100, 50, 400, 250), PixelRect(255, 255, 258, 263), PixelRect(600, 300, 601, 301))
+        val origins = listOf(0 to 0, 37 to -20, -300 to 260, 500 to 280, -2000 to 0)
+        for (rect in rects) {
+            for (orientation in Orientation.entries) {
+                val turned = orientation.targetSize(PixelSize(rect.width, rect.height))
+                for ((left, top) in origins + listOf(orientation.turnedOrigin(rect).let { it.x to it.y })) {
+                    val plan = TransformPlan.place(size, rect, orientation, size, left, top)
+                    assertEquals(size, plan.targetSize)
+                    assertEquals(orientation, plan.orientation)
+                    val covered = IntArray(size.width * size.height)
+                    forEachTargetPixel(plan) { x, y, source ->
+                        // 놓은 자리에서 방향을 되돌린 [rect] 안의 원본 픽셀이 온다
+                        val inRect = orientation.inverse.mapPixel(x - left, y - top, turned.width, turned.height)
+                        val expected = PixelPoint(inRect.x + rect.left, inRect.y + rect.top)
+                        if (source != expected) fail("$rect $orientation at ($left, $top): ($x, $y) took $source, expected $expected")
+                        covered[y * size.width + x]++
+                    }
+                    for (y in 0 until size.height step 7) {
+                        for (x in 0 until size.width step 5) {
+                            val inside = x - left in 0 until turned.width && y - top in 0 until turned.height
+                            val count = covered[y * size.width + x]
+                            if (count != if (inside) 1 else 0) fail("$rect $orientation at ($left, $top): ($x, $y) covered $count times")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun place_intoADifferentSizedCanvas_putsTheWholeImageAt() {
+        // 사진 넣기(사용자 피드백 12차)처럼 다른 크기 이미지를 캔버스 가운데에 놓는다
+        val image = PixelSize(300, 200)
+        val canvas = PixelSize(1000, 600)
+        val plan = TransformPlan.place(image, PixelRect.of(image), Orientation.IDENTITY, canvas, 350, 200)
+        assertEquals(canvas, plan.targetSize)
+        var count = 0
+        forEachTargetPixel(plan) { x, y, source ->
+            assertEquals(PixelPoint(x - 350, y - 200), source)
+            count++
+        }
+        assertEquals(300 * 200, count)
+    }
+
+    @Test
+    fun place_rejectsEmptyOrOutsideRect() {
+        val source = PixelSize(100, 50)
+        assertThrows(IllegalArgumentException::class.java) {
+            TransformPlan.place(source, PixelRect(10, 10, 10, 20), Orientation.IDENTITY, source, 0, 0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TransformPlan.place(source, PixelRect(90, 40, 101, 50), Orientation.ROTATE_CLOCKWISE, source, 0, 0)
+        }
+    }
+
+    /** 계획의 대상 픽셀(캔버스 좌표)마다 그 픽셀로 오는 원본 픽셀(이미지 좌표)을 알려 준다. 조각이 타일 안쪽에 있는지도 본다. */
+    private inline fun forEachTargetPixel(plan: TransformPlan, action: (x: Int, y: Int, source: PixelPoint) -> Unit) {
+        val sourceGrid = TileGrid(plan.sourceSize.width, plan.sourceSize.height)
+        val targetGrid = TileGrid(plan.targetSize.width, plan.targetSize.height)
+        assertEquals(targetGrid.keys(), plan.targets.map { it.key })
+        for (tile in plan.targets) {
+            for (part in tile.parts) {
+                val sourceBounds = sourceGrid.bounds(part.source)
+                assertTrue("$part", part.sourceRect in PixelRect(0, 0, sourceBounds.width, sourceBounds.height))
+                assertTrue("$part", part.targetRect in PixelRect(0, 0, tile.width, tile.height))
+                for (y in part.targetRect.top until part.targetRect.bottom) {
+                    for (x in part.targetRect.left until part.targetRect.right) {
+                        val local = part.sourcePixel(x, y, plan.orientation)
+                        action(
+                            tile.key.column * TILE_SIZE + x,
+                            tile.key.row * TILE_SIZE + y,
+                            PixelPoint(sourceBounds.left + local.x, sourceBounds.top + local.y)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun crop_rejectsEmptyOrOutsideRect() {
         val source = PixelSize(100, 50)
 
