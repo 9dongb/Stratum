@@ -5,6 +5,9 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.KeyboardShortcutGroup
+import android.view.Menu
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -19,6 +22,9 @@ import androidx.compose.ui.graphics.toArgb
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.ui.StratumApp
 import com.kiln.stratum.ui.edit.EditorViewModel
+import com.kiln.stratum.ui.edit.KeyShortcutHost
+import com.kiln.stratum.ui.edit.LocalKeyShortcutHost
+import com.kiln.stratum.ui.edit.keyboardShortcutGroup
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.hideStatusBar
 import com.kiln.stratum.ui.layout.rememberWindowHinges
@@ -29,6 +35,9 @@ class MainActivity : ComponentActivity() {
 
     // 편집 상태(엔진의 문서·실행 취소 기록)를 들고 있다. 접기·펼치기로 Activity가 다시 만들어져도 남는다.
     private val editor: EditorViewModel by viewModels()
+
+    // 키보드 단축키를 받을 곳(사용자 피드백 12차 4). 편집 화면이 떠 있는 동안 할 일을 맡긴다.
+    private val shortcuts = KeyShortcutHost()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,7 +52,7 @@ class MainActivity : ComponentActivity() {
             // 설정에서 테마를 바꾸면(또는 휴대폰 설정이 바뀌면) 창 바탕·막대 아이콘 색도 따라 바꾼다
             LaunchedEffect(dark) { applyWindowTheme(dark) }
             // 접히는 부분(힌지) 정보를 화면 어디서나 읽을 수 있게 넘긴다(LocalHinges)
-            CompositionLocalProvider(LocalHinges provides rememberWindowHinges(this)) {
+            CompositionLocalProvider(LocalHinges provides rememberWindowHinges(this), LocalKeyShortcutHost provides shortcuts) {
                 StratumTheme(darkTheme = dark) {
                     StratumApp(editor)
                 }
@@ -70,6 +79,25 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         // 사진 선택기·공유 창 같은 다른 화면에서 돌아오면 다시 숨긴다
         if (hasFocus) hideStatusBar(window)
+        // 다른 창으로 가는 동안 뗀 키(스페이스바)는 알 수 없어 뗀 것으로 본다
+        if (!hasFocus) shortcuts.release()
+    }
+
+    /**
+     * 편집 화면에서는 키보드 단축키가 화면보다 먼저다. 키보드를 쓰면 안드로이드가 버튼(맨 왼쪽 위 뒤로 등)에 포커스를 주어, 스페이스바·Enter가
+     * 그 버튼을 눌러 버리기 때문이다(에뮬레이터에서 스페이스바가 홈으로 나감). 글자 칸에 쓰는 동안은 화면이 먼저다(글자를 쳐야 하므로, 계획 승인).
+     * 단축키로 쓰지 않은 키(할 일이 없는 Enter·Esc 등)는 화면으로 간다.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val typing = currentFocus?.onCheckIsTextEditor() == true
+        if (!typing && shortcuts.onKey(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** 시스템의 '단축키 보기'(메타+/)에 편집 화면의 단축키 목록을 보인다 */
+    override fun onProvideKeyboardShortcuts(data: MutableList<KeyboardShortcutGroup>, menu: Menu?, deviceId: Int) {
+        super.onProvideKeyboardShortcuts(data, menu, deviceId)
+        if (shortcuts.handler != null) data += keyboardShortcutGroup(this)
     }
 
     override fun onStop() {

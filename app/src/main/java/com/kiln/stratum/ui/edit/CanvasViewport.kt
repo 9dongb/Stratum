@@ -1,5 +1,7 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +19,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
@@ -92,6 +96,29 @@ class CanvasViewState(initial: CanvasView) {
         zoomChanges++
     }
 
+    /**
+     * 캔버스 영역의 ([centerX], [centerY])(기본은 가운데) 아래 문서 위치를 그대로 두고 [factor]배 확대·축소한다(키보드 단축키·마우스 휠,
+     * 사용자 피드백 12차 4). 배율 범위는 두 손가락 확대와 같고, 배율 표시가 잠깐 보인다. 캔버스 크기를 아직 모르면 아무것도 하지 않는다.
+     */
+    fun zoomBy(factor: Double, document: PixelSize, centerX: Double = area.width / 2.0, centerY: Double = area.height / 2.0) {
+        if (area.width <= 0 || area.height <= 0 || factor == 1.0) return
+        view = view.transformedBy(0.0, 0.0, factor, centerX, centerY, PixelSize(area.width, area.height), document)
+        zoomDrift = 1.0
+        zoomChanges++
+    }
+
+    /** 100%(문서 픽셀 하나가 화면 픽셀 하나)로 본다. 캔버스 가운데의 문서 위치는 그대로다(Ctrl+1). */
+    fun actualPixels(document: PixelSize) {
+        val scale = scaleFor(document) ?: return
+        zoomBy(1.0 / scale, document)
+    }
+
+    /** 보기를 화면에서 ([dx], [dy])픽셀 옮긴다(스페이스바를 누른 채 끌기·마우스 가운데 버튼·휠). 배율은 그대로다. */
+    fun panBy(dx: Double, dy: Double, document: PixelSize) {
+        if (area.width <= 0 || area.height <= 0) return
+        view = view.transformedBy(dx, dy, 1.0, area.width / 2.0, area.height / 2.0, PixelSize(area.width, area.height), document)
+    }
+
     companion object {
         /** 접기·펼치기나 백그라운드 종료 뒤에도 남긴다. 맞춤은 빈 배열이다. */
         val Saver: Saver<CanvasViewState, DoubleArray> = Saver(
@@ -158,6 +185,8 @@ fun CanvasViewport(
     val threeEnabled = threeFinger != null
     // 캔버스 영역의 크기(픽셀). 그리는 쪽이 쓰는 크기와 같다.
     var area by remember { mutableStateOf(IntSize.Zero) }
+    // 스페이스바를 누르고 있는지(키보드 단축키, 사용자 피드백 12차 4). 누른 채 끌면 도구 대신 캔버스를 옮긴다.
+    val shortcutHost = LocalKeyShortcutHost.current
     val zoomFormat = stringResource(R.string.canvas_zoom_description)
     val fitLabel = stringResource(R.string.canvas_fit)
     LaunchedEffect(viewState) {
@@ -182,6 +211,24 @@ fun CanvasViewport(
                 clip = true
             }
             .onSizeChanged { area = it }
+            // 스페이스바를 누른 채 끌면 캔버스를 옮긴다(포토샵과 같다). 도구·두 손가락 조작보다 먼저 받아 그 터치는 도구에 가지 않는다.
+            .pointerInput(viewState) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (!shortcutHost.spaceHeld) return@awaitEachGesture
+                    down.consume()
+                    var last = down.position
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        event.changes.forEach { it.consume() }
+                        if (!change.pressed) break
+                        val delta = change.position - last
+                        last = change.position
+                        if (delta != Offset.Zero) viewState.panBy(delta.x.toDouble(), delta.y.toDouble(), documentSize)
+                    }
+                }
+            }
             .pointerInput(viewState, tapEnabled, threeEnabled) {
                 detectCanvasGestures(
                     onTransform = { centroid, pan, zoom ->

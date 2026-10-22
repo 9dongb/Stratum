@@ -639,6 +639,24 @@ fun EditScreen(
             EditTool.Mosaic -> mosaicOptions.brush
             else -> null
         }
+        // 고른 도구의 붓을 [changed]로 바꾼다(세 손가락 밀기·키보드 대괄호). AI 제거는 크기만 바꾼다([sizeOnly]가 아니면 하지 않음).
+        // 바꿨으면 true다.
+        fun applyBrush(changed: BrushSettings, sizeOnly: Boolean): Boolean {
+            when (activeTool) {
+                EditTool.Brush -> onBrush(changed)
+                EditTool.Eraser -> onEraser(changed)
+                EditTool.Retouch -> when {
+                    !retouchRemoving -> onRetouch(changed)
+                    sizeOnly -> onRetouch(retouch.copy(size = changed.size))
+                    else -> return false
+                }
+                EditTool.Tone -> onToneOptions(toneOptions.copy(brush = changed))
+                EditTool.Blur -> onBlurOptions(blurOptions.copy(brush = changed))
+                EditTool.Mosaic -> onMosaicOptions(mosaicOptions.copy(brush = changed))
+                else -> return false
+            }
+            return true
+        }
         // 커버 화면 한 줄 막대의 칩(결정 기록 '커버 화면 개편'). 값·할 일·이름표는 메인 띠의 칸과 같다.
         // 상단 바의 조정을 켜면 같은 막대가 조정 칩이 된다(Q1 A, 사진을 가리지 않게).
         val coverAdjust = coverPanel == MainPanel.ADJUST
@@ -949,21 +967,9 @@ fun EditScreen(
 
                     override fun swipe(axis: SwipeAxis, distance: Dp) {
                         val changed = swipeAnchor.from(sizedBrush ?: return).swiped(axis, distance.value)
-                        when (activeTool) {
-                            EditTool.Brush -> onBrush(changed)
-                            EditTool.Eraser -> onEraser(changed)
-                            EditTool.Retouch -> when {
-                                !retouchRemoving -> onRetouch(changed)
-                                // AI 제거는 경도가 없어 좌우로 밀기는 하지 않는다(크기만)
-                                axis == SwipeAxis.VERTICAL -> onRetouch(retouch.copy(size = changed.size))
-                                else -> return
-                            }
-                            EditTool.Tone -> onToneOptions(toneOptions.copy(brush = changed))
-                            EditTool.Blur -> onBlurOptions(blurOptions.copy(brush = changed))
-                            EditTool.Mosaic -> onMosaicOptions(mosaicOptions.copy(brush = changed))
-                            else -> return
-                        }
-                        sizePreview.onChange()
+                        // AI 제거는 경도가 없어 좌우로 밀기는 하지 않는다(크기만)
+                        if (activeTool == EditTool.Retouch && retouchRemoving && axis != SwipeAxis.VERTICAL) return
+                        if (applyBrush(changed, sizeOnly = axis == SwipeAxis.VERTICAL)) sizePreview.onChange()
                     }
 
                     override fun swipeEnd() {
@@ -973,6 +979,63 @@ fun EditScreen(
                 }
             } else {
                 null
+            }
+            // 키보드 단축키(사용자 피드백 12차 4: "키보드 마우스 단축키 먼저", 포토샵과 같은 키). 글자 칸에 쓰는 동안은 오지 않는다(MainActivity).
+            // 같은 일을 하는 버튼·제스처와 같은 조건일 때만 하고, 단축키로 알아본 키는 하지 못해도 받은 것으로 본다(포커스를 받은 버튼으로 가지 않게).
+            // 창(크기 변경·글자·내보내기 등)이나 유동화 작업 모드가 떠 있으면 단축키를 받지 않는다(창의 몫). Esc는 닫을 것이 없으면 받지 않는다.
+            // Enter는 할 일이 없어도 받는다: 키보드를 쓰면 안드로이드가 맨 왼쪽 위 뒤로 버튼에 포커스를 주어, 받지 않으면 홈으로 나갔다(에뮬레이터).
+            val editable = ready != null && !ready.busy && !cropMode
+            val shownDocument = ready?.let { shownOrientation.targetSize(it.documentSize) }
+            val onShortcut: (Shortcut) -> Boolean = handler@{ shortcut ->
+                if (dialogOpen) return@handler false
+                var handled = true
+                when (shortcut) {
+                    Shortcut.Undo -> if (editable && ready?.canUndo == true) onUndo()
+                    Shortcut.Redo -> if (editable && ready?.canRedo == true) onRedo()
+                    is Shortcut.PickTool -> if (toolsEnabled && !(cropMode && shortcut.tool != EditTool.Transform)) {
+                        // 커버에서는 탭을 누른 것과 같이 더보기 줄을 닫고 조정을 끈다(같은 막대에 도구 옵션을 보이게)
+                        if (widthClass == WidthClass.Compact) {
+                            coverMoreOpen = false
+                            if (floating.panel == MainPanel.ADJUST) floating.closePanel()
+                        }
+                        val subTool = shortcut.subTool
+                        if (subTool != null) chooseSubTool(subTool) else selection.pick(shortcut.tool)
+                    }
+                    is Shortcut.Size -> sizedBrush?.let { applyBrush(it.copy(size = steppedBrushSize(it.size, shortcut.larger)), sizeOnly = true) }
+                    is Shortcut.Hardness -> sizedBrush?.takeIf { !(activeTool == EditTool.Retouch && retouchRemoving) }?.let {
+                        applyBrush(it.copy(hardness = steppedHardness(it.hardness, shortcut.harder)), sizeOnly = false)
+                    }
+                    Shortcut.FitToScreen -> if (ready != null) viewState.fit()
+                    Shortcut.ActualPixels -> shownDocument?.let { viewState.actualPixels(it) }
+                    is Shortcut.Zoom -> shownDocument?.let { viewState.zoomBy(if (shortcut.zoomIn) KEY_ZOOM_STEP else 1.0 / KEY_ZOOM_STEP, it) }
+                    Shortcut.SelectAll -> if (editable) selectionActions.all()
+                    Shortcut.Deselect -> if (editable && ready?.selection != null) selectionActions.none()
+                    Shortcut.InvertSelection -> if (editable) selectionActions.invert()
+                    Shortcut.NewLayer -> if (editable) layerActions.add()
+                    Shortcut.DuplicateLayer -> if (editable) layerActions.duplicate()
+                    Shortcut.MergeDown -> if (editable) layerActions.mergeDown()
+                    Shortcut.DeleteSelected -> if (editable && ready?.selection != null) selectionActions.delete()
+                    Shortcut.Confirm -> if (crop != null && crop.canApply && ready?.busy != true) crop.onApply()
+                    Shortcut.Pan -> Unit
+                    // 하나씩 닫는다: 하위 도구 메뉴 → 띠의 옵션 창 → 자르기(취소) → 고른 도구. 편집 화면을 나가지는 않는다.
+                    Shortcut.Cancel -> when {
+                        subToolMenu.isOpen -> subToolMenu.close()
+                        floating.flyout != null -> floating.closeFlyout()
+                        crop != null -> crop.onCancel()
+                        selection.active != null -> selection.close()
+                        else -> handled = false
+                    }
+                }
+                handled
+            }
+            val shortcutHost = LocalKeyShortcutHost.current
+            val currentShortcut by rememberUpdatedState(onShortcut)
+            DisposableEffect(shortcutHost) {
+                shortcutHost.handler = { currentShortcut(it) }
+                onDispose {
+                    shortcutHost.handler = null
+                    shortcutHost.release()
+                }
             }
             when (widthClass) {
                 WidthClass.Compact -> if (coverCropWindow && coverLandscape) {
