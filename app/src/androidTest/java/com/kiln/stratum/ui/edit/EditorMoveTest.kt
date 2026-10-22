@@ -13,6 +13,8 @@ import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.engine.transform.Orientation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -117,6 +119,64 @@ class EditorMoveTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         val after = viewModel.state.value as EditorState.Ready
         assertEquals(hidden.revision, after.revision)
+    }
+
+    /** 투명한 캔버스에 가로 막대(가운데 줄 y 200, x 100~400, 굵기 40)를 긋는다. 내용 사각형은 (80, 180)~(420, 220)이다. */
+    private fun openWithBar(): EditorState.Ready {
+        onMain {
+            viewModel.onCanvasSize(1000, 800)
+            viewModel.newCanvas(SIZE.width, SIZE.height, CanvasFill.Transparent)
+        }
+        val opened = awaitReady { it.documentSize == SIZE }
+        onMain {
+            viewModel.edit(
+                PaintStroke(LayerId(0), listOf(StrokePoint(100f, 200f), StrokePoint(400f, 200f)), BrushSettings(size = 40f, hardness = 1f, color = Color.BLACK), false)
+            )
+        }
+        return awaitReady { it.revision > opened.revision }
+    }
+
+    @Test
+    fun turnButtons_turnTheLayerAroundItsContent_inOneUndoStep() {
+        // 사용자 피드백 12차 2: 이동 도구에서 고른 레이어만 돌린다
+        val before = openWithBar()
+
+        onMain { viewModel.moveActions.orient(Orientation.ROTATE_CLOCKWISE) }
+        val turned = awaitReady { it.revision > before.revision }
+
+        // 340×40 가로 막대가 가운데 (250, 200)를 축으로 40×340 세로 막대가 된다(x 230~270, y 30~370)
+        assertEquals(Color.BLACK, shown(turned).getPixel(250, 60))
+        assertEquals(Color.BLACK, shown(turned).getPixel(250, 340))
+        assertEquals(0, Color.alpha(shown(turned).getPixel(100, 200)))
+        assertTrue(turned.canUndo)
+
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > turned.revision }
+        assertEquals(Color.BLACK, shown(undone).getPixel(100, 200))
+        assertEquals(0, Color.alpha(shown(undone).getPixel(250, 60)))
+    }
+
+    @Test
+    fun turningAHiddenLayer_tellsWhy_andATextLayer_asksToConvertFirst() {
+        val before = openWithBar()
+        onMain { viewModel.edit(SetLayerVisible(LayerId(0), false)) }
+        val hidden = awaitReady { it.revision > before.revision }
+
+        onMain { viewModel.moveActions.orient(Orientation.FLIP_HORIZONTAL) }
+        assertEquals(EditorMessage.HiddenLayer, runBlocking { withTimeout(10_000) { viewModel.messages.first() } })
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(hidden.revision, (viewModel.state.value as EditorState.Ready).revision)
+
+        // 글자 레이어는 돌린 글자를 다시 그릴 수 없어, 먼저 픽셀로 바꿀지 묻는다(한 번에 하는 일과 같다)
+        onMain {
+            viewModel.setTextStyle(TextStyle(size = 40f, color = Color.BLACK))
+            viewModel.addText("Hi", 20f, 20f)
+        }
+        val withText = awaitReady { !it.busy && it.layers.size == 2 }
+        onMain { viewModel.moveActions.orient(Orientation.ROTATE_CLOCKWISE) }
+        onMain { assertEquals(withText.layers.last().id, viewModel.rasterizeAsk.value) }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertEquals(withText.revision, (viewModel.state.value as EditorState.Ready).revision)
     }
 
     private companion object {

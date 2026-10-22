@@ -5,6 +5,7 @@ import androidx.compose.ui.res.stringResource
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.tone.ToneRange
+import com.kiln.stratum.engine.transform.Orientation
 
 /*
  * 커버 화면 한 줄 막대([CoverToolBar])의 칸들(결정 기록 '커버 화면 개편'). 값 칩의 슬라이더(값·할 일·이름표)는 메인 화면 띠의 칸(ToolStrips.kt)을 그대로 쓴다.
@@ -126,6 +127,24 @@ internal fun selectionBar(mode: SubTool, controls: SelectionControls, onChoose: 
         add(BarGroup("actions", stringResource(R.string.bar_selection_actions)) { SelectionActionButtons(controls, compact = true) })
     }
 }
+
+/**
+ * 이동 도구의 막대: 고른 레이어 돌리기·뒤집기 칩 넷([LayerTurns], 사용자 피드백 12차 2). 자르기·회전 창과 같은 아이콘·이름이고,
+ * 화면 읽기 기능은 '레이어를 …'으로 읽는다. 처리 중에는 꺼진다([enabled]).
+ */
+@Composable
+internal fun moveBar(onOrient: (Orientation) -> Unit, enabled: Boolean): List<BarItem> =
+    LayerTurns.map { turn ->
+        BarButton(
+            key = turn.key,
+            label = stringResource(turn.label),
+            icon = turn.icon,
+            onClick = { onOrient(turn.orientation) },
+            enabled = enabled,
+            description = stringResource(turn.description),
+            iconRotation = turn.iconRotation
+        )
+    }
 
 /** 리터칭의 막대: 하위 도구(스팟 복구·복구·복제·AI 제거), (AI 제거) 고른 물체 지우기, 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도 */
 @Composable

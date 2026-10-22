@@ -622,6 +622,8 @@ fun EditScreen(
                 EditTool.Tone -> toneControls?.let { toneBar(checkNotNull(selection.modeOf(EditTool.Tone)), it, chooseSubTool) }
                 EditTool.Blur -> blurControls?.let { blurBar(checkNotNull(selection.modeOf(EditTool.Blur)), it, chooseSubTool) }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicBar(it) }
+                // 이동 도구: 고른 레이어 돌리기·뒤집기(사용자 피드백 12차 2)
+                EditTool.Move -> ready?.let { moveBar(moveActions::orient, enabled = !it.busy) }
                 else -> null
             }.orEmpty()
         }
@@ -669,6 +671,7 @@ fun EditScreen(
                     blurStrip(it)
                 }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicStrip(it) }
+                EditTool.Move -> ready?.let { moveStrip(moveActions::orient, enabled = !it.busy) }
                 else -> null
             }
         }

@@ -36,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -123,7 +124,10 @@ class BarColors(val controls: ColorControls) : BarItem {
         get() = "colors"
 }
 
-/** 버튼 칩: 누르면 바로 한다(AI 제거의 '지우기'). [accent]면 파란 채움 버튼이다. */
+/**
+ * 버튼 칩: 누르면 바로 한다(AI 제거의 '지우기', 이동 도구의 돌리기·뒤집기). [accent]면 파란 채움 버튼이고, 아니면 [icon]을 앞에 둔 칩이다
+ * ([iconRotation]만큼 돌려 그림). [description]은 화면 읽기 기능이 읽는 이름이다.
+ */
 class BarButton(
     override val key: String,
     val label: String,
@@ -132,7 +136,8 @@ class BarButton(
     val enabled: Boolean = true,
     val accent: Boolean = false,
     val description: String? = null,
-    val tag: String? = null
+    val tag: String? = null,
+    val iconRotation: Float = 0f
 ) : BarItem
 
 /** 켜고 끄는 칩(자동 선택의 '이어진 곳만'). 켜지면 선택 배경이다. */
@@ -339,7 +344,12 @@ private fun BarChip(item: BarItem, expand: (String) -> Unit) {
                 onClick = item.onClick,
                 enabled = item.enabled,
                 label = { Text(item.label, maxLines = 1) },
-                modifier = Modifier.testTag(item.tag ?: EditScreenTags.bar(item.key))
+                modifier = Modifier
+                    .testTag(item.tag ?: EditScreenTags.bar(item.key))
+                    .semantics { item.description?.let { contentDescription = it } },
+                leadingIcon = item.icon?.let { icon ->
+                    { Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp).rotate(item.iconRotation)) }
+                }
             )
         }
         is BarToggle -> StratumFilterChip(

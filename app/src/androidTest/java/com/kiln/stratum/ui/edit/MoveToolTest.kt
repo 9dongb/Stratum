@@ -6,11 +6,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,7 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -31,7 +33,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 이동 도구(사용자 피드백 7차, 결정 기록 '이동 도구')의 자리·안내와, 캔버스 끌기가 옮기기를 문서 좌표로 보내는지 확인한다. */
+/**
+ * 이동 도구(사용자 피드백 7차, 결정 기록 '이동 도구')의 자리·안내와, 캔버스 끌기가 옮기기를 문서 좌표로 보내는지,
+ * 띠·막대의 돌리기·뒤집기 버튼(사용자 피드백 12차 2)이 방향을 보내는지 확인한다.
+ */
 @RunWith(AndroidJUnit4::class)
 class MoveToolTest {
 
@@ -59,6 +64,10 @@ class MoveToolTest {
 
         override fun cancel() {
             calls += "cancel"
+        }
+
+        override fun orient(orientation: Orientation) {
+            calls += "orient $orientation"
         }
     }
 
@@ -93,7 +102,7 @@ class MoveToolTest {
     private fun text(id: Int) = composeRule.activity.getString(id)
 
     @Test
-    fun main_moveIsTheTopTool_withoutAStripOrAHint() {
+    fun main_moveIsTheTopTool_withTurnCellsInTheStrip_andNoHint() {
         show(930, 700)
         val move = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
         val transform = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).fetchSemanticsNode().layoutBoundsInWindow()
@@ -102,13 +111,22 @@ class MoveToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Move)).performClick()
 
-        // 고를 옵션이 없어 띠가 없고, 도구를 고를 때 뜨던 안내 알림도 없다(사용자 피드백 8차 1-7)
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        // 띠에 고른 레이어 돌리기·뒤집기 칸 넷(사용자 피드백 12차 2). 수치가 없어 오른쪽 수치 바는 없고, 안내 알림도 없다(8차 1-7).
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
+        for (turn in LayerTurns) composeRule.onNodeWithTag(EditScreenTags.strip(turn.key)).performClick()
+        composeRule.runOnIdle {
+            assertEquals(LayerTurns.map { "orient ${it.orientation}" }, calls)
+            assertEquals(
+                listOf(Orientation.ROTATE_COUNTERCLOCKWISE, Orientation.ROTATE_CLOCKWISE, Orientation.FLIP_HORIZONTAL, Orientation.FLIP_VERTICAL),
+                LayerTurns.map { it.orientation }
+            )
+        }
     }
 
     @Test
-    fun cover_moveIsTheFirstInTheMoreRow_withoutAnOptionsSheet() {
+    fun cover_moveIsTheFirstInTheMoreRow_andTheBarHasTheTurnChips() {
         show(411, 800)
         // 커버 탭 줄에는 없고(사용자 지정 탭: 자르기·선택·브러시·리터칭·유동화·더보기), 더보기 줄 맨 앞이다
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).assertDoesNotExist()
@@ -118,10 +136,14 @@ class MoveToolTest {
         assertTrue("$move should be left of $eraser", move.right <= eraser.left + 1f)
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).performClick()
 
-        // 고를 옵션이 없어 옵션 칸을 띄우지 않고(설명 줄도 뺌, 사용자 피드백 8차 1-7), 한 줄 막대에는 도구 이름만 보인다(결정 기록 '커버 화면 개편')
+        // 한 줄 막대에 돌리기·뒤집기 칩 넷(사용자 피드백 12차 2, 전에는 도구 이름만). 화면 읽기는 '레이어를 …'로 읽는다.
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertTextEquals(composeRule.activity.getString(R.string.tool_move_short))
+        composeRule.onNodeWithTag(EditScreenTags.bar(LayerTurns.first().key))
+            .assertContentDescriptionEquals(text(R.string.layer_rotate_left))
+        for (turn in LayerTurns) composeRule.onNodeWithTag(EditScreenTags.bar(turn.key)).performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(LayerTurns.map { "orient ${it.orientation}" }, calls) }
     }
 
     @Test

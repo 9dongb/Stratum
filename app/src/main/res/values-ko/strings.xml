@@ -345,6 +345,10 @@
     <string name="tool_mosaic">모자이크</string>
     <string name="tool_move">이동 도구</string>
     <string name="tool_move_short">이동</string>
+    <string name="layer_rotate_left">레이어를 왼쪽으로 90° 돌리기</string>
+    <string name="layer_rotate_right">레이어를 오른쪽으로 90° 돌리기</string>
+    <string name="layer_flip_horizontal">레이어 좌우 뒤집기</string>
+    <string name="layer_flip_vertical">레이어 상하 뒤집기</string>
     <string name="mosaic_cell">셀 크기</string>
 
     <!-- 명암(닷지·번) -->

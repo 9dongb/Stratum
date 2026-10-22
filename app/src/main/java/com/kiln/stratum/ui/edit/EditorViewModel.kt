@@ -72,6 +72,7 @@ import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.ObjectMask
 import com.kiln.stratum.engine.platform.ObjectSegmenter
+import com.kiln.stratum.engine.platform.OrientLayer
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.PreviewRenderer
@@ -97,6 +98,7 @@ import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.tone.ToneFill
 import com.kiln.stratum.export.ExportStorage
 import com.kiln.stratum.export.exportFileName
@@ -541,12 +543,13 @@ class EditorViewModel internal constructor(
         override fun cancel() = cancelStroke()
     }
 
-    /** 이동 도구가 보내는 일(결정 기록 '이동 도구') */
+    /** 이동 도구가 보내는 일(결정 기록 '이동 도구'·'레이어 돌리기·뒤집기') */
     val moveActions: MoveActions = object : MoveActions {
         override fun begin(x: Float, y: Float) = beginMove(x, y)
         override fun move(x: Float, y: Float) = extendMove(x, y)
         override fun end() = endMove()
         override fun cancel() = cancelMove()
+        override fun orient(orientation: Orientation) = orientLayer(orientation)
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -1852,6 +1855,20 @@ class EditorViewModel internal constructor(
         if ((shift.dx == 0 && shift.dy == 0) || editing) return restoreAfterMove()
         committingShift = shift
         runEdit(TranslateLayer(shift.layerId, shift.dx, shift.dy), onCommitted = { committingShift = null }) { committingShift = null }
+    }
+
+    /**
+     * 이동 도구의 돌리기·뒤집기: 고른 레이어만 [orientation] 방향으로 돌리거나 뒤집는다(실행 취소 한 단계, 사용자 피드백 12차 2,
+     * 결정 기록 '레이어 돌리기·뒤집기'). 축은 레이어 내용의 가운데이고, 캔버스 밖으로 나간 곳은 잘린다([OrientLayer]).
+     * 다른 편집을 처리하는 중이거나 옮기는·칠하는 중이면 무시한다. 숨긴 레이어면 알리고, 글자 레이어면 픽셀로 바꿀지 먼저 묻는다
+     * (선택 지우기처럼 한 번에 하는 일과 같다).
+     */
+    fun orientLayer(orientation: Orientation) {
+        if (editing || moving != null || drawing != null || queuedStrokes.isNotEmpty() || hasLiveValues) return
+        val layer = currentLayer() ?: return
+        if (!layer.visible) return tellHiddenLayer()
+        if (layer.text != null) return askRasterize(layer.id)
+        runEdit(OrientLayer(layer.id, orientation))
     }
 
     /** 두 손가락 조작이 시작돼 끄던 옮기기를 버린다(기록하지 않음) */

@@ -47,6 +47,16 @@ import kotlin.math.roundToInt
 private fun numbersLast(numbers: List<StripItem>, rest: List<StripItem>): List<StripItem> =
     if (rest.isEmpty() || numbers.isEmpty()) rest + numbers else rest + StripDivider("beforeNumbers") + numbers
 
+/**
+ * 이동 도구의 띠: 고른 레이어 돌리기·뒤집기 칸 넷([LayerTurns], 사용자 피드백 12차 2, 결정 기록 '레이어 돌리기·뒤집기').
+ * 자르기·회전 띠와 같은 아이콘이고, 화면 읽기 기능은 '레이어를 …'으로 읽는다. 처리 중에는 꺼진다([enabled]).
+ */
+@Composable
+internal fun moveStrip(onOrient: (Orientation) -> Unit, enabled: Boolean): List<StripItem> =
+    LayerTurns.map { turn ->
+        IconCell(turn.key, turn.icon, stringResource(turn.description), { onOrient(turn.orientation) }, enabled = enabled, iconRotation = turn.iconRotation)
+    }
+
 /** 오른쪽 수치 바에 두는 슬라이더 수(사용자 피드백 12차: "최대 3개까지") */
 internal const val MAX_BAR_SLIDERS = 3
 

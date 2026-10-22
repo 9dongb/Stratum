@@ -347,6 +347,10 @@
     <string name="tool_mosaic">Mosaic</string>
     <string name="tool_move">Move tool</string>
     <string name="tool_move_short">Move</string>
+    <string name="layer_rotate_left">Rotate layer 90° left</string>
+    <string name="layer_rotate_right">Rotate layer 90° right</string>
+    <string name="layer_flip_horizontal">Flip layer horizontally</string>
+    <string name="layer_flip_vertical">Flip layer vertically</string>
     <string name="mosaic_cell">Cell size</string>
 
     <!-- 명암(닷지·번) -->
