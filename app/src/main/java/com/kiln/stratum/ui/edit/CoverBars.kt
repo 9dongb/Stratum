@@ -124,7 +124,13 @@ internal fun selectionBar(mode: SubTool, controls: SelectionControls, onChoose: 
                 )
             )
         }
-        add(BarGroup("actions", stringResource(R.string.bar_selection_actions)) { SelectionActionButtons(controls, compact = true) })
+        add(
+            BarGroup(
+                "actions",
+                stringResource(R.string.bar_selection_actions),
+                columnContent = { SelectionActionButtons(controls, vertical = true) }
+            ) { SelectionActionButtons(controls, compact = true) }
+        )
     }
 }
 

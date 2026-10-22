@@ -43,6 +43,9 @@ object StratumShapes {
     /** 아래 시트의 위쪽 모서리 */
     val Sheet = RoundedCornerShape(topStart = StratumRadius.Large, topEnd = StratumRadius.Large)
 
+    /** 오른쪽에 붙는 패널(커버를 가로로 돌렸을 때의 레이어 패널)의 왼쪽 모서리 */
+    val SidePanel = RoundedCornerShape(topStart = StratumRadius.Large, bottomStart = StratumRadius.Large)
+
     /** 색 동그라미·바뀐 항목 점 */
     val Dot = CircleShape
 }

@@ -6,11 +6,13 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
@@ -60,7 +62,8 @@ import com.kiln.stratum.ui.layout.BarButtonContentInset
 import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
-import com.kiln.stratum.ui.layout.widthClassOf
+import com.kiln.stratum.ui.layout.isCoverLandscape
+import com.kiln.stratum.ui.layout.layoutClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
 
@@ -233,14 +236,37 @@ fun LiquifyMode(
     // 바탕은 편집 화면처럼 작업 공간 색이다(캔버스 주변). 위 막대와 옵션은 제 색을 칠한다.
     Surface(modifier.fillMaxSize().testTag(EditScreenTags.LIQUIFY_MODE), color = StratumTheme.colors.workspace) {
         BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { screenTop = it.positionInRoot().y }) {
-            val widthClass = widthClassOf(maxWidth.value)
+            // 편집 화면과 같이 짧은 쪽으로 커버 배치인지 고른다(사용자 피드백 12차 3)
+            val widthClass = layoutClassOf(maxWidth.value, maxHeight.value)
             // 닫힌 화면(커버)은 새 창 공통 규칙대로 취소·적용을 맨 아래 X·✓ 줄에 둔다(결정 기록 '닫힌 화면 새 창')
             val coverWindow = widthClass == WidthClass.Compact
+            // 커버를 가로로 돌렸으면 그 줄들이 캔버스 오른쪽에 세로로 선다(사용자 피드백 12차 3: "커버화면 배치가 돌아간형태")
+            val coverLandscape = isCoverLandscape(maxWidth.value, maxHeight.value)
             // 배치가 바뀌거나(접기·펼치기) 적용하기 시작하면 띠의 옵션 창을 닫는다
             LaunchedEffect(widthClass, state.busy) { floating.closeFlyout() }
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
-                if (coverWindow) {
+                if (coverWindow && coverLandscape) {
+                    // 돌아간 배치: [캔버스 | 크기·압력 기둥 | ✓ · 도구 · X 기둥]. 캔버스는 왼쪽 카메라 구멍과 아래 시스템 바를 피한다(편집 화면과 같다).
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        LiquifyCanvas(
+                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip,
+                            Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
+                        )
+                        BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
+                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview), state = coverBar)
+                        CoverWorkBar(
+                            onCancel = actions::cancel,
+                            onDone = actions::apply,
+                            doneEnabled = state.changed && !state.busy,
+                            cancelEnabled = !state.busy,
+                            cancelTag = EditScreenTags.LIQUIFY_CANCEL,
+                            doneTag = EditScreenTags.LIQUIFY_APPLY,
+                            vertical = true,
+                            middle = { LiquifyToolColumn(state.tool, enabled = !state.busy, onTool = actions::setTool) }
+                        )
+                    }
+                } else if (coverWindow) {
                     LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.weight(1f).fillMaxWidth())
                     // 크기·압력은 편집 화면과 같은 한 줄 막대다(칩을 누르면 같은 줄이 슬라이더, 결정 기록 '커버 화면 개편').
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
@@ -458,6 +484,30 @@ private fun LiquifyToolTabs(tool: LiquifyTool, enabled: Boolean, onTool: (Liquif
                 modifier = Modifier.testTag(EditScreenTags.liquifyTool(entry))
             ) {
                 Icon(painterResource(liquifyToolIcon(entry)), contentDescription = stringResource(liquifyToolLabel(entry)))
+            }
+        }
+    }
+}
+
+/**
+ * 커버를 가로로 돌렸을 때 오른쪽 기둥 가운데(✓와 X 사이)의 도구 칸 넷(위아래로, 아이콘과 이름). 고른 도구는 선택 배경이다.
+ * 이름표·할 일은 가로 탭([LiquifyToolTabs])과 같다. 세로 칸은 폭이 늘 같아 이름도 함께 보인다.
+ */
+@Composable
+private fun LiquifyToolColumn(tool: LiquifyTool, enabled: Boolean, onTool: (LiquifyTool) -> Unit) {
+    val colors = StratumTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        for (entry in LiquifyTool.entries) {
+            val selected = entry == tool
+            val label = stringResource(liquifyToolLabel(entry))
+            val color = when {
+                !enabled -> colors.textDisabled
+                selected -> colors.selectedContent
+                else -> colors.textSecondary
+            }
+            CellBox(EditScreenTags.liquifyTool(entry), label, null, open = selected, enabled = enabled, onClick = { onTool(entry) }) {
+                Icon(painterResource(liquifyToolIcon(entry)), contentDescription = null, tint = color)
+                CompactLabel(label, if (selected && enabled) colors.selectedContent else if (enabled) colors.textDescription else colors.textDisabled)
             }
         }
     }

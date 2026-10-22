@@ -495,6 +495,39 @@ class LiquifyModeTest {
     }
 
     @Test
+    fun coverLandscape_isTheRotatedLayout_barAndWorkColumnRightOfTheCanvas() {
+        // 사용자 피드백 12차 3: 커버를 가로로 돌리면 커버 배치가 돌아간 형태다. [캔버스 | 크기·압력 기둥 | ✓ · 도구 · X 기둥]
+        show(797, 411)
+        val bounds = { tag: String -> composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow() }
+        val canvas = bounds(EditScreenTags.LIQUIFY_CANVAS)
+        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
+        val apply = bounds(EditScreenTags.LIQUIFY_APPLY)
+        assertTrue("canvas $canvas should be left of the bar $bar", canvas.right <= bar.left + 1f)
+        assertTrue("bar $bar should be left of the work column ($apply)", bar.right <= apply.left + 1f)
+        assertTrue("bar $bar should be a tall column", bar.height > bar.width * 2)
+        // 위부터 ✓, 뒤틀기·오목·볼록·재구성, X(한 기둥)
+        val column = listOf(apply) + LiquifyTool.entries.map { bounds(EditScreenTags.liquifyTool(it)) } + bounds(EditScreenTags.LIQUIFY_CANCEL)
+        for ((upper, lower) in column.zipWithNext()) assertTrue("$upper should be above $lower", upper.bottom <= lower.top + 1f)
+        for (item in column) assertEquals("$item", apply.center.x, item.center.x, 2f)
+        composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.PUSH)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.liquifyTool(LiquifyTool.BLOAT)).performClick()
+        composeRule.runOnIdle { assertEquals(LiquifyTool.BLOAT, actions.chosenTool) }
+
+        // 크기·압력 칩은 위아래로 쌓이고, 펼친 화면의 띠는 없다
+        assertTrue(bounds(EditScreenTags.bar("size")).top < bounds(EditScreenTags.bar("strength")).top)
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        // 칩을 누르면 같은 기둥이 세로 슬라이더이고, 뒤로 가기는 칩부터 접고 다음이 취소다
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).performClick()
+        val slider = bounds(EditScreenTags.LIQUIFY_SIZE)
+        assertTrue("$slider should be tall", slider.height > slider.width)
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_SIZE).assertDoesNotExist()
+        composeRule.runOnIdle { assertTrue("${actions.calls}", actions.calls.isEmpty()) }
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.runOnIdle { assertEquals(listOf("cancel"), actions.calls) }
+    }
+
+    @Test
     fun mainScreens_optionsAreTheTopLeftStrip_overTheWholeCanvas() {
         // 사용자 피드백 8차 1-5 정정: 새 창 그대로, 수치 조정과 도구 바꾸기는 편집 화면처럼 왼쪽 위 띠(새 창이라 도구 막대는 없다)
         show(930, 700)

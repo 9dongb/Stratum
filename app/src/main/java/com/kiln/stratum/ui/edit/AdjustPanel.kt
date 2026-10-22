@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -39,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -63,9 +65,11 @@ import com.kiln.stratum.ui.components.QuietButton
 import com.kiln.stratum.ui.components.StratumActionChip
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumSlider
+import com.kiln.stratum.ui.components.StratumVerticalSlider
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
+import com.kiln.stratum.ui.theme.compactTextAutoSize
 
 /** 보정 패널이 엔진 쪽(ViewModel)에 보내는 일 */
 interface AdjustActions {
@@ -155,25 +159,48 @@ internal fun adjustBar(controls: AdjustControls): List<BarItem> =
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+            },
+            // 커버를 가로로 돌린 세로 막대(사용자 피드백 12차 3): 띠 칸 모양의 항목 칸과, 펼치면 같은 기둥의 세로 슬라이더
+            cell = { expand ->
+                AdjustCell(entry, changed = entry.isChanged(controls.adjustments), enabled = controls.enabled, onClick = expand)
+            },
+            columnContent = {
+                if (entry.isSlider) {
+                    CommitOnDispose(controls.actions)
+                    AdjustSliderColumn(entry, controls)
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CompactLabel(stringResource(entry.label), StratumTheme.colors.textSecondary)
+                    }
+                }
             }
         )
-    } + BarCustom(key = "adjust_reset_all", chip = { ResetAllButton(controls) }, content = {})
+    } + BarCustom(key = "adjust_reset_all", chip = { ResetAllButton(controls) }, content = {}, cell = { ResetAllCell(controls) })
 
 /**
  * 커버 화면 조정 막대에서 곡선 칩을 펼치면 막대 위(캔버스 아래쪽 위)에 뜨는 곡선 편집기와 그 옆 버튼(곡선 초기화·고른 점 지우기).
- * 옆쪽 시스템 바·카메라 구멍만 피한다.
+ * 옆쪽 시스템 바·카메라 구멍만 피한다. 커버를 가로로 돌렸으면([side]) 세로 막대 왼쪽, 캔버스 오른쪽 아래에 붙는 패널(폭 [CoverSidePanelWidth])이다
+ * (사용자 피드백 12차 3).
  */
 @Composable
-internal fun CoverCurveSheet(controls: AdjustControls, modifier: Modifier = Modifier) {
+internal fun CoverCurveSheet(controls: AdjustControls, modifier: Modifier = Modifier, side: Boolean = false) {
     CommitOnDispose(controls.actions)
     Surface(
-        modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider).testTag(EditScreenTags.COVER_CURVE_SHEET),
+        modifier
+            .then(
+                if (side) {
+                    Modifier.width(CoverSidePanelWidth).edgeDivider(DividerEdge.Start, StratumTheme.colors.divider).edgeDivider(DividerEdge.Top, StratumTheme.colors.divider)
+                } else {
+                    Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider)
+                }
+            )
+            .testTag(EditScreenTags.COVER_CURVE_SHEET),
         color = StratumTheme.colors.panel
     ) {
         CurveBlock(
             controls,
             Modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .then(if (side) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .fillMaxWidth()
                 .height(CompactCurveHeight)
@@ -216,6 +243,93 @@ private fun CommitOnDispose(actions: AdjustActions) {
         onDispose { actions.commit() }
     }
 }
+
+/** 세로 막대(커버 가로)의 조정 항목 칸: 이름과 그 아래 작은 점(바꾼 항목만). 가로 막대의 칩([AdjustChip])과 같은 이름표다. */
+@Composable
+private fun AdjustCell(item: AdjustItem, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val colors = StratumTheme.colors
+    val name = stringResource(item.label)
+    CellBox(EditScreenTags.adjustChip(item), name, null, open = false, enabled = enabled, onClick = onClick) {
+        CompactLabel(name, if (enabled) colors.textSecondary else colors.textDisabled)
+        Box(
+            Modifier
+                .padding(top = 4.dp)
+                .size(6.dp)
+                .background(if (changed) colors.sliderFill else Color.Transparent, StratumShapes.Dot)
+        )
+    }
+}
+
+/** 세로 막대(커버 가로)의 '모두 초기화' 칸. 가로 막대의 버튼([ResetAllButton])과 같은 이름표·조건이다. */
+@Composable
+private fun ResetAllCell(controls: AdjustControls) {
+    val colors = StratumTheme.colors
+    val enabled = controls.enabled && !controls.adjustments.isIdentity
+    val label = stringResource(R.string.adjust_reset_all)
+    CellBox(EditScreenTags.ADJUST_RESET_ALL, label, null, open = false, enabled = enabled, onClick = { controls.actions.record { Adjustments.NONE } }) {
+        Icon(painterResource(R.drawable.ic_restart_alt), contentDescription = null, tint = if (enabled) colors.selectedContent else colors.textDisabled)
+        CompactLabel(label, if (enabled) colors.selectedContent else colors.textDisabled)
+    }
+}
+
+/**
+ * 세로 막대(커버 가로)에서 조정 항목 칸을 펼친 기둥: 이름(두 번 누르면 그 항목만 초기화)·숫자와 세로 슬라이더([StratumVerticalSlider], 위로 끌면 커짐).
+ * 끄는 동안 미리 보고 놓으면 기록한다(가로 막대의 [AdjustSliderRow]와 같다). 화면 읽기 기능의 '초기화' 동작도 같다.
+ */
+@Composable
+private fun AdjustSliderColumn(item: AdjustItem, controls: AdjustControls) {
+    val value = item.valueIn(controls.adjustments)
+    val name = stringResource(item.label)
+    val resetLabel = stringResource(R.string.adjust_reset_item, name)
+    val shown = item.format(value, LocalConfiguration.current.locales[0])
+    val actions = controls.actions
+    val reset = { actions.record { item.resetIn(it) } }
+    val colors = StratumTheme.colors
+    val span = item.max - item.min
+    Column(
+        Modifier.fillMaxSize().padding(vertical = 4.dp).testTag(EditScreenTags.adjustSlider(item)),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.pointerInput(controls.enabled, item) { if (controls.enabled) detectTapGestures(onDoubleTap = { reset() }) }) {
+            CompactLabel(name, if (controls.enabled) colors.textSecondary else colors.textDisabled)
+        }
+        Text(
+            text = shown,
+            color = if (controls.enabled) colors.textPrimary else colors.textDisabled,
+            style = MaterialTheme.typography.labelLarge,
+            autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
+            maxLines = 1,
+            overflow = TextOverflow.Clip
+        )
+        StratumVerticalSlider(
+            value = ((value - item.min) / span).coerceIn(0f, 1f),
+            onValueChange = { fraction -> actions.preview { item.applyTo(it, item.min + fraction * span) } },
+            onValueChangeFinished = actions::commit,
+            enabled = controls.enabled,
+            // 0에서 양쪽으로 바꾸는 값이라 0의 자리부터 칠한다(가로 조정 슬라이더와 같다)
+            origin = ((0f - item.min) / span).coerceIn(0f, 1f),
+            modifier = Modifier
+                .weight(1f)
+                .width(SliderThickness)
+                .padding(vertical = 8.dp)
+                .semantics {
+                    contentDescription = name
+                    stateDescription = shown
+                    if (controls.enabled) {
+                        customActions = listOf(
+                            CustomAccessibilityAction(resetLabel) {
+                                reset()
+                                true
+                            }
+                        )
+                    }
+                }
+        )
+    }
+}
+
+/** 세로 막대의 슬라이더 폭(누르는 영역) */
+private val SliderThickness = 48.dp
 
 /** 커버 화면 조정 막대의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
 @Composable

@@ -635,16 +635,6 @@ class OptionStripTest {
     }
 
     @Test
-    fun lowScreen_stripScrollsToItsLastCell() {
-        // 가로로 눕힌 큰 폰처럼 낮고 넓은 메인 배치
-        show(DpSize(900.dp, 320.dp))
-        pick(EditTool.Brush)
-
-        // 맨 아래 칸(스포이드)까지 밀어 볼 수 있다
-        composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
     fun retouch_healHasNoSourceCellOrOpacity_cloneHasOpacity() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Retouch)

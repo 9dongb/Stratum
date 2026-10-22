@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.HorizontalDivider
@@ -145,3 +146,76 @@ fun CoverLayerSheet(controls: LayerControls, onClose: () -> Unit, maxHeight: Dp,
         }
     }
 }
+
+/**
+ * 커버를 가로로 돌렸을 때의 레이어 패널(사용자 피드백 12차 3: "커버화면 배치가 돌아간형태"): 레이어 시트를 돌려 캔버스 오른쪽(세로 막대 왼쪽)에
+ * 붙인 것이다. 폭은 [CoverSidePanelWidth]이고 높이는 내용만큼, 캔버스 높이를 넘으면 목록을 밀어 본다. 도구를 고르지 않아 막대가 안내 글뿐이면
+ * 편집 화면이 막대 자리까지 덮게 둔다(그때는 덮은 막대 폭([extra])만큼 넓어져 왼쪽 끝 자리가 막대 옆에 뜰 때와 같다, 시트와 같은 규칙).
+ * 머리(제목·버튼 줄)를 오른쪽으로 끌면 닫히고([onClose]), 레이어 버튼을 다시 누르거나 뒤로 가기로도 닫힌다(편집 화면).
+ * 내용·이름표·화면 읽기는 레이어 시트([CoverLayerSheet])와 같다.
+ */
+@Composable
+fun CoverLayerPanel(controls: LayerControls, onClose: () -> Unit, modifier: Modifier = Modifier, extra: Dp = 0.dp) {
+    val colors = StratumTheme.colors
+    // 머리를 끄는 동안 오른쪽으로 끈 만큼 패널이 따라간다(왼쪽으로는 따라가지 않음)
+    var dragged by remember { mutableFloatStateOf(0f) }
+    val threshold = with(LocalDensity.current) { SheetDragThreshold.toPx() }
+    val title = stringResource(R.string.tool_layers)
+    val closeLabel = stringResource(R.string.floating_panel_close, title)
+    Surface(
+        modifier = modifier
+            .width(CoverSidePanelWidth + extra)
+            .graphicsLayer { translationX = dragged.coerceAtLeast(0f) }
+            .testTag(EditScreenTags.COVER_LAYER_SHEET)
+            .semantics {
+                paneTitle = title
+                customActions = listOf(
+                    CustomAccessibilityAction(closeLabel) {
+                        onClose()
+                        true
+                    }
+                )
+            },
+        shape = StratumShapes.SidePanel,
+        color = colors.panel,
+        contentColor = colors.textPrimary,
+        border = BorderStroke(StratumDimens.Divider, colors.fieldBorder)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .draggable(
+                        state = rememberDraggableState { delta -> dragged += delta },
+                        orientation = Orientation.Horizontal,
+                        onDragStarted = { dragged = 0f },
+                        onDragStopped = {
+                            if (dragged > threshold) onClose()
+                            dragged = 0f
+                        }
+                    )
+                    .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .padding(start = 16.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .semantics { heading() }
+                        .testTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE),
+                    color = colors.textPrimary,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                LayerToolbar(controls)
+            }
+            HorizontalDivider(color = colors.divider)
+            LayerColumn(controls, Modifier.weight(1f, fill = false).padding(horizontal = 12.dp))
+        }
+    }
+}
+
+/** 커버를 가로로 돌렸을 때 캔버스 오른쪽에 붙는 패널(레이어·곡선)의 폭. 메인 화면 떠 있는 패널(280dp)과 같다. */
+internal val CoverSidePanelWidth = 280.dp

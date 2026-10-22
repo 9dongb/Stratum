@@ -5,16 +5,19 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -28,6 +31,7 @@ import com.kiln.stratum.ui.components.StratumSegment
 import com.kiln.stratum.ui.components.StratumSegmentedRow
 import com.kiln.stratum.ui.components.ToolActionButton
 import com.kiln.stratum.ui.components.horizontalScrollFadeEdges
+import com.kiln.stratum.ui.components.scrollFadeEdges
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /**
@@ -48,10 +52,13 @@ class CropControls(
     val onApply: () -> Unit
 )
 
-/** 닫힌 화면 자르기·회전 창의 옵션 탭(맨 아래 X와 ✓ 사이, 사용자 피드백 8차 1-1). 자르기는 비율, 회전은 돌리기·뒤집기를 보인다. */
-enum class CropTab(@get:StringRes val label: Int) {
-    CROP(R.string.crop_tab_crop),
-    ROTATE(R.string.crop_tab_rotate)
+/**
+ * 닫힌 화면 자르기·회전 창의 옵션 탭(맨 아래 X와 ✓ 사이, 사용자 피드백 8차 1-1). 자르기는 비율, 회전은 돌리기·뒤집기를 보인다.
+ * [icon]은 커버를 가로로 돌렸을 때 세로 탭 칸에 이름과 함께 보인다(가로 탭은 이름만).
+ */
+enum class CropTab(@get:StringRes val label: Int, @get:DrawableRes val icon: Int) {
+    CROP(R.string.crop_tab_crop, R.drawable.ic_crop),
+    ROTATE(R.string.crop_tab_rotate, R.drawable.ic_rotate_90_degrees_cw)
 }
 
 /**
@@ -60,16 +67,31 @@ enum class CropTab(@get:StringRes val label: Int) {
  * 높이는 편집 화면의 한 줄 막대와 같고(편집 화면이 정함, 결정 기록 '커버 화면 개편'), 두 탭 모두 한 줄이라 탭을 바꿔도 사진 크기가 그대로다.
  */
 @Composable
-internal fun CoverCropOptions(tab: CropTab, crop: CropControls, busy: Boolean, modifier: Modifier = Modifier) {
-    Box(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS), contentAlignment = Alignment.CenterStart) {
-        when (tab) {
-            CropTab.CROP -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { CropRatioRow(crop) }
-                StratumIconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
-                    Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
+internal fun CoverCropOptions(tab: CropTab, crop: CropControls, busy: Boolean, modifier: Modifier = Modifier, vertical: Boolean = false) {
+    if (vertical) {
+        // 커버를 가로로 돌렸으면(사용자 피드백 12차 3) 같은 것을 위아래로 쌓은 기둥이다. 폭이 늘 같아 탭을 바꿔도 사진 크기가 그대로다.
+        Box(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS), contentAlignment = Alignment.TopCenter) {
+            when (tab) {
+                CropTab.CROP -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.weight(1f, fill = false)) { CropRatioColumn(crop) }
+                    StratumIconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
+                        Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
+                    }
                 }
+                CropTab.ROTATE -> CropTurnColumn(crop, enabled = !busy)
             }
-            CropTab.ROTATE -> CropTurnButtons(crop, enabled = !busy)
+        }
+    } else {
+        Box(modifier.testTag(EditScreenTags.COVER_CROP_OPTIONS), contentAlignment = Alignment.CenterStart) {
+            when (tab) {
+                CropTab.CROP -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { CropRatioRow(crop) }
+                    StratumIconButton(onClick = crop.onSwap, modifier = Modifier.testTag(EditScreenTags.CROP_SWAP)) {
+                        Icon(painterResource(R.drawable.ic_swap_horiz), contentDescription = stringResource(R.string.crop_swap))
+                    }
+                }
+                CropTab.ROTATE -> CropTurnButtons(crop, enabled = !busy)
+            }
         }
     }
 }
@@ -105,6 +127,34 @@ internal fun CoverCropTabs(tab: CropTab, onTab: (CropTab) -> Unit, resizeEnabled
     }
 }
 
+/**
+ * 커버를 가로로 돌렸을 때 자르기·회전 창 오른쪽 기둥의 가운데(✓와 X 사이, 사용자 피드백 12차 3): [자르기]·[회전] 탭 칸과 크기 변경 칸을 위아래로.
+ * 칸은 아이콘과 이름이고 고른 탭은 선택 배경이다. 이름표·할 일은 가로 탭([CoverCropTabs])과 같다.
+ */
+@Composable
+internal fun CoverCropTabColumn(tab: CropTab, onTab: (CropTab) -> Unit, resizeEnabled: Boolean, onResize: () -> Unit) {
+    val colors = StratumTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        for (entry in CropTab.entries) {
+            val selected = entry == tab
+            val label = stringResource(entry.label)
+            CellBox(EditScreenTags.cropTab(entry), label, null, open = selected, enabled = true, onClick = { onTab(entry) }) {
+                Icon(painterResource(entry.icon), contentDescription = null, tint = if (selected) colors.selectedContent else colors.textSecondary)
+                CompactLabel(label, if (selected) colors.selectedContent else colors.textDescription)
+            }
+        }
+        val resize = stringResource(SubTool.RESIZE.shortLabel)
+        CellBox(EditScreenTags.subToolOption(SubTool.RESIZE), resize, null, open = false, enabled = resizeEnabled, onClick = onResize) {
+            Icon(
+                painterResource(SubTool.RESIZE.icon),
+                contentDescription = null,
+                tint = if (resizeEnabled) colors.textSecondary else colors.textDisabled
+            )
+            CompactLabel(resize, if (resizeEnabled) colors.textDescription else colors.textDisabled)
+        }
+    }
+}
+
 /** 자르기 비율 칩. 폭이 좁으면 옆으로 밀어 보고, 더 있는 쪽 끝을 흐리게 그린다. 고른 비율이 선택된 것으로 보인다. */
 @Composable
 private fun CropRatioRow(crop: CropControls) {
@@ -115,6 +165,26 @@ private fun CropRatioRow(crop: CropControls) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         CropRatioChips(crop)
+    }
+}
+
+/** 커버를 가로로 돌렸을 때의 비율 칸들(위아래로, 넘치면 밀어 보고 더 있는 쪽 끝을 흐리게). 고른 비율은 선택 배경이다. */
+@Composable
+private fun CropRatioColumn(crop: CropControls) {
+    val colors = StratumTheme.colors
+    val scroll = rememberScrollState()
+    Column(
+        modifier = Modifier.scrollFadeEdges(scroll, colors.panel).verticalScroll(scroll),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        for (ratio in CropRatio.entries) {
+            val selected = crop.frame.ratio == ratio
+            val label = cropRatioLabel(ratio, crop.frame.swapped)
+            CellBox(EditScreenTags.cropRatio(ratio), label, null, open = selected, enabled = true, onClick = { crop.onRatio(ratio) }) {
+                CompactLabel(label, if (selected) colors.selectedContent else colors.textSecondary)
+            }
+        }
     }
 }
 
@@ -177,21 +247,53 @@ private fun CropTurnButtons(crop: CropControls, enabled: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconLabelButton(R.drawable.ic_rotate_90_degrees_ccw, R.string.rotate_left, enabled, EditScreenTags.ROTATE_LEFT) {
-            crop.onTurn(Orientation.ROTATE_COUNTERCLOCKWISE)
-        }
-        IconLabelButton(R.drawable.ic_rotate_90_degrees_cw, R.string.rotate_right, enabled, EditScreenTags.ROTATE_RIGHT) {
-            crop.onTurn(Orientation.ROTATE_CLOCKWISE)
-        }
-        IconLabelButton(R.drawable.ic_flip, R.string.flip_horizontal, enabled, EditScreenTags.FLIP_HORIZONTAL) {
-            crop.onTurn(Orientation.FLIP_HORIZONTAL)
-        }
-        // 상하 뒤집기 아이콘은 좌우 뒤집기 아이콘을 90° 돌려 쓴다
-        IconLabelButton(R.drawable.ic_flip, R.string.flip_vertical, enabled, EditScreenTags.FLIP_VERTICAL, iconRotation = 90f) {
-            crop.onTurn(Orientation.FLIP_VERTICAL)
+        for (turn in CropTurns) {
+            IconLabelButton(turn.icon, turn.label, enabled, turn.tag, turn.iconRotation) { crop.onTurn(turn.orientation) }
         }
     }
 }
+
+/** 커버를 가로로 돌렸을 때의 돌리기·뒤집기 칸 네 개(위아래로, 아이콘과 이름). 이름표·할 일은 가로 줄([CropTurnButtons])과 같다. */
+@Composable
+private fun CropTurnColumn(crop: CropControls, enabled: Boolean) {
+    val colors = StratumTheme.colors
+    val scroll = rememberScrollState()
+    Column(
+        modifier = Modifier.scrollFadeEdges(scroll, colors.panel).verticalScroll(scroll),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        for (turn in CropTurns) {
+            val label = stringResource(turn.label)
+            CellBox(turn.tag, label, null, open = false, enabled = enabled, onClick = { crop.onTurn(turn.orientation) }) {
+                Icon(
+                    painterResource(turn.icon),
+                    contentDescription = null,
+                    tint = if (enabled) colors.textSecondary else colors.textDisabled,
+                    modifier = Modifier.rotate(turn.iconRotation)
+                )
+                CompactLabel(label, if (enabled) colors.textDescription else colors.textDisabled)
+            }
+        }
+    }
+}
+
+/** 자르기·회전 창의 돌리기·뒤집기 하나(가로 줄과 세로 기둥이 같이 쓴다) */
+private class CropTurn(
+    @DrawableRes val icon: Int,
+    @StringRes val label: Int,
+    val tag: String,
+    val orientation: Orientation,
+    val iconRotation: Float = 0f
+)
+
+/** 왼쪽·오른쪽 90°, 좌우·상하 뒤집기. 상하 뒤집기 아이콘은 좌우 뒤집기 아이콘을 90° 돌려 쓴다. */
+private val CropTurns = listOf(
+    CropTurn(R.drawable.ic_rotate_90_degrees_ccw, R.string.rotate_left, EditScreenTags.ROTATE_LEFT, Orientation.ROTATE_COUNTERCLOCKWISE),
+    CropTurn(R.drawable.ic_rotate_90_degrees_cw, R.string.rotate_right, EditScreenTags.ROTATE_RIGHT, Orientation.ROTATE_CLOCKWISE),
+    CropTurn(R.drawable.ic_flip, R.string.flip_horizontal, EditScreenTags.FLIP_HORIZONTAL, Orientation.FLIP_HORIZONTAL),
+    CropTurn(R.drawable.ic_flip, R.string.flip_vertical, EditScreenTags.FLIP_VERTICAL, Orientation.FLIP_VERTICAL, iconRotation = 90f)
+)
 
 /** 아이콘 아래에 이름이 있는 버튼(한 줄, 위아래 여백을 줄여 한 줄 막대 높이에 든다). 누르는 영역은 48dp 이상이다. */
 @Composable

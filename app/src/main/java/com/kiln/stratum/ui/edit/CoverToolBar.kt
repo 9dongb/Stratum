@@ -6,7 +6,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -150,21 +149,27 @@ class BarToggle(
     val tag: String? = null
 ) : BarItem
 
-/** 묶음 칩(선택 도구의 동작): 누르면 같은 줄이 [content](버튼들, 옆으로 밀어 봄)가 되고, 버튼을 눌러도 남아 ✓로 돌아온다. */
+/**
+ * 묶음 칩(선택 도구의 동작): 누르면 같은 줄이 [content](버튼들, 옆으로 밀어 봄)가 되고, 버튼을 눌러도 남아 ✓로 돌아온다.
+ * 세로 막대(커버 가로, [CoverToolColumn])는 [columnContent](좁은 기둥에 맞는 칸들)를 쓰고, 없으면 [content]를 쓴다.
+ */
 class BarGroup(
     override val key: String,
     val caption: String,
-    val content: @Composable RowScope.() -> Unit
+    val columnContent: (@Composable () -> Unit)? = null,
+    val content: @Composable () -> Unit
 ) : BarItem
 
 /**
  * 직접 그리는 칩(조정 항목·모두 초기화). [chip]은 칩 줄의 칩이고, 받은 함수를 부르면 같은 줄이 [content]가 된다(✓로 돌아옴).
- * 이름표·화면 읽기는 [chip]이 스스로 단다.
+ * 이름표·화면 읽기는 [chip]이 스스로 단다. 세로 막대(커버 가로, [CoverToolColumn])는 [cell]·[columnContent]를 쓰고, 없으면 [chip]·[content]를 쓴다.
  */
 class BarCustom(
     override val key: String,
     val chip: @Composable (expand: () -> Unit) -> Unit,
-    val content: @Composable () -> Unit
+    val content: @Composable () -> Unit,
+    val cell: (@Composable (expand: () -> Unit) -> Unit)? = null,
+    val columnContent: (@Composable () -> Unit)? = null
 ) : BarItem
 
 /**
@@ -406,9 +411,10 @@ private fun BarExpanded(item: BarItem, state: CoverBarState) {
         }
         is BarGroup -> Row(
             Modifier.fillMaxWidth().horizontalScrollFade(),
-            verticalAlignment = Alignment.CenterVertically,
-            content = item.content
-        )
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            item.content()
+        }
         is BarCustom -> item.content()
         // 색 버튼·버튼·켜고 끄는 칩은 펼치지 않는다
         is BarColors, is BarButton, is BarToggle -> Unit

@@ -52,7 +52,8 @@ import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 
 /** 하위 도구 메뉴가 뜨는 쪽: 도구 막대 버튼 오른쪽(메인 화면), 탭 위(커버) */
-enum class MenuSide { END, ABOVE }
+/** 하위 도구 메뉴가 버튼의 어느 쪽에 뜨는지: 도구 막대는 오른쪽([END]), 커버 탭 줄은 위([ABOVE]), 커버를 가로로 돌린 세로 탭 줄은 왼쪽([START]) */
+enum class MenuSide { END, ABOVE, START }
 
 /**
  * 도구 막대·커버 탭 줄의 하위 도구 메뉴(사용자 피드백 7차, 결정 기록 '하위 도구 메뉴'). 열린 메뉴의 도구와 버튼 자리, 끄는 손가락 밑 항목을 든다.
@@ -125,7 +126,7 @@ private val MenuMargin = 8.dp
 /**
  * 열린 하위 도구 메뉴. 편집 화면 맨 위(Box의 마지막 자식 쪽)에 화면 전체 크기로 둔다.
  * 메뉴 밖을 누르면 닫는 바탕(그 터치는 아래로 가지 않음)과 버튼 옆의 메뉴 카드: 메인 화면은 버튼 오른쪽(접히는 선은 보지 않음, 사용자 피드백 11차 1),
- * 커버는 탭 위. 항목을 누르면 [onChoose]로 고른다. 뒤로 가기로도 닫는다. [current]는 그 도구의 지금 하위 도구다(고른 것으로 보임).
+ * 커버는 탭 위, 커버를 가로로 돌렸으면 탭 왼쪽(사용자 피드백 12차 3). 항목을 누르면 [onChoose]로 고른다. 뒤로 가기로도 닫는다. [current]는 그 도구의 지금 하위 도구다(고른 것으로 보임).
  */
 @Composable
 fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
@@ -167,6 +168,13 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
                         region to { w: Int, h: Int ->
                             val x = ((anchor.left + anchor.right) / 2 - w / 2).coerceIn(area.left, (area.right - w).coerceAtLeast(area.left))
                             x to (anchor.top - gap - h).coerceAtLeast(area.top)
+                        }
+                    }
+                    MenuSide.START -> {
+                        // 탭 왼쪽, 위 끝을 탭 위 끝에 맞추고 화면 안으로 민다(커버를 가로로 돌렸을 때의 세로 탭 줄)
+                        val region = Region(area.left, area.top, anchor.left - gap, area.bottom)
+                        region to { w: Int, h: Int ->
+                            (anchor.left - gap - w).coerceAtLeast(area.left) to anchor.top.coerceAtMost(area.bottom - h).coerceAtLeast(area.top)
                         }
                     }
                 }

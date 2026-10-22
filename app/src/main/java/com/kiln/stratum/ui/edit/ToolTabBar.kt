@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -55,6 +55,7 @@ import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
+import com.kiln.stratum.ui.theme.compactTextAutoSize
 import kotlin.math.roundToInt
 
 /**
@@ -65,6 +66,9 @@ import kotlin.math.roundToInt
  * 조정 막대를 닫으며 누른 것이면(참을 돌려줌) 같은 막대가 그 도구로 돌아오는 것이라, 이미 고른 도구를 내려놓거나 메뉴를 열지 않는다.
  * 더보기 칸은 나머지 도구 줄([CoverMoreTools])을 열고 닫는다([onMore]). 더보기 줄의 도구를 골라 두면 더보기 칸이 그 도구의 아이콘·이름으로 켜진다.
  * 고른 칸은 도구 막대처럼 아이콘 뒤 모서리 8dp 사각형(선택 배경)과 선택 색 아이콘·이름이다. 아래 시스템 바는 피한다(키보드는 보지 않는다).
+ *
+ * 커버를 가로로 돌렸으면([vertical], 사용자 피드백 12차 3: "커버화면 배치가 돌아간형태") 캔버스 오른쪽 끝에 세로로 서고(위에서 아래로, 더보기 칸이 맨 아래),
+ * 하위 도구 메뉴는 칸 왼쪽에 뜬다. 오른쪽·아래 시스템 바와 카메라 구멍은 피한다.
  *
  * @param enabled 문서가 열려 있어 도구를 쓸 수 있는지
  * @param moreOpen 더보기 줄이 열려 있는지(더보기 칸이 켜진 모양)
@@ -78,9 +82,30 @@ fun ToolTabBar(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
     onTabTap: () -> Boolean = { false },
-    menu: SubToolMenuState = remember { SubToolMenuState() }
+    menu: SubToolMenuState = remember { SubToolMenuState() },
+    vertical: Boolean = false
 ) {
     val colors = StratumTheme.colors
+    if (vertical) {
+        Surface(
+            modifier.fillMaxHeight().edgeDivider(DividerEdge.Start, colors.divider).testTag(EditScreenTags.TOOL_TAB_BAR),
+            color = colors.background
+        ) {
+            Column(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
+                    .width(coverRowHeight())
+                    .testTag(EditScreenTags.TOOL_TAB_ROW)
+            ) {
+                val cell = Modifier.weight(1f).fillMaxWidth()
+                for (tool in EditTool.coverTabs) {
+                    key(tool) { TabToolItem(tool, selection, enabled, menu, onChoose, onTabTap, cell, MenuSide.START) }
+                }
+                MoreTabItem(selection, enabled, moreOpen, onMore, cell)
+            }
+        }
+        return
+    }
     Surface(
         modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, colors.divider).testTag(EditScreenTags.TOOL_TAB_BAR),
         color = colors.background
@@ -91,26 +116,30 @@ fun ToolTabBar(
                 .height(coverRowHeight())
                 .testTag(EditScreenTags.TOOL_TAB_ROW)
         ) {
+            val cell = Modifier.weight(1f).fillMaxHeight()
             for (tool in EditTool.coverTabs) {
-                key(tool) { TabToolItem(tool, selection, enabled, menu, onChoose, onTabTap) }
+                key(tool) { TabToolItem(tool, selection, enabled, menu, onChoose, onTabTap, cell, MenuSide.ABOVE) }
             }
-            MoreTabItem(selection, enabled, moreOpen, onMore)
+            MoreTabItem(selection, enabled, moreOpen, onMore, cell)
         }
     }
 }
 
 /**
  * 탭 칸 하나. 칸에는 짧은 이름을 보이고, 화면 읽기 기능은 긴 이름(예: 자르기·변형)을 읽는다.
- * 하위 도구가 있으면 길게 누르거나(메뉴 묶음 0.3초) 고른 뒤 다시 눌러 [menu]를 탭 위에 연다. 길게 누른 채 끌어 항목 위에서 떼면 고른다(도구 막대와 같다).
+ * 하위 도구가 있으면 길게 누르거나(메뉴 묶음 0.3초) 고른 뒤 다시 눌러 [menu]를 탭 옆([menuSide]: 가로 줄은 위, 세로 줄은 왼쪽)에 연다.
+ * 길게 누른 채 끌어 항목 위에서 떼면 고른다(도구 막대와 같다). [cell]은 줄을 똑같이 나누는 칸 크기다.
  */
 @Composable
-private fun RowScope.TabToolItem(
+private fun TabToolItem(
     tool: EditTool,
     selection: ToolSelection,
     enabled: Boolean,
     menu: SubToolMenuState,
     onChoose: (SubTool) -> Unit,
-    onTabTap: () -> Boolean
+    onTabTap: () -> Boolean,
+    cell: Modifier,
+    menuSide: MenuSide
 ) {
     val haptic = LocalHapticFeedback.current
     val menuLabel = stringResource(R.string.subtool_menu)
@@ -120,7 +149,7 @@ private fun RowScope.TabToolItem(
     // 칸 자리(창 좌표). 메뉴를 그 위에 띄운다.
     val bounds = remember { arrayOfNulls<Region>(1) }
     val openMenu = {
-        bounds[0]?.let { menu.open(tool, it, MenuSide.ABOVE) }
+        bounds[0]?.let { menu.open(tool, it, menuSide) }
         Unit
     }
     // 고른 도구를 다시 누르면 하위 도구 메뉴를 연다(하위 도구가 없는 도구는 내려놓는다).
@@ -140,7 +169,7 @@ private fun RowScope.TabToolItem(
             enabled = itemEnabled,
             label = stringResource(tool.shortLabel),
             onClick = tap,
-            modifier = Modifier
+            modifier = cell
                 .testTag(EditScreenTags.tabTool(tool))
                 .onGloballyPositioned { coordinates ->
                     val position = coordinates.positionInWindow()
@@ -199,7 +228,7 @@ private fun RowScope.TabToolItem(
  * 화면 읽기 기능은 '더보기: 지우개'처럼 읽는다. 더보기 줄이 열려 있어도 켜진 모양이다.
  */
 @Composable
-private fun RowScope.MoreTabItem(selection: ToolSelection, enabled: Boolean, open: Boolean, onMore: () -> Unit) {
+private fun MoreTabItem(selection: ToolSelection, enabled: Boolean, open: Boolean, onMore: () -> Unit, cell: Modifier) {
     val active = selection.active?.takeIf { it in EditTool.coverMoreTools }
     val moreLabel = stringResource(R.string.tool_more)
     val description = active?.let { stringResource(R.string.tool_more_active, stringResource(it.label)) } ?: moreLabel
@@ -209,7 +238,7 @@ private fun RowScope.MoreTabItem(selection: ToolSelection, enabled: Boolean, ope
         enabled = enabled,
         label = active?.let { stringResource(it.shortLabel) } ?: moreLabel,
         onClick = onMore,
-        modifier = Modifier
+        modifier = cell
             .testTag(EditScreenTags.MORE_TAB)
             .clearAndSetSemantics {
                 contentDescription = description
@@ -235,66 +264,83 @@ private fun RowScope.MoreTabItem(selection: ToolSelection, enabled: Boolean, ope
  * 탭 줄의 더보기 칸을 누르면 한 줄 막대 자리에 뜨고(막대가 잠깐 이 줄로 바뀜, 사진을 가리지 않음, 2026-10-22 사용자 요청),
  * 하나를 고르면([onPick]) 편집 화면이 닫는다.
  * 칸 모양은 탭 줄과 같고 고른 도구는 선택 표시다. 화면 읽기 기능에는 창 이름 '도구 더보기'로 알린다.
+ * 커버를 가로로 돌렸으면([vertical]) 세로 막대 자리에 세로 한 줄로 뜬다(사용자 피드백 12차 3).
  */
 @Composable
-fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool) -> Unit, modifier: Modifier = Modifier) {
+fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool) -> Unit, modifier: Modifier = Modifier, vertical: Boolean = false) {
     val colors = StratumTheme.colors
     val title = stringResource(R.string.more_tools_title)
     Surface(
         modifier
-            .fillMaxWidth()
-            .edgeDivider(DividerEdge.Top, colors.divider)
+            .then(if (vertical) Modifier.fillMaxHeight().edgeDivider(DividerEdge.Start, colors.divider) else Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, colors.divider))
             .testTag(EditScreenTags.COVER_MORE_TOOLS)
             .semantics { paneTitle = title },
         color = colors.panel
     ) {
-        Row(
-            Modifier
-                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal))
-                .height(coverRowHeight())
-        ) {
-            for (tool in EditTool.coverMoreTools) {
-                key(tool) {
-                    val label = stringResource(tool.label)
-                    val selected = selection.active == tool
-                    val itemEnabled = enabled && tool.available
-                    TabCell(
-                        selected = selected,
-                        enabled = itemEnabled,
-                        label = stringResource(tool.shortLabel),
-                        onClick = { onPick(tool) },
-                        modifier = Modifier
-                            .testTag(EditScreenTags.moreTool(tool))
-                            .clearAndSetSemantics {
-                                contentDescription = label
-                                role = Role.Button
-                                this.selected = selected
-                                if (itemEnabled) {
-                                    onClick(label) {
-                                        onPick(tool)
-                                        true
-                                    }
-                                } else {
-                                    disabled()
-                                }
+        val cells: @Composable (Modifier) -> Unit = { cell -> MoreToolCells(selection, enabled, onPick, cell) }
+        if (vertical) {
+            Column(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Bottom))
+                    .width(coverRowHeight())
+            ) {
+                cells(Modifier.weight(1f).fillMaxWidth())
+            }
+        } else {
+            Row(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal))
+                    .height(coverRowHeight())
+            ) {
+                cells(Modifier.weight(1f).fillMaxHeight())
+            }
+        }
+    }
+}
+
+/** 더보기 줄의 도구 칸들([cell]은 줄을 똑같이 나누는 칸 크기) */
+@Composable
+private fun MoreToolCells(selection: ToolSelection, enabled: Boolean, onPick: (EditTool) -> Unit, cell: Modifier) {
+    for (tool in EditTool.coverMoreTools) {
+        key(tool) {
+            val label = stringResource(tool.label)
+            val selected = selection.active == tool
+            val itemEnabled = enabled && tool.available
+            TabCell(
+                selected = selected,
+                enabled = itemEnabled,
+                label = stringResource(tool.shortLabel),
+                onClick = { onPick(tool) },
+                modifier = cell
+                    .testTag(EditScreenTags.moreTool(tool))
+                    .clearAndSetSemantics {
+                        contentDescription = label
+                        role = Role.Button
+                        this.selected = selected
+                        if (itemEnabled) {
+                            onClick(label) {
+                                onPick(tool)
+                                true
                             }
-                    ) {
-                        // 고른 하위 도구의 아이콘(명암은 닷지·번, 흐림은 흐림·선명·스머지)
-                        Icon(painterResource(selection.iconOf(tool)), contentDescription = null)
+                        } else {
+                            disabled()
+                        }
                     }
-                }
+            ) {
+                // 고른 하위 도구의 아이콘(명암은 닷지·번, 흐림은 흐림·선명·스머지)
+                Icon(painterResource(selection.iconOf(tool)), contentDescription = null)
             }
         }
     }
 }
 
 /**
- * 탭 줄·더보기 줄의 칸 모양: 아이콘(고르면 뒤에 모서리 8dp 사각형의 선택 배경)과 그 아래 짧은 이름. 칸 폭은 줄을 똑같이 나눈다.
+ * 탭 줄·더보기 줄의 칸 모양: 아이콘(고르면 뒤에 모서리 8dp 사각형의 선택 배경)과 그 아래 짧은 이름. 칸 크기는 부르는 쪽([modifier])이 줄을 똑같이 나눠 준다.
  * 아이콘은 보조 색·이름은 설명색이고, 고른 칸은 선택 색, 꺼진 칸은 비활성 색이다. 누를 때 번지는 표시는 그리지 않는다(고른 칸은 사각형이 바로 보인다).
  * 화면 읽기 기능의 의미는 부르는 쪽([modifier])이 정한다.
  */
 @Composable
-private fun RowScope.TabCell(
+private fun TabCell(
     selected: Boolean,
     enabled: Boolean,
     label: String,
@@ -315,8 +361,6 @@ private fun RowScope.TabCell(
     }
     Column(
         modifier = modifier
-            .weight(1f)
-            .fillMaxHeight()
             .clickable(interactionSource = null, indication = null, enabled = enabled, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -329,6 +373,14 @@ private fun RowScope.TabCell(
         ) {
             CompositionLocalProvider(LocalContentColor provides iconColor) { icon() }
         }
-        Text(label, color = labelColor, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Clip)
+        // 세로 줄(커버 가로)처럼 칸이 좁으면 이름을 줄여 다 보인다
+        Text(
+            label,
+            color = labelColor,
+            style = MaterialTheme.typography.labelMedium,
+            autoSize = compactTextAutoSize(MaterialTheme.typography.labelMedium),
+            maxLines = 1,
+            overflow = TextOverflow.Clip
+        )
     }
 }

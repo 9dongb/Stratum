@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -10,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -81,24 +83,35 @@ fun SelectionActionBar(controls: SelectionControls, screenCenterX: Float, modifi
 
 /**
  * 선택 동작 버튼 일곱: 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기. 모두 선택은 늘, 나머지는 고른 곳이 있을 때만 켠다.
- * 메인 화면 작업 표시줄([SelectionActionBar])과 커버 한 줄 막대의 동작 줄(결정 기록 '커버 화면 개편', [compact])이 같이 쓴다.
+ * 메인 화면 작업 표시줄([SelectionActionBar])과 커버 한 줄 막대의 동작 줄(결정 기록 '커버 화면 개편', [compact]),
+ * 커버를 가로로 돌렸을 때의 세로 막대([vertical], 띠 칸 모양)가 같이 쓴다.
  */
 @Composable
-internal fun SelectionActionButtons(controls: SelectionControls, compact: Boolean = false) {
+internal fun SelectionActionButtons(controls: SelectionControls, compact: Boolean = false, vertical: Boolean = false) {
     val ready = !controls.busy
     val selected = ready && controls.hasSelection
     val actions = controls.actions
+    val colors = StratumTheme.colors
     @Composable
-    fun button(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) =
-        ToolActionButton(
-            icon = icon,
-            label = stringResource(label),
-            onClick = onClick,
-            modifier = Modifier.testTag(tag),
-            enabled = enabled,
-            description = description?.let { stringResource(it) },
-            compact = compact
-        )
+    fun button(icon: Int, label: Int, description: Int?, enabled: Boolean, tag: String, onClick: () -> Unit) {
+        if (vertical) {
+            // 커버를 가로로 돌린 세로 막대(사용자 피드백 12차 3): 좁은 기둥에 맞게 띠 칸 모양(아이콘·작은 이름)
+            CellBox(tag, stringResource(description ?: label), null, open = false, enabled = enabled, onClick = onClick) {
+                Icon(painterResource(icon), contentDescription = null, tint = if (enabled) colors.textSecondary else colors.textDisabled)
+                CompactLabel(stringResource(label), if (enabled) colors.textDescription else colors.textDisabled)
+            }
+        } else {
+            ToolActionButton(
+                icon = icon,
+                label = stringResource(label),
+                onClick = onClick,
+                modifier = Modifier.testTag(tag),
+                enabled = enabled,
+                description = description?.let { stringResource(it) },
+                compact = compact
+            )
+        }
+    }
     button(R.drawable.ic_select_all, R.string.selection_all, R.string.selection_all_description, ready, EditScreenTags.SELECTION_ALL, actions::all)
     button(R.drawable.ic_deselect, R.string.selection_none, null, selected, EditScreenTags.SELECTION_NONE, actions::none)
     button(R.drawable.ic_flip_to_front, R.string.selection_invert, null, selected, EditScreenTags.SELECTION_INVERT, actions::invert)

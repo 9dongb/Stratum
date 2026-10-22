@@ -49,6 +49,7 @@ import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HoleAvoidingBarRow
 import com.kiln.stratum.ui.layout.WidthClass
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
+import com.kiln.stratum.ui.layout.layoutClassOf
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.AppTitleTextStyle
@@ -104,7 +105,10 @@ fun HomeScreen(
 
     // 창 전체 폭으로 시트·창을 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(modifier.fillMaxSize()) {
+        // 격자 칸 수는 넓은 화면을 쓰게 폭으로만 고르고(가로로 돌린 폰은 4열), 창(시트 ↔ 가운데 창)은 편집 화면과 같이 짧은 쪽으로 고른다
+        // (커버·폰을 가로로 돌려도 아래 시트, 사용자 피드백 12차 3)
         val widthClass = widthClassOf(maxWidth.value)
+        val promptClass = layoutClassOf(maxWidth.value, maxHeight.value)
         // 뒤로 가기는 선택을 먼저 끝낸다. 창보다 먼저 등록돼, 창이 열려 있으면 창이 먼저 닫힌다.
         BackHandler(enabled = selecting, onBack = endSelecting)
         Scaffold(
@@ -157,7 +161,7 @@ fun HomeScreen(
                 RenameProjectPrompt(
                     projectId = id,
                     initial = info.name,
-                    widthClass = widthClass,
+                    widthClass = promptClass,
                     onDismiss = { renaming = null },
                     onRename = { name ->
                         renaming = null
@@ -169,7 +173,7 @@ fun HomeScreen(
         if (showNewCanvas) {
             NewCanvasPrompt(
                 input = newCanvasInput,
-                widthClass = widthClass,
+                widthClass = promptClass,
                 onDismiss = { showNewCanvas = false },
                 onCreate = { width, height, fill, name ->
                     showNewCanvas = false

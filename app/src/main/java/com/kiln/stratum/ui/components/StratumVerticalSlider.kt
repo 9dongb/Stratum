@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumTheme
+import kotlin.math.abs
 
 /**
  * 세로 슬라이더(펼친 화면 도구 옵션 띠의 옵션 창, 결정 기록 '도구 옵션 띠'): 얇은 세로 트랙(3dp, 끝은 각짐)과 흰 원 손잡이.
@@ -27,6 +28,8 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * 트랙 어디를 눌러도 그 자리 값으로 가고, 끌면 따라온다. 손을 떼거나 이 자리가 사라지면 [onValueChangeFinished]를 부른다.
  * 크기는 부르는 쪽이 정한다(폭은 누르는 영역 48dp 이상). 화면 읽기 기능에는 진행 정도(0..1)와 값 조절을 알리고,
  * 이름·값 글은 부르는 쪽이 semantics로 더한다(가로 슬라이더와 같다).
+ * [origin]은 채움이 시작하는 자리(0..1, 아래 끝이 0)다. 0에서 양쪽으로 바꾸는 값(조정)은 0의 자리를 넘겨 그 자리부터 손잡이까지 칠한다
+ * (가로 [StratumSlider]의 centered와 같다).
  */
 @Composable
 fun StratumVerticalSlider(
@@ -34,7 +37,8 @@ fun StratumVerticalSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     onValueChangeFinished: () -> Unit = {},
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    origin: Float = 0f
 ) {
     val colors = StratumTheme.colors
     val currentOnChange by rememberUpdatedState(onValueChange)
@@ -86,8 +90,9 @@ fun StratumVerticalSlider(
         val trackWidth = StratumDimens.SliderTrack.toPx()
         val x = size.width / 2
         val thumbY = inset + (1f - fraction) * length
+        val originY = inset + (1f - origin.coerceIn(0f, 1f)) * length
         drawRect(if (enabled) colors.sliderTrack else colors.divider, Offset(x - trackWidth / 2, inset), Size(trackWidth, length))
-        drawRect(if (enabled) colors.sliderFill else colors.textDisabled, Offset(x - trackWidth / 2, thumbY), Size(trackWidth, inset + length - thumbY))
+        drawRect(if (enabled) colors.sliderFill else colors.textDisabled, Offset(x - trackWidth / 2, minOf(thumbY, originY)), Size(trackWidth, abs(originY - thumbY)))
         val radius = StratumDimens.SliderThumb.toPx() / 2
         drawCircle(if (enabled) colors.sliderThumb else colors.textDisabled, radius, Offset(x, thumbY))
         drawCircle(colors.sliderThumbBorder, radius, Offset(x, thumbY), style = Stroke(StratumDimens.Divider.toPx()))

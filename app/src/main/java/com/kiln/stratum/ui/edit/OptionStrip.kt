@@ -403,9 +403,10 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
  * 누를 수 있는 칸의 바탕: 띠 폭에서 양쪽 4dp를 뺀 모서리 8dp 칸(폭 48dp, 누르는 영역 그대로). 옵션 창이 열려 있으면 선택 배경이다.
  * 화면 읽기 기능에는 [description]과 [state](값)를 읽히고, 안쪽 글자는 따로 읽지 않는다.
  * [touch]는 누르기보다 먼저 터치를 받는 것(수치 끌기)이다. 그것이 터치를 가지면(끌면) 누르기는 되지 않는다.
+ * 커버를 가로로 돌렸을 때의 세로 막대([CoverToolColumn])도 같은 칸을 쓴다(사용자 피드백 12차 3).
  */
 @Composable
-private fun CellBox(
+internal fun CellBox(
     tag: String,
     description: String,
     state: String?,
@@ -555,7 +556,7 @@ private fun ColorCellView(cell: ColorCell, onClick: () -> Unit) {
 
 /** 칸의 작은 이름. 칸 폭(48dp)에 한 줄로 다 들어가지 않으면 글자를 줄인다('Hardness'·'Spot heal' 등). */
 @Composable
-private fun CompactLabel(text: String, color: Color) {
+internal fun CompactLabel(text: String, color: Color) {
     Text(
         text = text,
         color = color,
