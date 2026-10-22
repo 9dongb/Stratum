@@ -45,6 +45,7 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceMeshIndex
 import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FacePart
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
@@ -330,15 +331,17 @@ class LiquifyModeTest {
         selectFace()
         show(930, 700)
 
-        for ((key, shown) in listOf("face_eye_size" to "+35", "face_nose_width" to "-20", "face_face_width" to "0")) {
-            composeRule.onNodeWithTag(EditScreenTags.strip(key)).assertIsDisplayed()
+        // 처음 부위는 눈이다: 눈 슬라이더 여섯만 보인다
+        for ((key, shown) in listOf("face_eye_size" to "+35", "face_eye_height" to "0", "face_eye_tail" to "0")) {
+            composeRule.onNodeWithTag(EditScreenTags.strip(key)).performScrollTo().assertIsDisplayed()
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
         }
-        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_RESET).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_nose_width")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_RESET).performScrollTo().assertIsEnabled().performClick()
         composeRule.runOnIdle { assertEquals(listOf("resetFace"), actions.calls) }
 
         // 눈 크기 칸을 누르면 세로 슬라이더: 아래 끝을 누르면 -100, 위 끝까지 끌면 +100, 손을 떼면 끝
-        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).performTouchInput {
             swipe(bottomCenter - Offset(0f, 2f), topCenter + Offset(0f, 2f), 300)
         }
@@ -347,13 +350,21 @@ class LiquifyModeTest {
             assertEquals(FaceSlider.EYE_SIZE to -1f, actions.faceValues.first())
             assertEquals(FaceSlider.EYE_SIZE to 1f, actions.faceValues.last())
         }
+
+        // 부위 칸에서 코를 고르면 코 슬라이더 셋(코 높이·코 너비·콧등 너비)만 보인다
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_part")).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.facePart(FacePart.NOSE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_nose_width")).performScrollTo().assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "-20"))
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_bridge_width")).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).assertDoesNotExist()
     }
 
     @Test
     fun mainScreens_doubleTapOnTheFaceSliderThumb_resetsIt_withoutMovingIt() {
         selectFace()
         show(930, 700)
-        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performScrollTo().performClick()
 
         // 손잡이(+35 → 위에서 0.325 자리)를 두 번 톡
         composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).performTouchInput {
@@ -375,6 +386,10 @@ class LiquifyModeTest {
         composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.bar("face_eye_size")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_RESET).performScrollTo().assertIsEnabled()
+        // 맨 앞 부위 칩으로 코를 고른다(눈 슬라이더 칩이 코 슬라이더 칩으로 바뀜)
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_part")).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.facePart(FacePart.NOSE)).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_eye_size")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.bar("face_nose_width")).performScrollTo().performClick()
 
         // 원을 두 번 톡하면 0으로
@@ -397,6 +412,8 @@ class LiquifyModeTest {
         selectFace()
         show(800, 411)
 
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_part")).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.facePart(FacePart.FACE_SHAPE)).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.bar("face_face_width")).performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.FACE_WIDTH)).performTouchInput {
             swipe(bottomCenter - Offset(0f, 2f), topCenter + Offset(0f, 2f), 300)

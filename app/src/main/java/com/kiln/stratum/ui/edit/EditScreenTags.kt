@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSize
+import com.kiln.stratum.engine.face.FacePart
 import com.kiln.stratum.engine.face.FaceSlider
 
 /** 화면 테스트가 편집 화면의 부분을 찾을 때 쓰는 이름표(testTag). 화면에는 보이지 않는다. */
@@ -221,6 +222,9 @@ object EditScreenTags {
 
     /** 얼굴 슬라이더(띠의 세로 슬라이더·커버 막대의 슬라이더) */
     fun faceSlider(slider: FaceSlider): String = "faceSlider_${slider.name}"
+
+    /** 얼굴 부위 목록의 줄(펼친 화면 띠의 옵션 창·커버 막대의 고를 것) */
+    fun facePart(part: FacePart): String = "facePart_${part.name}"
 
     const val RETOUCH_OVERLAY = "retouchOverlay"
     const val RETOUCH_SIZE = "retouchSize"

@@ -3,6 +3,7 @@ package com.kiln.stratum.ui.edit
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.face.FacePart
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.tone.ToneRange
 import com.kiln.stratum.engine.transform.Orientation
@@ -89,9 +90,34 @@ internal fun mosaicBar(controls: MosaicControls): List<BarItem> = valueChips(mos
  * 고른 얼굴이 없으면 칩이 없어 막대에 안내 글(찾는 중·고르기)이 보인다.
  */
 @Composable
-internal fun liquifyBar(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<BarItem> = buildList {
-    addAll(valueChips(liquifyStrip(state, actions, sizePreview)))
-    val face = state.faceValues.takeIf { state.faceMode } ?: return@buildList
+internal fun liquifyBar(
+    state: LiquifyState,
+    actions: LiquifyActions,
+    sizePreview: SizePreviewState,
+    facePart: FacePart,
+    onFacePart: (FacePart) -> Unit
+): List<BarItem> = buildList {
+    val face = state.faceValues.takeIf { state.faceMode }
+    // 얼굴 모드: [부위 ▾] [그 부위의 슬라이더 칩] [얼굴 초기화](계획 '화면')
+    if (face != null) {
+        add(
+            BarChoice(
+                key = "face_part",
+                caption = stringResource(R.string.liquify_face_part),
+                options = FacePart.entries.map { part ->
+                    BarOption(
+                        label = stringResource(facePartLabel(part)),
+                        icon = null,
+                        selected = part == facePart,
+                        tag = EditScreenTags.facePart(part)
+                    ) { onFacePart(part) }
+                },
+                enabled = !state.busy
+            )
+        )
+    }
+    addAll(valueChips(liquifyStrip(state, actions, sizePreview, facePart, onFacePart, close = {})))
+    if (face == null) return@buildList
     add(
         BarButton(
             key = "face_reset",

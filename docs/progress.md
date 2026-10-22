@@ -24,9 +24,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 사용자가 보낸 사진(사진 부스 사진 3장, 얼굴 23개)으로도 시험했다. 사용자: "테스트시 이 사진에 얼굴 활용이 도움되면 함께 테스트하세요" 사진은 저장소 밖(이 Mac의 임시 폴더)에만 둔다.
     - 2단계 APK(`Stratum-debug-20261023-98e0060.apk`)를 구글 드라이브에 올렸다.
     - 3단계: 유동화를 적용하면 레이어에 기록(유동화 전 원래 픽셀·손으로 민 격자·얼굴·값)이 남아, 다시 열면 이어서 고치고 프로젝트에도 저장된다. 다른 편집이 그 레이어 픽셀을 바꾸면 묻지 않고 굳히고 알린다. 레이어 줄에 유동화 표시, 메뉴 '픽셀로 바꾸기'(결정 기록 '얼굴 인식 보정'의 3단계).
+    - 4단계: 나머지 슬라이더 15개(눈 높이·너비·기울기·간격·뒷트임, 코 높이·콧등 너비, 입 미소·윗입술·아랫입술·너비·높이, 이마·턱 높이·턱선)와 부위 고르기(눈·코·입·얼굴형)를 더했다(결정 기록 '얼굴 인식 보정'의 4단계).
   - 남은 일
-    - 4단계(나머지 슬라이더 15개)·5단계(검토·전체 테스트·최종 보고)를 묻지 않고 이어 한다.
-    - 사용자 확인(최종 보고 뒤, 에뮬레이터·폴드8): 세 슬라이더의 미리 보기, 기울이거나 돌린 얼굴, 배경 휨, 큰 사진 빠르기(2단계), 적용 → 다시 열어 고치기 → 적용, 앱을 다시 켜도 고칠 수 있는지, 그 레이어를 칠하면 굳힘 알림·실행 취소로 돌아옴(3단계).
+    - 5단계(검토·전체 테스트·최종 보고)를 묻지 않고 이어 한다.
+    - 사용자 확인(최종 보고 뒤, 에뮬레이터·폴드8): 슬라이더의 미리 보기, 기울이거나 돌린 얼굴, 배경 휨, 큰 사진 빠르기(2단계), 적용 → 다시 열어 고치기 → 적용, 앱을 다시 켜도 고칠 수 있는지, 그 레이어를 칠하면 굳힘 알림·실행 취소로 돌아옴(3단계), 부위마다 ±100%가 자연스러운지(4단계).
 
 - **사용자 피드백 12차(사용자 요청)** (시작: 2026-10-22)
   - 요청(사용자, 그대로):
@@ -236,7 +237,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌(대신 도구 막대·탭 줄 아이콘이 고른 하위 도구, 2026-10-22). 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(접히는 선을 보지 않음, 11차). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
 | AI 제거·AI 선택(사용자 요청) | 10단계(품질) 진행 중 | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 리터칭 넷째 하위 도구 'AI 제거'(칠하고 떼면 지움, 옵션은 크기만, 쓸 수 없는 기기는 알림과 스팟 복구 버튼). 선택 도구 'AI 채우기'(고른 곳을 채우고 선택은 남김). 채운 곳의 밝기·색은 채운 색을 늘여 경계 바깥과 맞춘다(폴드8 피드백으로 고침). 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 SAM 2.1 Tiny(97MB, Apache-2.0, 폴드8 GPU에서 사진 0.21초·탭 19ms)로 정해 파일을 넣었고, 선택 도구 'AI 선택'(물체를 톡 누르면 모양대로 고름)과 AI 제거의 톡 고르기(모양을 보이고 [지우기]로 지움)를 더했다. 채운 곳에 둘레만큼의 고운 잡음을 더한다(10단계). 계획은 `docs/ai-remove-plan.md` |
-| 얼굴 인식 보정(사용자 요청) | 3단계(다시 고치기·저장) 끝, 4단계 진행 중 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음, CPU). 유동화의 다섯째 도구 '얼굴'로 얼굴을 찾고 톡해서 고른다. 고른 얼굴의 눈 크기·코 너비·얼굴 너비(가운데 0인 ±100)를 같은 유동화 격자에 합쳐 미리 보고 적용한다(돌린 얼굴은 먼 쪽을 덜). 적용한 유동화는 레이어 기록으로 남아 다시 열어 고치고(프로젝트에 저장), 다른 편집이 그 픽셀을 바꾸면 묻지 않고 굳힌다. 계획 `docs/face-liquify-plan.md` |
+| 얼굴 인식 보정(사용자 요청) | 4단계(슬라이더 18개) 끝, 5단계(검토) 진행 중 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음, CPU). 유동화의 다섯째 도구 '얼굴'로 얼굴을 찾고 톡해서 고른다. 고른 얼굴의 부위(눈·코·입·얼굴형)를 골라 슬라이더 18개(가운데 0인 ±100)를 같은 유동화 격자에 합쳐 미리 보고 적용한다(돌린 얼굴은 먼 쪽을 덜). 적용한 유동화는 레이어 기록으로 남아 다시 열어 고치고(프로젝트에 저장), 다른 편집이 그 픽셀을 바꾸면 묻지 않고 굳힌다. 계획 `docs/face-liquify-plan.md` |
 
 ## 결정 기록
 
@@ -570,6 +571,21 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 기록의 파일이 없거나 망가졌거나 더 새 계산식 판이면 기록만 버리고(결과 픽셀로) 연다. 앞 판 앱은 꼬리표 5를 몰라 결과 픽셀 레이어로 연다(그 앱이 저장하면 기록이 사라짐).
     - 슬라이더 저장 번호(`FaceSlider.code`): 눈 크기 1, 코 너비 2, 얼굴 너비 3(차례와 상관없음, 4단계 슬라이더는 새 번호). 모르는 번호·숫자가 아닌 값은 건너뛴다.
     - 메모리: 실행 취소 기록의 메모리 셈과 프로젝트 불러올 메모리 어림이 원래 픽셀만 쓰는 타일과 격자(50MP 약 3.2MB)를 센다. 사진 전체를 크게 민 유동화는 원래 픽셀만큼(50MP 레이어 약 200MB) 더 남는다(계획의 '위험').
+  - 4단계 나머지 슬라이더(콧등 너비는 사용자 요청, 나머지 Claude 판단, 2026-10-23, 상수는 `FaceWarps`·틀은 FaceWarpShapes.kt, 사용자 "질문이나 끊김 없이"에 따라 묻지 않고 정함)
+    - 슬라이더 18개(+ = 크게·위로·넓게·길게): 눈(크기·높이·너비·기울기·간격·뒷트임), 코(높이·너비·콧등 너비), 입(미소·윗입술·아랫입술·너비·높이), 얼굴형(이마·턱 높이·턱선·얼굴 너비). 저장 번호는 2단계 셋(1~3) 뒤로 4~18이다.
+    - 눈: 눈 크기와 같은 타원에서 높이는 세로만 1.2배, 너비는 가로만 1.15배, 기울기는 가운데에서 8°(+면 두 눈꼬리가 올라감, 좌우 대칭, 돌리는 각도도 감쇠), 간격은 두 눈을 가로축으로 0.05U씩 밖·안으로, 뒷트임은 눈꼬리를 가운데로 한 작은 타원(눈 폭 배: 눈 가운데 쪽 0.65, 관자놀이 쪽 0.7, 세로 0.45)에서 눈꼬리를 눈 폭의 13% 바깥으로.
+      - 크기·높이·너비는 같은 타원으로 따로 차례로 늘인다. 한 번에 곱하면(크기와 높이 모두 −100%면 세로 1/1.46배) 감쇠 띠가 접히기 직전(야코비안 0.008)이었다.
+      - 뒷트임 타원을 눈꼬리에서 눈 가운데까지(0.5)로 좁히면 다른 눈 슬라이더와 함께 켤 때 너무 눌려(0.26) 0.65로 넓혔다(눈 가운데는 거의 그대로).
+    - 코: 높이는 코 타원(코 너비와 같음)을 위·아래로 0.05U. 콧등 너비는 콧등 줄(168·6·197·195·5)의 가운데를 둘러싼 타원을 가로로만 1.2배: 가로는 콧등 줄에서 가까운 눈머리까지의 0.85배라 눈머리에 닿기 전에 0, 위는 168보다 0.08U 위, 아래는 콧방울 선 0.15U 위에서 끝나 코 너비와 겹치지 않는다.
+    - 입: 입 가운데(입꼬리와 입선(13·14)의 가운데). 높이는 0.05U 옮기기, 너비는 입꼬리 쪽으로만 1.15배(타원 가로는 입 폭, 위는 입선–콧방울 선 거리의 0.85배, 아래는 입선–턱 끝의 0.7배). 미소는 입꼬리마다 위로 입 폭의 6%, 바깥으로 그 35%(점 감쇠, 입꼬리 둘레 입 폭의 0.3~0.45배). 윗입술·아랫입술은 입선에서 그 입술 쪽 반만 세로로 1.35배(두께의 3배까지, 감쇠는 0.3부터라 −100%로 얇게 해도 접히지 않음, 보통 감쇠면 0.25).
+    - 얼굴형: 이마는 눈썹 위 끝 0.03U 위에서 0, 이마 끝(10)에서 0.08U 옮기고 그 위 0.35U에서 0(가로는 눈썹 높이의 얼굴 폭). 턱 높이는 아랫입술 아래 끝(17) 0.03U 아래에서 0, 턱 끝(152)에서 0.08U, 그 아래 0.35U에서 0(가로는 아랫입술 높이 얼굴 반폭의 0.8배로 높이마다 같다: 턱 끝에서 좁아지는 윤곽을 따르면 −100%에서 접혔다). 턱선은 턱 모서리(172·397) 둘레(안쪽 0.45U, 바깥 0.4U, 세로 0.45U)를 가로로 0.06U.
+    - 먼 쪽: 가로로 옮기는 것(얼굴 너비·턱선·눈 간격·뒷트임·미소의 바깥으로)은 사진에서 좁게 보이는 쪽을 그만큼 덜 옮긴다(2단계 얼굴 너비와 같은 비율).
+    - 감쇠: 부위 전체를 고치는 것(늘이기·눈 간격·코·입 높이)은 타원 거리 0.45까지 다 걸리고, 한 점을 옮기는 것(미소·뒷트임·턱선)은 가운데에서만 다 걸린다(점 감쇠). 옮기기는 결과 자리에서 구한 무게만큼 되돌린 자리에서 무게를 한 번 더 구한다.
+    - 접힘: 슬라이더 하나씩 ±100%면 되돌려 찾는 지도의 야코비안이 0.3을 넘고, 18개를 모두 ±100%로 켜도 0.2를 넘는다(눈꼬리 바깥에서 눈 슬라이더 여섯의 눌림이 곱해져 0.25, 접히지는 않음). 계획의 '모두 켜도 0.3'은 하나씩으로 바꿨다.
+    - 시험 사진(NASA 2장, 사용자가 보낸 사진 부스 사진 2장)에 슬라이더마다 ±100%를 건 그림을 맥에서 만들어 보았다(저장소 밖): 찢어짐·꺾임 없이 자연스럽고, 얼굴형은 크기에 비해 은은하다.
+  - 4단계 화면(Claude 판단, 2026-10-23)
+    - 부위 고르기: 펼친 화면 띠는 얼굴 초기화 다음의 '부위' 값 칸(값은 지금 부위, 누르면 눈·코·입·얼굴형 목록), 커버 막대는 맨 앞 '부위' 고르기 칩(펼치면 넷이 한 줄). 고른 부위의 슬라이더 칸·칩만 보인다. 처음은 눈이고, 작업 창을 닫으면 처음으로 돌아간다(작업 창 안에서는 접기·펼치기에도 남음).
+    - 바뀐 슬라이더 칩의 점(계획)은 두지 않았다: 칩·칸에 값(+35 등)이 보인다.
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
   - 자리: 도구 막대 맨 위, 커버 탭 줄 맨 앞(막대 11개·탭 13개). 아이콘 Material Icons open_with(네 방향 화살표), 탭 이름 '이동', 화면 읽기 이름 '이동 도구'.
@@ -1308,7 +1324,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
 - **얼굴 인식 보정:** 계획은 `docs/face-liquify-plan.md`다.
   - 엔진 순수 Kotlin(`engine/face/`, JVM 테스트): 모델 틀 `FaceModel`(입력·출력 모양, 쓸 수 없으면 `FaceUnavailableException`), 풀기·NMS `FaceDetectionDecoder`, 자를 곳 `FaceRoi`(돌린 정사각형, 그림 ↔ 자른 그림 비율 좌표), 입력 `FaceTensor`, 결과 `FaceLandmarks`(478점, 윤곽 안 `contains`), 점 번호 `FaceMeshIndex`, 찾는 순서 `FaceSearch`(그림 읽기는 `FaceImage`로 받음).
-  - 슬라이더 → 변형(2단계): 슬라이더 `FaceSlider`, 얼굴 하나의 값 `FaceValues`(바꾸지 않는 값), 값 → 변형 `FaceWarps.of`(얼굴 좌표계 `FaceFrame`, 타원 늘이기 `EllipseScale`, 얼굴 너비 `FaceWidthWarp`, 감쇠 `falloff`·`smooth`). 새 슬라이더(4단계)는 `FaceSlider`에 더하고 `FaceWarps.of`에서 변형을 만든다. 차례는 거꾸로 따라갈 때의 차례다.
+  - 슬라이더 → 변형: 슬라이더 `FaceSlider`(저장 번호 `code`, 부위 `part`, `FaceSlider.of(부위)`는 화면 차례), 얼굴 하나의 값 `FaceValues`(바꾸지 않는 값), 값 → 변형 `FaceWarps.of`(부위별 `eyes`·`nose`·`mouth`·`jaw`·`forehead`·`chinHeight`, 상수는 모두 `FaceWarps`). 틀은 FaceWarpShapes.kt: 얼굴 좌표계 `FaceFrame`, 감쇠 `falloff`(부위 전체)·`peak`(한 점), 부위 타원 `PartEllipse`, 늘이기 `EllipseScale`(축마다 배율·반쪽 `half`·감쇠 시작 `plateau`), 옮기기 `EllipseMove`, 돌리기 `EllipseRotate`, 윤곽 `FaceOutline`(먼 쪽 비율 `factor`), 얼굴 너비 `FaceWidthWarp`, 얼굴 세로 띠 `BandMove`. 새 슬라이더는 `FaceSlider`에 새 번호로 더하고 `FaceWarps.of`의 부위 함수에서 변형을 만든다. 차례는 거꾸로 따라갈 때의 차례다(얼굴형 → 눈 → 코 → 입, 부위 안에서는 옮기기 → 늘이기).
   - 격자에 합치기: 변형 틀 `MeshWarp`(liquify, 상자 밖은 0), `LiquifyMesh.compose`(꼭짓점 변위 배열에 합침, 다른 스레드 가능)·`composedWith`(적용할 새 격자)·`sourceOf`(한 점이 읽는 곳)·`forward`(원래 점이 보이는 곳, 변형까지).
   - 엔진 플랫폼: `LiteRtFaceModel`(두 모델, AI 스레드), `FaceFinder`(`render`는 그리기 잠금 안, `search`는 밖, `workBytes`, `release`)와 그림 `FacePicture`(반씩 줄인 단계, `read`가 안드로이드 그리기로 자름).
   - 앱: `EditorViewModel.faceFinder`(internal var, 테스트는 가짜 모델로 바꿈), 유동화 작업 `LiquifySession.faces`·`faceValues`·`selectedFace`·`faceJob`·`faceNotice`, `openFaceMode`·`findFaces`·`pickLiquifyFace`·`shownFaces`(합친 변형을 앞으로 따라감, `fieldVersion`이 그대로면 앞의 것). 화면은 `LiquifyState`의 얼굴 칸(`faceMode`·`faces`·`selectedFace`·`findingFaces`·`faceNotice`·`faceValues`)과 `LiquifyActions.setFaceMode`·`pickFace`·`setFaceValue`·`finishFaceValue`·`resetFaceValue`·`resetFace`, 그림은 `FaceOverlay`(LiquifyFaces.kt).
@@ -1317,7 +1333,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 다시 고치기(3단계): 기록 `LiquifyRecord`(document/LiquifyRecord.kt)·`Layer.liquify`, 유동화를 시작할 레이어 `Layer.liquifySource`(원래 픽셀, `LiquifyRenderer.layerPreview`·얼굴 찾기가 씀), 기록을 남기는 `Layer.withLiquify`(`LiquifyLayer`만 씀). 픽셀을 바꾸는 새 명령은 `withPixels`를 써서 기록을 지운다(`LayerPixelsGuardTest`).
     - 저장: `LiquifyEntry`(ProjectManifest.kt, 꼬리표 5), 격자 파일 `LiquifyMeshCodec`(순수 Kotlin), `ProjectFolder`의 liquify/ 폴더(`savedMeshes`, 불러오기 `recordOf`는 실패하면 null). 실행 취소 메모리 셈은 `EditHistory.Usage`.
     - 앱: `LiquifySession.reopened`·`start`·`canApply`(→ `LiquifyState.canApply`, ✓·적용 버튼), `startLiquify`가 기록에서 격자·얼굴·값을 이어받음. 굳힘 알림은 `runEdit`의 `bakesLiquify`(→ `EditorMessage.LiquifyBaked`, `LiquifyLayer`·`RasterizeLayer`는 뺌). 레이어 줄은 `LayerSummary.liquify`·`EditScreenTags.layerLiquifyBadge`.
-    - 칸: `liquifyStrip`의 `faceSliderCells`(ToolStrips.kt), 커버는 `liquifyBar`(CoverBars.kt). 가운데 0 슬라이더는 `StripSlider.origin`(0.5)·`onReset`(원 두 번 톡)이고, 세로는 `StratumVerticalSlider(origin, onThumbDoubleTap)`, 커버 가로는 `OptionSlider(origin, onReset)`, 화면 읽기는 `sliderSemantics`(OptionStrip.kt)다.
+    - 칸: `liquifyStrip`의 `faceSliderCells`(고른 부위만)·`facePartCell`(ToolStrips.kt), 커버는 `liquifyBar`(CoverBars.kt, 맨 앞 부위 칩). 고른 부위는 `LiquifyMode`의 `facePart`(rememberSaveable)다. 가운데 0 슬라이더는 `StripSlider.origin`(0.5)·`onReset`(원 두 번 톡)이고, 세로는 `StratumVerticalSlider(origin, onThumbDoubleTap)`, 커버 가로는 `OptionSlider(origin, onReset)`, 화면 읽기는 `sliderSemantics`(OptionStrip.kt)다.
   - 시험: 엔진은 `TestFace`·`FakeFaceScene`(engine/src/test), 앱은 빨간 덩어리를 얼굴로 보는 `FakeFaceModel`(app/src/androidTest, 진짜 찾는 순서·그림 읽기를 거침). 진짜 모델은 `FaceModelProbeTest`·`FacePhotoTest`(시험 사진, `docs/emulator.md` '얼굴 시험 사진').
 - **꾹 누르기 시간:** 메뉴를 여는 꾹 누르기는 `MenuLongPress { }` 안에 둔다. 그 안의 `longPressFirst`·`combinedClickable`이 화면 설정값(`LocalViewConfiguration`)을 덮어쓴 0.3초(`LongPressTimes.MENU_MILLIS`)를 따른다. 캔버스 안 꾹 누르기는 `editLongPressMillis()`(휴대폰 설정)를 쓴다(ui/components/LongPress.kt).
 - **이동 도구:** 기록은 `TranslateLayer`(TransformCommands.kt)이고, 조각 계획은 `TransformPlan.translate`(순수 Kotlin, JVM 테스트)다. 옮기기 계획의 대상 타일은 조각이 다 덮지 않을 수 있어(`TargetTile.isCovered`), 한 가지 색 타일은 다 덮일 때만 그대로 쓴다. 게인맵은 `RasterTransform.translateGainmap`.

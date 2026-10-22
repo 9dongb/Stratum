@@ -7,7 +7,7 @@ import kotlin.math.sin
 /**
  * 시험용 얼굴: 두 눈동자 가운데 ([eyeX], [eyeY]), 눈 사이 거리 [eyeDistance], 기울기 [angle](라디안, 시계 방향 +).
  * [landmarks]는 그 얼굴의 478점을 얼굴 좌표계(눈 가운데가 0, 눈 선이 가로, 단위는 눈 사이 거리)의 틀로 만든다.
- * 이름이 있는 점과 눈 윤곽·콧등·입술은 사람 얼굴과 비슷한 자리, 얼굴 윤곽은 타원, 나머지 점은 얼굴 안쪽 작은 타원에 둔다.
+ * 이름이 있는 점과 눈 윤곽·눈썹·콧등·입술은 사람 얼굴과 비슷한 자리, 얼굴 윤곽은 타원, 나머지 점은 얼굴 안쪽 작은 타원에 둔다.
  * [turn]이 0이 아니면 고개를 돌린 얼굴처럼 얼굴 윤곽의 u < 0 쪽(사람의 오른쪽)을 가로로 (1 − [turn])배 좁힌다(먼 쪽이 좁게 찍힘).
  */
 data class TestFace(val eyeX: Float, val eyeY: Float, val eyeDistance: Float, val angle: Float = 0f, val turn: Float = 0f) {
@@ -54,6 +54,12 @@ data class TestFace(val eyeX: Float, val eyeY: Float, val eyeDistance: Float, va
         }
         put(FaceMeshIndex.RIGHT_IRIS, -0.5f, 0f)
         put(FaceMeshIndex.LEFT_IRIS, 0.5f, 0f)
+        // 눈썹 위 줄(바깥 → 안쪽, 위 끝 v −0.36)
+        for ((brow, side) in listOf(FaceMeshIndex.RIGHT_BROW to -1f, FaceMeshIndex.LEFT_BROW to 1f)) {
+            val us = floatArrayOf(0.78f, 0.65f, 0.5f, 0.35f, 0.2f)
+            val vs = floatArrayOf(-0.28f, -0.33f, -0.36f, -0.35f, -0.3f)
+            brow.forEachIndexed { k, index -> put(index, side * us[k], vs[k]) }
+        }
         // 콧등(위 → 아래)과 코끝, 콧방울
         FaceMeshIndex.NOSE_BRIDGE.forEachIndexed { k, index -> put(index, 0f, 0.08f + 0.12f * k) }
         put(FaceMeshIndex.NOSE_TIP, 0f, 0.6f)

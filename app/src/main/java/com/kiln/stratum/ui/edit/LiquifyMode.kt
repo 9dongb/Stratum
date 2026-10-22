@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FacePart
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
@@ -234,6 +235,9 @@ fun LiquifyMode(
     BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
     // 닫힌 화면의 한 줄 막대(크기·압력)에서 펼친 칩. 펼쳐져 있으면 뒤로 가기는 칩 줄로 돌아간다(닫힌 화면에서만, 취소보다 먼저).
     val coverBar = rememberCoverBarState()
+    // 얼굴 모드에서 슬라이더를 보일 부위(띠·막대가 함께 씀, 처음은 눈). 작업 창을 닫으면 처음으로 돌아간다.
+    var facePart by rememberSaveable { mutableStateOf(FacePart.EYES) }
+    val onFacePart: (FacePart) -> Unit = { facePart = it }
     val viewState = rememberCanvasViewState(state.documentSize)
     // 작업 모드와 캔버스의 위쪽 끝(창 루트 기준 픽셀). 제스처 알림을 화면 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다).
     var screenTop by remember { mutableFloatStateOf(0f) }
@@ -323,7 +327,7 @@ fun LiquifyMode(
                             Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                         )
                         BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
-                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                         CoverWorkBar(
                             onCancel = actions::cancel,
                             onDone = actions::apply,
@@ -341,7 +345,7 @@ fun LiquifyMode(
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
                     BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
                     // 얼굴 모드는 막대에 칩이 없고 안내 글(찾는 중·고르기·고른 얼굴)을 보인다
-                    CoverToolBar(items = liquifyBar(state, actions, sizePreview), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                    CoverToolBar(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(
                         onCancel = actions::cancel,
@@ -361,7 +365,7 @@ fun LiquifyMode(
                             floating = floating
                         )
                         // 띠와 옵션 창은 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다
-                        val items = liquifyStrip(state, actions, sizePreview)
+                        val items = liquifyStrip(state, actions, sizePreview, facePart, onFacePart, floating::closeFlyout)
                         val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
                         OptionStripHost(items, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
                         FlyoutHost(floating, items, Modifier.fillMaxSize().windowInsetsPadding(insets))

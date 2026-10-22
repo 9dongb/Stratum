@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
+import com.kiln.stratum.engine.face.FacePart
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyTool
@@ -318,7 +319,14 @@ internal fun mosaicStrip(controls: MosaicControls): List<StripItem> {
  * 얼굴 모드는 칠하지 않아 크기·압력 대신, 얼굴을 골랐으면 얼굴 초기화 | 얼굴 슬라이더(가운데 0인 ± 칸, [faceSliderCells])다.
  */
 @Composable
-internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePreview: SizePreviewState): List<StripItem> {
+internal fun liquifyStrip(
+    state: LiquifyState,
+    actions: LiquifyActions,
+    sizePreview: SizePreviewState,
+    facePart: FacePart,
+    onFacePart: (FacePart) -> Unit,
+    close: () -> Unit
+): List<StripItem> {
     val face = state.faceValues.takeIf { state.faceMode }
     val tools = LiquifyTool.entries.map { tool ->
         IconCell(
@@ -341,7 +349,7 @@ internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePrev
     )
     return numbersLast(
         numbers = when {
-            face != null -> faceSliderCells(face, enabled = !state.busy, actions)
+            face != null -> faceSliderCells(face, facePart, enabled = !state.busy, actions)
             state.faceMode -> emptyList()
             else -> listOf(
                 sizeCell(state.size, EditScreenTags.LIQUIFY_SIZE, sizePreview, actions::setSize),
@@ -367,18 +375,44 @@ internal fun liquifyStrip(state: LiquifyState, actions: LiquifyActions, sizePrev
                 onClick = actions::resetFace,
                 enabled = !state.busy && !face.isZero,
                 tag = EditScreenTags.LIQUIFY_FACE_RESET
-            )
+            ) + facePartCell(facePart, enabled = !state.busy) {
+                onFacePart(it)
+                close()
+            }
         }
     )
 }
 
+/** 얼굴 부위 고르기 칸(눈·코·입·얼굴형, 계획 '화면'): 값은 지금 부위, 누르면 부위 목록. 고른 부위의 슬라이더 칸만 보인다. */
+@Composable
+private fun facePartCell(part: FacePart, enabled: Boolean, onChoose: (FacePart) -> Unit): StripItem =
+    ValueCell("face_part", stringResource(R.string.liquify_face_part), stringResource(facePartLabel(part)), enabled) {
+        ChoiceList(
+            choices = FacePart.entries,
+            selected = part,
+            label = { stringResource(facePartLabel(it)) },
+            icon = { null },
+            tag = { EditScreenTags.facePart(it) },
+            onChoose = onChoose
+        )
+    }
+
+/** 얼굴 부위의 이름 */
+@StringRes
+internal fun facePartLabel(part: FacePart): Int = when (part) {
+    FacePart.EYES -> R.string.liquify_face_part_eyes
+    FacePart.NOSE -> R.string.liquify_face_part_nose
+    FacePart.MOUTH -> R.string.liquify_face_part_mouth
+    FacePart.FACE_SHAPE -> R.string.liquify_face_part_shape
+}
+
 /**
- * 고른 얼굴의 슬라이더 칸(눈 크기·코 너비·얼굴 너비, 결정 기록 '얼굴 인식 보정'): 값은 −100..+100(가운데 0, 세로 슬라이더는 가운데부터 칠함),
+ * 고른 얼굴의 [part] 부위 슬라이더 칸(결정 기록 '얼굴 인식 보정'): 값은 −100..+100(가운데 0, 세로 슬라이더는 가운데부터 칠함),
  * 끄는 대로 미리 보고 손을 떼면 작업 창 되돌리기 한 단계, 손잡이를 두 번 톡하면 0이다. 커버 막대의 칩도 이 칸을 그대로 쓴다.
  */
 @Composable
-private fun faceSliderCells(values: FaceValues, enabled: Boolean, actions: LiquifyActions): List<StripItem> =
-    FaceSlider.entries.map { slider ->
+private fun faceSliderCells(values: FaceValues, part: FacePart, enabled: Boolean, actions: LiquifyActions): List<StripItem> =
+    FaceSlider.of(part).map { slider ->
         val value = values[slider]
         SliderCell(
             key = "face_${slider.name.lowercase()}",
@@ -400,7 +434,22 @@ private fun faceSliderCells(values: FaceValues, enabled: Boolean, actions: Liqui
 @StringRes
 internal fun faceSliderLabel(slider: FaceSlider): Int = when (slider) {
     FaceSlider.EYE_SIZE -> R.string.liquify_face_eye_size
+    FaceSlider.EYE_HEIGHT -> R.string.liquify_face_eye_height
+    FaceSlider.EYE_WIDTH -> R.string.liquify_face_eye_width
+    FaceSlider.EYE_TILT -> R.string.liquify_face_eye_tilt
+    FaceSlider.EYE_DISTANCE -> R.string.liquify_face_eye_distance
+    FaceSlider.EYE_TAIL -> R.string.liquify_face_eye_tail
+    FaceSlider.NOSE_HEIGHT -> R.string.liquify_face_nose_height
     FaceSlider.NOSE_WIDTH -> R.string.liquify_face_nose_width
+    FaceSlider.BRIDGE_WIDTH -> R.string.liquify_face_bridge_width
+    FaceSlider.SMILE -> R.string.liquify_face_smile
+    FaceSlider.UPPER_LIP -> R.string.liquify_face_upper_lip
+    FaceSlider.LOWER_LIP -> R.string.liquify_face_lower_lip
+    FaceSlider.MOUTH_WIDTH -> R.string.liquify_face_mouth_width
+    FaceSlider.MOUTH_HEIGHT -> R.string.liquify_face_mouth_height
+    FaceSlider.FOREHEAD -> R.string.liquify_face_forehead
+    FaceSlider.CHIN_HEIGHT -> R.string.liquify_face_chin_height
+    FaceSlider.JAWLINE -> R.string.liquify_face_jawline
     FaceSlider.FACE_WIDTH -> R.string.liquify_face_width
 }
 
