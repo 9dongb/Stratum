@@ -410,9 +410,9 @@ internal class FaceWidthWarp private constructor(
 
 /**
  * 얼굴 세로 띠를 얼굴 세로축 쪽으로만 [move]U 옮기는 변형(이마·턱 높이, + = 턱 쪽). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth])이고
- * 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 → 그 아래). 가로로는 가운데 줄에서 반폭([half] U,
- * 없으면 윤곽의 반폭, [minHalf] U 이상) 안은 1, 그 바깥 [FaceWidthWarp.BAND]U 띠에서 0이다. 가로로는 옮기지 않아 세로선은 곧게 남는다.
- * 반폭이 높이에 따라 급하게 바뀌면(턱 끝의 윤곽) 그 옆이 세로로 크게 눌려 접힐 수 있어, 이마·턱은 높이마다 같은 [half]를 쓴다.
+ * 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 → 그 아래). 가로로는 가운데 줄에서 반폭 [half]U 안은 1,
+ * 그 바깥 [FaceWidthWarp.BAND]U 띠에서 0이다. 가로로는 옮기지 않아 세로선은 곧게 남는다.
+ * 반폭은 높이마다 같다: 윤곽을 따라 반폭이 급하게 바뀌면(턱 끝) 그 옆이 세로로 크게 눌려 접힐 수 있다.
  */
 internal class BandMove private constructor(
     private val frame: FaceFrame,
@@ -421,8 +421,7 @@ internal class BandMove private constructor(
     private val zeroV: Float,
     private val fullV: Float,
     private val endV: Float,
-    private val half: Float?,
-    private val minHalf: Float,
+    private val half: Float,
     box: FloatArray
 ) : MeshWarp {
 
@@ -443,13 +442,10 @@ internal class BandMove private constructor(
                 1f - smooth(fall)
             }
         }
-        val center = outline.mid(v)
-        val plusSide = u >= center
-        val width = max(minHalf, half ?: outline.half(v, plusSide))
-        val from = abs(u - center)
+        val from = abs(u - outline.mid(v))
         val horizontal = when {
-            from <= width -> 1f
-            from < width + FaceWidthWarp.BAND -> 1f - smooth((from - width) / FaceWidthWarp.BAND)
+            from <= half -> 1f
+            from < half + FaceWidthWarp.BAND -> 1f - smooth((from - half) / FaceWidthWarp.BAND)
             else -> return 0f
         }
         return vertical * horizontal
@@ -470,9 +466,10 @@ internal class BandMove private constructor(
     }
 
     companion object {
-        /** 무게가 0이 아닌 곳을 덮는 상자 */
-        fun of(frame: FaceFrame, outline: FaceOutline, move: Float, zeroV: Float, fullV: Float, endV: Float, half: Float?, minHalf: Float): BandMove {
-            val reach = max(minHalf, half ?: max(outline.widest - outline.mid(0f), outline.mid(0f) - outline.narrowest)) + FaceWidthWarp.BAND
+        /** 반폭은 [half]U이되 [minHalf]U보다 좁게 잡지 않는다. 상자는 무게가 0이 아닌 곳을 덮는다(가운데 줄은 높이에 따라 곧게 기운다). */
+        fun of(frame: FaceFrame, outline: FaceOutline, move: Float, zeroV: Float, fullV: Float, endV: Float, half: Float, minHalf: Float): BandMove {
+            val width = max(minHalf, half)
+            val reach = width + FaceWidthWarp.BAND
             val xs = FloatArray(4)
             val ys = FloatArray(4)
             var i = 0
@@ -484,7 +481,7 @@ internal class BandMove private constructor(
                     i++
                 }
             }
-            return BandMove(frame, outline, move, zeroV, fullV, endV, half, minHalf, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
+            return BandMove(frame, outline, move, zeroV, fullV, endV, width, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
         }
     }
 }

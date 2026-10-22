@@ -711,6 +711,9 @@ class EditorViewModel internal constructor(
         /** 화면에 한 번 알릴 것(못 찾음 등) */
         var faceNotice: FaceNotice? = null
 
+        /** 작다고 이미 알린 얼굴의 번호([faces] 안). 작업 창마다 한 번씩만 알린다. */
+        val smallTold = HashSet<Int>()
+
         /** 얼굴 슬라이더를 끄는 중이다(그 끌기의 되돌리기 단계를 이미 남김) */
         var sliding = false
 
@@ -1139,6 +1142,7 @@ class EditorViewModel internal constructor(
                 // 하나면 그 얼굴, 여럿이면 고친 첫 얼굴을 고른다(슬라이더가 바로 보이게)
                 session.selectedFace = if (record.faces.size == 1) 0 else record.faceValues.indexOfFirst { !it.isZero }
                 session.facesChanged()
+                tellIfSmall(session)
             }
             session.start = session.step()
             liquifySession = session
@@ -1259,6 +1263,8 @@ class EditorViewModel internal constructor(
                 else -> null
             }
             session.faceNotice = kind?.let { FaceNotice(it, faces?.size ?: 0, ++faceNoticeSerial) }
+            // 하나를 바로 골랐으면 작은 얼굴인지 알린다
+            if (kind == null) tellIfSmall(session)
             // 이 작업이 끝나기 전에 알려야 찾는 중 표시가 꺼진다
             session.faceJob = null
             republishLiquify()
@@ -1280,7 +1286,18 @@ class EditorViewModel internal constructor(
         if (index < 0 || index == session.selectedFace) return
         session.selectedFace = index
         session.sliding = false
+        tellIfSmall(session)
         republishLiquify()
+    }
+
+    /**
+     * 고른 얼굴이 격자에 비해 작으면(두 눈 사이가 격자 칸 [SMALL_FACE_CELLS]개보다 짧음, 50MP 사진은 약 150px) 고르게 바뀌지 않을 수 있다고
+     * 그 얼굴마다 한 번 알린다(계획 '격자 촘촘함의 한계'). 고칠 수는 있게 둔다.
+     */
+    private fun tellIfSmall(session: LiquifySession) {
+        val face = session.faces?.getOrNull(session.selectedFace) ?: return
+        if (face.eyeDistance >= SMALL_FACE_CELLS * session.mesh.cellSize || !session.smallTold.add(session.selectedFace)) return
+        session.faceNotice = FaceNotice(FaceNotice.Kind.SMALL, serial = ++faceNoticeSerial)
     }
 
     /**
@@ -1493,26 +1510,41 @@ class EditorViewModel internal constructor(
      */
     private fun applyLiquify() {
         val session = liquifySession ?: return
-        if (session.pressed || editing) return
-        // 얼굴 값이 아주 작으면 합친 변위가 움직였다고 볼 만큼(0.01px)도 안 될 수 있다. 그때 적용은 아무것도 하지 않으므로 그냥 닫는다.
-        // 다시 연 유동화는 움직인 곳이 없어도 적용한다(원래 픽셀로 돌리고 기록을 지움).
-        val composed = session.mesh.composedWith(session.warps())
-        if (!session.canApply() || (!session.reopened && composed.isIdentity())) {
+        val shown = _liquify.value ?: return
+        if (session.pressed || editing || shown.busy) return
+        if (!session.canApply()) {
             cancelLiquify()
             return
         }
-        val shown = _liquify.value ?: return
-        publishLiquify(session, shown.preview, busy = true)
+        // 손으로 민 격자와 얼굴 값은 메인 스레드에서만 바꾸므로 지금 것을 떼어 두고, 합치기(꼭짓점이 많다)는 메인 스레드 밖에서 한다
+        val manual = session.mesh.copy()
+        val warps = session.warps()
         val faces = session.faces.orEmpty()
         val values = List(faces.size) { session.faceValues.getOrNull(it) ?: FaceValues.ZERO }
-        runEdit(
-            LiquifyLayer(session.layer, composed, manual = session.mesh.copy(), faces = faces, faceValues = values),
-            onCommitted = { closeLiquify() },
-            onFinished = {
-                // 기록하지 못했으면 작업 모드가 남아 있다(다시 해 보거나 취소할 수 있게 버튼을 켠다)
-                if (liquifySession === session) _liquify.value = _liquify.value?.copy(busy = false)
+        publishLiquify(session, shown.preview, busy = true)
+        viewModelScope.launch {
+            val composed = withContext(Dispatchers.Default) { manual.composedWith(warps) }
+            if (liquifySession !== session) return@launch
+            // 얼굴 값이 아주 작으면 합친 변위가 움직였다고 볼 만큼(0.01px)도 안 될 수 있다. 그때 적용은 아무것도 하지 않으므로 그냥 닫는다.
+            // 다시 연 유동화는 움직인 곳이 없어도 적용한다(원래 픽셀로 돌리고 기록을 지움).
+            if (!session.reopened && composed.isIdentity()) {
+                closeLiquify()
+                return@launch
             }
-        )
+            // 합치는 사이 다른 편집이 시작했으면(드묾) 작업 모드를 그대로 두고 다시 누를 수 있게 한다
+            if (editing || _state.value !is EditorState.Ready) {
+                _liquify.value = _liquify.value?.copy(busy = false)
+                return@launch
+            }
+            runEdit(
+                LiquifyLayer(session.layer, composed, manual = manual, faces = faces, faceValues = values),
+                onCommitted = { closeLiquify() },
+                onFinished = {
+                    // 기록하지 못했으면 작업 모드가 남아 있다(다시 해 보거나 취소할 수 있게 버튼을 켠다)
+                    if (liquifySession === session) _liquify.value = _liquify.value?.copy(busy = false)
+                }
+            )
+        }
     }
 
     /** 바꾼 것을 버리고 작업 모드를 닫는다 */
@@ -2813,7 +2845,7 @@ class EditorViewModel internal constructor(
             if (showPreview(after, finishEdit = true) { finished = true; onFinished() }) {
                 scheduleSave()
                 // 다시 고칠 수 있던 유동화를 다른 편집이 굳혔으면 짧게 알린다(묻지 않음, 사용자 결정)
-                if (command !is LiquifyLayer && command !is RasterizeLayer && bakesLiquify(before, after)) _messages.trySend(EditorMessage.LiquifyBaked)
+                if (command !is LiquifyLayer && command !is RasterizeLayer && bakesLiquify(command, before, after)) _messages.trySend(EditorMessage.LiquifyBaked)
                 runPendingLive()
             } else {
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
@@ -2825,9 +2857,19 @@ class EditorViewModel internal constructor(
         }
     }
 
-    /** [before]에서 유동화 기록이 있던 레이어가 [after]에도 있는데 기록이 없어졌는지(다른 편집이 픽셀을 바꿔 굳힘) */
-    private fun bakesLiquify(before: Document, after: Document): Boolean =
-        before.layers.any { layer -> layer.liquify != null && after.layers.getOrNull(after.indexOfLayer(layer.id))?.let { it.liquify == null } == true }
+    /**
+     * [before]에서 유동화 기록이 있던 레이어가 굳었는지: [after]에 남았는데 기록이 없어졌거나(다른 편집이 픽셀을 바꿈),
+     * 병합으로 다른 레이어에 합쳐져 없어졌다(아래와 병합의 위 레이어, 보이는 레이어 병합의 맨 아래가 아닌 레이어).
+     * 지우기로 없어진 레이어는 굳힌 것이 아니라 알리지 않는다.
+     */
+    private fun bakesLiquify(command: EditCommand, before: Document, after: Document): Boolean {
+        val merges = command is MergeDown || command is MergeVisible
+        return before.layers.any { layer ->
+            if (layer.liquify == null) return@any false
+            val kept = after.layers.getOrNull(after.indexOfLayer(layer.id))
+            if (kept != null) kept.liquify == null else merges
+        }
+    }
 
     /**
      * 지금 문서를 [choice]대로 [target]에 내보낸다. 문서와 실행 취소 기록은 바꾸지 않는다(CLAUDE.md 5장).
@@ -3200,6 +3242,9 @@ class EditorViewModel internal constructor(
 
         /** 유동화 작업 모드 안에서 되돌릴 수 있는 획 수 */
         const val LIQUIFY_UNDO_STEPS = 8
+
+        /** 고른 얼굴의 두 눈 사이가 유동화 격자 칸 이만큼보다 짧으면 작은 얼굴로 알린다(계획 '격자 촘촘함의 한계') */
+        const val SMALL_FACE_CELLS = 12
 
         /** 오목·볼록·재구성을 누르고 있을 때 다시 거는 간격(밀리초) */
         const val LIQUIFY_HOLD_MILLIS = 40L

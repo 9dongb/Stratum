@@ -198,6 +198,38 @@ class EditorLiquifyRecordTest {
         assertNull(runBlocking { withTimeoutOrNull(1_000) { viewModel.messages.first { it == EditorMessage.LiquifyBaked } } })
     }
 
+    @Test
+    fun mergingTheLiquifiedLayerAway_bakesWithANotice_butDeletingItDoesNot() {
+        val painted = openWithAFace()
+        onMain { viewModel.addLayer() }
+        val added = awaitReady { it.revision > painted.revision && it.layers.size == 2 }
+        val dot = StrokeDabs.place(listOf(StrokePoint(400f, 430f)), 1f)
+        onMain { viewModel.edit(PaintStroke(LayerId(1), dot, BrushSettings(size = 300f, hardness = 1f, color = Color.BLUE), false)) }
+        val drawn = awaitReady { it.revision > added.revision }
+        onMain { viewModel.startLiquify() }
+        awaitLiquify { true }
+        pushTheFace()
+        val applied = apply(drawn.revision)
+        assertTrue(applied.layers.single { it.id == LayerId(1) }.liquify)
+
+        // 아래와 병합: 기록이 있던 위 레이어가 아래 레이어에 합쳐져 없어져도 굳힌 것이다
+        onMain { viewModel.mergeLayerDown() }
+        val merged = awaitReady { it.revision > applied.revision && it.layers.size == 1 }
+        assertEquals(EditorMessage.LiquifyBaked, runBlocking { withTimeout(10_000) { viewModel.messages.first { it == EditorMessage.LiquifyBaked } } })
+
+        // 실행 취소로 기록이 돌아오고, 그 레이어를 지우는 것은 굳힌 것이 아니라 알리지 않는다
+        onMain { viewModel.undo() }
+        val restored = awaitReady { it.revision > merged.revision && it.layers.size == 2 }
+        assertTrue(restored.layers.single { it.id == LayerId(1) }.liquify)
+        onMain {
+            viewModel.selectLayer(LayerId(1))
+            viewModel.deleteLayer()
+        }
+        val deleted = awaitReady { it.revision > restored.revision && it.layers.size == 1 }
+        assertEquals(LayerId(0), deleted.layers.single().id)
+        assertNull(runBlocking { withTimeoutOrNull(1_000) { viewModel.messages.first { it == EditorMessage.LiquifyBaked } } })
+    }
+
     /** 얼굴 가운데를 오른쪽으로 민다(늘 같은 획) */
     private fun pushTheFace() {
         onMain {

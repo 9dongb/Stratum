@@ -109,7 +109,8 @@ object LiquifyMeshCodec {
             val top = data.readInt()
             val windowWidth = data.readInt()
             val windowHeight = data.readInt()
-            if (left < 0 || top < 0 || windowWidth < 0 || windowHeight < 0 || left + windowWidth > columns || top + windowHeight > rows) {
+            // 더하기는 Long으로 한다(망가진 큰 값이 Int를 넘쳐 음수가 되면 검사를 지나 배열을 만들다 멈춘다)
+            if (left < 0 || top < 0 || windowWidth < 0 || windowHeight < 0 || left.toLong() + windowWidth > columns || top.toLong() + windowHeight > rows) {
                 throw IOException("Broken window ($left, $top) ${windowWidth}x$windowHeight in ${columns}x$rows")
             }
             val dx = FloatArray(columns * rows)

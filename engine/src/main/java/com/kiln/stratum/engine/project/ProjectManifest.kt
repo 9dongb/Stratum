@@ -10,6 +10,7 @@ import com.kiln.stratum.engine.document.HdrInfo
 import com.kiln.stratum.engine.document.HdrPrimaries
 import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceModel
+import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
@@ -374,7 +375,8 @@ object ProjectManifestCodec {
 
     /**
      * 유동화 기록을 읽는다. 망가졌으면 null이다: 기록만 버리고(결과 픽셀은 타일에 있다) 프로젝트는 연다(계획 '저장 방식').
-     * 숫자가 아닌 슬라이더 값은 건너뛰고, 점이 숫자가 아닌 얼굴이 있으면 망가진 것으로 본다.
+     * 점이 숫자가 아닌 얼굴, 이 앱이 모르는 슬라이더(더 새 앱이 더한 것)나 숫자가 아닌 슬라이더 값이 있어도 기록을 버린다.
+     * 그 값을 빼고 이어서 고치면 다시 열 때 그 슬라이더로 고친 모양이 조용히 사라지기 때문이다(결과 픽셀은 그대로 남는다).
      */
     private fun liquifyOrNull(bytes: ByteArray): LiquifyEntry? =
         try {
@@ -399,7 +401,8 @@ object ProjectManifestCodec {
                 val points = FloatArray(count) { data.readFloat() }
                 val face = FaceLandmarks(points, presence)
                 if (!face.isFinite) throw UnreadableProjectException("Broken face points")
-                val pairs = List(data.readCount()) { data.readInt() to data.readFloat() }.filter { it.second.isFinite() }
+                val pairs = List(data.readCount()) { data.readInt() to data.readFloat() }
+                if (pairs.any { (code, value) -> FaceSlider.ofCode(code) == null || !value.isFinite() }) throw UnreadableProjectException("Unknown face value")
                 faces += face
                 values += FaceValues.of(pairs)
             }

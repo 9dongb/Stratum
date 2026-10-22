@@ -116,6 +116,33 @@ class EditorFaceTest {
     }
 
     @Test
+    fun aSmallFace_isToldOnce_andCanStillBeChanged() {
+        // 빨간 덩어리를 작게(붓 70px: 두 눈 사이 약 28px, 격자 칸 4px의 12칸 = 48px보다 짧음)
+        onMain {
+            viewModel.onCanvasSize(1000, 800)
+            viewModel.newCanvas(SIZE.width, SIZE.height, CanvasFill.Solid(Color.WHITE))
+        }
+        val ready = awaitReady { it.documentSize == SIZE }
+        val dabs = StrokeDabs.place(listOf(StrokePoint(600f, 430f), StrokePoint(600f, 470f)), 1f)
+        onMain { viewModel.edit(PaintStroke(LayerId(0), dabs, BrushSettings(size = 70f, hardness = 1f, color = Color.RED), false)) }
+        awaitReady { it.revision > ready.revision }
+
+        val found = startFaceMode()
+
+        assertEquals(1, found.faces?.size)
+        assertEquals(FaceNotice.Kind.SMALL, found.faceNotice?.kind)
+        // 같은 얼굴은 다시 알리지 않고, 슬라이더는 그대로 쓸 수 있다
+        val serial = checkNotNull(found.faceNotice).serial
+        onMain {
+            viewModel.liquifyActions.setFaceValue(FaceSlider.EYE_SIZE, 0.5f)
+            viewModel.liquifyActions.finishFaceValue()
+        }
+        val changed = awaitLiquify { it.faceValues?.isZero == false }
+        assertEquals(serial, changed.faceNotice?.serial)
+        assertTrue(changed.changed)
+    }
+
+    @Test
     fun noFace_tellsSo() {
         openWithRedBlobs()
 

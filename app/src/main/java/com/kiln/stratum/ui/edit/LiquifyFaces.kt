@@ -110,4 +110,5 @@ internal fun faceNoticeText(notice: FaceNotice): String = when (notice.kind) {
     FaceNotice.Kind.SEVERAL -> stringResource(R.string.liquify_face_several, notice.count)
     FaceNotice.Kind.UNAVAILABLE -> stringResource(R.string.liquify_face_unavailable)
     FaceNotice.Kind.NOT_ENOUGH_MEMORY -> stringResource(R.string.liquify_face_memory)
+    FaceNotice.Kind.SMALL -> stringResource(R.string.liquify_face_small)
 }

@@ -110,6 +110,9 @@ class LiquifyMeshCodecTest {
         assertThrows(IOException::class.java) { read(craft(cell, columns - 1, 0, 2, 1, FloatArray(4))) }
         assertThrows(IOException::class.java) { read(craft(cell, 0, 0, 0, 0, FloatArray(0), version = 2)) }
         assertThrows(IOException::class.java) { read(craft(0, 0, 0, 0, 0, FloatArray(0))) }
+        // 더하면 Int를 넘치는 범위도 망가진 파일이다(넘쳐 음수가 되어 검사를 지나지 않게)
+        assertThrows(IOException::class.java) { read(craft(cell, 1, 0, Int.MAX_VALUE, 1, FloatArray(0))) }
+        assertThrows(IOException::class.java) { read(craft(cell, 0, 1, 1, Int.MAX_VALUE, FloatArray(0))) }
     }
 
     @Test

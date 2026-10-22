@@ -129,7 +129,10 @@ data class FaceNotice(val kind: Kind, val count: Int = 0, val serial: Int = 0) {
         UNAVAILABLE,
 
         /** 메모리가 모자라 찾지 못했다 */
-        NOT_ENOUGH_MEMORY
+        NOT_ENOUGH_MEMORY,
+
+        /** 고른 얼굴이 작아 고르게 바뀌지 않을 수 있다(고칠 수는 있음) */
+        SMALL
     }
 }
 

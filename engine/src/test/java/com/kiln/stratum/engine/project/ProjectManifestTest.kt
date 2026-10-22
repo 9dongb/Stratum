@@ -260,14 +260,26 @@ class ProjectManifestTest {
     }
 
     @Test
-    fun liquifyValues_skipSlidersThisAppDoesNotKnow_andValuesThatAreNotNumbers() {
-        val payload = liquifyPayload(
-            values = listOf(FaceSlider.NOSE_WIDTH.code to 0.5f, 99 to 0.25f, FaceSlider.EYE_SIZE.code to Float.NaN)
-        )
+    fun liquifyValues_ofSlidersThisAppKnows_areRead() {
+        val payload = liquifyPayload(values = listOf(FaceSlider.NOSE_WIDTH.code to 0.5f, FaceSlider.BRIDGE_WIDTH.code to -0.25f))
 
         val read = read(withTopLayerExtra(5, payload)).layers[1].liquify
 
         assertEquals(listOf(face), read?.faces)
-        assertEquals(listOf(FaceValues.ZERO.with(FaceSlider.NOSE_WIDTH, 0.5f)), read?.faceValues)
+        assertEquals(listOf(FaceValues.ZERO.with(FaceSlider.NOSE_WIDTH, 0.5f).with(FaceSlider.BRIDGE_WIDTH, -0.25f)), read?.faceValues)
+    }
+
+    @Test
+    fun liquifyValues_ofSlidersThisAppDoesNotKnow_orNotNumbers_dropTheRecord() {
+        // 그 값을 빼고 이어서 고치면 그 슬라이더로 고친 모양이 조용히 사라지므로, 기록을 버리고 결과 픽셀만 남긴다
+        val unknown = liquifyPayload(values = listOf(FaceSlider.NOSE_WIDTH.code to 0.5f, 99 to 0.25f))
+        val notANumber = liquifyPayload(values = listOf(FaceSlider.NOSE_WIDTH.code to 0.5f, FaceSlider.EYE_SIZE.code to Float.NaN))
+
+        for (payload in listOf(unknown, notANumber)) {
+            val read = read(withTopLayerExtra(5, payload))
+
+            assertNull(read.layers[1].liquify)
+            assertEquals(manifest, read)
+        }
     }
 }
