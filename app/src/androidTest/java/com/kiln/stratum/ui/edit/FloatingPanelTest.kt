@@ -187,9 +187,9 @@ class FloatingPanelTest {
         toggle(MainPanel.ADJUST).assertIsOff()
 
         // 도구 막대에서 도구를 골라도, 띠의 칸으로 옵션 창을 열어도 패널은 남는다(직접 끄기 전까지 유지)
-        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Tone)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.strip("size")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.strip("range")).performClick()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
 

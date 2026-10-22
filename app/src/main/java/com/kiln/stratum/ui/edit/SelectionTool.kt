@@ -10,14 +10,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -25,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -38,8 +29,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.transform.Orientation
@@ -48,9 +37,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionPoint
 import com.kiln.stratum.engine.selection.SelectionShape
-import com.kiln.stratum.ui.components.StratumSwitch
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
-import com.kiln.stratum.ui.theme.StratumTheme
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -87,27 +74,6 @@ internal fun selectionModeIcon(mode: SelectionMode): Int =
         SelectionMode.INTERSECT -> R.drawable.ic_selection_intersect
     }
 
-/** 자동 선택의 '이어진 곳만' 스위치 줄. 줄 전체를 누를 수 있다(48dp). */
-@Composable
-internal fun ContiguousRow(contiguous: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .toggleable(value = contiguous, role = Role.Switch, onValueChange = onChange)
-            .testTag(EditScreenTags.SELECTION_CONTIGUOUS),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            stringResource(R.string.selection_contiguous),
-            modifier = Modifier.weight(1f),
-            color = StratumTheme.colors.textSecondary,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(Modifier.width(16.dp))
-        StratumSwitch(checked = contiguous, onCheckedChange = null)
-    }
-}
 
 /** 페더 슬라이더 자리(0..1)와 픽셀. 작은 값을 세밀하게 고르게 제곱 눈금이다. */
 internal fun featherToFraction(feather: Float): Float = sqrt((feather / MAX_FEATHER).coerceIn(0f, 1f))

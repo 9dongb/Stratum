@@ -62,8 +62,9 @@ import org.junit.runner.RunWith
 
 /**
  * 메인 화면의 도구 옵션 띠와 옵션 창(결정 기록 '도구 옵션 띠'): 띠는 도구 막대 폭에 칸만큼의 높이로 캔버스 왼쪽 위(옮겨 놓은 자리)에 뜸,
- * 도구마다 칸, 칸을 누르면 옵션 창, 열고 닫기, 떠 있는 동안 캔버스를 누르면 닫기만(그리지 않음), 뒤로 가기 순서,
- * 접히는 선은 보지 않음(사용자 피드백 11차 1: 선이 지나도 자리가 그대로).
+ * 도구마다 칸(수치는 오른쪽 수치 바, 사용자 피드백 12차), 칸을 누르면 옵션 창, 열고 닫기, 떠 있는 동안 캔버스를 누르면 닫기만(그리지 않음),
+ * 뒤로 가기 순서, 접히는 선은 보지 않음(사용자 피드백 11차 1: 선이 지나도 자리가 그대로).
+ * 옵션 창이 있는 칸은 이제 명암의 범위·자르기의 비율이라, 옵션 창은 명암 범위로 본다.
  */
 @RunWith(AndroidJUnit4::class)
 class OptionStripTest {
@@ -78,6 +79,24 @@ class OptionStripTest {
     private val strokes = mutableListOf<String>()
     private val strokeActions = object : StrokeActions {
         override fun begin(x: Float, y: Float, erase: Boolean) {
+            strokes += "begin"
+        }
+
+        override fun extend(x: Float, y: Float) {
+            if (strokes.lastOrNull() != "extend") strokes += "extend"
+        }
+
+        override fun end() {
+            strokes += "end"
+        }
+
+        override fun cancel() {
+            strokes += "cancel"
+        }
+    }
+
+    private val toneActions = object : ToneActions {
+        override fun begin(x: Float, y: Float, dodge: Boolean) {
             strokes += "begin"
         }
 
@@ -148,6 +167,7 @@ class OptionStripTest {
                             cloneSource = cloneSource,
                             toneOptions = toneOptions,
                             onToneOptions = { toneOptions = it },
+                            toneActions = toneActions,
                             paintColors = paintColors,
                             onChooseColor = { slot, color -> chosen += slot to color },
                             onSwapColors = { paintColors = paintColors.swapped() },
@@ -213,137 +233,53 @@ class OptionStripTest {
     }
 
     @Test
-    fun brush_showsColorEyedropperAndValueCells_insteadOfThePanelOptions() {
+    fun brush_showsColorAndEyedropperCells_andTheNumbersAreInTheBar() {
         show(MAIN_PORTRAIT)
         pick(EditTool.Brush)
 
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertIsDisplayed()
-        // 전경색·배경색·바꾸기·스포이드, 크기·경도·불투명도
-        for (key in listOf("foreground", "background", "size", "hardness", "opacity")) cell(key).assertIsDisplayed()
+        // 띠: 전경색·배경색·바꾸기·스포이드. 크기·경도·불투명도는 띠가 아니라 오른쪽 수치 바(사용자 피드백 12차)
+        for (key in listOf("foreground", "background")) cell(key).assertIsDisplayed()
         composeRule.onNode(hasTestTag(EditScreenTags.COLOR_SWAP) and hasAnyAncestor(hasTestTag(EditScreenTags.OPTION_STRIP))).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).assertIsDisplayed()
+        for (key in listOf("size", "hardness", "opacity")) cell(key).assertDoesNotExist()
+        for (tag in listOf(EditScreenTags.BRUSH_SIZE, EditScreenTags.BRUSH_HARDNESS, EditScreenTags.BRUSH_OPACITY)) {
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        }
         // 커버의 한 줄 막대는 없다
         composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
     }
 
     @Test
-    fun eraser_hasNoColorCells_andTheStripLeavesWithTheTool() {
+    fun eraser_hasNoStrip_onlyTheBar_andTheBarLeavesWithTheTool() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Eraser)
-        cell("size").assertIsDisplayed()
-        cell("foreground").assertDoesNotExist()
+        // 지우개는 수치뿐이라 띠가 없다
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).assertDoesNotExist()
 
         pick(EditTool.Eraser)
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TOOL_SLIDER_BAR).assertDoesNotExist()
     }
 
     @Test
-    fun valueCell_opensItsSlider_andTheSliderChangesTheSetting() {
+    fun choiceCell_opensItsList_andTheSameCellCloses() {
         show()
-        pick(EditTool.Brush)
+        pick(EditTool.Tone)
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
 
-        cell("size").performClick()
+        cell("range").performClick()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
-
-        composeRule.runOnIdle { assertEquals(BrushSettings.MAX_SIZE, brush.size, 0.5f) }
-    }
-
-    @Test
-    fun sliderCell_opensAThinVerticalSlider_withItsValue_andDraggingUpRaisesIt() {
-        show(MAIN_LANDSCAPE)
-        pick(EditTool.Brush)
-        cell("hardness").performClick()
-
-        val slider = composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).fetchSemanticsNode()
-        val bounds = slider.layoutBoundsInWindow()
-        val cellBounds = cell("hardness").fetchSemanticsNode().layoutBoundsInWindow()
-        val dp = with(slider.layoutInfo.density) { 1.dp.toPx() }
-        // 칸 오른쪽의 얇은 세로 슬라이더(폭 48dp)와 그 옆 값 표시
-        assertEquals(48 * dp, bounds.width, 2 * dp)
-        assertTrue("$bounds should be tall", bounds.height > bounds.width * 3)
-        assertTrue("$bounds should be right of $cellBounds", bounds.left > cellBounds.right)
-        composeRule.onNodeWithTag(EditScreenTags.STRIP_SLIDER_VALUE).assertIsDisplayed()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS)
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, composeRule.activity.getString(com.kiln.stratum.R.string.layer_percent, (brush.hardness * 100).roundToInt())))
-
-        // 아래 끝에서 위 끝으로 끌면 가장 커지고, 위에서 아래로 끌면 가장 작아진다
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performTouchInput {
-            down(bottomCenter - Offset(0f, 2f))
-            moveTo(topCenter + Offset(0f, 2f))
-            up()
-        }
-        composeRule.runOnIdle { assertEquals(1f, brush.hardness, 0.01f) }
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).performTouchInput {
-            down(topCenter + Offset(0f, 2f))
-            moveTo(bottomCenter - Offset(0f, 2f))
-            up()
-        }
-        composeRule.runOnIdle { assertEquals(0f, brush.hardness, 0.01f) }
-    }
-
-    @Test
-    fun sliderCell_draggingTheNumber_changesTheValue_withoutOpeningTheSlider() {
-        // 사용자 피드백 9차: "수치를 터치하고 위나 아래로 슬라이딩하면 해당 옵션값(100~0)이 조절되도록 해주세요."
-        brush = brush.copy(hardness = 0.5f)
-        show(MAIN_LANDSCAPE)
-        pick(EditTool.Brush)
-        val dp = with(cell("hardness").fetchSemanticsNode().layoutInfo.density) { 1.dp.toPx() }
-        val slop = android.view.ViewConfiguration.get(composeRule.activity).scaledTouchSlop.toFloat()
-
-        // 위로 50dp 끈다: 터치 허용 거리를 넘은 만큼, 200dp에 처음부터 끝까지의 비율로 커진다
-        cell("hardness").performTouchInput {
-            down(center)
-            moveBy(Offset(0f, -30 * dp))
-            moveBy(Offset(0f, -20 * dp))
-            up()
-        }
-        composeRule.runOnIdle { assertEquals(0.5f + (50 * dp - slop) / (200 * dp), brush.hardness, 0.02f) }
-        // 끈 터치로는 옵션 창이 뜨지 않는다(톡 누르면 뜬다)
-        composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
-
-        // 아래로 끌면 작아지고 0에서 멈춘다
-        cell("hardness").performTouchInput {
-            down(center)
-            moveBy(Offset(0f, 150 * dp))
-            moveBy(Offset(0f, 150 * dp))
-            up()
-        }
-        composeRule.runOnIdle { assertEquals(0f, brush.hardness, 0.001f) }
-
-        // 크기도 같다(로그 눈금이라 슬라이더 눈금으로 커진다)
-        val size = brush.size
-        cell("size").performTouchInput {
-            down(center)
-            moveBy(Offset(0f, -40 * dp))
-            moveBy(Offset(0f, -40 * dp))
-            up()
-        }
-        composeRule.runOnIdle { assertTrue("size $size -> ${brush.size}", brush.size > size) }
-    }
-
-    @Test
-    fun sameCellCloses_andAnotherCellSwitches() {
-        show()
-        pick(EditTool.Brush)
-
-        cell("size").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertExists()
-        cell("hardness").performClick()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).assertExists()
-        cell("hardness").performClick()
+        cell("range").performClick()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
     }
 
     @Test
     fun canvasTouch_closesTheFlyout_withoutDrawing_thenTheNextDragDraws() {
         show()
-        pick(EditTool.Brush)
-        cell("opacity").performClick()
+        pick(EditTool.Tone)
+        cell("range").performClick()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertExists()
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput {
@@ -365,8 +301,8 @@ class OptionStripTest {
     @Test
     fun twoFingerTap_stillUndoesWhileTheFlyoutIsOpen() {
         show()
-        pick(EditTool.Brush)
-        cell("size").performClick()
+        pick(EditTool.Tone)
+        cell("range").performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.CANVAS).performTouchInput {
             down(0, center - Offset(60f, 0f))
@@ -385,8 +321,8 @@ class OptionStripTest {
     @Test
     fun back_closesTheFlyout_thenTheTool_thenGoesHome() {
         show(MAIN_LANDSCAPE)
-        pick(EditTool.Brush)
-        cell("size").performClick()
+        pick(EditTool.Tone)
+        cell("range").performClick()
 
         back()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
@@ -405,7 +341,6 @@ class OptionStripTest {
         show()
         pick(EditTool.Brush)
         // 사용자 요청: 도구를 고르면 전경색·배경색이 바로 보이고, 색을 누르면 옵션 창 없이 바로 색 고르기 창이 뜬다
-        cell("size").performClick()
         cell("foreground").performClick()
         composeRule.onNodeWithTag(EditScreenTags.PALETTE).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
@@ -455,10 +390,11 @@ class OptionStripTest {
         composeRule.mainClock.autoAdvance = false
         pick(EditTool.Text)
         composeRule.mainClock.advanceTimeBy(300)
-        // 글자도 브러시와 같은 두 색(전경색·배경색) 칸이 있다
+        // 글자도 브러시와 같은 두 색(전경색·배경색) 칸이 있고, 크기는 오른쪽 수치 바다
         cell("foreground").assertExists()
         cell("background").assertExists()
-        cell("textSize").assertExists()
+        cell("textSize").assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.TEXT_SIZE).assertExists()
         // 글자는 안내 알림이 없다(리터칭·명암만 처음 고를 때 알림, 사용자 피드백 10차 5)
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
         cell("help").assertDoesNotExist()
@@ -466,10 +402,9 @@ class OptionStripTest {
     }
 
     @Test
-    fun textSize_changesFromTheFlyout() {
+    fun textSize_changesFromTheBar() {
         show(MAIN_LANDSCAPE)
         pick(EditTool.Text)
-        cell("textSize").performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.TEXT_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
 
@@ -503,36 +438,20 @@ class OptionStripTest {
         assertEquals(rail.width, strip.width, 2 * dp)
         assertEquals(canvasBounds.left + 4 * dp, strip.left, 2 * dp)
         assertEquals(canvasBounds.top + 8 * dp, strip.top, 2 * dp)
-        // 칸만큼의 높이: 맨 위 손잡이(48dp) 아래 첫 칸, 마지막 칸 아래에는 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
+        // 칸만큼의 높이: 맨 위 손잡이(48dp) 아래 칸, 마지막 칸 아래에는 안쪽 여백만 남는다(빈 곳까지 차지하지 않음)
         val handle = composeRule.onNodeWithTag(EditScreenTags.STRIP_HANDLE).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(strip.top, handle.top, 2 * dp)
         assertEquals(48 * dp, handle.height, 2 * dp)
-        // 명암의 마지막 칸은 노출이다(수치 칸이 아래, 사용자 피드백 10차 9)
-        val last = cell("exposure").fetchSemanticsNode().layoutBoundsInWindow()
+        // 명암의 띠는 범위 칸 하나다(크기·경도·노출은 오른쪽 수치 바, 사용자 피드백 12차)
+        val last = cell("range").fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$strip should hug down to $last", strip.bottom - last.bottom <= 8 * dp)
         assertTrue("$strip should be shorter than $canvasBounds", strip.height < canvasBounds.height)
 
-        // 다른 도구(맨 아래 쪽 모자이크)도 같은 자리다
-        pick(EditTool.Mosaic)
+        // 다른 도구(맨 아래 쪽 글자)도 같은 자리다
+        pick(EditTool.Text)
         strip = stripBounds()
         assertEquals(canvasBounds.left + 4 * dp, strip.left, 2 * dp)
         assertEquals(canvasBounds.top + 8 * dp, strip.top, 2 * dp)
-    }
-
-    @Test
-    fun otherCellsComeFirst_thenTheNumbers_sizeHardnessOpacityStrength() {
-        // 사용자 피드백 10차 9: "수치 조절 외의 기능이 있을 시 ... 수치가 아래로 오도록 우선순위 변경해주세요.(공통 규칙)"
-        // 수치 칸 순서는 9차: "1.크기 2.경도 3. 투명도.4 강도 순서로 배치해주세요(없을 땐 제외)"
-        show(MAIN_LANDSCAPE)
-        fun tops(vararg keys: String) = keys.map { cell(it).fetchSemanticsNode().layoutBoundsInWindow().top }
-        fun assertDownward(values: List<Float>) = assertTrue("$values should go down", values.zipWithNext().all { (a, b) -> a < b })
-
-        pick(EditTool.Brush)
-        val brushColors = composeRule.onNodeWithTag(EditScreenTags.strip("foreground")).fetchSemanticsNode().layoutBoundsInWindow().top
-        assertDownward(listOf(brushColors) + tops("size", "hardness", "opacity"))
-
-        pick(EditTool.Tone)
-        assertDownward(tops("range", "size", "hardness", "exposure"))
     }
 
     @Test
@@ -559,7 +478,7 @@ class OptionStripTest {
             assertEquals(after.top - canvas.top, saved.y * dp, 2f)
         }
         // 도구를 바꿔도 그 자리다
-        pick(EditTool.Retouch)
+        pick(EditTool.Tone)
         assertEquals(after.left, stripBounds().left, 2f)
         assertEquals(after.top, stripBounds().top, 2f)
     }
@@ -567,7 +486,7 @@ class OptionStripTest {
     @Test
     fun handle_cannotDragTheStripOutOfTheCanvas() {
         show(MAIN_LANDSCAPE)
-        pick(EditTool.Eraser)
+        pick(EditTool.Brush)
         val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS).fetchSemanticsNode().layoutBoundsInWindow()
 
         dragHandle(5_000f, 5_000f)
@@ -583,8 +502,8 @@ class OptionStripTest {
     fun mainPortrait_aHorizontalHinge_doesNotMoveOrShortenTheStripAndItsFlyout() {
         // 사용자 피드백 11차 1: 접히는 선을 비키지 않는다(전에는 띠를 선 위 조각 높이로 줄이고, 옵션 창도 그 조각 안에 두었다)
         show(MAIN_PORTRAIT)
-        pick(EditTool.Retouch)
-        cell("size").performClick()
+        pick(EditTool.Tone)
+        cell("range").performClick()
         val strip = stripBounds()
         val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
         // 띠 한가운데를 지나는 가로 힌지
@@ -604,7 +523,7 @@ class OptionStripTest {
         val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
         val centerX = screen.center.x.roundToInt()
         composeRule.runOnIdle { hinges.value = listOf(Hinge(left = centerX, top = 0, right = centerX, bottom = screen.bottom.roundToInt(), isVertical = true)) }
-        pick(EditTool.Brush)
+        pick(EditTool.Tone)
         val strip = stripBounds()
 
         dragHandle(centerX - strip.center.x, 0f)
@@ -612,7 +531,7 @@ class OptionStripTest {
         val moved = stripBounds()
         assertEquals(centerX.toFloat(), moved.center.x, 4f)
         // 옵션 창은 칸 바로 오른쪽에 뜬다(선을 건너 왼쪽으로 가지 않음)
-        cell("size").performClick()
+        cell("range").performClick()
         val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$flyout should be right of $moved", flyout.left >= moved.right - 1f)
     }
@@ -620,18 +539,14 @@ class OptionStripTest {
     @Test
     fun flyout_opensOnTheLeft_whenTheStripIsAtTheRightEdge() {
         show(MAIN_LANDSCAPE)
-        pick(EditTool.Brush)
+        pick(EditTool.Tone)
         dragHandle(5_000f, 0f)
         val strip = stripBounds()
 
-        cell("hardness").performClick()
+        cell("range").performClick()
 
         val flyout = composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$flyout should be left of $strip", flyout.right <= strip.left + 1f)
-        // 값 표시는 슬라이더 카드의 칸 반대쪽(왼쪽)이다
-        val value = composeRule.onNodeWithTag(EditScreenTags.STRIP_SLIDER_VALUE).fetchSemanticsNode().layoutBoundsInWindow()
-        val slider = composeRule.onNodeWithTag(EditScreenTags.BRUSH_HARDNESS).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$value should be left of $slider", value.right <= slider.left + 1f)
     }
 
     @Test
@@ -650,17 +565,16 @@ class OptionStripTest {
         pick(EditTool.Retouch)
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_HEAL)
 
-        // '가져올 곳 정하기' 칸은 없다(사용자 피드백 10차 4: 표시가 늘 보이고 끌어 옮긴다)
-        cell("source").assertDoesNotExist()
-        cell("opacity").assertDoesNotExist()
-        cell("size").performClick()
+        // '가져올 곳 정하기' 칸은 없다(사용자 피드백 10차 4: 표시가 늘 보이고 끌어 옮긴다). 수치뿐이라 띠도 없다(사용자 피드백 12차)
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.runOnIdle { assertEquals(BrushSettings.MIN_SIZE, retouch.size, 0.5f) }
 
         composeRule.runOnIdle { cloneSource = CloneSource(10f, 10f) }
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_CLONE)
         cell("source").assertDoesNotExist()
-        cell("opacity").assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OPACITY).assertIsDisplayed()
     }
 
     @Test
@@ -669,9 +583,10 @@ class OptionStripTest {
         pick(EditTool.Retouch)
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_REMOVE)
 
-        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기와 [지우기] 칸(톡 눌러 고른 물체가 있을 때만 켜짐)만 있다
-        cell("size").assertIsDisplayed()
-        for (key in listOf("hardness", "opacity", "source")) cell(key).assertDoesNotExist()
+        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 [지우기] 칸(톡 눌러 고른 물체가 있을 때만 켜짐)만, 수치 바에는 크기만 있다
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_SIZE).assertIsDisplayed()
+        for (tag in listOf(EditScreenTags.RETOUCH_HARDNESS, EditScreenTags.RETOUCH_OPACITY)) composeRule.onNodeWithTag(tag).assertDoesNotExist()
+        cell("source").assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsDisplayed().assertIsNotEnabled()
         // 물음표 칸은 없고(사용자 피드백 10차 5), 처음 고르면 안내 글이 알림으로 뜬다
         cell("help").assertDoesNotExist()
@@ -686,7 +601,6 @@ class OptionStripTest {
         cell("range").performClick()
         composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.HIGHLIGHTS)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.OPTION_FLYOUT).assertDoesNotExist()
-        cell("exposure").performClick()
         composeRule.onNodeWithTag(EditScreenTags.TONE_EXPOSURE).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.runOnIdle {
             assertEquals(ToneRange.HIGHLIGHTS, toneOptions.range)

@@ -264,11 +264,12 @@ fun LiquifyMode(
                             state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.fillMaxSize(),
                             floating = floating
                         )
-                        // 띠와 옵션 창은 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다
-                        val items = liquifyStrip(state, actions, sizePreview)
+                        // 띠(도구 넷)와 옵션 창, 오른쪽 수치 바(크기·압력)는 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다(편집 화면과 같다, 사용자 피드백 12차)
+                        val split = splitSliders(liquifyStrip(state, actions, sizePreview))
                         val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                        OptionStripHost(items, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
-                        FlyoutHost(floating, items, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                        ToolSliderBar(split.sliders, Modifier.fillMaxSize().windowInsetsPadding(insets), onTouch = floating::closeFlyout)
+                        OptionStripHost(split.strip, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                        FlyoutHost(floating, split.strip, Modifier.fillMaxSize().windowInsetsPadding(insets))
                     }
                 }
             }

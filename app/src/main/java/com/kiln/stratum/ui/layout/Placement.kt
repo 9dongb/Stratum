@@ -96,3 +96,32 @@ fun stripTop(anchor: Span, height: Int, area: Span): Int {
     }
     return top.coerceAtMost(area.end - height).coerceAtLeast(area.start)
 }
+
+/**
+ * 도구 수치 바의 크기(픽셀, 사용자 피드백 12차: "펼친 화면 기준 도구 수치 조절을 오른쪽에 바에서 일괄 조절합니다"). [thickness]는 슬라이더 자리의
+ * 굵기(누르는 영역), [minLength]~[maxLength]는 슬라이더 길이, [padding]은 카드 안쪽 여백, [gap]은 슬라이더 사이, [margin]은 카드와 캔버스 끝 사이다.
+ */
+data class SliderBarMetrics(val thickness: Int, val minLength: Int, val maxLength: Int, val padding: Int, val gap: Int, val margin: Int)
+
+/** 도구 수치 바 카드([box])와 그 안 슬라이더 자리([slots], 위·왼쪽부터)(창 좌표) */
+data class SliderBarLayout(val box: Region, val slots: List<Region>)
+
+/**
+ * 캔버스 오른쪽 가장자리의 세로 수치 바: [area](캔버스 영역) 오른쪽 끝에서 [SliderBarMetrics.margin] 안, 세로 가운데. 슬라이더 [count]개를 위부터
+ * 쌓고, 길이는 영역 높이에 맞춰 [SliderBarMetrics.minLength]~[SliderBarMetrics.maxLength]다(캔버스가 낮으면 줄인다). 그래도 넘치면 위 끝부터 놓는다.
+ */
+fun sideSliderBar(count: Int, area: Region, m: SliderBarMetrics): SliderBarLayout {
+    val room = area.height - 2 * m.margin - 2 * m.padding - (count - 1) * m.gap
+    val length = (room / count.coerceAtLeast(1)).coerceAtMost(m.maxLength).coerceAtLeast(m.minLength)
+    val width = m.thickness + 2 * m.padding
+    val height = count * length + (count - 1).coerceAtLeast(0) * m.gap + 2 * m.padding
+    val right = area.right - m.margin
+    val top = (area.top + (area.height - height) / 2).coerceAtLeast(area.top + m.margin)
+    val box = Region(right - width, top, right, top + height)
+    val slots = List(count) { index ->
+        val start = top + m.padding + index * (length + m.gap)
+        Region(box.left + m.padding, start, box.right - m.padding, start + length)
+    }
+    return SliderBarLayout(box, slots)
+}
+

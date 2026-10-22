@@ -103,4 +103,38 @@ class PlacementTest {
         // 영역보다 넓으면 왼쪽 끝부터
         assertEquals(listOf(10, 74, 138), actionBarStarts(List(3) { 60 }, center = 100, area = Span(10, 150), gap = 4))
     }
+
+    /** 수치 바 크기: 자리 굵기 48, 길이 80~160, 안쪽 여백 4, 사이 8, 캔버스 끝과 8 */
+    private val bar = SliderBarMetrics(thickness = 48, minLength = 80, maxLength = 160, padding = 4, gap = 8, margin = 8)
+
+    @Test
+    fun sideSliderBar_sitsOnTheRightEdge_centeredVertically_withSlotsFromTheTop() {
+        // 사용자 피드백 12차: 캔버스 오른쪽 가장자리, 세로 가운데. 슬라이더는 위부터 크기·경도·불투명도 순서로 쌓는다
+        val area = Region(100, 50, 1000, 750)
+        val layout = sideSliderBar(3, area, bar)
+        // 카드 폭 = 자리 48 + 안쪽 여백 4×2, 높이 = 160×3 + 8×2 + 4×2
+        assertEquals(Region(1000 - 8 - 56, 50 + (700 - 504) / 2, 1000 - 8, 50 + (700 - 504) / 2 + 504), layout.box)
+        assertEquals(3, layout.slots.size)
+        val top = layout.box.top + 4
+        assertEquals(Region(layout.box.left + 4, top, layout.box.right - 4, top + 160), layout.slots[0])
+        assertEquals(Region(layout.box.left + 4, top + 168, layout.box.right - 4, top + 328), layout.slots[1])
+        assertEquals(Region(layout.box.left + 4, top + 336, layout.box.right - 4, top + 496), layout.slots[2])
+    }
+
+    @Test
+    fun sideSliderBar_shrinksTheSlidersOnALowCanvas_butNotBelowTheMinimum() {
+        // 높이 400: 남는 자리 400 - 16 - 8 - 16 = 360 → 길이 120
+        val low = sideSliderBar(3, Region(0, 0, 500, 400), bar)
+        assertEquals(120, low.slots[0].height)
+        assertEquals((400 - low.box.height) / 2, low.box.top)
+        // 아주 낮으면 가장 짧은 길이로 두고 위 끝(여백 안)부터 놓는다
+        val tiny = sideSliderBar(3, Region(0, 0, 500, 200), bar)
+        assertEquals(80, tiny.slots[0].height)
+        assertEquals(8, tiny.box.top)
+        // 하나면 그 하나만 가운데에(가장 긴 길이)
+        val one = sideSliderBar(1, Region(0, 0, 500, 800), bar)
+        assertEquals(160, one.slots.single().height)
+        assertEquals((800 - 168) / 2, one.box.top)
+    }
+
 }

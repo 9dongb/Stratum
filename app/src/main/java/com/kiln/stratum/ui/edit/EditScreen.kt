@@ -670,6 +670,8 @@ fun EditScreen(
                 else -> null
             }
         }
+        // 띠 칸을 띠에 남길 칸과 오른쪽 수치 바의 슬라이더로 나눈다(사용자 피드백 12차)
+        val stripSplit = stripItems?.takeIf { railTool != null }?.let { splitSliders(it) }
         // 조정·레이어의 켬·끔은 커버와 메인 화면이 같은 상태다(FloatingState.panel, 결정 기록 '커버 화면 개편').
         // 그래서 접고 펴도 따로 잇지 않는다(메인에서 켠 패널은 접어도 커버의 조정·레이어로 보인다).
         // 배치가 바뀌면(접기·펼치기) 메뉴를 연 버튼 자리가 사라지므로 메뉴와 커버 더보기 줄을 닫는다
@@ -690,10 +692,14 @@ fun EditScreen(
             selectionActionBar?.let {
                 SelectionActionBar(it, screenCenterX, Modifier.fillMaxSize().windowInsetsPadding(insets)) { inset -> selectionBarPx = inset }
             }
-            if (stripItems != null && railTool != null) {
-                // 띠는 캔버스 왼쪽 위(옮겨 놓은 자리)에 칸만큼의 높이로 뜬다(사용자 피드백 9차)
-                OptionStripHost(stripItems, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
-                FlyoutHost(floating, stripItems, Modifier.fillMaxSize().windowInsetsPadding(insets))
+            // 수치(크기·경도·불투명도·그 밖, 최대 3개)는 캔버스 오른쪽 수치 바에서 고친다(사용자 피드백 12차). 띠·옵션 창이 그 위에 그려진다.
+            if (stripSplit != null && stripSplit.sliders.isNotEmpty()) {
+                ToolSliderBar(stripSplit.sliders, Modifier.fillMaxSize().windowInsetsPadding(insets), onTouch = floating::closeFlyout)
+            }
+            if (stripSplit != null && stripSplit.strip.isNotEmpty()) {
+                // 띠는 캔버스 왼쪽 위(옮겨 놓은 자리)에 칸만큼의 높이로 뜬다(사용자 피드백 9차). 수치 밖의 칸이 없으면(지우개 등) 띠가 없다.
+                OptionStripHost(stripSplit.strip, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                FlyoutHost(floating, stripSplit.strip, Modifier.fillMaxSize().windowInsetsPadding(insets))
             }
         }
         // 자르기 중에는 캔버스 위에 테두리를, 브러시·지우개·리터칭·명암을 고르면 그리는 터치 자리를 겹친다.

@@ -27,10 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.kiln.stratum.ui.layout.Region
-import com.kiln.stratum.ui.layout.Span
 import com.kiln.stratum.ui.layout.flyoutOnLeft
 import com.kiln.stratum.ui.layout.flyoutSides
-import com.kiln.stratum.ui.layout.stripTop
 import com.kiln.stratum.ui.theme.StratumDimens
 import com.kiln.stratum.ui.theme.StratumShapes
 import com.kiln.stratum.ui.theme.StratumTheme
@@ -146,42 +144,29 @@ private class FlyoutArea {
 /**
  * 띠 칸의 옵션 창을 그 칸 옆에 띄우는 자리. 받은 영역을 다 차지하지만 터치는 옵션 창만 받는다(빈 곳은 아래 캔버스로 간다).
  * 칸 오른쪽에 띄우고, 띠를 오른쪽 끝에 옮겨 놓아 자리가 모자라면 왼쪽에 띄운다([flyoutOnLeft], 사용자 피드백 9차).
- * 어느 쪽인지는 그리기 전에 정해, 세로 슬라이더 창의 값 표시를 칸 반대쪽에 두고 삼각형이 칸을 가리키게 한다.
- * 자리는 배치하는 순간 칸 자리(창 좌표)와 자기 위치를 읽어 정한다([flyoutSides]). 접히는 선은 보지 않는다(사용자 피드백 11차 1).
- * 옵션 창이 그 자리보다 크면 자리 크기로 줄여 잰다(내용이 길면 스스로 밀어 본다).
+ * 자리는 배치하는 순간 칸 자리(창 좌표)와 자기 위치를 읽어 정한다([flyoutSides]). 위 끝은 칸 위 끝에 맞추고 영역 안으로 민다.
+ * 접히는 선은 보지 않는다(사용자 피드백 11차 1). 옵션 창이 그 자리보다 크면 자리 크기로 줄여 잰다(내용이 길면 스스로 밀어 본다).
  */
 @Composable
 fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier = Modifier) {
     val item = items.firstOrNull { it.key == state.flyout }
     val anchor = item?.let { state.anchors[it.key] }
-    // 슬라이더 칸은 얇은 세로 슬라이더 창(칸 가운데에 맞추고 칸을 가리키는 삼각형), 나머지는 칸 위 끝에 맞춘 카드 창이다
-    val slider = item as? SliderCell
     val density = LocalDensity.current
     val area = remember { FlyoutArea() }
-    // 세로 슬라이더 창은 삼각형이 들어갈 만큼 칸에서 더 띄운다
-    val gapDp = if (slider != null) FlyoutGap + FlyoutArrowWidth else FlyoutGap
     val onLeft = with(density) {
         val cell = anchor
         val region = area.region
         if (cell == null || region == null) {
             false
         } else {
-            val gap = gapDp.roundToPx()
+            val gap = FlyoutGap.roundToPx()
             val (right, left) = flyoutSides(anchor = cell, area = region, gap = gap)
             flyoutOnLeft(FlyoutDecisionWidth.roundToPx(), cell, right, left, gap)
         }
     }
-    val content: (@Composable () -> Unit)? = when {
-        slider != null -> ({ VerticalSliderFlyout(slider, valueOnLeft = onLeft) })
-        else -> item?.flyout?.let { flyout -> { FlyoutSurface(item.title) { flyout() } } }
-    }
+    val content: (@Composable () -> Unit)? = item?.flyout?.let { flyout -> { FlyoutSurface(item.title) { flyout() } } }
     Layout(
-        content = {
-            if (content != null && anchor != null) {
-                content()
-                if (slider != null) FlyoutArrow()
-            }
-        },
+        content = { if (content != null && anchor != null) content() },
         modifier = modifier
     ) { measurables, constraints ->
         val width = constraints.maxWidth
@@ -196,7 +181,7 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             area.region = region
             val measurable = measurables.firstOrNull() ?: return@layout
             val cell = anchor ?: return@layout
-            val gap = gapDp.roundToPx()
+            val gap = FlyoutGap.roundToPx()
             val (rightSide, leftSide) = flyoutSides(anchor = cell, area = region, gap = gap)
             val side = if (onLeft) leftSide else rightSide
             val placeable = measurable.measure(
@@ -207,21 +192,8 @@ fun FlyoutHost(state: FloatingState, items: List<StripItem>, modifier: Modifier 
             } else {
                 side.left.coerceAtMost(side.right - placeable.width).coerceAtLeast(side.left)
             }
-            val y = if (slider != null) {
-                // 칸 가운데에 슬라이더 가운데를 맞추고, 위아래가 모자라면 칸에서 시작하거나 끝나게 영역 안으로 민다(띠와 같은 규칙)
-                stripTop(Span(cell.top, cell.bottom), placeable.height, Span(side.top, side.bottom))
-            } else {
-                cell.top.coerceAtMost(side.bottom - placeable.height).coerceAtLeast(side.top)
-            }
+            val y = cell.top.coerceAtMost(side.bottom - placeable.height).coerceAtLeast(side.top)
             placeable.place(x - left, y - top)
-            // 칸을 가리키는 삼각형: 창의 칸 쪽 끝에 칸 가운데 높이로, 창 테두리를 덮게 조금 겹쳐 놓는다(왼쪽에 띄우면 뒤집어 놓는다)
-            val arrow = measurables.getOrNull(1)?.measure(Constraints()) ?: return@layout
-            val arrowY = ((cell.top + cell.bottom) / 2 - arrow.height / 2).coerceIn(y, (y + placeable.height - arrow.height).coerceAtLeast(y))
-            if (onLeft) {
-                arrow.placeWithLayer(x + placeable.width + FlyoutArrowWidth.roundToPx() - arrow.width - left, arrowY - top) { scaleX = -1f }
-            } else {
-                arrow.place(x - FlyoutArrowWidth.roundToPx() - left, arrowY - top)
-            }
         }
     }
 }

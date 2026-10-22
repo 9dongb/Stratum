@@ -239,7 +239,7 @@ class EffectToolsTest {
     }
 
     @Test
-    fun editScreen_mainScreen_showsTheStripCells() {
+    fun editScreen_mainScreen_showsTheNumbersInTheBar() {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(900.dp, 700.dp))) {
                 StratumTheme {
@@ -248,10 +248,12 @@ class EffectToolsTest {
             }
         }
 
+        // 흐림·모자이크는 수치뿐이라 띠가 없고, 오른쪽 수치 바에 크기·경도·강도(셀 크기)가 있다(사용자 피드백 12차)
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Blur)).performScrollTo().performClick()
-        composeRule.onNodeWithTag(EditScreenTags.strip("strength")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Mosaic)).performScrollTo().performClick()
-        composeRule.onNodeWithTag(EditScreenTags.strip("cell")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.MOSAIC_CELL).assertIsDisplayed()
     }
 
 }
