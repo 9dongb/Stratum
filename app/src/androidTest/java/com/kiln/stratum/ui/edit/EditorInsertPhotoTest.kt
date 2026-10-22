@@ -24,6 +24,7 @@ import org.junit.runner.RunWith
 /**
  * 사진 넣기(사용자 피드백 12차: 레이어 패널의 사진 넣기)를 편집 흐름(ViewModel)에서 확인한다:
  * 고른 레이어 바로 위 새 레이어로 문서 가운데에 넣고 그 레이어를 고르며, 실행 취소 한 단계다. 사진이 아니면 알리고 그대로다.
+ * 끌어다 놓은 사진(사용자 피드백 12차 4)은 먼저 앱 임시 폴더에 복사하고 권한을 놓은 뒤 넣고(홈이면 연다), 복사본은 지운다.
  */
 @RunWith(AndroidJUnit4::class)
 class EditorInsertPhotoTest {
@@ -98,6 +99,47 @@ class EditorInsertPhotoTest {
         val now = viewModel.state.value as EditorState.Ready
         assertEquals(1, now.layers.size)
         assertEquals(opened.revision, now.revision)
+    }
+
+    @Test
+    fun aDroppedPhoto_isCopiedFirst_thenInserted_andTheCopyIsRemoved() {
+        openCanvas()
+        var released = 0
+        // 놓을 때 받은 권한은 복사한 뒤 바로 놓는다(끌어 놓기, 사용자 피드백 12차 4)
+        onMain { viewModel.insertDropped(png("dropped.png", 100, 50, Color.GREEN)) { released++ } }
+        val inserted = awaitReady { !it.busy && it.layers.size == 2 }
+
+        assertEquals(1, released)
+        assertEquals(Color.GREEN, pixel(inserted, 200, 150))
+        assertEquals(inserted.layers.last().id, inserted.activeLayer)
+        // 앱 임시 폴더의 복사본은 넣은 뒤 지운다
+        val dropped = File(context.cacheDir, EditorViewModel.DROPPED_DIR)
+        val left = (dropped.listFiles() ?: emptyArray()).filter { it.isFile }
+        assertTrue("$left should be removed", left.isEmpty())
+    }
+
+    @Test
+    fun aDroppedPhotoOnHome_opensAsANewProject() {
+        var released = 0
+        onMain { viewModel.openDropped(png("opened.png", 120, 80, Color.RED)) { released++ } }
+        val opened = awaitReady { !it.busy && it.documentSize == PixelSize(120, 80) }
+
+        assertEquals(1, released)
+        assertEquals(1, opened.layers.size)
+        assertEquals(Color.RED, pixel(opened, 60, 40))
+    }
+
+    @Test
+    fun aDroppedFileThatIsNotAPhoto_isReported() {
+        openCanvas()
+        val file = File(dir, "dropped-note.png").apply { writeText("not a photo") }
+        var released = 0
+
+        onMain { viewModel.insertDropped(Uri.fromFile(file)) { released++ } }
+
+        assertEquals(EditorMessage.PhotoUnreadable, runBlocking { withTimeout(10_000) { viewModel.messages.first() } })
+        assertEquals(1, released)
+        assertEquals(1, (viewModel.state.value as EditorState.Ready).layers.size)
     }
 
     private companion object {

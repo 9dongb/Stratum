@@ -110,6 +110,7 @@ import com.kiln.stratum.project.ProjectNames
 import com.kiln.stratum.settings.AppSettings
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.settings.PreviewQuality
+import java.io.File
 import java.io.IOException
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
@@ -128,6 +129,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -760,6 +762,9 @@ class EditorViewModel internal constructor(
     /** 사용자가 크기를 고르기를 기다리는 사진. */
     private var pendingPhoto: PendingPhoto? = null
 
+    /** 홈에 끌어다 놓아 연 사진의 앱 임시 폴더 복사본. 다음에 끌어다 놓아 열 때와 편집 상태가 사라질 때 지운다. */
+    private var openedDrop: File? = null
+
     /** 캔버스 영역의 크기(픽셀). 화면이 알려 주기 전에는 기기 화면 크기로 짐작한다. */
     private var canvasSize: PixelSize? = null
 
@@ -782,10 +787,32 @@ class EditorViewModel internal constructor(
         savedState.get<String>(KEY_PROJECT)?.let { id ->
             if (ProjectLibrary.isValidId(id)) openProject(id) else savedState.remove<String>(KEY_PROJECT)
         }
+        // 지난 실행에서 끌어다 놓은 사진의 복사본이 남아 있으면 지운다(사진은 이미 문서 타일로 옮겨졌다)
+        viewModelScope.launch(Dispatchers.IO) { File(getApplication<Application>().cacheDir, DROPPED_DIR).deleteRecursively() }
     }
 
     /** [uri] 사진을 연다. 열려 있던 문서는 닫는다(저장은 끝까지 한다). 새 프로젝트가 된다. */
-    fun openPhoto(uri: Uri) {
+    fun openPhoto(uri: Uri) =
+        openSource {
+            ImageDecoder.createSource(getApplication<Application>().contentResolver, uri) to withContext(Dispatchers.IO) { displayNameOf(uri) }
+        }
+
+    /**
+     * 홈에 끌어다 놓은 사진([uri])을 [openPhoto]처럼 연다(사용자 피드백 12차 4: 끌어 놓기). 놓을 때 받은 읽기 권한은 화면이 다시 만들어지면
+     * 사라지므로, 바로 앱 임시 폴더에 복사한 뒤 [releasePermission]으로 권한을 놓고 복사본에서 연다. 복사본은 다음에 앱을 켤 때 지운다.
+     */
+    fun openDropped(uri: Uri, releasePermission: () -> Unit) {
+        // 앞에서 끌어다 놓아 연 사진의 복사본은 더 쓰지 않는다(열기를 마쳤거나, 새로 열면 큰 사진 선택 창이 사라진다)
+        openedDrop?.delete()
+        openedDrop = null
+        val copy = viewModelScope.async {
+            copyDropped(uri).also { releasePermission() }
+        }
+        openSource { copy.await()?.let { dropped -> openedDrop = dropped.file; ImageDecoder.createSource(dropped.file) to dropped.name } }
+    }
+
+    /** [load]가 주는 사진(읽지 못하면 null)과 표시 이름으로 새 프로젝트를 연다([openPhoto]·[openDropped]) */
+    private fun openSource(load: suspend () -> Pair<ImageDecoder.Source, String?>?) {
         previewJob?.cancel()
         detailJob?.cancel()
         pendingPhoto = null
@@ -801,9 +828,14 @@ class EditorViewModel internal constructor(
             _state.value = EditorState.Opening
             // 앞 문서를 저장하던 것이 끝나야 메모리가 겹치지 않는다
             library.awaitSaves()
-            val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+            val loaded = load()
+            if (loaded == null) {
+                _state.value = EditorState.Failed(EditorFailure.PHOTO_UNREADABLE)
+                return@launch
+            }
+            val (source, displayName) = loaded
             // 새 프로젝트 이름은 사진 파일 이름(확장자 뺌)이다(결정 기록 '프로젝트 이름')
-            val name = withContext(Dispatchers.IO) { ProjectNames.fromFileName(displayNameOf(uri)) }
+            val name = ProjectNames.fromFileName(displayName)
             val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
             if (info == null) {
                 _state.value = EditorState.Failed(EditorFailure.PHOTO_UNREADABLE)
@@ -1244,25 +1276,68 @@ class EditorViewModel internal constructor(
     fun insertPhoto(uri: Uri) {
         if (history == null) return
         val source = ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
-        insertImage(source) { displayNameOf(uri) }
+        viewModelScope.launch { insertImage(source, withContext(Dispatchers.IO) { displayNameOf(uri) }) }
     }
 
-    /** [source] 사진을 새 레이어로 넣는다([insertPhoto]). [fileName]은 백그라운드에서 읽는 표시 이름이다. */
-    private fun insertImage(source: ImageDecoder.Source, fileName: () -> String?) {
+    /**
+     * 다른 앱에서 끌어다 놓은 사진([uri])을 [insertPhoto]처럼 새 레이어로 넣는다(사용자 피드백 12차 4: 끌어 놓기).
+     * 놓을 때 받은 읽기 권한은 화면이 다시 만들어지면 사라지므로, 바로 앱 임시 폴더에 복사한 뒤 [releasePermission]으로 권한을 놓고
+     * 복사본에서 넣는다. 넣기가 끝나면 복사본을 지운다.
+     */
+    fun insertDropped(uri: Uri, releasePermission: () -> Unit) {
+        if (history == null) {
+            releasePermission()
+            return
+        }
         viewModelScope.launch {
-            val name = withContext(Dispatchers.IO) { ProjectNames.photoLayerName(fileName()) }
-            val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
-            if (info == null) {
+            val dropped = copyDropped(uri)
+            releasePermission()
+            if (dropped == null) {
                 _messages.trySend(EditorMessage.PhotoUnreadable)
                 return@launch
             }
-            // 처리하던 편집이 있으면 끝나기를 기다린다(그 사이 문서가 바뀌므로 넣을 자리는 그 뒤에 정한다)
-            editJob?.join()
-            val document = history?.document ?: return@launch
-            if (editing || hasLiveValues) return@launch
-            val layerName = name ?: getApplication<Application>().getString(R.string.layer_photo_name, document.nextLayerId)
-            runEdit(InsertImageLayer(source, info, layerName, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId))
+            insertImage(ImageDecoder.createSource(dropped.file), dropped.name) { dropped.file.delete() }
         }
+    }
+
+    /** [source] 사진을 새 레이어로 넣는다([insertPhoto]·[insertDropped]). [displayName]은 표시 이름이고, 끝나면(넣지 못해도) [onDone]을 부른다. */
+    private suspend fun insertImage(source: ImageDecoder.Source, displayName: String?, onDone: () -> Unit = {}) {
+        val info = withContext(Dispatchers.Default) { PhotoImporter.readInfo(source) }
+        if (info == null) {
+            onDone()
+            _messages.trySend(EditorMessage.PhotoUnreadable)
+            return
+        }
+        // 처리하던 편집이 있으면 끝나기를 기다린다(그 사이 문서가 바뀌므로 넣을 자리는 그 뒤에 정한다)
+        editJob?.join()
+        val document = history?.document
+        if (document == null || editing || hasLiveValues) {
+            onDone()
+            return
+        }
+        val layerName = ProjectNames.photoLayerName(displayName) ?: getApplication<Application>().getString(R.string.layer_photo_name, document.nextLayerId)
+        runEdit(InsertImageLayer(source, info, layerName, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId), onFinished = onDone)
+    }
+
+    /** 끌어다 놓은 사진의 앱 임시 폴더 복사본([file])과 표시 이름 */
+    private class DroppedPhoto(val file: File, val name: String?)
+
+    /** 끌어다 놓은 [uri]를 앱 임시 폴더([DROPPED_DIR])에 복사한다. 읽지 못하면 null이다. */
+    private suspend fun copyDropped(uri: Uri): DroppedPhoto? = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val name = displayNameOf(uri)
+        val dir = File(app.cacheDir, DROPPED_DIR).apply { mkdirs() }
+        val file = File.createTempFile("drop", null, dir)
+        val copied = try {
+            app.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } } != null
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not copy the dropped photo", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "No permission for the dropped photo", e)
+            false
+        }
+        if (copied) DroppedPhoto(file, name) else null.also { file.delete() }
     }
 
     /**
@@ -2527,6 +2602,7 @@ class EditorViewModel internal constructor(
 
     override fun onCleared() {
         releaseAiModels()
+        openedDrop?.delete()
         super.onCleared()
     }
 
@@ -2741,6 +2817,9 @@ class EditorViewModel internal constructor(
 
         /** 맞춤 배율과 같다고 볼 오차(배율 계산의 반올림) */
         private const val FIT_SCALE_TOLERANCE = 1.000001
+
+        /** 끌어다 놓은 사진을 복사해 두는 앱 임시 폴더(cacheDir 안) 이름 */
+        const val DROPPED_DIR = "dropped"
     }
 
     private fun levelFor(document: Document): Int {

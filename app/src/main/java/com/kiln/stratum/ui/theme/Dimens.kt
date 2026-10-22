@@ -15,6 +15,9 @@ object StratumDimens {
     /** 선택된 탭 밑줄 */
     val TabIndicator = 2.dp
 
+    /** 사진을 끌어 받을 자리의 테두리(끌어 놓기, 사용자 피드백 12차 4) */
+    val DropOutline = 2.dp
+
     /** 슬라이더 트랙 두께와 손잡이(흰 원) 지름 */
     val SliderTrack = 3.dp
     val SliderThumb = 14.dp

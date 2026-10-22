@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -110,7 +111,9 @@ import com.kiln.stratum.ui.layout.workTopBarHeight
 import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.topBarItem
 import com.kiln.stratum.ui.layout.isCoverLandscape
+import com.kiln.stratum.ui.layout.PhotoDropHighlight
 import com.kiln.stratum.ui.layout.layoutClassOf
+import com.kiln.stratum.ui.layout.rememberPhotoDropTarget
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.StratumTheme
 import kotlinx.coroutines.awaitCancellation
@@ -172,6 +175,8 @@ import kotlinx.coroutines.flow.first
  * @param toolHelpSeen 이번 실행에서 안내 글을 이미 보인 하위 도구(리터칭·명암을 처음 고를 때 알림, 편집 상태가 들어 접기·펼치기에도 남는다)
  * @param onOpenSettings 상단 바 맨 오른쪽 설정 버튼을 눌렀다(사용자 피드백 11차 4). 설정에서 뒤로 가면 보던 그대로 돌아온다.
  * @param onAddPhoto 레이어 패널·시트의 사진 넣기 버튼을 눌렀다(사용자 피드백 12차). 앱이 사진 선택기를 띄운다.
+ * @param onDropPhoto 다른 앱에서 사진을 끌어다 놓았다(주소와 받은 읽기 권한을 놓을 일, 사용자 피드백 12차 4). 앱이 새 레이어로 넣는다.
+ *   없으면 끌어 놓기를 받지 않는다. 자르는 중이거나 문서가 없으면 받지 않고 권한을 바로 놓는다.
  */
 @Composable
 fun EditScreen(
@@ -235,7 +240,8 @@ fun EditScreen(
     onStripPosition: (StripPosition) -> Unit = {},
     toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
     onOpenSettings: () -> Unit = {},
-    onAddPhoto: () -> Unit = {}
+    onAddPhoto: () -> Unit = {},
+    onDropPhoto: ((Uri, release: () -> Unit) -> Unit)? = null
 ) {
     // 캔버스 보기(확대·이동). 화면 폭에 따라 배치가 바뀌어도 이어지도록 배치를 고르기 전에 둔다.
     val viewState = rememberCanvasViewState((state as? EditorState.Ready)?.documentSize)
@@ -391,9 +397,20 @@ fun EditScreen(
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
+    // 다른 앱에서 사진을 끌어 오는 동안 받을 자리 위에 있는지(편집 화면 전체가 받는 자리, 사용자 피드백 12차 4)
+    var dropHover by remember { mutableStateOf(false) }
+    val dropTarget = if (onDropPhoto != null) {
+        rememberPhotoDropTarget(onHover = { dropHover = it }) { uri, release ->
+            // 자르는 중에는 문서를 바꾸지 않는다(레이어 버튼과 같다)
+            if (cropMode || ready == null) release() else onDropPhoto(uri, release)
+        }
+    } else {
+        Modifier
+    }
+
     // 창 전체 폭으로 배치를 고르므로 Scaffold 바깥에서 잰다
     BoxWithConstraints(
-        modifier.fillMaxSize().onGloballyPositioned {
+        modifier.fillMaxSize().then(dropTarget).onGloballyPositioned {
             val position = it.positionInRoot()
             screenTop = position.y
             screenLeft = position.x
@@ -1231,6 +1248,8 @@ fun EditScreen(
         // 제스처 알림·도구 안내는 도구 막대·띠와 상관없이 화면 가로 정중앙에 띄운다(2026-10-20 사용자 요청: "도구바나 띠 생각하지 말고 화면 정중앙에").
         // 세로는 캔버스 위쪽 끝 조금 아래다. 떠 있는 띠·패널보다 위에 그리고, 터치는 받지 않아 그 밑을 그대로 누를 수 있다.
         GestureToast(gestureToast, Modifier.fillMaxSize().padding(top = with(LocalDensity.current) { (canvasTop - screenTop).coerceAtLeast(0f).toDp() }))
+        // 사진을 끌어 오는 동안 받을 자리 위에 있으면 알린다
+        PhotoDropHighlight(dropHover, stringResource(R.string.drop_to_add_layer))
         // 하위 도구 메뉴는 캔버스·띠 위에 뜬다(창보다는 아래). 고르면 닫고 하위 도구를 고른다(크기 변경은 창을 띄움).
         SubToolMenuHost(
             state = subToolMenu,

@@ -74,7 +74,12 @@ fun StratumApp(editor: EditorViewModel) {
                     screen = AppScreen.Edit
                 },
                 onDeleteProjects = editor::deleteProjects,
-                onRenameProject = editor::renameProject
+                onRenameProject = editor::renameProject,
+                // 다른 앱에서 끌어다 놓은 사진은 사진 열기와 같이 새 프로젝트로 연다(사용자 피드백 12차 4)
+                onDropPhoto = { uri, release ->
+                    editor.openDropped(uri, release)
+                    screen = AppScreen.Edit
+                }
             )
         }
 
@@ -176,6 +181,8 @@ fun StratumApp(editor: EditorViewModel) {
                     onSwapColors = editor::swapColors,
                     moveActions = editor.moveActions,
                     onAddPhoto = { insertPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    // 편집 화면에 끌어다 놓은 사진은 사진 넣기와 같이 새 레이어로 넣는다(사용자 피드백 12차 4)
+                    onDropPhoto = editor::insertDropped,
                     eyedropper = { eyedropper.value },
                     eyedropperActions = editor.eyedropperActions,
                     // 메인 화면 도구 옵션 띠를 손잡이로 옮겨 놓은 자리는 설정에 남는다(사용자 피드백 9차)

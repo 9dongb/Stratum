@@ -1,5 +1,6 @@
 package com.kiln.stratum.ui.home
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,9 +49,11 @@ import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.stratumTopAppBarColors
 import com.kiln.stratum.ui.layout.HoleAvoidingBarRow
+import com.kiln.stratum.ui.layout.PhotoDropHighlight
 import com.kiln.stratum.ui.layout.WidthClass
-import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.layoutClassOf
+import com.kiln.stratum.ui.layout.rememberPhotoDropTarget
+import com.kiln.stratum.ui.layout.rememberTopBarInsets
 import com.kiln.stratum.ui.layout.widthClassOf
 import com.kiln.stratum.ui.layout.windowInsets
 import com.kiln.stratum.ui.theme.AppTitleTextStyle
@@ -69,6 +73,8 @@ import com.kiln.stratum.ui.theme.StratumTheme
  * @param onOpenProject 프로젝트 카드를 눌렀다.
  * @param onDeleteProjects 지울지 묻는 창에서 '지우기'를 눌렀다(하나 또는 '선택'으로 고른 여럿).
  * @param onRenameProject 이름 바꾸기 창에서 '확인'을 눌렀다(적은 이름 그대로, 다듬기는 받는 쪽이 한다).
+ * @param onDropPhoto 다른 앱에서 사진을 끌어다 놓았다(주소와 받은 읽기 권한을 놓을 일, 사용자 피드백 12차 4). 앱이 새 프로젝트로 연다.
+ *   없으면 끌어 놓기를 받지 않는다.
  */
 // TopAppBar의 scrollBehavior 매개변수 타입이 아직 실험 기능이라, TopAppBar를 쓰려면 opt-in이 필요하다
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +86,8 @@ fun HomeScreen(
     projects: List<ProjectInfo> = emptyList(),
     onOpenProject: (String) -> Unit = {},
     onDeleteProjects: (List<String>) -> Unit = {},
-    onRenameProject: (id: String, name: String) -> Unit = { _, _ -> }
+    onRenameProject: (id: String, name: String) -> Unit = { _, _ -> },
+    onDropPhoto: ((Uri, release: () -> Unit) -> Unit)? = null
 ) {
     // 새 캔버스 창을 열었는지와 입력값. 접기·펼치기로 시트↔창이 바뀌어도 이어지도록 창 밖에서 기억한다.
     var showNewCanvas by rememberSaveable { mutableStateOf(false) }
@@ -103,8 +110,12 @@ fun HomeScreen(
         selected = emptyList()
     }
 
+    // 다른 앱에서 사진을 끌어다 놓으면 연다(홈 전체가 받는 자리, 사용자 피드백 12차 4: "사진 끌어다 놓아 열기")
+    var dropHover by remember { mutableStateOf(false) }
+    val dropTarget = if (onDropPhoto != null) rememberPhotoDropTarget(onHover = { dropHover = it }, onDrop = onDropPhoto) else Modifier
+
     // 창 전체 폭으로 시트·창을 고르므로 Scaffold 바깥에서 잰다
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize().then(dropTarget)) {
         // 격자 칸 수는 넓은 화면을 쓰게 폭으로만 고르고(가로로 돌린 폰은 4열), 창(시트 ↔ 가운데 창)은 편집 화면과 같이 짧은 쪽으로 고른다
         // (커버·폰을 가로로 돌려도 아래 시트, 사용자 피드백 12차 3)
         val widthClass = widthClassOf(maxWidth.value)
@@ -181,6 +192,8 @@ fun HomeScreen(
                 }
             )
         }
+        // 사진을 끌어 오는 동안 받을 자리 위에 있으면 알린다
+        PhotoDropHighlight(dropHover, stringResource(R.string.drop_to_open))
     }
 }
 
