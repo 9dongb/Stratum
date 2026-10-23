@@ -32,6 +32,7 @@ import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.selection.ColorRegion
 import com.kiln.stratum.engine.selection.SelectionMode
+import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.tone.ToneRange
 import com.kiln.stratum.settings.ColorSlot
 import com.kiln.stratum.ui.theme.StratumShapes
@@ -280,6 +281,95 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit)
             }
         )
     )
+}
+
+/**
+ * 피부 도구의 띠(결정 기록 '피부 보정'): 그룹이 없으면 [피부 보정 만들기](파란 버튼)만. 있으면 위에 기준(자동·스포이드)과 [마스크 보기],
+ * 구분선 아래 부분 붉은기·전체 붉은기·톤 균일화(0~100%, 3단계). 색 보정 레이어가 없거나 잰 얼굴이 없으면 색 칸이 없다.
+ * 끄는 동안 미리 보고 놓으면 실행 취소 한 단계다(기본 보정 슬라이더와 같다). 피부 정돈·질감 유지는 4단계에서 더한다.
+ */
+@Composable
+internal fun skinStrip(controls: SkinControls, close: () -> Unit): List<StripItem> {
+    if (controls.group == null) {
+        return listOf(
+            IconCell(
+                SKIN_CREATE_KEY, R.drawable.ic_face, stringResource(R.string.skin_create), controls.onCreate,
+                enabled = !controls.busy, accent = true, tag = EditScreenTags.SKIN_CREATE
+            )
+        )
+    }
+    val color = controls.color
+    val rest = buildList {
+        if (color != null) add(skinReferenceCell(controls, color, close))
+        add(
+            IconCell(
+                SKIN_MASK_KEY, R.drawable.ic_vignette, stringResource(R.string.skin_mask_view_description), controls.onToggleMask,
+                enabled = controls.maskAvailable, checked = controls.maskShown, tag = EditScreenTags.SKIN_MASK
+            )
+        )
+    }
+    val numbers = if (color == null) {
+        emptyList()
+    } else {
+        listOf(
+            skinValueCell("skinLocal", R.string.skin_local, color.local, EditScreenTags.SKIN_LOCAL, controls) { skin, value -> skin.withValues(local = value) },
+            skinValueCell("skinGlobal", R.string.skin_global, color.global, EditScreenTags.SKIN_GLOBAL, controls) { skin, value -> skin.withValues(global = value) },
+            skinValueCell("skinEven", R.string.skin_even, color.even, EditScreenTags.SKIN_EVEN, controls) { skin, value -> skin.withValues(even = value) }
+        )
+    }
+    return numbersLast(numbers, rest)
+}
+
+/** 피부 색 슬라이더 칸 하나(0~100%, 1%씩). 끄는 대로 [set]으로 바꾼 값을 미리 보고, 놓으면 기록한다. */
+@Composable
+private fun skinValueCell(
+    key: String,
+    @StringRes label: Int,
+    value: Float,
+    tag: String,
+    controls: SkinControls,
+    set: (SkinColor, Float) -> SkinColor
+): StripItem =
+    SliderCell(
+        key = key,
+        caption = stringResource(label),
+        value = stringResource(R.string.layer_percent, (value * 100).roundToInt()),
+        slider = StripSlider(
+            fraction = value,
+            onFraction = { fraction ->
+                val stepped = (fraction * 100).roundToInt() / 100f
+                controls.onColor { set(it, stepped) }
+            },
+            tag = tag,
+            onFinished = controls.onColorFinished
+        )
+    )
+
+/** 피부 색 보정의 기준 칸: 지금 기준(스포이드로 고른 얼굴이 있으면 스포이드)과, 누르면 자동·스포이드 목록 */
+@Composable
+private fun skinReferenceCell(controls: SkinControls, color: SkinColor, close: () -> Unit): StripItem {
+    val caption = stringResource(R.string.skin_reference)
+    val current = if (color.hasReference || controls.picking) SkinReferenceChoice.PICK else SkinReferenceChoice.AUTO
+    return ChoiceCell(
+        key = SKIN_REFERENCE_KEY,
+        icon = current.icon,
+        caption = caption,
+        description = stringResource(R.string.strip_choice_description, caption, stringResource(current.label))
+    ) {
+        ChoiceList(
+            choices = SkinReferenceChoice.entries,
+            selected = current,
+            label = { stringResource(it.label) },
+            icon = { it.icon },
+            tag = { EditScreenTags.skinReference(it) }
+        ) {
+            when (it) {
+                SkinReferenceChoice.AUTO -> controls.onAutoReference()
+                SkinReferenceChoice.PICK -> controls.onPickReference()
+            }
+            close()
+        }
+    }
 }
 
 /** 흐림의 띠: 크기, 경도, 강도(하위 도구 흐림·선명·스머지는 도구 막대의 하위 도구 메뉴에서 고른다) */

@@ -24,6 +24,10 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinFaceTone
+import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.ui.layout.LocalHinges
 import com.kiln.stratum.ui.theme.StratumTheme
 import org.junit.Assert.assertEquals
@@ -55,6 +59,10 @@ class SkinToolTest {
         override fun toggleMask(colorLayer: LayerId) {
             calls += "mask ${colorLayer.value}"
         }
+
+        override fun autoReference(colorLayer: LayerId) {
+            calls += "auto ${colorLayer.value}"
+        }
     }
 
     private val document = PixelSize(1000, 1000)
@@ -62,6 +70,12 @@ class SkinToolTest {
 
     private fun summary(id: Long, name: String, parent: Long? = null) =
         LayerSummary(LayerId(id), name, 1f, BlendMode.NORMAL, Adjustments.NONE, parent = parent?.let(::LayerId))
+
+    /** 얼굴 하나를 잰 피부 색(슬라이더는 부분 붉은기 35%) */
+    private val skinColor = SkinColor(
+        local = 0.35f,
+        faces = listOf(SkinFaceTone(SkinFaceArea(500f, 500f, 200f, 120f), SkinTone(0.7f, 0.85f, 0.055f, 0.055f, 0f, 0.05f, 0.006f)))
+    )
 
     /** 사진 하나 */
     private val photoOnly = listOf(summary(0, "Photo"))
@@ -71,7 +85,7 @@ class SkinToolTest {
         summary(0, "Photo"),
         summary(4, "Spots", parent = 1),
         summary(3, "Smooth", parent = 1).copy(opacity = 0f, hasMask = true),
-        summary(2, "Color", parent = 1).copy(adjustment = true, hasMask = true),
+        summary(2, "Color", parent = 1).copy(adjustment = true, hasMask = true, skinColor = skinColor),
         summary(1, "Skin", parent = null).copy(group = true, skin = SkinSummary(LayerId(0), LayerId(2), LayerId(3), LayerId(4), 1, true, 0.5f))
     )
 
@@ -128,6 +142,24 @@ class SkinToolTest {
         composeRule.onNodeWithTag(EditScreenTags.SKIN_CREATE).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.SKIN_MASK).assertIsDisplayed().assertIsOff().performClick()
         composeRule.runOnIdle { assertEquals(listOf("picked", "mask 2"), calls) }
+    }
+
+    @Test
+    fun main_withMeasuredFaces_theStripHasTheReference_andTheThreeColorSliders() {
+        layers = withGroup
+        show(930, 700)
+
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Skin)).performClick()
+
+        for (key in listOf("skinLocal", "skinGlobal", "skinEven")) composeRule.onNodeWithTag(EditScreenTags.strip(key)).assertExists()
+        // 기준: 스포이드를 고르면 캔버스가 스포이드 손가락이 되고, 자동을 고르면 기준을 지운다
+        composeRule.onNodeWithTag(EditScreenTags.strip(SKIN_REFERENCE_KEY)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.skinReference(SkinReferenceChoice.PICK)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.EYEDROPPER_OVERLAY).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.strip(SKIN_REFERENCE_KEY)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.skinReference(SkinReferenceChoice.AUTO)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.EYEDROPPER_OVERLAY).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(listOf("picked", "auto 2"), calls) }
     }
 
     @Test

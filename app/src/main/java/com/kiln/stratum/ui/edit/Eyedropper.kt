@@ -24,8 +24,9 @@ import com.kiln.stratum.ui.theme.CanvasOverlayColors
  *
  * @property target 고른 색을 쓸 곳
  * @property color 그 자리에 보이는 색(아직 읽지 못했거나 투명한 곳이면 null)
+ * @property current 고리 아래쪽 반에 보일 지금 색. 없으면 전경색이다(피부 기준이면 가까운 얼굴의 지금 기준색).
  */
-data class EyedropperState(val target: ColorTarget, val x: Float, val y: Float, val color: Int? = null)
+data class EyedropperState(val target: ColorTarget, val x: Float, val y: Float, val color: Int? = null, val current: Int? = null)
 
 /** 스포이드가 엔진 쪽(ViewModel)에 보내는 일. 좌표는 문서 픽셀이다. */
 interface EyedropperActions {

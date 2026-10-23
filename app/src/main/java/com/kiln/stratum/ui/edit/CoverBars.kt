@@ -55,6 +55,53 @@ internal fun toneBar(mode: SubTool, controls: ToneControls): List<BarItem> {
     }
 }
 
+/**
+ * 피부 도구의 막대(결정 기록 '피부 보정'): 띠와 같은 것을 칩으로 둔다([skinStrip]). 그룹이 없으면 [피부 보정 만들기],
+ * 있으면 기준 고르기 칩(자동·스포이드), [마스크 보기], 부분 붉은기·전체 붉은기·톤 균일화 값 칩. 커버 가로의 세로 기둥도 같은 칸이다.
+ */
+@Composable
+internal fun skinBar(controls: SkinControls): List<BarItem> {
+    if (controls.group == null) {
+        return listOf(
+            BarButton(
+                SKIN_CREATE_KEY, stringResource(R.string.skin_create), R.drawable.ic_face, controls.onCreate,
+                enabled = !controls.busy, accent = true, tag = EditScreenTags.SKIN_CREATE
+            )
+        )
+    }
+    return buildList {
+        controls.color?.let { color ->
+            val picked = color.hasReference || controls.picking
+            add(
+                BarChoice(
+                    key = SKIN_REFERENCE_KEY,
+                    caption = stringResource(R.string.skin_reference),
+                    options = SkinReferenceChoice.entries.map { choice ->
+                        BarOption(
+                            label = stringResource(choice.label),
+                            icon = choice.icon,
+                            selected = (choice == SkinReferenceChoice.PICK) == picked,
+                            tag = EditScreenTags.skinReference(choice)
+                        ) {
+                            when (choice) {
+                                SkinReferenceChoice.AUTO -> controls.onAutoReference()
+                                SkinReferenceChoice.PICK -> controls.onPickReference()
+                            }
+                        }
+                    }
+                )
+            )
+        }
+        add(
+            BarToggle(
+                SKIN_MASK_KEY, stringResource(R.string.skin_mask_view), controls.maskShown, { controls.onToggleMask() },
+                enabled = controls.maskAvailable, tag = EditScreenTags.SKIN_MASK
+            )
+        )
+        addAll(valueChips(skinStrip(controls, close = {})))
+    }
+}
+
 /** 흐림의 막대(흐림·선명·스머지가 같다): 크기, 경도, 강도 */
 @Composable
 internal fun blurBar(controls: BlurControls): List<BarItem> = valueChips(blurStrip(controls))

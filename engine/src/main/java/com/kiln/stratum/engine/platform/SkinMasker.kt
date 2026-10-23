@@ -17,6 +17,7 @@ import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.MaskTile
 import com.kiln.stratum.engine.skin.OkLab
 import com.kiln.stratum.engine.skin.SkinModel
+import com.kiln.stratum.engine.skin.SkinRedCast
 import com.kiln.stratum.engine.skin.SkinRegion
 import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.skin.SkinUnavailableException
@@ -43,8 +44,11 @@ class SkinMasker(private val model: SkinModel) {
      */
     class FaceMask(val frame: FaceRoi, val size: Int, val alphas: ByteArray, val tone: SkinTone? = null)
 
-    /** 얼굴들의 마스크. [segmented]가 false면 분할 모델을 쓸 수 없어 윤곽만으로 만든 것이다(목·귀·이마 위가 빠짐). */
-    class FaceMasks(val masks: List<FaceMask>, val segmented: Boolean)
+    /**
+     * 얼굴들의 마스크. [segmented]가 false면 분할 모델을 쓸 수 없어 윤곽만으로 만든 것이다(목·귀·이마 위가 빠짐).
+     * [redCast]는 사진 전체가 붉은지다(흰자·채도 낮은 곳이 붉음, [SkinRedCast], 3단계).
+     */
+    class FaceMasks(val masks: List<FaceMask>, val segmented: Boolean, val redCast: Boolean = false)
 
     /**
      * [faces](문서 좌표)의 피부 마스크를 [picture]에서 만든다. 피부 색 통계는 [space](문서 색 공간)의 OKLab으로 잰다.
@@ -59,6 +63,7 @@ class SkinMasker(private val model: SkinModel) {
         val scaleX = picture.width / picture.documentWidth.toFloat()
         val scaleY = picture.height / picture.documentHeight.toFloat()
         var segmented = true
+        val sclera = SkinRedCast.Samples()
         val masks = faces.map { face ->
             checkCanceled()
             val started = SystemClock.elapsedRealtime()
@@ -81,6 +86,7 @@ class SkinMasker(private val model: SkinModel) {
             val crop = picture.read(pictureFrame, size, FaceImage.Outside.EDGE)
             val (values, tone) = try {
                 val values = SkinRegion.mask(probabilities, face, frame, crop, size)
+                SkinRedCast.addSclera(crop, size, SkinRegion.cropPoints(face, frame, size), space, sclera)
                 values to measureTone(crop, values, size, space)
             } catch (e: OutOfMemoryError) {
                 throw NotEnoughMemoryException(e)
@@ -88,7 +94,27 @@ class SkinMasker(private val model: SkinModel) {
             Log.i(TAG, "Skin mask in ${SystemClock.elapsedRealtime() - started} ms (side ${frame.side.toInt()} px, segmented ${probabilities != null}, tone $tone)")
             FaceMask(frame, size, toAlphas(values), tone)
         }
-        return FaceMasks(masks, segmented)
+        checkCanceled()
+        val redCast = try {
+            SkinRedCast.isRedCast(sclera, neutralSamples(picture, space))
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        return FaceMasks(masks, segmented, redCast)
+    }
+
+    /** 그림 전체를 [NEUTRAL_SIZE]²로 읽어 채도 낮고 밝은 곳의 색을 모은다(붉은 사진 알기) */
+    private fun neutralSamples(picture: FacePicture, space: OkLab.Space): SkinRedCast.Samples {
+        val side = max(picture.width, picture.height).toFloat()
+        val roi = FaceRoi(picture.width / 2f, picture.height / 2f, side)
+        val pixels = picture.read(roi, NEUTRAL_SIZE, FaceImage.Outside.BLACK)
+        // 정사각형 가운데 그림이 덮는 칸만 본다(나머지는 밖의 검정)
+        val inside = BooleanArray(NEUTRAL_SIZE * NEUTRAL_SIZE) { i ->
+            val x = roi.imageX((i % NEUTRAL_SIZE + 0.5f) / NEUTRAL_SIZE, (i / NEUTRAL_SIZE + 0.5f) / NEUTRAL_SIZE)
+            val y = roi.imageY((i % NEUTRAL_SIZE + 0.5f) / NEUTRAL_SIZE, (i / NEUTRAL_SIZE + 0.5f) / NEUTRAL_SIZE)
+            x >= 0f && y >= 0f && x < picture.width && y < picture.height
+        }
+        return SkinRedCast.Samples().also { SkinRedCast.addNeutral(pixels, inside, space, it) }
     }
 
     /**
@@ -158,6 +184,9 @@ class SkinMasker(private val model: SkinModel) {
         private const val SNAP = 0.02f
 
         private const val TAG = "SkinMasker"
+
+        /** 붉은 사진을 알려고 그림 전체를 읽는 크기(맥 시험은 긴 변 768px, 채도 낮은 곳의 가운데 색만 보아 작아도 같다) */
+        private const val NEUTRAL_SIZE = 256
 
         /** 피부 색 통계는 마스크의 [TONE_STRIDE]칸마다 한 칸으로 잰다(얼굴 하나에 피부 픽셀 수만 개면 통계가 같고 네 배 빠르다) */
         private const val TONE_STRIDE = 2

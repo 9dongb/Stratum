@@ -13,6 +13,7 @@ import com.kiln.stratum.engine.brush.StrokeDabs
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.SetLayerVisible
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.PaintStroke
@@ -195,6 +196,79 @@ class EditorSkinTest {
         // 칠하지 않은 피부는 그대로다
         assertTrue("skin ${color.alphaAt(470, 470)}", color.alphaAt(470, 470) > 200)
         assertNotNull(document.layers[document.indexOfLayer(LayerId(1))].skin)
+    }
+
+    /** 기록된 문서에서 색 보정 레이어(2)의 피부 색 */
+    private fun recordedSkinColor() = checkNotNull(viewModel.recordedDocument).let { document ->
+        checkNotNull((document.layers[document.indexOfLayer(LayerId(2))].content as AdjustmentContent).skin)
+    }
+
+    @Test
+    fun aReddishPhoto_isTold_withItsSource() {
+        // 가짜 얼굴 모델은 흰자 자리도 빨간 덩어리라 사진 전체가 붉다고 본다
+        created()
+
+        assertEquals(EditorMessage.SkinRedCast(LayerId(0)), awaitMessage())
+    }
+
+    @Test
+    fun colorSliders_previewWhileDragging_andRecordOneStep() {
+        val ready = created()
+
+        onMain {
+            viewModel.skinActions.previewColor(LayerId(2)) { it.withValues(local = 0.3f) }
+            viewModel.skinActions.previewColor(LayerId(2)) { it.withValues(global = 0.6f) }
+        }
+        // 끄는 동안은 두 값을 함께 미리 보고 기록하지 않는다
+        assertEquals(0.3f, viewModel.liveSkin.value?.color?.local)
+        assertEquals(0.6f, viewModel.liveSkin.value?.color?.global)
+        assertEquals(0f, recordedSkinColor().local)
+
+        onMain { viewModel.skinActions.commitColor() }
+        val committed = awaitReady { it.revision > ready.revision }
+        assertNull(viewModel.liveSkin.value)
+        assertEquals(0.3f, committed.layers.first { it.id == LayerId(2) }.skinColor?.local)
+        assertEquals(0.6f, recordedSkinColor().global)
+
+        // 실행 취소 한 단계로 돌아온다
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > committed.revision }
+        assertEquals(0f, undone.layers.first { it.id == LayerId(2) }.skinColor?.global)
+    }
+
+    @Test
+    fun theEyedropper_setsTheFacesReference_fromSkinColorsOnly_andAutoClearsIt() {
+        // 덩어리 옆 (800, 300)에 피부색 칸을 칠해 둔다(가짜 모델이 얼굴·피부로 보지 않는 색)
+        val photo = openPhoto()
+        val dabs = StrokeDabs.place(listOf(StrokePoint(800f, 300f)), 1f)
+        onMain { viewModel.edit(PaintStroke(LayerId(0), dabs, BrushSettings(size = 80f, hardness = 1f, color = Color.rgb(222, 172, 142)), false)) }
+        val painted = awaitReady { it.revision > photo.revision }
+        onMain { viewModel.skinActions.picked() }
+        val ready = awaitReady { it.revision > painted.revision && it.layers.size == 5 }
+        assertEquals(EditorMessage.SkinRedCast(LayerId(0)), awaitMessage())
+
+        // 흰 바탕은 피부 색이 아니라 알리고 그대로다
+        onMain {
+            viewModel.eyedropperActions.begin(ColorTarget.SKIN, 100f, 100f)
+            viewModel.eyedropperActions.end()
+        }
+        assertEquals(EditorMessage.SkinReferenceNotSkin, awaitMessage())
+        assertNull(recordedSkinColor().faces[0].reference)
+
+        // 피부색 칸을 누르면 그 색이 (하나뿐인) 얼굴의 기준이다(실행 취소 한 단계)
+        onMain {
+            viewModel.eyedropperActions.begin(ColorTarget.SKIN, 800f, 300f)
+            viewModel.eyedropperActions.end()
+        }
+        val picked = awaitReady { it.revision > ready.revision }
+        val reference = checkNotNull(recordedSkinColor().faces[0].reference)
+        assertTrue("hue ${Math.toDegrees(reference.hue.toDouble())}", Math.toDegrees(reference.hue.toDouble()) in 40.0..75.0)
+        assertTrue(picked.layers.first { it.id == LayerId(2) }.skinColor?.hasReference == true)
+
+        // 자동으로 되돌린다
+        onMain { viewModel.skinActions.autoReference(LayerId(2)) }
+        awaitReady { it.revision > picked.revision }
+        assertNull(recordedSkinColor().faces[0].reference)
     }
 
     private companion object {

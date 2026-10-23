@@ -438,6 +438,16 @@
     <string name="skin_mask_view">마스크 보기</string>
     <string name="skin_mask_view_description">피부 마스크 보기</string>
     <string name="skin_mask_hint">피부가 아닌 곳은 빨갛게 보여요. 브러시로 피부를 더하고 지우개로 빼요.</string>
+    <string name="skin_local">부분 붉은기</string>
+    <string name="skin_global">전체 붉은기</string>
+    <string name="skin_even">톤 균일화</string>
+    <string name="skin_reference">기준</string>
+    <string name="skin_reference_auto">자동</string>
+    <string name="skin_reference_pick">스포이드</string>
+    <string name="skin_reference_hint">기준으로 삼을 피부를 누르세요.</string>
+    <string name="edit_skin_not_skin">피부 색이 아니에요. 피부를 눌러 고르세요.</string>
+    <string name="edit_skin_red_cast">사진 전체가 붉어요. 원본의 색온도·틴트를 먼저 맞추면 더 자연스러워요.</string>
+    <string name="skin_red_cast_fix">색온도 맞추기</string>
     <string name="skin_group_name">피부 보정</string>
     <string name="skin_color_name">색 보정</string>
     <string name="skin_smooth_name">피부 정돈</string>

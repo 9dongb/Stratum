@@ -76,7 +76,7 @@ data class CreateSkinRetouch(
         val spotsId = LayerId(next++)
         val areas = faces.map(SkinFaceArea::of)
         val tones = masks.masks.indices.mapNotNull { i -> masks.masks[i].tone?.let { SkinFaceTone(areas[i], it) } }
-        val record = SkinRecord(source, colorId, smoothId, spotsId, areas, masks.segmented)
+        val record = SkinRecord(source, colorId, smoothId, spotsId, areas, masks.segmented, redCast = masks.redCast)
         val created = listOf(
             Layer(spotsId, names.spots, RasterContent(Raster.EMPTY), parent = groupId),
             Layer(smoothId, names.smooth, RasterContent(Raster.EMPTY), opacity = 0f, mask = mask, parent = groupId),

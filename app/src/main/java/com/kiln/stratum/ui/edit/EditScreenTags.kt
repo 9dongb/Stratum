@@ -251,6 +251,14 @@ object EditScreenTags {
     /** 피부 도구의 [마스크 보기](켜고 끔) */
     const val SKIN_MASK = "skinMask"
 
+    /** 피부 색 슬라이더(띠의 옵션 창·커버 막대의 펼친 줄, 3단계) */
+    const val SKIN_LOCAL = "skinLocal"
+    const val SKIN_GLOBAL = "skinGlobal"
+    const val SKIN_EVEN = "skinEven"
+
+    /** 피부 색 기준 목록의 줄(자동·스포이드) */
+    fun skinReference(choice: SkinReferenceChoice): String = "skinReference_${choice.name}"
+
     const val TONE_OVERLAY = "toneOverlay"
     const val TONE_EXPOSURE = "toneExposure"
     const val TONE_SIZE = "toneSize"

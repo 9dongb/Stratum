@@ -7,7 +7,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kiln.stratum.engine.command.SetSkinColor
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceMeshIndex
 import com.kiln.stratum.engine.face.FaceUnavailableException
@@ -16,12 +19,19 @@ import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.LiteRtFaceModel
 import com.kiln.stratum.engine.platform.LiteRtSkinModel
 import com.kiln.stratum.engine.platform.PhotoImporter
+import com.kiln.stratum.engine.platform.CreateSkinRetouch
 import com.kiln.stratum.engine.platform.PreviewRenderer
+import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.skin.NoFaceException
+import com.kiln.stratum.engine.skin.OkLab
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.hypot
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -67,6 +77,72 @@ class SkinPhotoTest {
         assertEquals(3, faces.size)
         faces.forEach { assertSkin(it, mask) }
         assertEquals(0, mask.alphaAt(8, 8))
+    }
+
+    /**
+     * 피부 색 보정(결정 기록 '피부 보정'의 3단계)을 실제 피부 사진에 건다: 피부 안의 밝기는 거의 그대로이고, 연두(색상 상한 너머)로 가는 픽셀이 없다.
+     * 앞·뒤를 나란히 붙인 그림을 skin-debug/[이름]-color.png에 남긴다(맥에서 보고 상수를 다듬는 데 쓴다). 사진이 없으면 건너뛴다.
+     */
+    @Test
+    fun colorSliders_onRealSkin_keepTheLightness_andNeverTurnGreen() {
+        val names = listOf("flushed_hotwings.jpg" to 1, "redhead_freckles.jpg" to 4, "teen_acne.jpg" to 1, "redlight_navy.jpg" to 1, "Buzz_Aldrin.jpg" to 1)
+            .filter { File(File(context.filesDir, "face"), it.first).isFile }
+        assumeTrue("No skin test photos in files/face", names.isNotEmpty())
+        for ((name, sample) in names) {
+            val document = (PhotoImporter.import(ImageDecoder.createSource(file(name)), "Photo", sample) as ImportResult.Success).document
+            val created = try {
+                CreateSkinRetouch(LayerId(0), SkinLayerNames("Skin", "Color", "Smooth", "Spots"), finder, masker).applyTo(document)
+            } catch (e: NoFaceException) {
+                Log.i("SkinPhoto", "$name: no face")
+                continue
+            }
+            val colorLayer = created.layers[3]
+            val color = checkNotNull((colorLayer.content as AdjustmentContent).skin)
+            val fixed = SetSkinColor(colorLayer.id, color.withValues(local = 1f, global = 0.6f, even = 0.6f)).applyTo(created)
+            var level = 0
+            while (maxOf(document.width, document.height) shr level > 1024) level++
+            val before = checkNotNull(PreviewRenderer.render(created, level)).copy(Bitmap.Config.ARGB_8888, false)
+            val after = checkNotNull(PreviewRenderer.render(fixed, level)).copy(Bitmap.Config.ARGB_8888, false)
+            val mask = checkNotNull(colorLayer.mask)
+            val lab0 = FloatArray(3)
+            val lab1 = FloatArray(3)
+            var count = 0
+            var lightness = 0.0
+            var green = 0
+            for (y in 0 until before.height) {
+                for (x in 0 until before.width) {
+                    if (mask.alphaAt(minOf(x shl level, document.width - 1), minOf(y shl level, document.height - 1)) < 200) continue
+                    val p0 = before.getPixel(x, y)
+                    val p1 = after.getPixel(x, y)
+                    OkLab.fromRgb(Color.red(p0) / 255f, Color.green(p0) / 255f, Color.blue(p0) / 255f, lab0)
+                    OkLab.fromRgb(Color.red(p1) / 255f, Color.green(p1) / 255f, Color.blue(p1) / 255f, lab1)
+                    count++
+                    lightness += abs(lab1[0] - lab0[0])
+                    val hue0 = Math.toDegrees(atan2(lab0[2], lab0[1]).toDouble())
+                    val hue1 = Math.toDegrees(atan2(lab1[2], lab1[1]).toDouble())
+                    if (hue0 < 62.0 && hue1 > 67.0 && hypot(lab1[1], lab1[2]) > 0.02f) green++
+                }
+            }
+            val redCast = created.layers[4].skin?.redCast
+            Log.i("SkinPhoto", "$name: ${color.faces.size} faces ${color.faces.map { Math.toDegrees(it.tone.hue.toDouble()).toInt() }}°, red cast $redCast, $count skin pixels, mean |dL| ${lightness / count}, greener $green")
+            saveSideBySide(before, after, "${name.substringBeforeLast('.')}-color")
+            before.recycle()
+            after.recycle()
+            if (count == 0) continue
+            assertTrue("$name mean |dL| ${lightness / count}", lightness / count < 0.02)
+            assertTrue("$name greener $green of $count", green < count / 100 + 1)
+        }
+    }
+
+    /** 앞·뒤 그림을 나란히 붙여 앱 캐시 skin-debug/[name].png로 남긴다 */
+    private fun saveSideBySide(before: Bitmap, after: Bitmap, name: String) {
+        val joined = Bitmap.createBitmap(before.width * 2, before.height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(joined)
+        canvas.drawBitmap(before, 0f, 0f, null)
+        canvas.drawBitmap(after, before.width.toFloat(), 0f, null)
+        val folder = File(context.cacheDir, "skin-debug").apply { mkdirs() }
+        FileOutputStream(File(folder, "$name.png")).use { joined.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        joined.recycle()
     }
 
     /** 볼·이마는 피부, 눈동자·윗입술은 피부가 아니다 */

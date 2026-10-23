@@ -81,7 +81,13 @@ import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
 /** 스포이드를 쓰는 도구(브러시·글자). 버튼을 켠 도구에서 고르고, 고른 색은 전경색이 된다. */
-enum class ColorTarget { BRUSH, TEXT }
+enum class ColorTarget {
+    BRUSH,
+    TEXT,
+
+    /** 피부 색 보정의 기준(피부 도구의 기준 스포이드, 결정 기록 '피부 보정'의 3단계). 고른 색은 전경색이 아니라 가까운 얼굴의 기준이 된다. */
+    SKIN
+}
 
 /**
  * 색 줄이 쓰는 값과 할 일(브러시·글자 옵션, 결정 기록 '전경색·배경색'·'스포이드').

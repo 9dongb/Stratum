@@ -440,6 +440,16 @@
     <string name="skin_mask_view">Mask</string>
     <string name="skin_mask_view_description">Show the skin mask</string>
     <string name="skin_mask_hint">Red shows what isn\'t skin. Add skin with the brush and remove it with the eraser.</string>
+    <string name="skin_local">Local redness</string>
+    <string name="skin_global">Overall redness</string>
+    <string name="skin_even">Even tone</string>
+    <string name="skin_reference">Reference</string>
+    <string name="skin_reference_auto">Auto</string>
+    <string name="skin_reference_pick">Eyedropper</string>
+    <string name="skin_reference_hint">Tap the skin to use as the reference color.</string>
+    <string name="edit_skin_not_skin">That isn\'t a skin color. Tap the skin.</string>
+    <string name="edit_skin_red_cast">The whole photo looks reddish. Matching the original\'s temperature and tint first looks more natural.</string>
+    <string name="skin_red_cast_fix">Fix temperature</string>
     <string name="skin_group_name">Skin retouch</string>
     <string name="skin_color_name">Skin color</string>
     <string name="skin_smooth_name">Skin smoothing</string>

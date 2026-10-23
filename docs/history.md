@@ -14,6 +14,24 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 3b: 붉은기·톤 균일화 슬라이더·기준·붉은 사진 알림
+
+- 요청: 승인된 피부 보정 계획의 3단계(붉은기·톤 균일화)의 화면 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "피부 도구에 붉은기·톤 균일화 슬라이더와 기준 스포이드를 더하고, 사진 전체가 붉으면 알림"
+- 바꾼 것
+  - 엔진: `SkinRedCast`(새, 흰자·채도 낮은 곳), `SkinMasker`(붉은 사진 알기), `SetSkinColor`·`Layer.withSkinColor`, `SkinColorMath.isSkinLike`.
+  - 화면: 띠 `skinStrip`·막대 `skinBar`(기준·슬라이더 셋), `SkinTool`(`LiveSkinColor`·`SkinReferenceChoice`·조작 더함), `EditScreen`(기준 스포이드·알림 둘·[색온도 맞추기]), 스포이드의 피부 기준(`ColorTarget.SKIN`, 고리 아래쪽 반은 지금 기준색), 문구(두 언어).
+  - ViewModel: 끄는 피부 색(`liveSkin`)·기록, 피부 기준 스포이드(색 보정 바로 아래까지 합친 색, 가까운 얼굴), 알림 둘(`SkinRedCast`·`SkinReferenceNotSkin`).
+  - 테스트: JVM `SkinRedCastTest`(새, 3개). 에뮬레이터 `EditorSkinTest`(3개 더: 붉은 사진 알림, 슬라이더 미리 보기·한 단계, 스포이드 기준·피부 아님·자동), `SkinToolTest`(1개 더: 띠의 기준·슬라이더), `SkinPhotoTest`(1개 더: 실제 피부 사진에서 밝기 그대로·연두 없음, 앞·뒤 그림), `SkinRetouchTest`(붉은 사진 표시는 저장하지 않음).
+  - 기록: progress.md(진행 중 3b, 결정 기록 '피부 보정'의 3b, 진행표), 이 항목.
+- 정한 것(Claude 판단, 2단계부터 묻지 않고 정함): 결정 기록 '피부 보정'의 3b.
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 665개).
+  - 에뮬레이터(접은 상태) `EditorSkinTest` 10개, `SkinToolTest` 6개, `SkinRetouchTest` 4개, `SkinColorTest` 4개, 스포이드가 바뀌어 다시 본 `EditorEyedropperTest` 3개·`EyedropperTest` 7개, `EditorAdjustTest` 5개, `EditorLayersTest` 12개 통과.
+  - 실제 사진(에뮬레이터, 진짜 모델): 달아오른 얼굴·주근깨·우주인 사진의 붉은기가 줄고 밝기·주근깨는 그대로, 붉은 조명 사진만 붉다고 알렸다(결정 기록의 3b).
+
 ## 2026-10-24 · 피부 보정 3a: 붉은기·톤 균일화 계산(엔진)
 
 - 요청: 승인된 피부 보정 계획의 3단계(붉은기·톤 균일화)의 엔진 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`.

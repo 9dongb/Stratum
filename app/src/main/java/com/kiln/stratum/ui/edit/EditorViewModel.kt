@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
@@ -33,6 +34,7 @@ import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.command.SetLayerVisible
+import com.kiln.stratum.engine.command.SetSkinColor
 import com.kiln.stratum.engine.command.UngroupLayer
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.BlendMode
@@ -129,6 +131,10 @@ import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.skin.NoFaceException
+import com.kiln.stratum.engine.skin.OkLab
+import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinColorMath
+import com.kiln.stratum.engine.skin.SkinReference
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.transform.Orientation
@@ -144,7 +150,11 @@ import com.kiln.stratum.settings.PreviewQuality
 import java.io.File
 import java.io.IOException
 import java.time.LocalDateTime
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -256,6 +266,15 @@ sealed interface EditorMessage {
 
     /** 이 기기에서는 얼굴 모델을 돌릴 수 없어 피부 보정을 만들지 못했다. 문서는 그대로다. */
     data object SkinFaceUnavailable : EditorMessage
+
+    /**
+     * 피부 보정을 만든 사진 전체가 붉다(흰자·채도 낮은 곳이 붉음, 결정 기록 '피부 보정'의 3단계). 원본([source])의 색온도·틴트를 먼저 맞추면
+     * 더 자연스러워, 화면은 원본을 고르고 조정을 여는 버튼을 둔다.
+     */
+    data class SkinRedCast(val source: LayerId) : EditorMessage
+
+    /** 피부 기준 스포이드로 고른 색이 피부 색이 아니다(색상·채도가 피부 범위 밖). 기준은 그대로다. */
+    data object SkinReferenceNotSkin : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -272,6 +291,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * @property adjustment 조정 레이어인지(결정 기록 '피부 보정'의 1f). 레이어 줄에 작은 그림 대신 조정 아이콘을 보인다.
  * @property group 그룹(통과)인지, [parent]는 감싼 그룹(결정 기록 '피부 보정'의 1h). 레이어 목록이 들여 쓰고 접고 펼친다.
  * @property skin [피부 보정] 그룹이면 그 기록(결정 기록 '피부 보정'의 2c). 피부 도구가 고칠 그룹을 찾는다([skinGroupFor]).
+ * @property skinColor 피부 색 조정 레이어(그룹의 색 보정)면 그 값(3단계). 피부 도구의 슬라이더가 보인다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -288,7 +308,8 @@ data class LayerSummary(
     val adjustment: Boolean = false,
     val group: Boolean = false,
     val parent: LayerId? = null,
-    val skin: SkinSummary? = null
+    val skin: SkinSummary? = null,
+    val skinColor: SkinColor? = null
 )
 
 /**
@@ -498,6 +519,14 @@ class EditorViewModel internal constructor(
     /** 끄는 동안의 불투명도(기록 전). [liveAdjustments]와 같은 방식이다. */
     val liveOpacity: StateFlow<Float?> = _liveOpacity.asStateFlow()
 
+    private val _liveSkin = MutableStateFlow<LiveSkinColor?>(null)
+
+    /**
+     * 피부 도구의 색 슬라이더를 끄는 동안의 값(기록 전, 결정 기록 '피부 보정'의 3단계). [liveAdjustments]와 같은 방식이지만,
+     * 고른 레이어가 아니라 그룹의 색 보정 레이어([LiveSkinColor.layer])에 건다.
+     */
+    val liveSkin: StateFlow<LiveSkinColor?> = _liveSkin.asStateFlow()
+
     /** 다른 편집을 처리하는 동안 놓은 값(보정·불투명도). 그 편집이 끝나면 기록한다(놓은 값을 잃지 않게). */
     private var liveCommitPending = false
 
@@ -669,11 +698,14 @@ class EditorViewModel internal constructor(
         override fun orient(orientation: Orientation) = orientLayer(orientation)
     }
 
-    /** 피부 도구가 보내는 일(결정 기록 '피부 보정'의 2c) */
+    /** 피부 도구가 보내는 일(결정 기록 '피부 보정'의 2c·3단계) */
     val skinActions: SkinActions = object : SkinActions {
         override fun picked() = pickSkinTool()
         override fun create() = createSkinRetouch()
         override fun toggleMask(colorLayer: LayerId) = editLayerMask(colorLayer)
+        override fun previewColor(colorLayer: LayerId, change: (SkinColor) -> SkinColor) = previewSkinColor(colorLayer, change)
+        override fun commitColor() = commitLive()
+        override fun autoReference(colorLayer: LayerId) = recordSkinColor(colorLayer) { it.withoutReferences() }
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -1394,6 +1426,8 @@ class EditorViewModel internal constructor(
             onCommitted = {
                 val created = history?.document?.let { it.layers.getOrNull(it.indexOfLayer(group)) }?.skin
                 if (created?.segmented == false) _messages.trySend(EditorMessage.SkinOvalOnly)
+                // 사진 전체가 붉으면 원본의 색온도·틴트부터 맞추게 알린다(만들 때 한 번, 결정 기록 '피부 보정'의 3단계)
+                if (created?.redCast == true) _messages.trySend(EditorMessage.SkinRedCast(created.source))
             }
         )
     }
@@ -2137,7 +2171,8 @@ class EditorViewModel internal constructor(
             val job = editJob
             when {
                 editing && job != null && job.isActive -> job.join()
-                hasLiveValues -> combine(_liveAdjustments, _liveOpacity) { adjustments, opacity -> adjustments == null && opacity == null }.first { it }
+                hasLiveValues ->
+                    combine(_liveAdjustments, _liveOpacity, _liveSkin) { adjustments, opacity, skin -> adjustments == null && opacity == null && skin == null }.first { it }
                 else -> return
             }
         }
@@ -2309,10 +2344,13 @@ class EditorViewModel internal constructor(
      * 그 자리에 보이는 색(보이는 레이어를 모두 합친 색)을 백그라운드에서 읽어 [eyedropper]로 알린다.
      */
     fun beginEyedropper(target: ColorTarget, x: Float, y: Float) {
-        if (_state.value !is EditorState.Ready || history == null) return
+        val document = history?.document ?: return
+        if (_state.value !is EditorState.Ready) return
         eyedropperJob?.cancel()
         eyedropperEnding = false
-        _eyedropper.value = EyedropperState(target, x, y)
+        // 피부 기준이면 고리 아래쪽 반은 그 자리에서 가까운 얼굴의 지금 기준색이다
+        val current = if (target == ColorTarget.SKIN) skinReferenceShown(document, x, y) else null
+        _eyedropper.value = EyedropperState(target, x, y, current = current)
         sampleEyedropper()
     }
 
@@ -2348,7 +2386,9 @@ class EditorViewModel internal constructor(
         eyedropperJob = viewModelScope.launch {
             while (true) {
                 val wanted = _eyedropper.value ?: return@launch
-                val document = history?.document ?: return@launch
+                val recorded = history?.document ?: return@launch
+                // 피부 기준은 색 보정 바로 아래까지 합친 색에서 고른다(이미 고친 색이 아니라, 계획 '스포이드')
+                val document = if (wanted.target == ColorTarget.SKIN) belowSkinColor(recorded) ?: return@launch else recorded
                 val color = withContext(Dispatchers.Default) { ColorSampler.sample(document, wanted.x, wanted.y) }
                 val now = _eyedropper.value ?: return@launch
                 _eyedropper.value = now.copy(color = color)
@@ -2363,9 +2403,64 @@ class EditorViewModel internal constructor(
         val picked = _eyedropper.value
         eyedropperJob = null
         eyedropperEnding = false
-        // 고른 색은 전경색이 된다(브러시·글자 어디서 골랐든, 결정 기록 '전경색·배경색')
-        picked?.color?.let { chooseColor(ColorSlot.FOREGROUND, it) }
+        // 고른 색은 전경색이 된다(브러시·글자 어디서 골랐든, 결정 기록 '전경색·배경색'). 피부 기준이면 가까운 얼굴의 기준이다.
+        picked?.color?.let { color ->
+            if (picked.target == ColorTarget.SKIN) setSkinReference(picked.x, picked.y, color) else chooseColor(ColorSlot.FOREGROUND, color)
+        }
         _eyedropper.value = null
+    }
+
+    /** 고른 레이어가 고칠 피부 보정 그룹의 색 보정 레이어(피부 색이 있을 때만) */
+    private fun skinColorLayerIn(document: Document): LayerId? {
+        val group = SkinRecord.groupOf(document.layers, activeLayerIn(document)) ?: return null
+        val color = group.skin?.color ?: return null
+        return color.takeIf { skinColorOf(document, it) != null }
+    }
+
+    /**
+     * 피부 기준을 고를 때 읽을 문서: 색 보정 레이어 바로 아래까지(감싼 그룹은 남겨 보이기·불투명도를 물려준다, 계획 '스포이드').
+     * 고른 레이어가 고칠 그룹이 없거나 그 아래에 그릴 것이 없으면 null.
+     */
+    private fun belowSkinColor(document: Document): Document? {
+        val colorLayer = skinColorLayerIn(document) ?: return null
+        val index = document.indexOfLayer(colorLayer)
+        val ancestors = LayerTree.ancestors(document.layers, document.layers[index]).mapTo(HashSet()) { it.id }
+        val below = document.layers.filterIndexed { i, layer -> i < index || layer.id in ancestors }
+        if (below.none { it.content is RasterContent }) return null
+        return document.copy(layers = below)
+    }
+
+    /** 문서 자리 ([x], [y])에서 가까운 얼굴의 지금 기준색(스포이드로 고른 것, 없으면 그 사람 피부의 가운데 색, sRGB). 고칠 그룹이 없으면 null. */
+    private fun skinReferenceShown(document: Document, x: Float, y: Float): Int? {
+        val skin = skinColorLayerIn(document)?.let { skinColorOf(document, it) } ?: return null
+        val face = skin.faces.maxByOrNull { SkinColorMath.weight(it.area, x, y) } ?: return null
+        val hue = face.reference?.hue ?: face.tone.hue
+        val chroma = face.reference?.chroma ?: face.tone.chroma
+        val rgb = FloatArray(3)
+        OkLab.toRgb(face.tone.lightness, chroma * cos(hue), chroma * sin(hue), rgb)
+        return Color.rgb(
+            (rgb[0].coerceIn(0f, 1f) * 255).roundToInt(), (rgb[1].coerceIn(0f, 1f) * 255).roundToInt(), (rgb[2].coerceIn(0f, 1f) * 255).roundToInt()
+        )
+    }
+
+    /**
+     * 스포이드로 고른 [color](sRGB, 색 보정 바로 아래까지 합친 색)를 문서 자리 ([x], [y])에서 가까운 얼굴의 기준으로 한다(실행 취소 한 단계).
+     * 다른 얼굴은 그대로다. 피부 색이 아니면(색상·채도가 피부 범위 밖) 하지 않고 알린다. OKLab은 색 자체라 문서 색 공간과 상관없이 같은 값이다.
+     */
+    private fun setSkinReference(x: Float, y: Float, color: Int) {
+        val document = history?.document ?: return
+        val colorLayer = skinColorLayerIn(document) ?: return
+        val skin = skinColorOf(document, colorLayer) ?: return
+        val index = skin.faces.indices.maxByOrNull { SkinColorMath.weight(skin.faces[it].area, x, y) } ?: return
+        val lab = FloatArray(3)
+        OkLab.fromRgb(Color.red(color) / 255f, Color.green(color) / 255f, Color.blue(color) / 255f, lab)
+        val hue = atan2(lab[2], lab[1])
+        val chroma = hypot(lab[1], lab[2])
+        if (!SkinColorMath.isSkinLike(hue, chroma)) {
+            _messages.trySend(EditorMessage.SkinReferenceNotSkin)
+            return
+        }
+        recordSkinColor(colorLayer) { it.withReference(index, SkinReference(hue, chroma)) }
     }
 
     /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */
@@ -2933,7 +3028,8 @@ class EditorViewModel internal constructor(
     fun commitLive() {
         val adjustments = _liveAdjustments.value
         val opacity = _liveOpacity.value
-        if (adjustments == null && opacity == null) return
+        val skin = _liveSkin.value
+        if (adjustments == null && opacity == null && skin == null) return
         if (editing) {
             liveCommitPending = true
             return
@@ -2942,6 +3038,7 @@ class EditorViewModel internal constructor(
         if (layer == null || history == null || _state.value !is EditorState.Ready) {
             _liveAdjustments.value = null
             _liveOpacity.value = null
+            _liveSkin.value = null
             return
         }
         liveDocument = null
@@ -2950,8 +3047,33 @@ class EditorViewModel internal constructor(
             // 그사이 다시 끌기 시작했으면 그 값은 남긴다(끝나면 그린다)
             if (_liveAdjustments.value == adjustments) _liveAdjustments.value = null
             if (_liveOpacity.value == opacity) _liveOpacity.value = null
+            if (_liveSkin.value == skin) _liveSkin.value = null
         }
     }
+
+    /**
+     * 피부 도구의 색 슬라이더를 끄는 동안 [colorLayer](그룹의 색 보정 레이어)의 피부 색을 미리 본다. 기록하지 않는다(보정 미리 보기와 같은 방식).
+     * [change]는 지금 값(미리 보는 값, 없으면 기록된 값)을 받아 새 값을 돌려준다. 손을 떼면 [commitLive]로 실행 취소 한 단계다.
+     */
+    fun previewSkinColor(colorLayer: LayerId, change: (SkinColor) -> SkinColor) {
+        if (_state.value !is EditorState.Ready) return
+        val document = history?.document ?: return
+        val current = _liveSkin.value?.takeIf { it.layer == colorLayer }?.color ?: skinColorOf(document, colorLayer) ?: return
+        _liveSkin.value = LiveSkinColor(colorLayer, change(current))
+        afterLiveChange()
+    }
+
+    /** [colorLayer]의 피부 색에 [change]를 걸어 바로 기록한다(실행 취소 한 단계, 기준 '자동'·스포이드). 다른 편집을 처리하는 중이면 무시한다. */
+    fun recordSkinColor(colorLayer: LayerId, change: (SkinColor) -> SkinColor) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        val current = skinColorOf(document, colorLayer) ?: return
+        edit(SetSkinColor(colorLayer, change(current)))
+    }
+
+    /** [document]의 [layer]가 피부 색 조정 레이어면 그 값 */
+    private fun skinColorOf(document: Document, layer: LayerId): SkinColor? =
+        (document.layers.getOrNull(document.indexOfLayer(layer))?.content as? AdjustmentContent)?.skin
 
     /** 지금 보정 값에 [change]를 걸어 바로 기록한다(초기화·점 지우기 버튼). */
     fun recordAdjustments(change: (Adjustments) -> Adjustments) {
@@ -2963,7 +3085,7 @@ class EditorViewModel internal constructor(
 
     /** 끄는 동안의 값이 있는지(놓은 값을 아직 기록하지 못한 것 포함) */
     private val hasLiveValues: Boolean
-        get() = _liveAdjustments.value != null || _liveOpacity.value != null
+        get() = _liveAdjustments.value != null || _liveOpacity.value != null || _liveSkin.value != null
 
     /** 끄는 값이 바뀌었다. 놓았던 값은 이번 끌기와 합쳐 기록하고, 편집 중이 아니면 바로 그린다. */
     private fun afterLiveChange() {
@@ -3002,11 +3124,13 @@ class EditorViewModel internal constructor(
     /** [layer]가 보이는지: 자기와 감싼 그룹이 모두 눈을 켰다(숨긴 그룹 안에도 그리지 않는다, 결정 기록 '피부 보정'의 1h) */
     private fun isShown(layer: Layer): Boolean = history?.document?.let { LayerTree.isVisible(it.layers, layer) } ?: layer.visible
 
-    /** 끄는 값을 [layer]에 거는 명령들(보정, 불투명도 순) */
+    /** 끄는 값을 [layer]에 거는 명령들(보정, 불투명도, 피부 색 순) */
     private fun liveCommands(layer: LayerId): List<EditCommand> =
         listOfNotNull(
             _liveAdjustments.value?.let { SetLayerAdjustments(layer, it) },
-            _liveOpacity.value?.let { SetLayerOpacity(layer, it) }
+            _liveOpacity.value?.let { SetLayerOpacity(layer, it) },
+            // 피부 색은 고른 레이어가 아니라 그룹의 색 보정 레이어에 건다(결정 기록 '피부 보정'의 3단계)
+            _liveSkin.value?.let { SetSkinColor(it.layer, it.color) }
         )
 
     /** 끄는 값을 고른 레이어에 건 문서를 그린다. 그리는 동안 또 바뀌면 가장 나중 것만 그린다. */
@@ -3651,7 +3775,7 @@ class EditorViewModel internal constructor(
                     LayerSummary(
                         it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null,
                         maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent, it.content is GroupContent, it.parent,
-                        it.skin?.let(SkinSummary::of)
+                        it.skin?.let(SkinSummary::of), (it.content as? AdjustmentContent)?.skin
                     )
                 },
                 activeLayer = activeLayerIn(document),
@@ -3816,6 +3940,7 @@ class EditorViewModel internal constructor(
         liveJob?.cancel()
         _liveAdjustments.value = null
         _liveOpacity.value = null
+        _liveSkin.value = null
         liveCommitPending = false
         drawing = null
         // 글자 레이어에 시작한 획과 그 질문도 버린다. 홈으로 나간 뒤 획이 끝나도(손가락 자리가 사라짐) 다음 문서에서 묻지 않게.

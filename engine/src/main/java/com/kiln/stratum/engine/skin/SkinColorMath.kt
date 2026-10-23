@@ -157,6 +157,20 @@ object SkinColorMath {
         out[1] = c3 * sin(h3)
     }
 
+    /** 스포이드로 고른 기준이 피부 색으로 볼 만한 색상(라디안) 범위(맥 시험의 피부 43~53°를 넉넉히) */
+    val SKIN_HUE_MIN: Float = Math.toRadians(10.0).toFloat()
+    val SKIN_HUE_MAX: Float = Math.toRadians(85.0).toFloat()
+
+    /** 그 채도 범위(회색·아주 진한 색은 피부가 아니다) */
+    const val SKIN_CHROMA_MIN = 0.015f
+    const val SKIN_CHROMA_MAX = 0.25f
+
+    /**
+     * 색상 [hue]·채도 [chroma]가 피부 색으로 볼 만한지(Claude 판단: 스포이드로 배경·옷을 눌러 피부가 파랗게·회색으로 옮겨 가지 않게).
+     * 아니면 화면이 피부를 다시 누르게 알린다.
+     */
+    fun isSkinLike(hue: Float, chroma: Float): Boolean = hue in SKIN_HUE_MIN..SKIN_HUE_MAX && chroma in SKIN_CHROMA_MIN..SKIN_CHROMA_MAX
+
     /** GLSL의 smoothstep */
     fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
         val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)

@@ -12,6 +12,7 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.skin.SkinColor
 
 /**
  * 빈(투명한) 레이어를 [index] 위치에 추가한다. 0이면 맨 아래, 레이어 개수와 같으면 맨 위다.
@@ -226,6 +227,17 @@ data class SetLayerAdjustments(val layerId: LayerId, val adjustments: Adjustment
         document.updateLayer(layerId) { layer ->
             val normalized = adjustments.normalized()
             if (layer.adjustments == normalized) layer else layer.copy(adjustments = normalized)
+        }
+}
+
+/**
+ * [layerId] 피부 색 조정 레이어의 값을 [color]로 바꾼다(피부 도구의 슬라이더·스포이드 기준, 결정 기록 '피부 보정'의 3단계).
+ * 없거나 피부 색 종류가 아닌 레이어이거나 값이 같으면 그대로 둔다.
+ */
+data class SetSkinColor(val layerId: LayerId, val color: SkinColor) : EditCommand {
+    override fun applyTo(document: Document): Document =
+        document.updateLayer(layerId) { layer ->
+            if ((layer.content as? AdjustmentContent)?.skin == color) layer else layer.withSkinColor(color)
         }
 }
 

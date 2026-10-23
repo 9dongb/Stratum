@@ -111,6 +111,7 @@ fun StratumApp(editor: EditorViewModel) {
             // 끄는 동안 자주 바뀌므로 State로 받아 두고, 보정 패널만 읽게 한다
             val liveAdjustments = editor.liveAdjustments.collectAsState()
             val liveOpacity = editor.liveOpacity.collectAsState()
+            val liveSkin = editor.liveSkin.collectAsState()
             val brush by editor.brush.collectAsState()
             val eraser by editor.eraser.collectAsState()
             val textStyle by editor.textStyle.collectAsState()
@@ -183,6 +184,7 @@ fun StratumApp(editor: EditorViewModel) {
                     onSwapColors = editor::swapColors,
                     moveActions = editor.moveActions,
                     skinActions = editor.skinActions,
+                    liveSkin = { liveSkin.value },
                     onAddPhoto = { insertPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     // 편집 화면에 끌어다 놓은 사진은 사진 넣기와 같이 새 레이어로 넣는다(사용자 피드백 12차 4)
                     onDropPhoto = editor::insertDropped,

@@ -129,7 +129,8 @@ class SkinRetouchTest {
 
         assertEquals(result.layers.map { it.id }, loaded.layers.map { it.id })
         assertEquals(result.layers.map { it.parent }, loaded.layers.map { it.parent })
-        assertEquals(result.layers.last().skin, loaded.layers.last().skin)
+        // 만들 때의 붉은 사진 표시는 저장하지 않는다(만든 뒤 한 번 알리는 데만 씀)
+        assertEquals(result.layers.last().skin?.copy(redCast = false), loaded.layers.last().skin)
         assertEquals(result.layers[3].content, loaded.layers[3].content)
         assertEquals(0f, loaded.layers[2].opacity, 0f)
         val mask = checkNotNull(loaded.layers[3].mask)

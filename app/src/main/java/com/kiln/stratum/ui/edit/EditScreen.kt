@@ -240,6 +240,7 @@ fun EditScreen(
     eyedropperActions: EyedropperActions = EyedropperActions.None,
     moveActions: MoveActions = MoveActions.None,
     skinActions: SkinActions = SkinActions.None,
+    liveSkin: () -> LiveSkinColor? = { null },
     stripPosition: StripPosition? = null,
     onStripPosition: (StripPosition) -> Unit = {},
     toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
@@ -330,6 +331,11 @@ fun EditScreen(
     // AI 제거를 쓸 수 없다는 알림의 버튼: 리터칭을 스팟 복구 브러시로 바꾼다
     val useSpotHeal = { chooseSubTool(SubTool.RETOUCH_SPOT) }
     val useMagicWand = { chooseSubTool(SubTool.SELECT_WAND) }
+    // 사진 전체가 붉다는 알림의 '색온도 맞추기': 원본을 고르고 조정을 연다(결정 기록 '피부 보정'의 3단계)
+    val useSkinRedCast = { source: LayerId ->
+        layerActions.select(source)
+        if (floating.panel != MainPanel.ADJUST) floating.togglePanel(MainPanel.ADJUST)
+    }
     // 글자 창에서 고르는 것(새 글자를 넣을 자리, 또는 고칠 글자 레이어와 글자·크기·색). 창이 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var textDraft by rememberSaveable(stateSaver = TextDraft.Saver) { mutableStateOf<TextDraft?>(null) }
     // 다른 크기의 문서를 보게 되면(다른 문서를 열었거나 편집됨) 창을 닫는다(누른 자리가 맞지 않는다)
@@ -676,17 +682,23 @@ fun EditScreen(
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
         val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
         val mosaicControls = MosaicControls(mosaicOptions, sizePreview = sizePreview, onChange = onMosaicOptions).takeIf { activeTool == EditTool.Mosaic }
-        // 피부 도구(결정 기록 '피부 보정'의 2c): 고른 레이어가 고칠 [피부 보정] 그룹과 그 피부 마스크 보기
+        // 피부 도구(결정 기록 '피부 보정'의 2c·3단계): 고른 레이어가 고칠 [피부 보정] 그룹, 피부 마스크 보기, 색 슬라이더와 기준
         val skinMaskHint = stringResource(R.string.skin_mask_hint)
+        val skinReferenceHint = stringResource(R.string.skin_reference_hint)
         var skinMaskHintShown by rememberSaveable { mutableStateOf(false) }
         val skinControls = ready?.takeIf { activeTool == EditTool.Skin }?.let { shown ->
             val group = skinGroupFor(shown.layers, shown.activeLayer)?.skin
             val maskShown = group != null && shown.activeLayer == group.color && shown.maskOverlay != null
+            // 끄는 동안은 그 값, 아니면 색 보정 레이어에 기록된 값(잰 얼굴이 없으면 색 칸이 없다)
+            val committed = group?.let { g -> shown.layers.firstOrNull { it.id == g.color }?.skinColor }
+            val color = (liveSkin()?.takeIf { it.layer == group?.color }?.color ?: committed)?.takeIf { it.faces.isNotEmpty() }
             SkinControls(
                 group = group,
+                color = color,
                 maskShown = maskShown,
                 maskAvailable = group != null && shown.layers.any { it.id == group.color && it.hasMask },
                 busy = shown.busy,
+                picking = eyedropperTarget == ColorTarget.SKIN,
                 onCreate = skinActions::create,
                 onToggleMask = {
                     group?.let {
@@ -697,6 +709,17 @@ fun EditScreen(
                         }
                         skinActions.toggleMask(it.color)
                     }
+                },
+                onColor = { change -> group?.let { skinActions.previewColor(it.color, change) } },
+                onColorFinished = skinActions::commitColor,
+                onAutoReference = {
+                    eyedropperTarget = null
+                    group?.let { skinActions.autoReference(it.color) }
+                },
+                onPickReference = {
+                    // 다음에 캔버스를 누른 자리의 피부색이 그 자리 얼굴의 기준이 된다(색 보정 바로 아래까지 합친 색)
+                    eyedropperTarget = ColorTarget.SKIN
+                    gestureToast.show(skinReferenceHint, toolHelpToastMillis(skinReferenceHint))
                 }
             )
         }
@@ -807,7 +830,7 @@ fun EditScreen(
                 }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicStrip(it) }
                 EditTool.Move -> ready?.let { moveStrip(moveActions::orient, enabled = !it.busy) }
-                EditTool.Skin -> skinControls?.let { skinStrip(it) }
+                EditTool.Skin -> skinControls?.let { skinStrip(it, floating::closeFlyout) }
                 else -> null
             }
         }
@@ -842,7 +865,8 @@ fun EditScreen(
         // 크기 슬라이더를 끄는 동안은 그 위에 브러시 크기 원을 보인다.
         // 스포이드 버튼을 켰으면 브러시·글자의 손가락 대신 스포이드 손가락을 겹친다
         val picking = eyedropperTarget?.takeIf {
-            (it == ColorTarget.BRUSH && activeTool == EditTool.Brush) || (it == ColorTarget.TEXT && activeTool == EditTool.Text)
+            (it == ColorTarget.BRUSH && activeTool == EditTool.Brush) || (it == ColorTarget.TEXT && activeTool == EditTool.Text) ||
+                (it == ColorTarget.SKIN && activeTool == EditTool.Skin)
         }
         val overlay: @Composable BoxScope.() -> Unit = {
             val frame = cropFrame
@@ -978,8 +1002,8 @@ fun EditScreen(
             if (ready != null && picked != null) {
                 EyedropperLoupe(
                     state = picked,
-                    // 아래쪽 반은 지금 칠하는 색(전경색)이다
-                    currentColor = paintColors.foreground,
+                    // 아래쪽 반은 지금 칠하는 색(전경색)이다. 피부 기준이면 가까운 얼굴의 지금 기준색이다.
+                    currentColor = picked.current ?: paintColors.foreground,
                     view = { viewState.view },
                     document = ready.documentSize,
                     modifier = Modifier.fillMaxSize()
@@ -1147,7 +1171,7 @@ fun EditScreen(
                             flip = viewFlip,
                             orientation = shownOrientation,
                             onSpotHeal = useSpotHeal,
-                            onMagicWand = useMagicWand
+                            onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast
                         )
                         if (crop != null) {
                             Surface(Modifier.fillMaxHeight().edgeDivider(DividerEdge.Start, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
@@ -1191,7 +1215,7 @@ fun EditScreen(
                             flip = viewFlip,
                             orientation = shownOrientation,
                             onSpotHeal = useSpotHeal,
-                            onMagicWand = useMagicWand
+                            onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast
                         )
                         if (crop != null) {
                             Surface(Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, StratumTheme.colors.divider), color = StratumTheme.colors.panel) {
@@ -1344,7 +1368,7 @@ fun EditScreen(
                                 flip = viewFlip,
                                 orientation = shownOrientation,
                                 onSpotHeal = useSpotHeal,
-                                onMagicWand = useMagicWand,
+                                onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast,
                                 endReserve = coverBarHeight,
                                 overlayEnd = coverSheetInset,
                                 floating = coverFloating
@@ -1361,7 +1385,7 @@ fun EditScreen(
                                 flip = viewFlip,
                                 orientation = shownOrientation,
                                 onSpotHeal = useSpotHeal,
-                                onMagicWand = useMagicWand,
+                                onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast,
                                 bottomReserve = coverBarHeight,
                                 floating = coverFloating
                             )
@@ -1384,7 +1408,7 @@ fun EditScreen(
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
                         reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
                         orientation = shownOrientation,
-                        onSpotHeal = useSpotHeal, onMagicWand = useMagicWand,
+                        onSpotHeal = useSpotHeal, onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast,
                         // 알림 막대는 선택 도구의 작업 표시줄 위에 뜬다
                         overlayBottom = selectionBarInset,
                         // 배율 표시는 도구 옵션 띠를 피한다(띠가 왼쪽 위에 있으면 그 오른쪽)
@@ -1670,6 +1694,7 @@ private fun EditCanvas(
     orientation: Orientation = Orientation.IDENTITY,
     onSpotHeal: () -> Unit = {},
     onMagicWand: () -> Unit = {},
+    onSkinRedCast: (LayerId) -> Unit = {},
     avoid: () -> Region? = { null },
     bottomReserve: Dp = 0.dp,
     endReserve: Dp = 0.dp,
@@ -1679,6 +1704,7 @@ private fun EditCanvas(
     val snackbarHostState = remember { SnackbarHostState() }
     val currentOnSpotHeal by rememberUpdatedState(onSpotHeal)
     val currentOnMagicWand by rememberUpdatedState(onMagicWand)
+    val currentOnSkinRedCast by rememberUpdatedState(onSkinRedCast)
     val context = LocalContext.current
     val notEnoughMemory = stringResource(R.string.edit_not_enough_memory)
     val exportSaved = stringResource(R.string.edit_export_saved)
@@ -1703,6 +1729,9 @@ private fun EditCanvas(
     val skinPickPhoto = stringResource(R.string.edit_skin_pick_photo)
     val skinOvalOnly = stringResource(R.string.edit_skin_oval_only)
     val skinFaceUnavailable = stringResource(R.string.edit_skin_face_unavailable)
+    val skinRedCast = stringResource(R.string.edit_skin_red_cast)
+    val skinRedCastFix = stringResource(R.string.skin_red_cast_fix)
+    val skinNotSkin = stringResource(R.string.edit_skin_not_skin)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1753,6 +1782,12 @@ private fun EditCanvas(
                 EditorMessage.SkinPickPhoto -> snackbarHostState.showSnackbar(skinPickPhoto)
                 EditorMessage.SkinOvalOnly -> snackbarHostState.showSnackbar(skinOvalOnly, duration = SnackbarDuration.Long)
                 EditorMessage.SkinFaceUnavailable -> snackbarHostState.showSnackbar(skinFaceUnavailable, duration = SnackbarDuration.Long)
+                is EditorMessage.SkinRedCast -> {
+                    // 원본을 고르고 조정을 여는 버튼을 둔다(색온도·틴트를 먼저 맞추게)
+                    val result = snackbarHostState.showSnackbar(skinRedCast, actionLabel = skinRedCastFix, duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) currentOnSkinRedCast(message.source)
+                }
+                EditorMessage.SkinReferenceNotSkin -> snackbarHostState.showSnackbar(skinNotSkin)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

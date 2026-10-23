@@ -113,6 +113,10 @@ data class Layer(
     fun withLiquify(raster: Raster, gainmap: HdrGainmap?, record: LiquifyRecord): Layer =
         copy(content = RasterContent(raster), gainmap = gainmap, text = null, liquify = record)
 
+    /** 피부 색 조정 레이어의 값을 [color]로 바꾼 레이어(피부 도구의 슬라이더·기준, 결정 기록 '피부 보정'의 3단계). 피부 색 종류가 아니면 그대로다. */
+    fun withSkinColor(color: SkinColor): Layer =
+        if ((content as? AdjustmentContent)?.skin == null) this else copy(content = AdjustmentContent(color))
+
     /**
      * 피부 보정의 얼굴 자리를 문서와 함께 옮긴 레이어(자르기·회전·크기 변경·옮기기, 결정 기록 '피부 보정'의 3단계): 피부 색 조정 레이어의 얼굴과
      * [피부 보정] 그룹 기록의 얼굴을 [map](문서 좌표 → 새 문서 좌표)으로 옮기고 길이를 [scale]배 한다. 그 밖의 레이어는 그대로다.
