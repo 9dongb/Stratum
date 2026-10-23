@@ -45,6 +45,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 맥 시험(실제 사진 5곳, 앱과 같은 순서): 고운 결의 세기(정답 / 지금 / 질감 향상) 길 9.48 / 1.84 / 6.98, 보도 9.62 / 3.78 / 6.90, 벽면 10.07 / 5.61 / 7.82, 흙바닥 22.52 / 9.81 / 19.33, 땅 22.52 / 10.27 / 12.30. 큰 모양(1/8로 줄여 본 오차)은 그대로다. 폰에 맞춘 두 단계 짝 찾기는 모두 비교와 84~99% 같은 조각을 골랐다(차이 2% 안).
     - 1: 기록(계획 문서, 이 항목, 결정 기록).
     - 2: 짝 찾기 `InpaintTexture`(순수 Kotlin): 후보·대상 조각, 두 단계 짝 찾기, 짝 표 색, 조각 판 크기 규칙. JVM 테스트 12개(`InpaintTextureTest`). 화면 변화는 없다.
+    - 3: 결 붙이기(`TextureTransfer`: 짝 표·조각 판, AGSL 셰이더)와 명령 `EnhanceTexture`(채우기 전 픽셀에서 다시 채우며 결을 붙임, 더할 결이 없으면 `NothingToEnhanceException`). `Inpainter`의 계획 부분을 꺼내 `windows`로 쓴다. 에뮬레이터 테스트 `EnhanceTextureTest`. 화면 변화는 없다.
 
 - **얼굴 인식 보정 다듬기(사용자 요청)** (시작: 2026-10-23)
   - 요청(사용자, 그대로, 폴드8에서 써 본 뒤):
@@ -1469,6 +1470,8 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 분할 모델 시험: 가짜 모델 `FakeSegmentModel`(app/src/androidTest, 탭한 칸에서 비슷한 색으로 이어진 곳, 0번 후보는 그림 전체)로 `SelectObjectTest`, 진짜 모델은 `SegmentRealModelTest`다.
   - 계산하는 동안만 쓰는 메모리는 명령의 `estimateWorkBytes`로 알리고, `makeRoom`이 `EditHistory.unreleasableBytes`로 단계를 버려서 될 때만 버린다. 쓸 수 없는 모델(`InpaintUnavailableException`)은 `runEdit`가 `EditorMessage.RemoveUnavailable`로 알린다.
   - 테스트용 가짜 모델은 `FakeInpaintModel`(engine/src/test, 아는 곳 평균색으로 채움)이다.
+  - 질감 향상: 명령 `EnhanceTexture(layerId, area, model, original)`이 채우기 전 픽셀 `original`에 `Inpainter.paint(…, texture = true)`를 한다. 창마다 배율이 1.5 이상이면 `TextureTransfer.prepare`(짝 찾기 `InpaintTexture.plan` → 짝 표·조각 판)를 하고, 키우기 셰이더가 `TextureTransfer.TEXTURED_BICUBIC`이 된다(잡음 없음). 결을 붙일 창이 없는지는 모델을 부르기 전에 `Inpainter.windows`로 본다.
+    - 셰이더는 배열을 아무 번호로 읽을 수 없어(AGSL은 상수·반복 번호만) 짝을 8888 그림(짝 표)으로 넘긴다. F16은 2048보다 큰 정수가 정확하지 않다. 바이큐빅 읽기는 `ImageResizer.BICUBIC_SAMPLE`의 `bicubicAt`(입력 그림 자리를 바로 받음)이다.
 - **얼굴 인식 보정:** 계획은 `docs/face-liquify-plan.md`다.
   - 엔진 순수 Kotlin(`engine/face/`, JVM 테스트): 모델 틀 `FaceModel`(입력·출력 모양, 쓸 수 없으면 `FaceUnavailableException`), 풀기·NMS `FaceDetectionDecoder`, 자를 곳 `FaceRoi`(돌린 정사각형, 그림 ↔ 자른 그림 비율 좌표), 입력 `FaceTensor`, 결과 `FaceLandmarks`(478점, 윤곽 안 `contains`), 점 번호 `FaceMeshIndex`, 찾는 순서 `FaceSearch`(그림 읽기는 `FaceImage`로 받음).
   - 슬라이더 → 변형: 슬라이더 `FaceSlider`(저장 번호 `code`, 부위 `part`, `FaceSlider.of(부위)`는 화면 차례), 얼굴 하나의 값 `FaceValues`(바꾸지 않는 값), 값 → 변형 `FaceWarps.of`(부위별 `eyes`·`nose`·`mouth`·`jaw`·`forehead`·`chinHeight`, 상수는 모두 `FaceWarps`). 틀은 FaceWarpShapes.kt: 얼굴 좌표계 `FaceFrame`, 감쇠 `falloff`(부위 전체)·`peak`(한 점), 부위 타원 `PartEllipse`, 늘이기 `EllipseScale`(축마다 배율·반쪽 `half`·감쇠 시작 `plateau`), 옮기기 `EllipseMove`, 돌리기 `EllipseRotate`, 윤곽 `FaceOutline`(먼 쪽 비율 `factor`), 얼굴 너비 `FaceWidthWarp`, 얼굴 세로 띠 `BandMove`(1로 머무는 구간 `holdV`), 거의 고른 0..1 `eased`, 움직이지 않는 원 `KeepOut`(`EllipseMove(keep)`, 뒷트임의 눈동자), 한 점 기준 늘이기 `AnchoredScale`(쪽마다 가로 반지름·옆 띠, 머리 크기). 새 슬라이더는 `FaceSlider`에 새 번호로 더하고 `FaceWarps.of`의 부위 함수에서 변형을 만든다. 차례는 거꾸로 따라갈 때의 차례다(얼굴형 → 눈 → 코 → 입, 부위 안에서는 옮기기 → 늘이기). `FaceWarps.of(faces, values)`는 얼굴마다 다른 얼굴을 넘긴다(`others`, 머리 크기가 피함). 계산식을 바꿔 같은 값의 모양이 달라지면 `LiquifyRecord.VERSION`을 올린다(지금 2).

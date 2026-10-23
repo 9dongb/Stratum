@@ -204,7 +204,8 @@ internal object ImageResizer {
 
     /**
      * [BICUBIC]의 읽기 부분: 입력 `image`, 그림 픽셀마다 읽을 자리 `offset + position × scale`, 함수 `bicubic`.
-     * AI 제거의 잡음 섞인 키우기(`Inpainter`)도 같은 읽기를 쓴다. Kotlin으로 같은 계산을 하는 곳: `InpaintNoise.upscaledLuma`.
+     * `bicubicAt`은 입력 그림의 자리(픽셀 가운데가 i + 0.5)를 바로 받는다.
+     * AI 제거의 잡음 섞인 키우기와 질감 향상(`Inpainter`, `TextureTransfer`)도 같은 읽기를 쓴다. Kotlin으로 같은 계산을 하는 곳: `InpaintNoise.upscaledLuma`.
      */
     internal const val BICUBIC_SAMPLE = """
         uniform shader image;
@@ -222,8 +223,7 @@ internal object ImageResizer {
             return 0.0;
         }
 
-        float4 bicubic(float2 position) {
-            float2 source = offset + position * scale;
+        float4 bicubicAt(float2 source) {
             float2 base = floor(source - 0.5);
             float4 sum = float4(0.0);
             float total = 0.0;
@@ -239,6 +239,10 @@ internal object ImageResizer {
             color.a = clamp(color.a, 0.0, 1.0);
             color.rgb = clamp(color.rgb, float3(0.0), float3(color.a));
             return color;
+        }
+
+        float4 bicubic(float2 position) {
+            return bicubicAt(offset + position * scale);
         }
     """
 

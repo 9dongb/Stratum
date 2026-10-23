@@ -20,6 +20,7 @@ import com.kiln.stratum.engine.inpaint.InpaintModel
 import com.kiln.stratum.engine.inpaint.InpaintNoise
 import com.kiln.stratum.engine.inpaint.InpaintPlan
 import com.kiln.stratum.engine.inpaint.InpaintTensor
+import com.kiln.stratum.engine.inpaint.InpaintTexture
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
@@ -45,6 +46,7 @@ import kotlin.math.min
  *    구멍을 그 크기로 다시 그려 넓힌 뒤, 모델(또는 매끈한 잇기)로 채우고 둘레 밝기·색에 맞춘 그림을 만든다([InpaintTensor]).
  * 3. 채울 그림을 원본 해상도로 키워(GPU 바이큐빅, 1024px 묶음마다 한 번) 쓰기 몫 ∩ 선택 영역만큼 타일에 바꿔 넣는다(소프트웨어).
  *    AI 모델로 채운 곳에는 둘레만큼 모자란 고운 잡음을 키우면서 더한다([InpaintNoise], 원본 해상도의 작은 조각 몇 개에서 잼).
+ *    질감 향상(texture)이면 배율이 큰 창은 잡음 대신 둘레 원본의 고운 결을 옮겨 붙인다([InpaintTexture], [TextureTransfer]).
  *
  * 몫이 0인 픽셀과 닿지 않은 타일은 그대로다. Kotlin 반복은 계획(1024칸 이하)과 모델 크기(512²)에서만 한다.
  * 보정은 걸지 않은 레이어의 원래 픽셀을 읽는다(리터칭과 같다). P3 문서도 값을 바꾸지 않고 그대로 넣는다.
@@ -136,16 +138,15 @@ internal object Inpainter {
         ).intersect(PixelRect.of(size))
     }
 
-    /** [raster]의 [area]를 [source]로 채운 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다. */
-    fun paint(
-        raster: Raster,
-        size: PixelSize,
-        area: InpaintArea,
-        selection: Selection?,
-        source: FillSource,
-        checkCanceled: () -> Unit
-    ): Raster {
-        val bounds = bounds(area, selection, size) ?: return raster
+    /** 채울 창들([InpaintPlan.windows], 덩어리마다 차례로)과 칠한 고리 안쪽 */
+    private class Plan(val windows: List<CropWindow>, val interior: Interior?)
+
+    /**
+     * 계획: 채울 곳을 긴 변 1024칸 이하로 줄여 그리고, 조금이라도 덮인 칸을 구멍으로 보고, 칠한 경우 고리 안쪽까지 메워 덩어리로 나눈 뒤
+     * 덩어리마다 창을 정한다. [interior]가 참이면 고리 안쪽 그림도 만든다(쓴 뒤 recycle). 채울 곳이 없으면 null.
+     */
+    private fun plan(area: InpaintArea, selection: Selection?, size: PixelSize, modelSize: Int, interior: Boolean): Plan? {
+        val bounds = bounds(area, selection, size) ?: return null
         val level = InpaintPlan.planLevel(bounds.width, bounds.height)
         val cell = 1 shl level
         val left = bounds.left / cell * cell
@@ -155,27 +156,49 @@ internal object Inpainter {
         val drawn = InpaintMask.holes(coverage(area, selection, left.toFloat(), top.toFloat(), 1f / cell, width, height))
         val holes = if (area is InpaintArea.Painted) InpaintMask.fillEnclosed(drawn, width, height) else drawn
         val regions = InpaintMask.group(InpaintMask.components(holes, width, height), ceilDiv(InpaintPlan.MIN_MARGIN, cell))
-        if (regions.isEmpty()) return raster
+        if (regions.isEmpty()) return null
+        val windows = regions.flatMap { region ->
+            val hole = PixelRect(
+                left + region.bounds.left * cell,
+                top + region.bounds.top * cell,
+                min(left + region.bounds.right * cell, size.width),
+                min(top + region.bounds.bottom * cell, size.height)
+            )
+            InpaintPlan.windows(hole, region.cells.toLong() * cell * cell, size, modelSize)
+        }
         // 고리 안쪽(칠하지 않았지만 메운 칸). 창마다 구멍을 다시 그릴 때 함께 넣는다.
-        val interior = Interior.of(BooleanArray(holes.size) { holes[it] && !drawn[it] }, width, height, left, top, cell)
+        val inside = if (interior) Interior.of(BooleanArray(holes.size) { holes[it] && !drawn[it] }, width, height, left, top, cell) else null
+        return Plan(windows, inside)
+    }
+
+    /** [area]를 모델 크기 [modelSize]로 채울 창들(채울 때와 같은 순서). 채울 곳이 없으면 빈 목록 */
+    fun windows(area: InpaintArea, selection: Selection?, size: PixelSize, modelSize: Int): List<CropWindow> =
+        plan(area, selection, size, modelSize, interior = false)?.windows ?: emptyList()
+
+    /**
+     * [raster]의 [area]를 [source]로 채운 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다.
+     * [texture]면 AI 모델로 채우는 창 가운데 배율이 [InpaintTexture.MIN_SCALE] 이상인 창에 잡음 대신 결을 붙이고, 붙인 창마다 [onTexture]를 부른다.
+     */
+    fun paint(
+        raster: Raster,
+        size: PixelSize,
+        area: InpaintArea,
+        selection: Selection?,
+        source: FillSource,
+        checkCanceled: () -> Unit,
+        texture: Boolean = false,
+        onTexture: () -> Unit = {}
+    ): Raster {
+        val plan = plan(area, selection, size, source.size, interior = true) ?: return raster
         try {
             var current = raster
-            for (region in regions) {
-                val hole = PixelRect(
-                    left + region.bounds.left * cell,
-                    top + region.bounds.top * cell,
-                    min(left + region.bounds.right * cell, size.width),
-                    min(top + region.bounds.bottom * cell, size.height)
-                )
-                val holeArea = region.cells.toLong() * cell * cell
-                for (window in InpaintPlan.windows(hole, holeArea, size, source.size)) {
-                    checkCanceled()
-                    current = paintWindow(current, size, window, area, selection, interior, source, checkCanceled)
-                }
+            for (window in plan.windows) {
+                checkCanceled()
+                current = paintWindow(current, size, window, area, selection, plan.interior, source, texture, onTexture, checkCanceled)
             }
             return current
         } finally {
-            interior?.recycle()
+            plan.interior?.recycle()
         }
     }
 
@@ -188,6 +211,8 @@ internal object Inpainter {
         selection: Selection?,
         interior: Interior?,
         source: FillSource,
+        texture: Boolean,
+        onTexture: () -> Unit,
         checkCanceled: () -> Unit
     ): Raster {
         val modelSize = source.size
@@ -228,14 +253,26 @@ internal object Inpainter {
         // 쓰기 몫: 칠했거나 물체 모양이면 넓힌 띠 안에서 0으로 줄고, 고른 곳이면 넓힌 곳 전체다(타일에서 선택 알파로 다시 자른다)
         val weights = if (area is InpaintArea.Selected) FloatArray(plane) { 1f } else InpaintTensor.writeWeights(distance, radius)
         for (p in 0 until plane) if (!modelHole[p]) weights[p] = 0f
-        // 고운 잡음: AI가 채운 곳만(게인맵처럼 매끈한 그림은 더하지 않는다)
-        val noise = if (source is FillSource.Model) {
-            noiseLevel(raster, size, window, fill, weights, holeDistance, straight, modelSize, checkCanceled)
+        // 질감 향상: AI가 채운 곳 가운데 배율이 큰 창은 잡음 대신 둘레의 결을 붙인다(짝을 찾지 못하면 잡음)
+        val transfer = if (texture && source is FillSource.Model) {
+            TextureTransfer.prepare(raster, size, window, straight, fill, holeDistance, modelHole, modelSize, checkCanceled)
         } else {
-            0f
+            null
         }
-        checkCanceled()
-        return composite(raster, size, window, fill, weights, selection, modelSize, noise, checkCanceled)
+        try {
+            // 고운 잡음: AI가 채운 곳만(게인맵처럼 매끈한 그림은 더하지 않는다)
+            val noise = if (source is FillSource.Model && transfer == null) {
+                noiseLevel(raster, size, window, fill, weights, holeDistance, straight, modelSize, checkCanceled)
+            } else {
+                0f
+            }
+            checkCanceled()
+            val painted = composite(raster, size, window, fill, weights, selection, modelSize, noise, transfer, checkCanceled)
+            if (transfer != null && painted !== raster) onTexture()
+            return painted
+        } finally {
+            transfer?.recycle()
+        }
     }
 
     /**
@@ -363,6 +400,7 @@ internal object Inpainter {
     /**
      * 채울 그림 [fill](알파를 곱한 RGBA 0..1, 모델 크기)을 원본 해상도로 키워, 몫 [weights] ∩ 선택 영역만큼 타일에 바꿔 넣는다.
      * 결과 = 원래 × (1 - 몫) + 채울 색 × 몫(효과 도구의 '바꾸기'와 같다). 몫이 0인 픽셀은 값이 그대로다.
+     * [transfer]가 있으면 키울 때 결을 붙인다([TextureTransfer.TEXTURED_BICUBIC]).
      */
     private fun composite(
         raster: Raster,
@@ -373,6 +411,7 @@ internal object Inpainter {
         selection: Selection?,
         modelSize: Int,
         noise: Float,
+        transfer: TextureTransfer.Inputs?,
         checkCanceled: () -> Unit
     ): Raster {
         val scale = modelSize.toFloat() / window.size
@@ -411,7 +450,7 @@ internal object Inpainter {
                 checkCanceled()
                 val area = block.map { tileRect(grid, it) }
                     .reduce { a, b -> PixelRect(min(a.left, b.left), min(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom)) }
-                val upscaled = upscale(colors, window, scale, area, noise) ?: throw NotEnoughMemoryException()
+                val upscaled = upscale(colors, window, scale, area, noise, transfer) ?: throw NotEnoughMemoryException()
                 try {
                     for (key in block) {
                         checkCanceled()
@@ -433,15 +472,24 @@ internal object Inpainter {
      * 채울 그림을 문서 [area] 크기로 키운 소프트웨어 그림(GPU 바이큐빅 한 번).
      * 그림 픽셀 가운데 (x + 0.5)는 채울 그림에서 ((area.left + x + 0.5 - 창 왼쪽) × [scale]) 자리다.
      * [noise](밝기 표준편차, 0..1 눈금)가 0보다 크면 문서 픽셀 자리로 정해지는 잡음을 R·G·B에 같이 더한다(묶음이 바뀌어도 이어진다).
+     * [transfer]가 있으면 잡음 대신 둘레의 결을 붙인다.
      */
-    private fun upscale(colors: Bitmap, window: CropWindow, scale: Float, area: PixelRect, noise: Float): Bitmap? {
+    private fun upscale(colors: Bitmap, window: CropWindow, scale: Float, area: PixelRect, noise: Float, transfer: TextureTransfer.Inputs?): Bitmap? {
         val image = BitmapShader(colors, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         image.filterMode = BitmapShader.FILTER_MODE_NEAREST
-        val shader = RuntimeShader(if (noise > 0f) NOISY_BICUBIC else ImageResizer.BICUBIC)
+        val shader = RuntimeShader(
+            when {
+                transfer != null -> TextureTransfer.TEXTURED_BICUBIC
+                noise > 0f -> NOISY_BICUBIC
+                else -> ImageResizer.BICUBIC
+            }
+        )
         shader.setInputShader("image", image)
         shader.setFloatUniform("scale", scale, scale)
         shader.setFloatUniform("offset", (area.left - window.left) * scale, (area.top - window.top) * scale)
-        if (noise > 0f) {
+        if (transfer != null) {
+            transfer.applyTo(shader, area)
+        } else if (noise > 0f) {
             shader.setFloatUniform("noise", noise)
             shader.setFloatUniform("origin", area.left.toFloat(), area.top.toFloat())
         }

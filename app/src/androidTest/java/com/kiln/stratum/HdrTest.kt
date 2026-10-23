@@ -30,6 +30,7 @@ import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.DocumentColors
+import com.kiln.stratum.engine.platform.EnhanceTexture
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.LayerPreviewCache
@@ -78,7 +79,7 @@ class HdrTest {
     private val height = 600
 
     /** 왼쪽 절반은 게인맵 200(많이 밝힘), 오른쪽 절반은 50인 회색 Ultra HDR JPEG. 게인맵은 가로·세로 1/4, 1채널. */
-    private fun ultraHdrJpeg(): ByteArray {
+    private fun ultraHdrJpeg(width: Int = this.width, height: Int = this.height): ByteArray {
         val base = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(120, 120, 120)) }
         val gainWidth = width / 4f
         val gainHeight = height / 4f
@@ -285,6 +286,19 @@ class HdrTest {
         assertNear(200, gainmap.value(50, 75))
         // 먼 곳은 그대로다
         assertNear(50, gainmap.value(190, 10), tolerance = 0)
+    }
+
+    @Test
+    fun enhanceTexture_keepsTheGainmapTheFillMade() {
+        // 2000×1500의 큰 자국: 창 한 변이 1500px 가까이라 모델 1px이 문서 1.5px을 넘어 결을 붙인다
+        val document = import(ultraHdrJpeg(2000, 1500))
+        val area = InpaintArea.Painted(listOf(StrokePoint(1000f, 750f)), 600f)
+        val filled = InpaintRegion(LayerId(0), area, FakeInpaintModel()).applyTo(document)
+
+        val enhanced = EnhanceTexture(LayerId(0), area, FakeInpaintModel(), (document.layers[0].content as RasterContent).raster).applyTo(filled)
+
+        assertNotSame(filled, enhanced)
+        assertSame(filled.layers[0].gainmap, enhanced.layers[0].gainmap)
     }
 
     @Test
