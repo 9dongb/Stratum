@@ -45,7 +45,7 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
                 is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled))
                     .copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
                 // 조정 레이어는 마스크만 바꾼다(결정 기록 '피부 보정'의 1e)
-                AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
+                is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
                 // 그룹은 그리는 것이 없다(1g)
                 GroupContent -> layer
             }

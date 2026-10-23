@@ -593,7 +593,7 @@ class LayerPreviewCache {
         when (val content = layer.content) {
             is RasterContent -> content.raster
             // 조정 레이어는 픽셀이 없다(빈 래스터로 보아 축소본·작은 그림을 그리지 않는다)
-            AdjustmentContent, GroupContent -> Raster.EMPTY
+            is AdjustmentContent, GroupContent -> Raster.EMPTY
         }
 
     companion object {

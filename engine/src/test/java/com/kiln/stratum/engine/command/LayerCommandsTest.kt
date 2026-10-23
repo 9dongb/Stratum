@@ -9,6 +9,7 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.documentWithLayers
 import com.kiln.stratum.engine.layerIds
@@ -371,7 +372,7 @@ class LayerCommandsTest {
         assertEquals(3L, added.nextLayerId)
         val layer = added.layers[1]
         assertEquals("Adjust", layer.name)
-        assertSame(AdjustmentContent, layer.content)
+        assertSame(AdjustmentContent.BASIC, layer.content)
         assertEquals(Adjustments.NONE, layer.adjustments)
         assertSame(selection, layer.mask)
         // 선택을 풀어 마스크 모양이 그대로 보인다(레이어 마스크 더하기와 같다)
@@ -439,6 +440,20 @@ class LayerCommandsTest {
         // 모두 지워지면 지우지 않는다
         val all = document.copy(layers = document.layers.map { if (it.id == LayerId(0)) it.copy(parent = LayerId(3)) else it })
         assertSame(all, DeleteLayer(LayerId(3)).applyTo(all))
+    }
+
+    @Test
+    fun duplicatingASkinGroup_pointsTheCopiedRecordAtTheCopiedLayers() {
+        val base = grouped()
+        val record = SkinRecord(LayerId(0), color = LayerId(2), smooth = LayerId(1), spots = LayerId(1), faces = emptyList(), segmented = true)
+        val document = base.copy(layers = base.layers.map { if (it.id == LayerId(3)) it.copy(skin = record) else it })
+
+        val duplicated = DuplicateLayer(LayerId(3), "G copy").applyTo(document)
+
+        // 안의 레이어 1, 2, 그룹 3이 4, 5, 6으로 복사된다: 복사본의 기록은 복사본을 가리키고 원본 레이어는 그대로다
+        val copy = checkNotNull(duplicated.layers[6].skin)
+        assertEquals(SkinRecord(LayerId(0), color = LayerId(5), smooth = LayerId(4), spots = LayerId(4), faces = emptyList(), segmented = true), copy)
+        assertEquals(record, duplicated.layers[3].skin)
     }
 
     @Test

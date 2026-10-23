@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyMeshCodec
 import com.kiln.stratum.engine.project.AdjustmentEntry
@@ -23,6 +24,7 @@ import com.kiln.stratum.engine.project.ProjectHeader
 import com.kiln.stratum.engine.project.ProjectManifest
 import com.kiln.stratum.engine.project.ProjectManifestCodec
 import com.kiln.stratum.engine.project.RasterEntry
+import com.kiln.stratum.engine.project.SkinEntry
 import com.kiln.stratum.engine.project.TileEntry
 import com.kiln.stratum.engine.project.TileRef
 import com.kiln.stratum.engine.project.UnreadableProjectException
@@ -112,7 +114,7 @@ class ProjectFolder(val directory: File) {
         val layers = document.layers.map { layer ->
             val content = when (val content = layer.content) {
                 is RasterContent -> RasterEntry(entriesOf(content.raster))
-                AdjustmentContent -> AdjustmentEntry
+                is AdjustmentContent -> AdjustmentEntry
                 GroupContent -> GroupEntry
             }
             // 유동화 기록: 원래 픽셀은 결과와 바뀌지 않은 타일을 함께 써서 바뀐 타일만 더 쓴다
@@ -133,9 +135,11 @@ class ProjectFolder(val directory: File) {
                     MaskTileEntry(key.column, key.row, if (tile.isFull) null else maskFileOf(tile, referenced))
                 }
             }
+            val skin = layer.skin?.let { SkinEntry(it.source.value, it.color.value, it.smooth.value, it.spots.value, it.faces, it.segmented, it.texture) }
             LayerEntry(
                 layer.id.value, layer.name, layer.opacity, layer.blendMode, content, layer.adjustments,
-                layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask, layer.parent?.value
+                layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask, layer.parent?.value,
+                skin, (layer.content as? AdjustmentContent)?.skin
             )
         }
         val manifest = ProjectManifest(
@@ -229,16 +233,20 @@ class ProjectFolder(val directory: File) {
         val layers = manifest.layers.map { entry ->
             val content = when (val content = entry.content) {
                 is RasterEntry -> RasterContent(rasterOf(content.tiles, grid))
-                AdjustmentEntry -> AdjustmentContent
+                AdjustmentEntry -> AdjustmentContent(skin = entry.skinColor)
                 GroupEntry -> GroupContent
             }
             try {
                 val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
                 val liquify = entry.liquify?.let { recordOf(it) }
                 val mask = entry.mask?.let { maskOf(it) }
+                // 피부 기록은 그룹에만 둔다(망가진 파일이 다른 레이어에 붙였으면 버린다)
+                val skin = entry.skin?.takeIf { content is GroupContent }?.let {
+                    SkinRecord(LayerId(it.source), LayerId(it.color), LayerId(it.smooth), LayerId(it.spots), it.faces, it.segmented, it.texture)
+                }
                 Layer(
                     LayerId(entry.id), entry.name, content, entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text,
-                    liquify, mask, entry.parent?.let(::LayerId)
+                    liquify, mask, entry.parent?.let(::LayerId), skin
                 )
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")

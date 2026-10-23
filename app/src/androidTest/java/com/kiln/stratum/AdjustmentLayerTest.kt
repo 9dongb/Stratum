@@ -89,7 +89,7 @@ class AdjustmentLayerTest {
     private fun pixelLayer(id: Long, raster: Raster) = Layer(LayerId(id), "L$id", RasterContent(raster))
 
     private fun adjustment(id: Long, adjustments: Adjustments = gray, opacity: Float = 1f, mask: Selection? = null, mode: BlendMode = BlendMode.NORMAL) =
-        Layer(LayerId(id), "A$id", AdjustmentContent, opacity, mode, adjustments, mask = mask)
+        Layer(LayerId(id), "A$id", AdjustmentContent.BASIC, opacity, mode, adjustments, mask = mask)
 
     private fun document(vararg layers: Layer) = Document(width, height, layers.toList(), nextLayerId = layers.maxOf { it.id.value } + 1)
 
@@ -185,7 +185,7 @@ class AdjustmentLayerTest {
 
         val added = AddAdjustmentLayer("Adjust", 1).applyTo(plain.copy(selection = selection))
         val layer = added.layers[1]
-        assertEquals(AdjustmentContent, layer.content)
+        assertEquals(AdjustmentContent.BASIC, layer.content)
         assertSame(selection, layer.mask)
         assertNull(added.selection)
         val revealAll = AddAdjustmentLayer("Adjust", 1).applyTo(plain).layers[1].mask
@@ -221,7 +221,7 @@ class AdjustmentLayerTest {
         ProjectFolder(directory).save(document, createdMillis = 1, modifiedMillis = 2)
         val loaded = ProjectFolder(directory).load().document.layers[1]
 
-        assertEquals(AdjustmentContent, loaded.content)
+        assertEquals(AdjustmentContent.BASIC, loaded.content)
         assertEquals(gray, loaded.adjustments)
         assertEquals(0.7f, loaded.opacity, 0f)
         assertEquals(BlendMode.SCREEN, loaded.blendMode)

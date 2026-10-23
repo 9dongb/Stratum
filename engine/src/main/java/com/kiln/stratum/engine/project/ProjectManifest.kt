@@ -12,6 +12,7 @@ import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceModel
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
+import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -66,7 +67,8 @@ data class ProjectManifest(
 /**
  * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에, 숨김은 덧붙임(꼬리표 3)에,
  * 다시 고칠 수 있는 글자는 덧붙임(꼬리표 4)에, 다시 고칠 수 있는 유동화 기록은 덧붙임(꼬리표 5)에, 틴트는 덧붙임(꼬리표 6)에,
- * 레이어 마스크는 덧붙임(꼬리표 7, 판 2)에 적고, 없으면(보이면) 적지 않는다.
+ * 레이어 마스크는 덧붙임(꼬리표 7, 판 2)에, [피부 보정] 그룹의 기록은 덧붙임(꼬리표 9)에, 피부 색 조정 레이어의 값은 덧붙임(꼬리표 10)에 적고,
+ * 없으면(보이면) 적지 않는다.
  * 그래서 숨김을 모르는 앞 판의 프로젝트는 모두 보이는 레이어로 열리고, 글자·유동화 기록을 모르는 앞 판 앱은 그 레이어를 픽셀 레이어로 연다
  * (픽셀은 늘 타일에 있다).
  */
@@ -82,7 +84,22 @@ data class LayerEntry(
     val text: TextSpec? = null,
     val liquify: LiquifyEntry? = null,
     val mask: List<MaskTileEntry>? = null,
-    val parent: Long? = null
+    val parent: Long? = null,
+    val skin: SkinEntry? = null,
+    val skinColor: SkinColor? = null
+)
+
+/**
+ * [피부 보정] 그룹의 기록(document.SkinRecord, 결정 기록 '피부 보정'의 2c). 레이어 번호는 같은 목차의 레이어다.
+ */
+data class SkinEntry(
+    val source: Long,
+    val color: Long,
+    val smooth: Long,
+    val spots: Long,
+    val faces: List<FaceLandmarks>,
+    val segmented: Boolean,
+    val texture: Float
 )
 
 /**
@@ -197,6 +214,15 @@ object ProjectManifestCodec {
     /** 레이어 덧붙임 꼬리표: 감싼 그룹의 레이어 번호(long, 판 2, 결정 기록 '피부 보정'의 1g). 그룹 밖이면 적지 않는다. */
     private const val EXTRA_PARENT = 8
 
+    /** 레이어 덧붙임 꼬리표: [피부 보정] 그룹의 기록(결정 기록 '피부 보정'의 2c). 망가졌거나 더 새 판이면 기록만 버린다(그룹은 보통 그룹). */
+    private const val EXTRA_SKIN = 9
+
+    /** 레이어 덧붙임 꼬리표: 피부 색 조정 레이어의 값(결정 기록 '피부 보정'의 2c). 없으면 기본 보정 조정 레이어다. */
+    private const val EXTRA_SKIN_COLOR = 10
+
+    /** 피부 기록·피부 색 덧붙임 안의 판. 이 앱보다 새 판이면 그 덧붙임을 버린다. */
+    private const val SKIN_VERSION = 1
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
 
@@ -241,6 +267,8 @@ object ProjectManifestCodec {
             layer.liquify?.let { extras += EXTRA_LIQUIFY to liquifyBytes(it) }
             layer.mask?.let { extras += EXTRA_MASK to maskBytes(it) }
             layer.parent?.let { extras += EXTRA_PARENT to ByteArrayOutputStream().also { out -> DataOutputStream(out).writeLong(it) }.toByteArray() }
+            layer.skin?.let { extras += EXTRA_SKIN to skinBytes(it) }
+            layer.skinColor?.let { extras += EXTRA_SKIN_COLOR to skinColorBytes(it) }
             writeExtras(out, extras)
         }
         // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
@@ -278,6 +306,8 @@ object ProjectManifestCodec {
                 var liquify: LiquifyEntry? = null
                 var mask: List<MaskTileEntry>? = null
                 var parent: Long? = null
+                var skin: SkinEntry? = null
+                var skinColor: SkinColor? = null
                 data.readExtras { tag, bytes ->
                     when (tag) {
                         EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
@@ -288,9 +318,11 @@ object ProjectManifestCodec {
                         EXTRA_TINT -> tint = DataInputStream(ByteArrayInputStream(bytes)).readFloat()
                         EXTRA_MASK -> mask = maskOf(bytes)
                         EXTRA_PARENT -> parent = DataInputStream(ByteArrayInputStream(bytes)).readLong()
+                        EXTRA_SKIN -> skin = skinOrNull(bytes)
+                        EXTRA_SKIN_COLOR -> skinColor = skinColorOrNull(bytes)
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify, mask, parent)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify, mask, parent, skin, skinColor)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null
@@ -463,6 +495,76 @@ object ProjectManifestCodec {
                 values += FaceValues.of(pairs)
             }
             LiquifyEntry(version, base, baseGainmap, meshFile, faces, values)
+        } catch (e: IOException) {
+            null
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+
+    /** 피부 기록: 판, 원본·색 보정·피부 정돈·잡티 제거 레이어 번호, 분할했는지, 질감 유지, 얼굴 수와 얼굴마다 점수·점 좌표 수·좌표들 */
+    private fun skinBytes(skin: SkinEntry): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeInt(SKIN_VERSION)
+            out.writeLong(skin.source)
+            out.writeLong(skin.color)
+            out.writeLong(skin.smooth)
+            out.writeLong(skin.spots)
+            out.writeBoolean(skin.segmented)
+            out.writeFloat(skin.texture)
+            out.writeInt(skin.faces.size)
+            for (face in skin.faces) {
+                out.writeFloat(face.presence)
+                out.writeInt(face.points.size)
+                for (value in face.points) out.writeFloat(value)
+            }
+            out.flush()
+        }.toByteArray()
+
+    /** 피부 기록을 읽는다. 망가졌거나 이 앱보다 새 판이면 null이다(기록만 버리고 그룹은 보통 그룹으로 연다). */
+    private fun skinOrNull(bytes: ByteArray): SkinEntry? =
+        try {
+            val data = DataInputStream(ByteArrayInputStream(bytes))
+            if (data.readInt() != SKIN_VERSION) throw UnreadableProjectException("Unknown skin record")
+            val source = data.readLong()
+            val color = data.readLong()
+            val smooth = data.readLong()
+            val spots = data.readLong()
+            val segmented = data.readBoolean()
+            val texture = data.readFloat()
+            if (!(texture in 0f..1f)) throw UnreadableProjectException("Broken texture $texture")
+            val faces = List(data.readCount()) {
+                val presence = data.readFloat()
+                val count = data.readInt()
+                if (count != FaceModel.LANDMARK_COUNT * 2) throw UnreadableProjectException("Broken face points $count")
+                FaceLandmarks(FloatArray(count) { data.readFloat() }, presence).also {
+                    if (!it.isFinite) throw UnreadableProjectException("Broken face points")
+                }
+            }
+            SkinEntry(source, color, smooth, spots, faces, segmented, texture)
+        } catch (e: IOException) {
+            null
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+
+    /** 피부 색: 판, 부분 붉은기, 전체 붉은기, 톤 균일화 */
+    private fun skinColorBytes(color: SkinColor): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeInt(SKIN_VERSION)
+            out.writeFloat(color.local)
+            out.writeFloat(color.global)
+            out.writeFloat(color.even)
+            out.flush()
+        }.toByteArray()
+
+    /** 피부 색을 읽는다. 망가졌거나 이 앱보다 새 판이면 null이다(바꾸는 것이 없는 피부 색으로 연다). */
+    private fun skinColorOrNull(bytes: ByteArray): SkinColor? =
+        try {
+            val data = DataInputStream(ByteArrayInputStream(bytes))
+            if (data.readInt() != SKIN_VERSION) throw UnreadableProjectException("Unknown skin color")
+            SkinColor(data.readFloat(), data.readFloat(), data.readFloat())
         } catch (e: IOException) {
             null
         } catch (e: IllegalArgumentException) {

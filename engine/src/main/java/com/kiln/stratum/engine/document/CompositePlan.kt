@@ -32,7 +32,7 @@ object CompositePlan {
             when (val content = layer.content) {
                 is RasterContent -> CompositeStep.Draw(layer, content.raster, opacity, layer.mask)
                 // 바꾸는 것이 없는 표준 조정 레이어는 그릴 것이 없다(다른 혼합 모드는 보정이 없어도 아래를 자기와 섞어 바꾼다)
-                AdjustmentContent ->
+                is AdjustmentContent ->
                     if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) null else CompositeStep.Adjust(layer, opacity, layer.mask)
                 GroupContent -> null
             }

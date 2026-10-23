@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.document.HdrPrimaries
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.face.TestFace
+import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -184,6 +185,34 @@ class ProjectManifestTest {
 
         assertEquals(grouped, read(bytes))
         assertEquals(2, ByteBuffer.wrap(bytes, 4, 4).int)
+    }
+
+    @Test
+    fun skinGroupRecord_andSkinColor_roundTrip_inVersion2() {
+        val skin = SkinEntry(source = 0, color = 4, smooth = 5, spots = 6, faces = listOf(face), segmented = false, texture = 0.7f)
+        val color = LayerEntry(4, "Color", 1f, BlendMode.NORMAL, AdjustmentEntry, parent = 3, skinColor = SkinColor(0.2f, 0.5f, 1f))
+        val group = LayerEntry(3, "Skin", 1f, BlendMode.NORMAL, GroupEntry, skin = skin)
+        val withSkin = manifest.copy(layers = listOf(manifest.layers[0], color, group), nextLayerId = 7)
+        val bytes = bytesOf(withSkin)
+
+        assertEquals(withSkin, read(bytes))
+        assertEquals(2, ByteBuffer.wrap(bytes, 4, 4).int)
+        // 바꾸는 것이 없는 피부 색도 피부 색 종류로 남는다(기본 보정 조정 레이어와 구별)
+        val zero = withSkin.copy(layers = listOf(manifest.layers[0], color.copy(skinColor = SkinColor()), group))
+        assertEquals(SkinColor(), read(bytesOf(zero)).layers[1].skinColor)
+    }
+
+    @Test
+    fun brokenOrNewerSkinRecords_areDropped_andTheProjectStillOpens() {
+        val newer = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeInt(2); writeLong(0); flush() } }.toByteArray()
+        for (payload in listOf(ByteArray(0), ByteArray(3) { 7 }, newer)) {
+            val skin = read(withTopLayerExtra(9, payload))
+            assertNull(skin.layers[1].skin)
+            assertEquals(manifest, skin)
+            val color = read(withTopLayerExtra(10, payload))
+            assertNull(color.layers[1].skinColor)
+            assertEquals(manifest, color)
+        }
     }
 
     @Test

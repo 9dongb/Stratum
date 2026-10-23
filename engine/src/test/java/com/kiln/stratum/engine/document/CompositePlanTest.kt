@@ -67,7 +67,7 @@ class CompositePlanTest {
 
     @Test
     fun adjustmentLayer_becomesAnAdjustStep_unlessItChangesNothing() {
-        val adjust = Layer(LayerId(1), "A", AdjustmentContent, 0.5f, BlendMode.SCREEN, Adjustments(saturation = -1f), mask = Selection.EMPTY)
+        val adjust = Layer(LayerId(1), "A", AdjustmentContent.BASIC, 0.5f, BlendMode.SCREEN, Adjustments(saturation = -1f), mask = Selection.EMPTY)
         val plan = CompositePlan.of(document(layer(0), adjust))
 
         val step = plan[1] as CompositeStep.Adjust

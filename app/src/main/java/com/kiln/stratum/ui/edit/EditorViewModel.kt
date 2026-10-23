@@ -1841,7 +1841,7 @@ class EditorViewModel internal constructor(
                 _messages.trySend(EditorMessage.GroupNoPixels)
                 return
             }
-            AdjustmentContent -> {
+            is AdjustmentContent -> {
                 _messages.trySend(EditorMessage.AdjustmentNoPixels)
                 return
             }

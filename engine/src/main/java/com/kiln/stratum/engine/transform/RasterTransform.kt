@@ -51,7 +51,7 @@ object RasterTransform {
                     if (text != null) masked.copy(text = text) else masked
                 }
                 // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
-                AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
+                is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
                 // 그룹은 그리는 것이 없다(안의 레이어가 따로 바뀐다, 1g)
                 GroupContent -> layer
             }

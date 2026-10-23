@@ -37,7 +37,7 @@ data class AddAdjustmentLayer(val name: String, val index: Int, val parent: Laye
     override fun applyTo(document: Document): Document {
         require(index in 0..document.layers.size) { "Layer index out of range: $index" }
         val mask = document.selection ?: Selection.all(PixelSize(document.width, document.height))
-        val layer = Layer(LayerId(document.nextLayerId), name, AdjustmentContent, mask = mask, parent = parent)
+        val layer = Layer(LayerId(document.nextLayerId), name, AdjustmentContent.BASIC, mask = mask, parent = parent)
         val layers = document.layers.toMutableList().apply { add(index, layer) }
         return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1, selection = null)
     }
@@ -61,7 +61,13 @@ data class DuplicateLayer(val layerId: LayerId, val name: String) : EditCommand 
         val copies = block.map { i ->
             val layer = document.layers[i]
             // 자손은 복사한 그룹을 가리키고, 맨 위(복제한 레이어)는 원래 레이어가 있던 그룹 그대로다
-            layer.copy(id = ids.getValue(layer.id), name = if (i == index) name else layer.name, parent = layer.parent?.let { ids[it] ?: it })
+            layer.copy(
+                id = ids.getValue(layer.id),
+                name = if (i == index) name else layer.name,
+                parent = layer.parent?.let { ids[it] ?: it },
+                // [피부 보정] 그룹의 기록은 복사한 안의 레이어를 가리킨다(원본 레이어는 그대로)
+                skin = layer.skin?.remapped(ids)
+            )
         }
         val layers = document.layers.toMutableList().apply { addAll(index + 1, copies) }
         return document.copy(layers = layers, nextLayerId = next)

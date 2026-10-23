@@ -98,7 +98,7 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         val raster = when (val content = target.content) {
             is RasterContent -> content.raster
             // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
-            AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled))
+            is AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled))
             // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김)
             GroupContent -> return target
         }

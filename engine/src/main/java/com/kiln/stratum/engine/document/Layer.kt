@@ -4,6 +4,7 @@ import com.kiln.stratum.engine.adjust.Adjustments
 
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.text.TextSpec
 
 /**
@@ -39,8 +40,15 @@ data class RasterContent(val raster: Raster) : LayerContent
 /**
  * 조정 레이어의 내용(결정 기록 '피부 보정'의 1e): 픽셀이 없고, 이 레이어의 기본 보정 값([Layer.adjustments])을 그 아래에 합친 그림 전체에 건다.
  * 레이어의 불투명도·혼합 모드·마스크가 그 세기와 자리를 정한다(포토샵 조정 레이어와 같다).
+ *
+ * @property skin 피부 색 종류면 그 값([피부 보정] 그룹의 색 보정, 결정 기록 '피부 보정'의 2c). 기본 보정 종류면 null이다.
  */
-data object AdjustmentContent : LayerContent
+data class AdjustmentContent(val skin: SkinColor? = null) : LayerContent {
+    companion object {
+        /** 기본 보정 종류(레이어 메뉴 '조정 레이어 더하기') */
+        val BASIC = AdjustmentContent()
+    }
+}
 
 /**
  * 레이어 그룹(통과)의 내용(결정 기록 '피부 보정'의 1g): 그리지 않고, 안의 레이어(자손)에 보이기와 불투명도를 물려준다.
@@ -64,6 +72,7 @@ data object GroupContent : LayerContent
  *   없는 타일은 가리며, 다 보이는 타일([com.kiln.stratum.engine.selection.MaskTile.FULL])은 메모리를 쓰지 않는다. 그릴 때 보정을 건 레이어 색에 곱한다.
  *   픽셀을 바꿔도 그대로 남는다(포토샵과 같다). 없으면 null(다 보임).
  * @property parent 이 레이어를 감싼 그룹(결정 기록 '피부 보정'의 1g). 그룹 밖이면 null이다. 규칙은 [LayerTree].
+ * @property skin [피부 보정] 그룹의 기록(결정 기록 '피부 보정'의 2c). 그룹 레이어에만 있고, 없으면 null이다.
  */
 data class Layer(
     val id: LayerId,
@@ -77,7 +86,8 @@ data class Layer(
     val text: TextSpec? = null,
     val liquify: LiquifyRecord? = null,
     val mask: Selection? = null,
-    val parent: LayerId? = null
+    val parent: LayerId? = null,
+    val skin: SkinRecord? = null
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }

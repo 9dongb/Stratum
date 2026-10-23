@@ -14,6 +14,23 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 2c(엔진): [피부 보정] 그룹 만들기·기록·저장
+
+- 요청: 승인된 피부 보정 계획의 2단계 셋째 작은 단계(피부 도구와 그룹 만들기)의 엔진 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "피부 보정 그룹을 만드는 명령과 그룹 기록·피부 색 값의 저장을 더함"
+- 바꾼 것
+  - 문서: `AdjustmentContent`를 종류가 있는 값으로(`skin: SkinColor?`, 기본은 `AdjustmentContent.BASIC`), `Layer.skin`(`SkinRecord`), `SkinColor`, `NoFaceException`. 조정 레이어를 다루는 곳은 종류와 상관없이 그대로다.
+  - 명령: `CreateSkinRetouch`(새, platform), `DuplicateLayer`(복제한 그룹의 기록이 복사본을 가리킴).
+  - 저장: `ProjectManifest`의 `SkinEntry`·`skinColor`(덧붙임 꼬리표 9·10), `ProjectFolder`.
+  - 테스트: JVM `ProjectManifestTest`(피부 기록·피부 색 왕복, 망가지거나 더 새 판은 버림), `LayerCommandsTest`(피부 그룹 복제). 에뮬레이터 `SkinRetouchTest`(새, 4개: 구조·공유 마스크·기록, 얼굴 없음, 분할 모델 없이 윤곽, 저장 왕복)와 가짜 피부 모델 `FakeSkinModel`. 테스트가 쓰던 조정 레이어 값을 `AdjustmentContent.BASIC`으로.
+  - 기록: progress.md(진행 중 2c 엔진, 결정 기록 '피부 보정'의 2c 엔진), 이 항목.
+- 정한 것(Claude 판단, 계획 승인): 결정 기록 '피부 보정'의 2c 엔진.
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 엔진 490개).
+  - 에뮬레이터 `SkinRetouchTest` 4개, `AdjustmentLayerTest` 7개, `LayerGroupTest` 6개, `ProjectFolderTest` 10개 통과(접은 상태).
+
 ## 2026-10-24 · 피부 보정 2b: 피부 영역(얼굴마다 피부 마스크)
 
 - 요청: 승인된 피부 보정 계획의 2단계 둘째 작은 단계(피부 영역). 사용자 원문은 `docs/skin-retouch-plan.md`.

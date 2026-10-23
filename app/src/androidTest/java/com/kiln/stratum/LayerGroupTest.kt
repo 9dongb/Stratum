@@ -105,7 +105,7 @@ class LayerGroupTest {
     private fun skinLike(groupOpacity: Float = 1f, groupVisible: Boolean = true) = document(
         pixels(0, photo),
         pixels(1, blueLeft, parent = 3),
-        Layer(LayerId(2), "A", AdjustmentContent, adjustments = gray, parent = LayerId(3)),
+        Layer(LayerId(2), "A", AdjustmentContent.BASIC, adjustments = gray, parent = LayerId(3)),
         group(3, groupOpacity, groupVisible)
     )
 
@@ -127,7 +127,7 @@ class LayerGroupTest {
             document(
                 pixels(0, photo),
                 pixels(1, blueLeft).copy(opacity = 0.5f),
-                Layer(LayerId(2), "A", AdjustmentContent, opacity = 0.5f, adjustments = gray)
+                Layer(LayerId(2), "A", AdjustmentContent.BASIC, opacity = 0.5f, adjustments = gray)
             )
         )
 

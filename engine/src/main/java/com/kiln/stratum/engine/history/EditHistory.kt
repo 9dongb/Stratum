@@ -175,7 +175,7 @@ class EditHistory(
             for (layer in document.layers) {
                 when (val content = layer.content) {
                     is RasterContent -> tiles.addAll(content.raster.tiles.values)
-                    AdjustmentContent, GroupContent -> Unit
+                    is AdjustmentContent, GroupContent -> Unit
                 }
                 layer.gainmap?.let { tiles.addAll(it.raster.tiles.values) }
                 layer.mask?.let { masks.addAll(it.tiles.values) }
