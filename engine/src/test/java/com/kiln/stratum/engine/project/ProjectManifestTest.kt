@@ -176,6 +176,17 @@ class ProjectManifestTest {
     }
 
     @Test
+    fun groups_roundTrip_inVersion2() {
+        val group = LayerEntry(3, "Group", 0.5f, BlendMode.NORMAL, GroupEntry, visible = false)
+        val child = manifest.layers[1].copy(parent = 3)
+        val grouped = manifest.copy(layers = listOf(manifest.layers[0], child, group), nextLayerId = 4)
+        val bytes = bytesOf(grouped)
+
+        assertEquals(grouped, read(bytes))
+        assertEquals(2, ByteBuffer.wrap(bytes, 4, 4).int)
+    }
+
+    @Test
     fun gainmapAndHdrValues_roundTrip() {
         val hdr = HdrInfo(
             ratioMin = GainRgb(1f),

@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
@@ -45,6 +46,8 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
                     .copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
                 // 조정 레이어는 마스크만 바꾼다(결정 기록 '피부 보정'의 1e)
                 AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
+                // 그룹은 그리는 것이 없다(1g)
+                GroupContent -> layer
             }
         }
         // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')

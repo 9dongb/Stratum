@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.history
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.raster.Tile
@@ -174,7 +175,7 @@ class EditHistory(
             for (layer in document.layers) {
                 when (val content = layer.content) {
                     is RasterContent -> tiles.addAll(content.raster.tiles.values)
-                    AdjustmentContent -> Unit
+                    AdjustmentContent, GroupContent -> Unit
                 }
                 layer.gainmap?.let { tiles.addAll(it.raster.tiles.values) }
                 layer.mask?.let { masks.addAll(it.tiles.values) }

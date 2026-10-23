@@ -82,4 +82,21 @@ class CompositePlanTest {
         // 숨긴 조정 레이어도 빠진다
         assertEquals(1, CompositePlan.of(document(layer(0), adjust.copy(visible = false))).size)
     }
+
+    @Test
+    fun groups_passThrough_handingVisibilityAndOpacityToTheirLayers() {
+        val inner = Layer(LayerId(2), "G2", GroupContent, opacity = 0.5f, parent = LayerId(3))
+        val outer = Layer(LayerId(3), "G3", GroupContent, opacity = 0.8f)
+        val child = layer(1, opacity = 0.5f).copy(parent = LayerId(2))
+        val plan = CompositePlan.of(document(layer(0), child, inner, outer))
+
+        // 그룹은 그리지 않고, 안의 레이어는 그룹 불투명도를 곱해 얹는다
+        assertEquals(listOf(LayerId(0), LayerId(1)), plan.map { it.layer.id })
+        assertEquals(0.2f, (plan[1] as CompositeStep.Draw).opacity, 1e-6f)
+        // 숨긴 그룹·불투명도 0인 그룹 안은 빠진다
+        assertEquals(1, CompositePlan.of(document(layer(0), child, inner, outer.copy(visible = false))).size)
+        assertEquals(1, CompositePlan.of(document(layer(0), child, inner.copy(opacity = 0f), outer)).size)
+        // 일부만 넘긴 목록(병합)은 목록에 없는 그룹을 보지 않는다
+        assertEquals(0.5f, (CompositePlan.of(listOf(child)).single() as CompositeStep.Draw).opacity, 0f)
+    }
 }

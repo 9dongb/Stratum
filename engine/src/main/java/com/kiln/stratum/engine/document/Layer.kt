@@ -43,6 +43,12 @@ data class RasterContent(val raster: Raster) : LayerContent
 data object AdjustmentContent : LayerContent
 
 /**
+ * 레이어 그룹(통과)의 내용(결정 기록 '피부 보정'의 1g): 그리지 않고, 안의 레이어(자손)에 보이기와 불투명도를 물려준다.
+ * 자손은 [Layer.parent]로 이 그룹을 가리키고 목록에서 이 그룹 바로 아래에 이어 놓인다([LayerTree]).
+ */
+data object GroupContent : LayerContent
+
+/**
  * 문서 안의 레이어 하나. 한 번 만들면 바꾸지 않고, 바꿀 때는 copy로 새 레이어를 만든다.
  *
  * @property name 화면에 보이는 이름. 엔진은 문구를 만들지 않으므로 앱이 strings.xml에서 만들어 넘긴다.
@@ -57,6 +63,7 @@ data object AdjustmentContent : LayerContent
  * @property mask 레이어 마스크(결정 기록 '피부 보정'의 1c): 문서 크기의 알파(255 보임, 0 가림). 선택 영역과 같은 알파 타일이고
  *   없는 타일은 가리며, 다 보이는 타일([com.kiln.stratum.engine.selection.MaskTile.FULL])은 메모리를 쓰지 않는다. 그릴 때 보정을 건 레이어 색에 곱한다.
  *   픽셀을 바꿔도 그대로 남는다(포토샵과 같다). 없으면 null(다 보임).
+ * @property parent 이 레이어를 감싼 그룹(결정 기록 '피부 보정'의 1g). 그룹 밖이면 null이다. 규칙은 [LayerTree].
  */
 data class Layer(
     val id: LayerId,
@@ -69,7 +76,8 @@ data class Layer(
     val visible: Boolean = true,
     val text: TextSpec? = null,
     val liquify: LiquifyRecord? = null,
-    val mask: Selection? = null
+    val mask: Selection? = null,
+    val parent: LayerId? = null
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }

@@ -4,7 +4,10 @@ import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
+import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
@@ -73,7 +76,7 @@ data class CropImage(
  * 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사, 결정 기록 '회전·뒤집기·자르기는 안드로이드 내부 복사'와 같다). 타일 크기의 배수만큼 옮기면 타일을 그대로 쓴다.
  * 게인맵(HDR)도 같은 비율만큼 옮기고, 레이어 마스크도 같이 옮긴다(결정 기록 '피부 보정'의 1c). 선택 영역·다른 레이어·레이어 속성은 그대로다.
  * 그 레이어가 없으면 그대로 둔다. 글자 레이어(사용자 피드백 8차 1-6)는 픽셀을 옮기지 않고 글자를 새 자리에 다시 그린다. 그래서 고칠 수 있는 채로 남고,
- * 캔버스 밖으로 나갔다가 돌아와도 글자가 남는다.
+ * 캔버스 밖으로 나갔다가 돌아와도 글자가 남는다. 그룹이면 안의 레이어를 모두 옮긴다(결정 기록 '피부 보정'의 1g).
  */
 data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : CancellableCommand {
 
@@ -81,35 +84,43 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         if (dx == 0 && dy == 0) return document
         val index = document.indexOfLayer(layer)
         if (index < 0) return document
-        val target = document.layers[index]
         val plan = TransformPlan.translate(document.size, dx, dy)
-        // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
-        if (target.content is AdjustmentContent) {
-            val mask = target.mask ?: return document
-            val layers = document.layers.toMutableList()
-            layers[index] = target.copy(mask = movedMask(mask, plan, checkCanceled))
-            return document.copy(layers = layers)
+        // 그룹은 안의 레이어를 모두 옮긴다(한 단계, 결정 기록 '피부 보정'의 1g)
+        val layers = document.layers.toMutableList()
+        for (i in LayerTree.blockOf(document.layers, index)) {
+            layers[i] = moved(document, document.layers[i], plan, checkCanceled) ?: return document
         }
-        val raster = (target.content as? RasterContent)?.raster ?: return document
+        return document.copy(layers = layers)
+    }
+
+    /** [target]을 [plan]대로 옮긴 레이어. 글자를 다시 그리지 못하면 null(문서를 그대로 둔다). */
+    private fun moved(document: Document, target: Layer, plan: TransformPlan, checkCanceled: () -> Unit): Layer? {
+        val raster = when (val content = target.content) {
+            is RasterContent -> content.raster
+            // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
+            AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled))
+            // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김)
+            GroupContent -> return target
+        }
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())
-            val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return document
-            val layers = document.layers.toMutableList()
-            layers[index] = target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, checkCanceled))
-            return document.copy(layers = layers)
+            val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return null
+            return target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, checkCanceled))
         }
         return try {
             val moved = RasterTransform.transform(raster, plan, CanvasTileComposer, checkCanceled)
             val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
-            val layers = document.layers.toMutableList()
-            layers[index] = target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
-            document.copy(layers = layers)
+            target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
     }
 
-    override fun estimateNewBytes(document: Document): Long = layerTileBytes(document, layer)
+    override fun estimateNewBytes(document: Document): Long {
+        val index = document.indexOfLayer(layer)
+        if (index < 0) return 0L
+        return LayerTree.blockOf(document.layers, index).sumOf { layerTileBytes(document, document.layers[it].id) }
+    }
 }
 
 /**

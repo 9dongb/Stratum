@@ -4,15 +4,18 @@ import android.graphics.Bitmap
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyMeshCodec
 import com.kiln.stratum.engine.project.AdjustmentEntry
 import com.kiln.stratum.engine.project.GainmapEntry
+import com.kiln.stratum.engine.project.GroupEntry
 import com.kiln.stratum.engine.project.LayerEntry
 import com.kiln.stratum.engine.project.LiquifyEntry
 import com.kiln.stratum.engine.project.MaskTileEntry
@@ -110,6 +113,7 @@ class ProjectFolder(val directory: File) {
             val content = when (val content = layer.content) {
                 is RasterContent -> RasterEntry(entriesOf(content.raster))
                 AdjustmentContent -> AdjustmentEntry
+                GroupContent -> GroupEntry
             }
             // 유동화 기록: 원래 픽셀은 결과와 바뀌지 않은 타일을 함께 써서 바뀐 타일만 더 쓴다
             val liquify = layer.liquify?.let { record ->
@@ -131,7 +135,7 @@ class ProjectFolder(val directory: File) {
             }
             LayerEntry(
                 layer.id.value, layer.name, layer.opacity, layer.blendMode, content, layer.adjustments,
-                layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask
+                layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask, layer.parent?.value
             )
         }
         val manifest = ProjectManifest(
@@ -226,6 +230,7 @@ class ProjectFolder(val directory: File) {
             val content = when (val content = entry.content) {
                 is RasterEntry -> RasterContent(rasterOf(content.tiles, grid))
                 AdjustmentEntry -> AdjustmentContent
+                GroupEntry -> GroupContent
             }
             try {
                 val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
@@ -233,14 +238,16 @@ class ProjectFolder(val directory: File) {
                 val mask = entry.mask?.let { maskOf(it) }
                 Layer(
                     LayerId(entry.id), entry.name, content, entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text,
-                    liquify, mask
+                    liquify, mask, entry.parent?.let(::LayerId)
                 )
             } catch (e: IllegalArgumentException) {
                 throw UnreadableProjectException("Broken layer ${entry.id}: ${e.message}")
             }
         }
+        // 그룹 규칙이 깨진 파일이면 그룹을 풀고(안의 레이어는 그룹 밖으로) 픽셀은 살린다(결정 기록 '피부 보정'의 1g)
+        val tree = if (LayerTree.problem(layers) == null) layers else layers.map { it.copy(parent = null) }
         val document = try {
-            Document(manifest.width, manifest.height, layers, manifest.nextLayerId, colorSpace = manifest.colorSpace, hdr = manifest.hdr)
+            Document(manifest.width, manifest.height, tree, manifest.nextLayerId, colorSpace = manifest.colorSpace, hdr = manifest.hdr)
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken document: ${e.message}")
         }
@@ -269,7 +276,7 @@ class ProjectFolder(val directory: File) {
             layer.mask?.forEach { tile -> tile.file?.let { masks += it } }
             val entries = when (val content = layer.content) {
                 is RasterEntry -> content.tiles
-                AdjustmentEntry -> emptyList()
+                AdjustmentEntry, GroupEntry -> emptyList()
             } + layer.gainmap?.tiles.orEmpty() + layer.liquify?.base.orEmpty() + layer.liquify?.baseGainmap?.tiles.orEmpty()
             for (tile in entries) {
                 when (val ref = tile.ref) {

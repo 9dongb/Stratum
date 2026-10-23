@@ -3,7 +3,10 @@ package com.kiln.stratum.engine.command
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.GroupContent
+import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.document.liquifySource
@@ -20,6 +23,7 @@ import com.kiln.stratum.engine.document.Document
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.Assert.assertNull
 
@@ -376,5 +380,93 @@ class LayerCommandsTest {
         val all = checkNotNull(AddAdjustmentLayer("Adjust", 2).applyTo(document).layers[2].mask)
         assertEquals(setOf(TileKey(0, 0)), all.tiles.keys)
         assertSame(MaskTile.FULL, all.tiles[TileKey(0, 0)])
+    }
+
+    /** 아래부터 레이어 0, 1, 2와 그 위 그룹 3(안에 1, 2) */
+    private fun grouped(): Document {
+        val base = documentWithLayers(3)
+        val layers = base.layers.mapIndexed { i, layer -> if (i == 0) layer else layer.copy(parent = LayerId(3)) } +
+            Layer(LayerId(3), "G", GroupContent, opacity = 0.5f)
+        return base.copy(layers = layers, nextLayerId = 4)
+    }
+
+    @Test
+    fun groupLayer_wrapsTheLayerInANewGroupRightAboveIt() {
+        val document = documentWithLayers(2)
+
+        val grouped = GroupLayer(LayerId(0), "Group").applyTo(document)
+
+        assertEquals(listOf(0L, 2L, 1L), grouped.layerIds())
+        assertSame(GroupContent, grouped.layers[1].content)
+        assertEquals("Group", grouped.layers[1].name)
+        assertEquals(LayerId(2), grouped.layers[0].parent)
+        assertNull(grouped.layers[1].parent)
+        assertNull(LayerTree.problem(grouped.layers))
+        // 그룹 안의 레이어를 묶으면 새 그룹은 그 그룹 안이다
+        val nested = GroupLayer(LayerId(1), "Inner").applyTo(grouped())
+        assertEquals(LayerId(3), nested.layers[nested.indexOfLayer(LayerId(4))].parent)
+        assertNull(LayerTree.problem(nested.layers))
+    }
+
+    @Test
+    fun ungroupLayer_keepsTheLook_byHandingDownOpacityAndVisibility() {
+        val document = grouped()
+
+        val ungrouped = UngroupLayer(LayerId(3)).applyTo(document)
+
+        assertEquals(listOf(0L, 1L, 2L), ungrouped.layerIds())
+        assertTrue(ungrouped.layers.all { it.parent == null })
+        assertEquals(0.5f, ungrouped.layers[1].opacity, 0f)
+        val hidden = UngroupLayer(LayerId(3)).applyTo(document.copy(layers = document.layers.map { if (it.id == LayerId(3)) it.copy(visible = false) else it }))
+        assertTrue(hidden.layers.drop(1).none { it.visible })
+        // 그룹이 아니면 그대로다
+        assertSame(document, UngroupLayer(LayerId(1)).applyTo(document))
+    }
+
+    @Test
+    fun duplicateAndDelete_takeTheGroupWithItsLayers() {
+        val document = grouped()
+
+        val duplicated = DuplicateLayer(LayerId(3), "G copy").applyTo(document)
+        assertEquals(listOf(0L, 1L, 2L, 3L, 4L, 5L, 6L), duplicated.layerIds())
+        assertEquals(7L, duplicated.nextLayerId)
+        assertEquals("G copy", duplicated.layers[6].name)
+        assertEquals(listOf(LayerId(6), LayerId(6)), duplicated.layers.subList(4, 6).map { it.parent })
+        assertNull(LayerTree.problem(duplicated.layers))
+
+        val deleted = DeleteLayer(LayerId(3)).applyTo(document)
+        assertEquals(listOf(0L), deleted.layerIds())
+        // 모두 지워지면 지우지 않는다
+        val all = document.copy(layers = document.layers.map { if (it.id == LayerId(0)) it.copy(parent = LayerId(3)) else it })
+        assertSame(all, DeleteLayer(LayerId(3)).applyTo(all))
+    }
+
+    @Test
+    fun moveLayer_entersAndLeavesGroups_andKeepsGroupsWhole() {
+        val document = grouped()
+
+        // 레이어 0을 그룹 안 맨 위로
+        val entered = MoveLayer(LayerId(0), 2, parent = LayerId(3)).applyTo(document)
+        assertEquals(listOf(1L, 2L, 0L, 3L), entered.layerIds())
+        assertEquals(LayerId(3), entered.layers[2].parent)
+        // 그룹 안의 레이어를 그룹 밖 맨 위로
+        val left = MoveLayer(LayerId(1), 3, parent = null).applyTo(document)
+        assertEquals(listOf(0L, 2L, 3L, 1L), left.layerIds())
+        assertNull(left.layers[3].parent)
+        // 그룹은 자손과 함께 옮긴다(맨 아래로)
+        val group = MoveLayer(LayerId(3), 2).applyTo(document)
+        assertEquals(listOf(1L, 2L, 3L, 0L), group.layerIds())
+        assertNull(LayerTree.problem(group.layers))
+        // 그룹 사이를 가르는 자리는 옮기지 않는다
+        assertSame(document, MoveLayer(LayerId(0), 1, parent = null).applyTo(document))
+    }
+
+    @Test
+    fun addLayer_goesIntoTheGivenGroup() {
+        val added = AddLayer("New", 3, parent = LayerId(3)).applyTo(grouped())
+
+        assertEquals(listOf(0L, 1L, 2L, 4L, 3L), added.layerIds())
+        assertEquals(LayerId(3), added.layers[3].parent)
+        assertNull(LayerTree.problem(added.layers))
     }
 }

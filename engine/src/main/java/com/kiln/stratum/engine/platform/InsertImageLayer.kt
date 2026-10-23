@@ -32,7 +32,8 @@ class InsertImageLayer(
     private val source: ImageDecoder.Source,
     val info: PhotoInfo,
     val name: String,
-    val index: Int
+    val index: Int,
+    val parent: LayerId? = null
 ) : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
@@ -47,7 +48,7 @@ class InsertImageLayer(
             val origin = InsertSizing.centered(size, documentSize)
             val plan = TransformPlan.place(size, PixelRect.of(size), Orientation.IDENTITY, documentSize, origin.x, origin.y)
             val placed = RasterTransform.transform(image, plan, CanvasTileComposer, checkCanceled)
-            val layer = Layer(LayerId(document.nextLayerId), name, RasterContent(placed))
+            val layer = Layer(LayerId(document.nextLayerId), name, RasterContent(placed), parent = parent)
             val layers = document.layers.toMutableList().apply { add(index, layer) }
             document.copy(layers = layers, nextLayerId = document.nextLayerId + 1)
         } catch (e: OutOfMemoryError) {

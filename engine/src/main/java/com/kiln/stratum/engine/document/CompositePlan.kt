@@ -11,20 +11,33 @@ import com.kiln.stratum.engine.selection.Selection
  */
 object CompositePlan {
 
-    /** [document]를 아래부터 그릴 단계. 보이지 않는 레이어(숨김·불투명도 0)는 빠진다. */
+    /** [document]를 아래부터 그릴 단계. 보이지 않는 레이어(숨김·불투명도 0, 숨기거나 불투명도가 0인 그룹 안)는 빠진다. */
     fun of(document: Document): List<CompositeStep> = of(document.layers)
 
-    /** [layers](아래부터)를 그릴 단계. 병합처럼 문서의 일부만 그릴 때 쓴다. */
-    fun of(layers: List<Layer>): List<CompositeStep> =
-        layers.mapNotNull { layer ->
-            if (!layer.isShown) return@mapNotNull null
+    /** [layers](아래부터)를 그릴 단계. 병합처럼 문서의 일부만 그릴 때 쓴다(그때 목록에 없는 그룹은 보지 않는다). */
+    fun of(layers: List<Layer>): List<CompositeStep> {
+        val groups = layers.filter { it.content is GroupContent }.associateBy { it.id }
+        return layers.mapNotNull { layer ->
+            // 그룹(통과)은 그리지 않고, 안의 레이어에 보이기와 불투명도를 물려준다(결정 기록 '피부 보정'의 1g)
+            var visible = layer.visible
+            var opacity = layer.opacity
+            var parent = layer.parent?.let(groups::get)
+            var depth = 0
+            while (parent != null && depth++ < layers.size) {
+                visible = visible && parent.visible
+                opacity *= parent.opacity
+                parent = parent.parent?.let(groups::get)
+            }
+            if (!visible || opacity <= 0f) return@mapNotNull null
             when (val content = layer.content) {
-                is RasterContent -> CompositeStep.Draw(layer, content.raster, layer.opacity, layer.mask)
+                is RasterContent -> CompositeStep.Draw(layer, content.raster, opacity, layer.mask)
                 // 바꾸는 것이 없는 표준 조정 레이어는 그릴 것이 없다(다른 혼합 모드는 보정이 없어도 아래를 자기와 섞어 바꾼다)
                 AdjustmentContent ->
-                    if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) null else CompositeStep.Adjust(layer, layer.opacity, layer.mask)
+                    if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) null else CompositeStep.Adjust(layer, opacity, layer.mask)
+                GroupContent -> null
             }
         }
+    }
 
     /** [document]에서 그려지는 레이어들(아래부터). 병합·스포이드처럼 '보이는 레이어'를 다루는 곳이 쓴다. */
     fun shownLayers(document: Document): List<Layer> = of(document).map { it.layer }
@@ -36,12 +49,15 @@ sealed interface CompositeStep {
     /** 이 단계를 만든 레이어 */
     val layer: Layer
 
+    /** 얹는 불투명도: 레이어 불투명도에 감싼 그룹들의 불투명도를 곱한 값(결정 기록 '피부 보정'의 1g) */
+    val opacity: Float
+
     /**
      * 픽셀 레이어 하나를 그 레이어의 보정을 건 채 [opacity]와 혼합 모드로 아래에 얹는다.
-     * [opacity]는 얹을 때 쓰는 불투명도다(지금은 레이어 불투명도, 그룹이 생기면 그룹 불투명도를 곱한 값).
+     * [opacity]는 얹을 때 쓰는 불투명도다(레이어 불투명도에 감싼 그룹들의 불투명도를 곱한 값, 결정 기록 '피부 보정'의 1g).
      * [mask]가 있으면 보정을 건 색에 그 알파를 곱한다(레이어 마스크, 결정 기록 '피부 보정'의 1c). 마스크 타일이 없는 자리는 그리지 않는다.
      */
-    class Draw(override val layer: Layer, val raster: Raster, val opacity: Float, val mask: Selection? = null) : CompositeStep {
+    class Draw(override val layer: Layer, val raster: Raster, override val opacity: Float, val mask: Selection? = null) : CompositeStep {
 
         val blendMode: BlendMode
             get() = layer.blendMode
@@ -63,7 +79,7 @@ sealed interface CompositeStep {
      * 알파는 아래 그대로라 투명한 곳은 그대로다. 그리는 쪽은 아래를 그림으로 만들어 다시 그린다(여러 번 그리기, `AdjustLayerShader`).
      * [mask]가 없으면 모든 곳에 건다. [opacity]는 얹을 때 쓰는 불투명도다(그리기 단계와 같다).
      */
-    class Adjust(override val layer: Layer, val opacity: Float, val mask: Selection? = null) : CompositeStep {
+    class Adjust(override val layer: Layer, override val opacity: Float, val mask: Selection? = null) : CompositeStep {
 
         val blendMode: BlendMode
             get() = layer.blendMode

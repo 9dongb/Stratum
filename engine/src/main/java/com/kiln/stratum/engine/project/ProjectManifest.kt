@@ -24,7 +24,7 @@ import java.io.OutputStream
 
 /**
  * 프로젝트 파일 형식의 판. 이 앱이 읽을 수 있는 가장 높은 판이다.
- * 판 2는 레이어 마스크(결정 기록 '피부 보정'의 1c)와 조정 레이어(1e)를 담는다. 앞 판 앱이 그것을 빼고 열면 보이는 모습이 달라지므로,
+ * 판 2는 레이어 마스크(결정 기록 '피부 보정'의 1c)·조정 레이어(1e)·레이어 그룹(1g)을 담는다. 앞 판 앱이 그것을 빼고 열면 보이는 모습이 달라지므로,
  * 그것이 있는 프로젝트만 판 2로 쓰고 나머지는 판 1 그대로다([ProjectManifest.formatVersion]).
  */
 const val PROJECT_FORMAT_VERSION = 2
@@ -58,9 +58,9 @@ data class ProjectManifest(
     val header: ProjectHeader
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
 
-    /** 이 목차를 쓸 판: 레이어 마스크나 조정 레이어가 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
+    /** 이 목차를 쓸 판: 레이어 마스크·조정 레이어·그룹이 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
     val formatVersion: Int
-        get() = if (layers.any { it.mask != null || it.content is AdjustmentEntry }) 2 else 1
+        get() = if (layers.any { it.mask != null || it.content is AdjustmentEntry || it.content is GroupEntry || it.parent != null }) 2 else 1
 }
 
 /**
@@ -81,7 +81,8 @@ data class LayerEntry(
     val visible: Boolean = true,
     val text: TextSpec? = null,
     val liquify: LiquifyEntry? = null,
-    val mask: List<MaskTileEntry>? = null
+    val mask: List<MaskTileEntry>? = null,
+    val parent: Long? = null
 )
 
 /**
@@ -123,6 +124,9 @@ data class RasterEntry(val tiles: List<TileEntry>) : ContentEntry
 /** 조정 레이어(판 2, 결정 기록 '피부 보정'의 1e). 픽셀이 없고, 보정 값은 레이어 덧붙임(꼬리표 1·6)에 있다. */
 data object AdjustmentEntry : ContentEntry
 
+/** 레이어 그룹(통과, 판 2, 결정 기록 '피부 보정'의 1g). 안의 레이어는 덧붙임 꼬리표 8로 이 그룹을 가리킨다. */
+data object GroupEntry : ContentEntry
+
 /** [column]·[row] 자리의 타일 */
 data class TileEntry(val column: Int, val row: Int, val ref: TileRef)
 
@@ -163,6 +167,9 @@ object ProjectManifestCodec {
     /** 내용 종류: 조정 레이어(판 2) */
     private const val CONTENT_ADJUSTMENT = 2
 
+    /** 내용 종류: 레이어 그룹(판 2) */
+    private const val CONTENT_GROUP = 3
+
     /** 레이어 덧붙임 꼬리표: 기본 보정 값 */
     private const val EXTRA_ADJUSTMENTS = 1
 
@@ -186,6 +193,9 @@ object ProjectManifestCodec {
 
     /** 레이어 덧붙임 꼬리표: 레이어 마스크의 타일 목록(판 2, 결정 기록 '피부 보정'의 1c). 마스크가 없으면 적지 않는다. */
     private const val EXTRA_MASK = 7
+
+    /** 레이어 덧붙임 꼬리표: 감싼 그룹의 레이어 번호(long, 판 2, 결정 기록 '피부 보정'의 1g). 그룹 밖이면 적지 않는다. */
+    private const val EXTRA_PARENT = 8
 
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
@@ -219,6 +229,7 @@ object ProjectManifestCodec {
                     writeTiles(out, content.tiles)
                 }
                 AdjustmentEntry -> out.writeInt(CONTENT_ADJUSTMENT)
+                GroupEntry -> out.writeInt(CONTENT_GROUP)
             }
             // 레이어 덧붙임: 보정 값·틴트·게인맵(있을 때만)
             val extras = ArrayList<Pair<Int, ByteArray>>()
@@ -229,6 +240,7 @@ object ProjectManifestCodec {
             layer.text?.let { extras += EXTRA_TEXT to textBytes(it) }
             layer.liquify?.let { extras += EXTRA_LIQUIFY to liquifyBytes(it) }
             layer.mask?.let { extras += EXTRA_MASK to maskBytes(it) }
+            layer.parent?.let { extras += EXTRA_PARENT to ByteArrayOutputStream().also { out -> DataOutputStream(out).writeLong(it) }.toByteArray() }
             writeExtras(out, extras)
         }
         // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
@@ -255,6 +267,7 @@ object ProjectManifestCodec {
                 val content = when (val type = data.readInt()) {
                     CONTENT_RASTER -> RasterEntry(readTiles(data))
                     CONTENT_ADJUSTMENT -> AdjustmentEntry
+                    CONTENT_GROUP -> GroupEntry
                     else -> throw UnreadableProjectException("Unknown layer content $type")
                 }
                 var adjustments = Adjustments.NONE
@@ -264,6 +277,7 @@ object ProjectManifestCodec {
                 var text: TextSpec? = null
                 var liquify: LiquifyEntry? = null
                 var mask: List<MaskTileEntry>? = null
+                var parent: Long? = null
                 data.readExtras { tag, bytes ->
                     when (tag) {
                         EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
@@ -273,9 +287,10 @@ object ProjectManifestCodec {
                         EXTRA_LIQUIFY -> liquify = liquifyOrNull(bytes)
                         EXTRA_TINT -> tint = DataInputStream(ByteArrayInputStream(bytes)).readFloat()
                         EXTRA_MASK -> mask = maskOf(bytes)
+                        EXTRA_PARENT -> parent = DataInputStream(ByteArrayInputStream(bytes)).readLong()
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify, mask)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify, mask, parent)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null

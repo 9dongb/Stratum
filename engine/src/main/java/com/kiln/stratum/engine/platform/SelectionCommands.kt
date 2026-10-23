@@ -232,7 +232,9 @@ data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: 
             // 게인맵은 함께 쓴다. 고르지 않은 곳은 알파가 0이라 상관없다(결정 기록 'HDR').
             gainmap = layer.gainmap,
             // 마스크도 함께 써서 원래 레이어에서 보이던 그대로다(결정 기록 '피부 보정'의 1c)
-            mask = layer.mask
+            mask = layer.mask,
+            // 원래 레이어 바로 위, 같은 그룹 안이다(결정 기록 '피부 보정'의 1g)
+            parent = layer.parent
         )
         val layers = document.layers.toMutableList()
         if (cut) layers[index] = layer.withPixels(SelectedPixels.cut(raster, selection, size, checkCanceled))

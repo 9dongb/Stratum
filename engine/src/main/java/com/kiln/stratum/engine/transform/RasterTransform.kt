@@ -2,6 +2,7 @@ package com.kiln.stratum.engine.transform
 
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelRect
@@ -51,6 +52,8 @@ object RasterTransform {
                 }
                 // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
                 AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
+                // 그룹은 그리는 것이 없다(안의 레이어가 따로 바뀐다, 1g)
+                GroupContent -> layer
             }
         }
         // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')

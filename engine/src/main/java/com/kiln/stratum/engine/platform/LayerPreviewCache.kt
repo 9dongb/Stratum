@@ -17,8 +17,10 @@ import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.preview.PreviewLevels
@@ -132,10 +134,12 @@ class LayerPreviewCache {
             previews[step] = bitmap
         }
         val moving = shift?.takeIf { it.dx != 0 || it.dy != 0 }
+        // 옮기는 레이어들: 그룹이면 안의 레이어 모두(결정 기록 '피부 보정'의 1g)
+        val movingIds = moving?.let { LayerTree.idsWith(document.layers, it.layerId) } ?: emptySet()
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
         (steps.singleOrNull() as? CompositeStep.Draw)?.let { step ->
             val bitmap = previews[step]
-            if (bitmap != null && step.isPlain && step.layer.id != moving?.layerId) return bitmap
+            if (bitmap != null && step.isPlain && step.layer.id !in movingIds) return bitmap
         }
         val width = region.previewWidth
         val height = region.previewHeight
@@ -145,7 +149,7 @@ class LayerPreviewCache {
         var below: Bitmap? = null
         for (step in steps) {
             // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL). 마스크도 같이 옮긴다.
-            val offset = if (step.layer.id == moving?.layerId) {
+            val offset = if (moving != null && step.layer.id in movingIds) {
                 val scale = 1f / (1 shl level)
                 Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) }
             } else {
@@ -557,7 +561,7 @@ class LayerPreviewCache {
         when (val content = layer.content) {
             is RasterContent -> content.raster
             // 조정 레이어는 픽셀이 없다(빈 래스터로 보아 축소본·작은 그림을 그리지 않는다)
-            AdjustmentContent -> Raster.EMPTY
+            AdjustmentContent, GroupContent -> Raster.EMPTY
         }
 
     companion object {

@@ -31,6 +31,7 @@ import kotlin.math.floor
  * 문서 밖으로 나간 부분은 버린다. 글자가 비었거나 문서에 하나도 닿지 않으면 문서를 그대로 돌려준다.
  *
  * @property name 새 레이어 이름. 앱이 정한다(글자의 앞부분 등).
+ * @property parent 새 레이어가 들어갈 그룹(결정 기록 '피부 보정'의 1g). 그 그룹 안 자리여야 한다.
  */
 data class AddTextLayer(
     val text: String,
@@ -38,14 +39,15 @@ data class AddTextLayer(
     val y: Float,
     val style: TextStyle,
     val name: String,
-    val index: Int
+    val index: Int,
+    val parent: LayerId? = null
 ) : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         require(index in 0..document.layers.size) { "Layer index out of range: $index" }
         val drawn = TextRenderer.draw(text, x, y, style, document, checkCanceled) ?: return document
         if (drawn.raster.tiles.isEmpty()) return document
-        val layer = Layer(LayerId(document.nextLayerId), name, RasterContent(drawn.raster), text = drawn.spec)
+        val layer = Layer(LayerId(document.nextLayerId), name, RasterContent(drawn.raster), text = drawn.spec, parent = parent)
         val layers = document.layers.toMutableList().apply { add(index, layer) }
         return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1)
     }

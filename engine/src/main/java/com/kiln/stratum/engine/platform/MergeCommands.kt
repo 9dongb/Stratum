@@ -9,8 +9,10 @@ import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
@@ -53,9 +55,14 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
     /**
      * [index] 레이어를 아래와 합칠 수 있는지: 맨 아래가 아니고, 두 레이어가 다 보이고, 아래가 픽셀 레이어다.
      * 위가 조정 레이어면 아래 레이어 픽셀에만 보정을 굳힌다(결정 기록 '피부 보정'의 1e). 조정 레이어 위로는 합치지 않는다.
+     * 그룹은 합치지 않고, 같은 그룹 안의 이웃끼리만 합친다(그룹 경계를 넘지 않음, 1g).
      */
-    private fun canMerge(document: Document, index: Int): Boolean =
-        index > 0 && document.layers[index].visible && document.layers[index - 1].visible && document.layers[index - 1].content is RasterContent
+    private fun canMerge(document: Document, index: Int): Boolean {
+        if (index <= 0) return false
+        val upper = document.layers[index]
+        val lower = document.layers[index - 1]
+        return upper.visible && lower.visible && upper.content !is GroupContent && lower.content is RasterContent && upper.parent == lower.parent
+    }
 
     /** 합칠 두 레이어. 아래 레이어의 불투명도·혼합 모드는 결과 레이어에 그대로 남으므로 픽셀에는 넣지 않는다(보정은 굳힌다). */
     private fun mergedLayers(document: Document, index: Int): List<Layer> =
@@ -68,37 +75,55 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
  * 결과는 그 레이어의 번호·이름을 지니고 표준·100%·보정·마스크 없음이라, 화면에 보이던 모습 그대로다.
  * 숨긴(눈을 끈·0%) 레이어는 제자리에 그대로 남는다. 합칠 레이어([mergedLayers])가 둘보다 적으면 그대로 둔다.
  * 그 픽셀 레이어보다 아래에 보이는 조정 레이어는 숨긴 레이어만 바꾸므로 합치지 않고 그대로 둔다(결정 기록 '피부 보정'의 1e).
+ *
+ * 그룹(1g): 그룹이 물려준 보이기·불투명도대로 합치고, 결과는 그룹 밖(맨 위 단계)이다. 안의 레이어를 다 합친 그룹은 지우고, 숨긴 레이어가 남은 그룹은 남긴다.
+ * 결과는 가장 아래 합친 레이어가 있던 자리이고, 그 자리가 남은 그룹 안이면 그 그룹(가장 바깥) 바로 아래다.
  */
 data object MergeVisible : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
-        val visible = mergedLayers(document)
-        if (visible.size < 2) return document
-        val base = visible.first()
-        val merged = LayerMerger.merge(document, visible, checkCanceled)
-        val gainmap = GainmapEdits.merge(document, visible, checkCanceled)
-        val result = base.withPixels(merged, gainmap).copy(opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE, mask = null)
-        val mergedIds = visible.mapTo(HashSet()) { it.id }
-        val layers = document.layers.mapNotNull { layer ->
-            when {
-                layer.id == base.id -> result
-                layer.id in mergedIds -> null
-                else -> layer
-            }
+        val steps = mergedSteps(document)
+        if (steps.size < 2) return document
+        val base = steps.first().layer
+        // 그룹이 물려준 보이기·불투명도로 합친다(보이던 그대로)
+        val flat = steps.map { it.layer.copy(opacity = it.opacity, visible = true, parent = null) }
+        val merged = LayerMerger.merge(document, flat, checkCanceled)
+        val gainmap = GainmapEdits.merge(document, flat, checkCanceled)
+        val result = base.withPixels(merged, gainmap).copy(opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE, mask = null, parent = null)
+        val mergedIds = steps.mapTo(HashSet()) { it.layer.id }
+        val removed = HashSet(mergedIds)
+        // 안의 그리는 레이어를 다 합친 그룹은 덩어리째 지운다(숨긴 레이어가 남은 그룹은 남김)
+        for ((index, layer) in document.layers.withIndex()) {
+            if (layer.content !is GroupContent) continue
+            val block = LayerTree.blockOf(document.layers, index)
+            val leaves = block.map { document.layers[it] }.filter { it.content !is GroupContent }
+            if (leaves.isNotEmpty() && leaves.all { it.id in mergedIds }) block.forEach { removed += document.layers[it].id }
         }
-        return document.copy(layers = layers)
+        val kept = document.layers.filter { it.id !in removed }.toMutableList()
+        val baseIndex = document.indexOfLayer(base.id)
+        // 결과 자리: 가장 아래 합친 레이어가 있던 곳. 남은 그룹 안이면 그 그룹(가장 바깥) 바로 아래로 내려 그룹 밖에 둔다.
+        val outer = LayerTree.ancestors(document.layers, base).lastOrNull()?.takeIf { it.id !in removed }
+        val at = if (outer != null) {
+            LayerTree.blockOf(kept, kept.indexOfFirst { it.id == outer.id }).first
+        } else {
+            kept.count { document.indexOfLayer(it.id) < baseIndex }
+        }
+        kept.add(at, result)
+        return document.copy(layers = kept)
     }
 
     override fun estimateNewBytes(document: Document): Long {
-        val visible = mergedLayers(document)
-        return if (visible.size < 2) 0L else LayerMerger.estimateNewBytes(visible)
+        val steps = mergedSteps(document)
+        return if (steps.size < 2) 0L else LayerMerger.estimateNewBytes(steps.map { it.layer.copy(opacity = it.opacity, parent = null) })
     }
 
     /**
      * 합칠 레이어(아래부터): 합성 계획이 그리는 레이어(결정 기록 '피부 보정'의 1단계) 가운데 가장 아래 픽셀 레이어부터 위로다.
      * 맨 앞이 결과가 될 레이어다. 앱이 메뉴를 켜고 결과 레이어를 고를 때도 쓴다.
      */
-    fun mergedLayers(document: Document): List<Layer> = CompositePlan.shownLayers(document).dropWhile { it.content !is RasterContent }
+    fun mergedLayers(document: Document): List<Layer> = mergedSteps(document).map { it.layer }
+
+    private fun mergedSteps(document: Document): List<CompositeStep> = CompositePlan.of(document).dropWhile { it !is CompositeStep.Draw }
 }
 
 /**

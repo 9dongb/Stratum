@@ -7,6 +7,7 @@ import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.raster.PixelSize
@@ -24,7 +25,8 @@ import com.kiln.stratum.engine.selection.Selection
 data class AddLayerMask(val layerId: LayerId) : EditCommand {
     override fun applyTo(document: Document): Document {
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return document
-        if (layer.mask != null) return document
+        // 그룹에는 마스크를 두지 않는다(픽셀·조정 레이어만, 결정 기록 '피부 보정'의 1g)
+        if (layer.mask != null || layer.content is GroupContent) return document
         val mask = document.selection ?: Selection.all(PixelSize(document.width, document.height))
         return document.withLayer(layer.copy(mask = mask)).copy(selection = null)
     }
