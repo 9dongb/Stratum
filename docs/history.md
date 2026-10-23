@@ -14,6 +14,20 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 1i: 1단계 전체 에뮬레이터 테스트와 APK
+
+- 요청: 승인된 피부 보정 계획의 1단계 마지막 작은 단계(전체 에뮬레이터 테스트)와 큰 단계 보고 때 APK를 구글 드라이브에 올리기(계획). 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "피부 보정 1단계 전체 에뮬레이터 테스트 결과와 APK를 기록함"
+- 바꾼 것
+  - 기록: progress.md(진행 중 1i·남은 일, 진행표, 기술 주의점의 테스트 시간), 이 항목. 앱 코드는 그대로다.
+- 확인한 것
+  - 에뮬레이터(Pixel_Fold, 자동 회전 끔, 다른 세션은 쉼), 검토 커밋(1d8b4d4)의 앱:
+    - 접은 상태 전체(115개 클래스, 00:57~01:21): 924개 중 922개 통과(조건이 맞지 않아 건너뛴 것 포함). 실패 2개는 `ResizeDialogTest.medium_statusAndControlsStayInView`(접은 상태에서만 실패하는 것, progress.md 기술 주의점)와 `HomeProjectsTest.tappingTheName_renames`다. 뒤의 것은 다시 두 번 돌려 클래스 14개가 모두 통과했다(홈 화면 코드는 12차 뒤로 그대로).
+    - 펼친 상태: 1단계가 바꾼 화면의 배치 테스트 10개 클래스(LayerPanel·FloatingPanel·AdjustPanel·EditScreenLayout·LiquifyMode·MoveTool·EditTools·TextEdit·ResizeDialog·CoverLandscape) 159개 모두 통과(01:23~01:39). 접은 상태에서만 실패하는 `ResizeDialogTest`도 통과했다.
+  - APK `Stratum-debug-20261024-1d8b4d4.apk`(180,785,081바이트)를 구글 드라이브에 올렸다(올라감 확인).
+
 ## 2026-10-24 · 피부 보정 1i: 1단계 스스로 검토에서 찾은 것을 고침
 
 - 요청: 승인된 피부 보정 계획의 1단계 마지막 작은 단계(스스로 검토와 전체 에뮬레이터 테스트). 사용자 원문은 `docs/skin-retouch-plan.md`.
