@@ -43,6 +43,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1163,10 +1164,13 @@ fun EditScreen(
                                 Box(if (coverAdjust) Modifier.testTag(EditScreenTags.ADJUST_PANEL) else Modifier) {
                                     // 칩이 없는 도구는 도구 이름을 흐린 글자로 보인다
                                     val empty = activeTool?.let { stringResource(it.shortLabel) }
-                                    if (coverLandscape) {
-                                        CoverToolColumn(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
-                                    } else {
-                                        CoverToolBar(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
+                                    // 칩을 끄는 값·꾹 눌러 0은 제스처 알림 자리에 알린다(2026-10-23)
+                                    CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
+                                        if (coverLandscape) {
+                                            CoverToolColumn(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
+                                        } else {
+                                            CoverToolBar(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
+                                        }
                                     }
                                 }
                             }

@@ -232,6 +232,8 @@
     <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_handle_description">옵션 띠 옮기기</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
+    <!-- 수치 칸·칩을 꾹 눌러 0으로 되돌렸을 때(2026-10-23 커버 막대) -->
+    <string name="value_reset_to_zero">%1$s 값을 0으로 되돌렸어요</string>
     <string name="strip_tone_range">범위</string>
     <string name="strip_crop_ratio">비율</string>
     <string name="color_saturation_value">채도·밝기</string>

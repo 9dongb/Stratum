@@ -234,6 +234,8 @@
     <string name="strip_slider_value">%1$s %2$s</string>
     <string name="strip_handle_description">Move the options strip</string>
     <string name="strip_choice_description">%1$s: %2$s</string>
+    <!-- 수치 칸·칩을 꾹 눌러 0으로 되돌렸을 때(2026-10-23 커버 막대) -->
+    <string name="value_reset_to_zero">%1$s reset to 0</string>
     <string name="strip_tone_range">Range</string>
     <string name="strip_crop_ratio">Ratio</string>
     <string name="color_saturation_value">Saturation and brightness</string>

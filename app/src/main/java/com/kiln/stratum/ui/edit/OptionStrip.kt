@@ -8,7 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -408,7 +407,8 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
 /**
  * 누를 수 있는 칸의 바탕: 띠 폭에서 양쪽 4dp를 뺀 모서리 8dp 칸(폭 48dp, 누르는 영역 그대로). 옵션 창이 열려 있으면 선택 배경이다.
  * 화면 읽기 기능에는 [description]과 [state](값)를 읽히고, 안쪽 글자는 따로 읽지 않는다.
- * [touch]는 누르기보다 먼저 터치를 받는 것(수치 끌기)이다. 그것이 터치를 가지면(끌면) 누르기는 되지 않는다.
+ * [touch]는 누르기보다 먼저 터치를 받는 것(수치 끌기, [valueGestures])이다. 그것이 터치를 가지면(끌면) 누르기는 되지 않는다.
+ * [onReset]이 있으면(꾹 눌러 0이 되는 값) 화면 읽기 기능에 '[description] 초기화' 동작을 준다.
  * 커버를 가로로 돌렸을 때의 세로 막대([CoverToolColumn])도 같은 칸을 쓴다(사용자 피드백 12차 3).
  */
 @Composable
@@ -420,9 +420,11 @@ internal fun CellBox(
     enabled: Boolean,
     onClick: () -> Unit,
     touch: Modifier = Modifier,
+    onReset: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val colors = StratumTheme.colors
+    val resetLabel = stringResource(R.string.adjust_reset_item, description)
     Column(
         modifier = Modifier
             .padding(horizontal = 4.dp)
@@ -438,6 +440,14 @@ internal fun CellBox(
                 onClick {
                     if (enabled) onClick()
                     enabled
+                }
+                if (enabled && onReset != null) {
+                    customActions = listOf(
+                        CustomAccessibilityAction(resetLabel) {
+                            onReset()
+                            true
+                        }
+                    )
                 }
             }
             .clip(StratumShapes.Control)
@@ -463,6 +473,7 @@ internal val ScrubFullRange = 200.dp
  * 값 칸·슬라이더 칸의 모양: 위에 작은 이름, 아래에 값. 누르면 [onClick](옵션 창).
  * [scrub]가 있으면(슬라이더 칸) 칸을 누른 채 위아래로 끌어 값을 바꾼다: 끄는 동안 [StripSlider.onFraction], 손을 떼면
  * [StripSlider.onFinished](슬라이더와 같다, 크기·경도는 크기 원도). 끄는 동안 칸은 선택 배경이고, 끈 터치로는 옵션 창이 뜨지 않는다.
+ * 0으로 되돌릴 수 있는 값(얼굴 보정)은 꾹 눌러 0이다(공통 수치 칸 기능 [valueGestures], 2026-10-23).
  */
 @Composable
 private fun ValueCellView(
@@ -476,39 +487,13 @@ private fun ValueCellView(
 ) {
     val colors = StratumTheme.colors
     var scrubbing by remember { mutableStateOf(false) }
-    // 끄는 동안 값이 바뀌어 칸이 다시 그려져도 끌기를 다시 시작하지 않고 지금 슬라이더에 보낸다
-    val currentScrub by rememberUpdatedState(scrub)
+    // 펼친 화면 띠는 칸에 값이 보여 끄는 값을 알림으로 따로 띄우지 않는다(손가락이 칸을 다 가리지 않는다)
     val touch = if (scrub != null && enabled) {
-        Modifier.pointerInput(key) {
-            val fullRange = ScrubFullRange.toPx()
-            var start = 0f
-            var moved = 0f
-            detectVerticalDragGestures(
-                onDragStart = {
-                    start = currentScrub?.fraction ?: 0f
-                    moved = 0f
-                    scrubbing = true
-                },
-                onDragEnd = {
-                    scrubbing = false
-                    currentScrub?.onFinished?.invoke()
-                },
-                onDragCancel = {
-                    scrubbing = false
-                    currentScrub?.onFinished?.invoke()
-                },
-                onVerticalDrag = { change, dy ->
-                    change.consume()
-                    moved += dy
-                    // 화면에서 위가 작은 y라, 위로 끈 만큼(-dy) 커진다
-                    currentScrub?.onFraction?.invoke((start - moved / fullRange).coerceIn(0f, 1f))
-                }
-            )
-        }
+        Modifier.valueGestures(scrub, ScrubAxis.VERTICAL, caption, value, showValue = false) { scrubbing = it }
     } else {
         Modifier
     }
-    CellBox(EditScreenTags.strip(key), caption, value, open || scrubbing, enabled, onClick, touch) {
+    CellBox(EditScreenTags.strip(key), caption, value, open || scrubbing, enabled, onClick, touch, onReset = scrub?.onReset) {
         CompactLabel(caption, if (enabled) colors.textDescription else colors.textDisabled)
         Text(
             text = value,

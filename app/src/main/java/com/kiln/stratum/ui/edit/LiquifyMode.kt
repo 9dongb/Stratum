@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -330,7 +331,9 @@ fun LiquifyMode(
                             Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                         )
                         BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
-                        CoverToolColumn(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                        CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
+                            CoverToolColumn(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                        }
                         CoverWorkBar(
                             onCancel = actions::cancel,
                             onDone = actions::apply,
@@ -348,7 +351,10 @@ fun LiquifyMode(
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
                     BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
                     // 얼굴 모드는 막대에 칩이 없고 안내 글(찾는 중·고르기·고른 얼굴)을 보인다
-                    CoverToolBar(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                    // 칩을 끄는 값·꾹 눌러 0(얼굴 슬라이더)은 이 창의 제스처 알림 자리에 알린다(편집 화면의 알림은 이 창에 가린다, 2026-10-23)
+                    CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
+                        CoverToolBar(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                    }
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(
                         onCancel = actions::cancel,
@@ -370,7 +376,9 @@ fun LiquifyMode(
                         // 띠와 옵션 창은 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다
                         val items = liquifyStrip(state, actions, sizePreview, facePart, onFacePart, floating::closeFlyout)
                         val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                        OptionStripHost(items, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                        CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
+                            OptionStripHost(items, floating, stripPosition, onStripPosition, Modifier.fillMaxSize().windowInsetsPadding(insets))
+                        }
                         FlyoutHost(floating, items, Modifier.fillMaxSize().windowInsetsPadding(insets))
                     }
                 }

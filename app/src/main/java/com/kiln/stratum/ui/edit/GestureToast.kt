@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -52,12 +53,28 @@ class GestureToastState {
     internal var durationMillis: Long = GESTURE_TOAST_MILLIS
         private set
 
+    /**
+     * 수치 칸·칩을 누른 채 끄는 동안 손을 뗄 때까지 보일 글자('크기: 84 px', 2026-10-23 커버 막대). 값이 바뀌면 다시 읽는다.
+     * 보이는 동안은 [text]보다 앞서고, 화면 읽기 기능은 읽지 않는다(끄는 값을 하나하나 읽지 않게). 없으면 null.
+     */
+    var scrubText: (() -> String)? by mutableStateOf(null)
+        private set
+
     /** [text]를 [durationMillis] 동안 띄운다. */
     fun show(text: String, durationMillis: Long = GESTURE_TOAST_MILLIS) {
         last = text
         this.durationMillis = durationMillis
         this.text = text
         serial++
+    }
+
+    /** 끄기를 시작했다: 손을 뗄 때([endScrub])까지 [text]를 보인다 */
+    fun startScrub(text: () -> String) {
+        scrubText = text
+    }
+
+    fun endScrub() {
+        scrubText = null
     }
 
     internal fun hide() {
@@ -68,6 +85,12 @@ class GestureToastState {
 /** 제스처 알림 상태 */
 @Composable
 fun rememberGestureToastState(): GestureToastState = remember { GestureToastState() }
+
+/**
+ * 수치 칸·칩의 손가락 처리([valueGestures])가 끄는 값과 0으로 되돌림을 알릴 곳: 편집 화면과 유동화 작업 모드가 각자의 제스처 알림을 넣는다
+ * (유동화 작업 모드는 편집 화면의 알림 자리를 덮는다). 없으면 알리지 않는다.
+ */
+val LocalValueFeedback = staticCompositionLocalOf<GestureToastState?> { null }
 
 /**
  * 제스처 알림: 캔버스 위쪽 가운데에 짧게 뜨는 알약 모양 글자다. 반대 색이라 어떤 사진 위에서도 보이고, 화면 읽기 기능이 읽는다.
@@ -83,18 +106,20 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
             state.hide()
         }
     }
+    val scrub = state.scrubText
     Box(modifier.padding(top = GESTURE_TOAST_TOP), contentAlignment = Alignment.TopCenter) {
-        AnimatedVisibility(visible = state.text != null, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = state.text != null || scrub != null, enter = fadeIn(), exit = fadeOut()) {
             // Surface는 아래로 가는 터치를 막으므로 쓰지 않는다. 알림이 떠 있어도 그 밑의 캔버스·옵션 창을 그대로 누를 수 있다.
             Text(
-                text = state.last,
+                text = scrub?.invoke() ?: state.last,
                 modifier = Modifier
                     // 긴 도구 안내가 화면 폭으로 넓게 퍼지지 않게 한다(여러 줄로 가운데 맞춤)
                     .widthIn(max = GestureToastMaxWidth)
                     .shadow(3.dp, StratumShapes.Card)
                     .background(StratumTheme.colors.inverseBackground, StratumShapes.Card)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
-                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    // 끄는 값은 읽지 않는다(손을 뗄 때까지 계속 바뀐다)
+                    .semantics { if (scrub == null) liveRegion = LiveRegionMode.Polite }
                     .testTag(EditScreenTags.GESTURE_TOAST),
                 color = StratumTheme.colors.inverseText,
                 textAlign = TextAlign.Center,
