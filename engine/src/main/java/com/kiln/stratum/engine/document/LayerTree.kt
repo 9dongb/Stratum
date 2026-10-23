@@ -60,6 +60,17 @@ object LayerTree {
         return chain
     }
 
+    /**
+     * [id] 레이어 아래에 합쳐지는 레이어들(아래부터): 목록에서 그 레이어보다 아래인 것과, 감싼 그룹들(보이기·불투명도를 물려주게 남김).
+     * 피부 보정의 기준 스포이드·피부 정돈이 '그 레이어 바로 아래까지 합친 그림'을 그리는 데 쓴다. 없는 레이어면 비었다.
+     */
+    fun below(layers: List<Layer>, id: LayerId): List<Layer> {
+        val index = layers.indexOfFirst { it.id == id }
+        if (index < 0) return emptyList()
+        val ancestors = ancestors(layers, layers[index]).mapTo(HashSet()) { it.id }
+        return layers.filterIndexed { i, layer -> i < index || layer.id in ancestors }
+    }
+
     /** 감싼 그룹 수(그룹 밖이면 0). 레이어 목록이 들여 쓰는 깊이다. */
     fun depth(layers: List<Layer>, layer: Layer): Int = ancestors(layers, layer).size
 

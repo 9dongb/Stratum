@@ -274,6 +274,21 @@ object EffectShader {
             }
         }
 
+    /**
+     * [image]를 가우스 σ [sigma](그림 픽셀)로 흐린 그림(GPU 하드웨어 비트맵, 알파를 곱한 값으로 섞음). 결과는 [image]의 ([fromX], [fromY])부터
+     * [width]×[height]다. 그림 밖은 끝 픽셀을 늘여 읽는다. 흐림 도구와 같은 두 번 흐리기다(피부 정돈의 고운 결, 결정 기록 '피부 보정'의 4단계).
+     * GPU가 그리지 못하면 null.
+     */
+    internal fun gaussian(image: Bitmap, sigma: Float, fromX: Int, fromY: Int, width: Int, height: Int): Bitmap? {
+        val step = EffectMath.tapStep(sigma)
+        val across = Retouch.drawOnGpu(blur(read(image, linear = true), 0f, 0f, axisX = 1f, axisY = 0f, step), image.width, image.height) ?: return null
+        try {
+            return Retouch.drawOnGpu(blur(read(across, linear = true), fromX.toFloat(), fromY.toFloat(), axisX = 0f, axisY = 1f, step), width, height)
+        } finally {
+            across.recycle()
+        }
+    }
+
     /** 그림을 읽는 셰이더. 그림 밖은 끝 픽셀을 늘인다. [linear]면 픽셀 사이를 쌍선형으로 읽는다. */
     private fun read(bitmap: Bitmap, linear: Boolean): Shader =
         BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {

@@ -7,10 +7,12 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.command.SetSkinColor
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.face.FaceLandmarks
 import com.kiln.stratum.engine.face.FaceMeshIndex
 import com.kiln.stratum.engine.face.FaceUnavailableException
@@ -23,6 +25,8 @@ import com.kiln.stratum.engine.platform.CreateSkinRetouch
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
+import com.kiln.stratum.engine.preview.PreviewLevels
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.skin.NoFaceException
@@ -131,6 +135,57 @@ class SkinPhotoTest {
             if (count == 0) continue
             assertTrue("$name mean |dL| ${lightness / count}", lightness / count < 0.02)
             assertTrue("$name greener $green of $count", green < count / 100 + 1)
+        }
+    }
+
+    /**
+     * 피부 정돈(결정 기록 '피부 보정'의 4단계)을 실제 피부 사진에 다 올려 건다: 얼굴 둘레를 원본 크기로 잘라 앞·뒤를 나란히 붙인 그림을
+     * skin-debug/[이름]-smooth.png에 남기고(맥에서 보고 상수를 다듬는 데 쓴다), 피부 안의 밝기 평균이 거의 그대로인지 본다. 사진이 없으면 건너뛴다.
+     */
+    @Test
+    fun smoothing_onRealSkin_keepsTheLightness() {
+        val names = listOf("redhead_freckles.jpg" to 2, "flushed_hotwings.jpg" to 1, "Buzz_Aldrin.jpg" to 1)
+            .filter { File(File(context.filesDir, "face"), it.first).isFile }
+        assumeTrue("No skin test photos in files/face", names.isNotEmpty())
+        for ((name, sample) in names) {
+            val document = (PhotoImporter.import(ImageDecoder.createSource(file(name)), "Photo", sample) as ImportResult.Success).document
+            val started = SystemClock.elapsedRealtime()
+            val created = try {
+                CreateSkinRetouch(LayerId(0), SkinLayerNames("Skin", "Color", "Smooth", "Spots"), finder, masker).applyTo(document)
+            } catch (e: NoFaceException) {
+                continue
+            }
+            val smoothLayer = created.layers[2]
+            Log.i("SkinPhoto", "$name ${document.width}x${document.height}: created with smoothing in ${SystemClock.elapsedRealtime() - started} ms, ${(smoothLayer.content as RasterContent).raster.tiles.size} smooth tiles")
+            val smoothed = SetLayerOpacity(smoothLayer.id, 1f).applyTo(created)
+            val face = checkNotNull(created.layers[4].skin).faces[0]
+            val reach = (face.radius * 1.2f).toInt()
+            val rect = PixelRect((face.centerX - reach).toInt(), (face.centerY - reach).toInt(), (face.centerX + reach).toInt(), (face.centerY + reach).toInt())
+            val region = checkNotNull(PreviewLevels.region(PixelSize(document.width, document.height), 0, rect))
+            val before = checkNotNull(PreviewRenderer.renderRegion(created, region)).copy(Bitmap.Config.ARGB_8888, false)
+            val after = checkNotNull(PreviewRenderer.renderRegion(smoothed, region)).copy(Bitmap.Config.ARGB_8888, false)
+            val mask = checkNotNull(smoothLayer.mask)
+            val lab = FloatArray(3)
+            var sum0 = 0.0
+            var sum1 = 0.0
+            var count = 0
+            for (y in 0 until before.height step 2) {
+                for (x in 0 until before.width step 2) {
+                    if (mask.alphaAt(region.rect.left + x, region.rect.top + y) < 200) continue
+                    val p0 = before.getPixel(x, y)
+                    val p1 = after.getPixel(x, y)
+                    OkLab.fromRgb(Color.red(p0) / 255f, Color.green(p0) / 255f, Color.blue(p0) / 255f, lab)
+                    sum0 += lab[0]
+                    OkLab.fromRgb(Color.red(p1) / 255f, Color.green(p1) / 255f, Color.blue(p1) / 255f, lab)
+                    sum1 += lab[0]
+                    count++
+                }
+            }
+            Log.i("SkinPhoto", "$name: smoothed face ${before.width}x${before.height}, mean L ${sum0 / count} -> ${sum1 / count}")
+            saveSideBySide(before, after, "${name.substringBeforeLast('.')}-smooth")
+            before.recycle()
+            after.recycle()
+            assertTrue("$name mean L ${sum0 / count} -> ${sum1 / count}", abs(sum1 / count - sum0 / count) < 0.01)
         }
     }
 

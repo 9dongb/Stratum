@@ -450,6 +450,10 @@
     <string name="edit_skin_not_skin">That isn\'t a skin color. Tap the skin.</string>
     <string name="edit_skin_red_cast">The whole photo looks reddish. Matching the original\'s temperature and tint first looks more natural.</string>
     <string name="skin_red_cast_fix">Fix temperature</string>
+    <string name="skin_smooth">Smoothing</string>
+    <string name="skin_texture">Texture</string>
+    <string name="skin_rebuild">Rebuild</string>
+    <string name="skin_rebuild_description">Rebuild smoothing and the skin color reference from the photo now</string>
     <string name="skin_group_name">Skin retouch</string>
     <string name="skin_color_name">Skin color</string>
     <string name="skin_smooth_name">Skin smoothing</string>

@@ -99,6 +99,14 @@ internal fun skinBar(controls: SkinControls): List<BarItem> {
             )
         )
         addAll(valueChips(skinStrip(controls, close = {})))
+        // 정돈이 낡았으면 파란 버튼으로 앞세운다(결정 기록 '피부 보정'의 4단계)
+        add(
+            BarButton(
+                SKIN_REBUILD_KEY, stringResource(R.string.skin_rebuild), R.drawable.ic_restart_alt, controls.onRebuild,
+                enabled = !controls.busy, accent = controls.group.stale, description = stringResource(R.string.skin_rebuild_description),
+                tag = EditScreenTags.SKIN_REBUILD
+            )
+        )
     }
 }
 

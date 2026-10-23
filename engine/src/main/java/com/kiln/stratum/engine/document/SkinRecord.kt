@@ -13,6 +13,8 @@ import com.kiln.stratum.engine.skin.SkinFaceArea
  * @property segmented 분할 모델로 피부를 골랐는지. false면 얼굴 윤곽만으로 골랐다(목·귀·이마 위가 빠짐).
  * @property texture 질감 유지(0..1, 4단계): 피부 정돈이 고운 결을 얼마나 남기는지.
  * @property redCast 만들 때 사진 전체가 붉었는지(흰자·채도 낮은 곳이 붉음, 3단계). 화면이 만든 뒤 한 번 알리는 데만 쓰고 저장하지 않는다.
+ * @property smoothBasis 피부 정돈을 만든 바탕(정돈 레이어 아래를 합친 그림)의 지문(4단계). 지금 바탕과 다르면 정돈이 낡았다([isStale]).
+ *   저장하지 않고, 프로젝트를 열 때 그때의 바탕으로 다시 정한다(열기 전에 낡았던 것은 알 수 없다).
  */
 data class SkinRecord(
     val source: LayerId,
@@ -22,10 +24,21 @@ data class SkinRecord(
     val faces: List<SkinFaceArea>,
     val segmented: Boolean,
     val texture: Float = DEFAULT_TEXTURE,
-    val redCast: Boolean = false
+    val redCast: Boolean = false,
+    val smoothBasis: CompositeKey? = null
 ) {
     init {
         require(texture in 0f..1f) { "Texture must be within 0..1: $texture" }
+    }
+
+    /**
+     * 피부 정돈이 낡았는지: 정돈 레이어 아래를 합친 그림(원본·잡티 제거와 그 아래)이 만들 때와 다르다(원본을 칠하거나 보정을 바꿈, 손으로 잡티를 지움 등).
+     * 화면은 [다시 만들기]를 앞세운다. 바탕을 모르면(열기 전) 낡지 않은 것으로 본다.
+     */
+    fun isStale(document: Document): Boolean {
+        val basis = smoothBasis ?: return false
+        if (document.indexOfLayer(smooth) < 0) return false
+        return !basis.matches(document.copy(layers = LayerTree.below(document.layers, smooth)))
     }
 
     /** 얼굴 자리를 옮긴 기록(자르기·회전·크기 변경·옮기기, [SkinFaceArea.mapped]) */
@@ -49,6 +62,34 @@ data class SkinRecord(
             if (layer.skin != null) return layer
             LayerTree.ancestors(layers, layer).firstOrNull { it.skin != null }?.let { return it }
             return layers.lastOrNull { it.skin?.source == id }
+        }
+
+        /**
+         * 프로젝트를 연 문서: 피부 보정 그룹들의 정돈 바탕을 지금 그림으로 정한 것(지문은 저장하지 않아, 연 뒤의 편집부터 낡음을 안다).
+         * 정돈 레이어가 없는 그룹은 그대로다.
+         */
+        fun withBases(document: Document): Document {
+            if (document.layers.none { it.skin != null }) return document
+            return document.copy(layers = document.layers.map { layer ->
+                val record = layer.skin ?: return@map layer
+                if (document.indexOfLayer(record.smooth) < 0) return@map layer
+                layer.copy(skin = record.copy(smoothBasis = CompositeKey.of(document.copy(layers = LayerTree.below(document.layers, record.smooth)))))
+            })
+        }
+
+        /**
+         * 문서 전체를 같이 바꾼 뒤(자르기·회전·뒤집기·크기 변경, 피부 정돈 레이어도 함께 바뀜) [after]의 피부 보정 그룹들의 정돈 바탕을 새 그림으로
+         * 다시 정한 문서. [before]에서 낡지 않았던 정돈만 그렇게 한다(낡았던 것은 그대로 낡음).
+         */
+        fun rebased(before: Document, after: Document): Document {
+            if (after.layers.none { it.skin?.smoothBasis != null }) return after
+            val fresh = before.layers.mapNotNullTo(HashSet()) { layer -> layer.id.takeIf { layer.skin?.let { !it.isStale(before) } == true } }
+            return after.copy(layers = after.layers.map { layer ->
+                val record = layer.skin ?: return@map layer
+                if (layer.id !in fresh || record.smoothBasis == null || after.indexOfLayer(record.smooth) < 0) return@map layer
+                val basis = CompositeKey.of(after.copy(layers = LayerTree.below(after.layers, record.smooth)))
+                layer.copy(skin = record.copy(smoothBasis = basis))
+            })
         }
 
         /**

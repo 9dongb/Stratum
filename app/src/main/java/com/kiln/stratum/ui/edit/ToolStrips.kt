@@ -284,9 +284,10 @@ internal fun toneStrip(mode: SubTool, controls: ToneControls, close: () -> Unit)
 }
 
 /**
- * 피부 도구의 띠(결정 기록 '피부 보정'): 그룹이 없으면 [피부 보정 만들기](파란 버튼)만. 있으면 위에 기준(자동·스포이드)과 [마스크 보기],
- * 구분선 아래 부분 붉은기·전체 붉은기·톤 균일화(0~100%, 3단계). 색 보정 레이어가 없거나 잰 얼굴이 없으면 색 칸이 없다.
- * 끄는 동안 미리 보고 놓으면 실행 취소 한 단계다(기본 보정 슬라이더와 같다). 피부 정돈·질감 유지는 4단계에서 더한다.
+ * 피부 도구의 띠(결정 기록 '피부 보정'): 그룹이 없으면 [피부 보정 만들기](파란 버튼)만. 있으면 위에 기준(자동·스포이드)·[마스크 보기]·
+ * [다시 만들기](정돈이 낡았으면 파란 버튼), 구분선 아래 부분 붉은기·전체 붉은기·톤 균일화(3단계)·피부 정돈·질감 유지(4단계, 0~100%).
+ * 색 보정 레이어가 없거나 잰 얼굴이 없으면 색 칸이, 정돈 레이어가 없으면 정돈 칸이 없다.
+ * 끄는 동안 미리 보고 놓으면 실행 취소 한 단계다(기본 보정 슬라이더와 같다). 질감 유지는 놓을 때 정돈을 다시 만든다(무거워 끄는 동안은 값만).
  */
 @Composable
 internal fun skinStrip(controls: SkinControls, close: () -> Unit): List<StripItem> {
@@ -307,18 +308,38 @@ internal fun skinStrip(controls: SkinControls, close: () -> Unit): List<StripIte
                 enabled = controls.maskAvailable, checked = controls.maskShown, tag = EditScreenTags.SKIN_MASK
             )
         )
-    }
-    val numbers = if (color == null) {
-        emptyList()
-    } else {
-        listOf(
-            skinValueCell("skinLocal", R.string.skin_local, color.local, EditScreenTags.SKIN_LOCAL, controls) { skin, value -> skin.withValues(local = value) },
-            skinValueCell("skinGlobal", R.string.skin_global, color.global, EditScreenTags.SKIN_GLOBAL, controls) { skin, value -> skin.withValues(global = value) },
-            skinValueCell("skinEven", R.string.skin_even, color.even, EditScreenTags.SKIN_EVEN, controls) { skin, value -> skin.withValues(even = value) }
+        add(
+            IconCell(
+                SKIN_REBUILD_KEY, R.drawable.ic_restart_alt, stringResource(R.string.skin_rebuild_description), controls.onRebuild,
+                enabled = !controls.busy, accent = controls.group.stale, tag = EditScreenTags.SKIN_REBUILD
+            )
         )
+    }
+    val numbers = buildList {
+        if (color != null) {
+            add(skinValueCell("skinLocal", R.string.skin_local, color.local, EditScreenTags.SKIN_LOCAL, controls) { skin, value -> skin.withValues(local = value) })
+            add(skinValueCell("skinGlobal", R.string.skin_global, color.global, EditScreenTags.SKIN_GLOBAL, controls) { skin, value -> skin.withValues(global = value) })
+            add(skinValueCell("skinEven", R.string.skin_even, color.even, EditScreenTags.SKIN_EVEN, controls) { skin, value -> skin.withValues(even = value) })
+        }
+        controls.smooth?.let { smooth ->
+            add(percentCell("skinSmooth", R.string.skin_smooth, smooth, EditScreenTags.SKIN_SMOOTH, controls.onSmooth, controls.onColorFinished))
+        }
+        controls.texture?.let { texture ->
+            add(percentCell("skinTexture", R.string.skin_texture, texture, EditScreenTags.SKIN_TEXTURE, controls.onTexture, controls.onTextureFinished))
+        }
     }
     return numbersLast(numbers, rest)
 }
+
+/** 0~100% 슬라이더 칸 하나(1%씩): 끄는 대로 [onValue], 놓으면 [onFinished] */
+@Composable
+private fun percentCell(key: String, @StringRes label: Int, value: Float, tag: String, onValue: (Float) -> Unit, onFinished: () -> Unit): StripItem =
+    SliderCell(
+        key = key,
+        caption = stringResource(label),
+        value = stringResource(R.string.layer_percent, (value * 100).roundToInt()),
+        slider = StripSlider(fraction = value, onFraction = { onValue((it * 100).roundToInt() / 100f) }, tag = tag, onFinished = onFinished)
+    )
 
 /** 피부 색 슬라이더 칸 하나(0~100%, 1%씩). 끄는 대로 [set]으로 바꾼 값을 미리 보고, 놓으면 기록한다. */
 @Composable

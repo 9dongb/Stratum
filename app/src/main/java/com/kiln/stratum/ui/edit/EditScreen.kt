@@ -241,6 +241,7 @@ fun EditScreen(
     moveActions: MoveActions = MoveActions.None,
     skinActions: SkinActions = SkinActions.None,
     liveSkin: () -> LiveSkinColor? = { null },
+    liveSkinSmooth: () -> LiveSkinSmooth? = { null },
     stripPosition: StripPosition? = null,
     onStripPosition: (StripPosition) -> Unit = {},
     toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
@@ -686,8 +687,19 @@ fun EditScreen(
         val skinMaskHint = stringResource(R.string.skin_mask_hint)
         val skinReferenceHint = stringResource(R.string.skin_reference_hint)
         var skinMaskHintShown by rememberSaveable { mutableStateOf(false) }
+        // 질감 유지를 끄는 동안의 값(무거워 놓을 때 다시 만들고, 다 만들 때까지 이 값을 보인다, 4단계)
+        var skinTextureDrag by remember { mutableStateOf<Float?>(null) }
+        var skinTextureReleased by remember { mutableStateOf(false) }
+        LaunchedEffect(skinTextureReleased, ready?.busy) {
+            if (skinTextureReleased && ready?.busy != true) {
+                skinTextureDrag = null
+                skinTextureReleased = false
+            }
+        }
         val skinControls = ready?.takeIf { activeTool == EditTool.Skin }?.let { shown ->
-            val group = skinGroupFor(shown.layers, shown.activeLayer)?.skin
+            val groupRow = skinGroupFor(shown.layers, shown.activeLayer)
+            val group = groupRow?.skin
+            val smoothRow = group?.let { g -> shown.layers.firstOrNull { it.id == g.smooth } }
             val maskShown = group != null && shown.activeLayer == group.color && shown.maskOverlay != null
             // 끄는 동안은 그 값, 아니면 색 보정 레이어에 기록된 값(잰 얼굴이 없으면 색 칸이 없다)
             val committed = group?.let { g -> shown.layers.firstOrNull { it.id == g.color }?.skinColor }
@@ -720,7 +732,18 @@ fun EditScreen(
                     // 다음에 캔버스를 누른 자리의 피부색이 그 자리 얼굴의 기준이 된다(색 보정 바로 아래까지 합친 색)
                     eyedropperTarget = ColorTarget.SKIN
                     gestureToast.show(skinReferenceHint, toolHelpToastMillis(skinReferenceHint))
-                }
+                },
+                // 피부 정돈 세기는 정돈 레이어의 불투명도(끄는 중이면 그 값), 질감 유지는 그룹 기록의 값(4단계)
+                smooth = smoothRow?.let { row -> liveSkinSmooth()?.takeIf { it.layer == row.id }?.opacity ?: row.opacity },
+                texture = smoothRow?.let { skinTextureDrag ?: group.texture },
+                onSmooth = { strength -> smoothRow?.let { skinActions.previewSmooth(it.id, strength) } },
+                onTexture = { skinTextureDrag = it },
+                onTextureFinished = {
+                    val texture = skinTextureDrag
+                    if (groupRow != null && texture != null) skinActions.setTexture(groupRow.id, texture)
+                    skinTextureReleased = true
+                },
+                onRebuild = { groupRow?.let { skinActions.rebuild(it.id) } }
             )
         }
         // 피부 도구를 고르면(다른 도구에서 바꾸거나 처음 고름) 고른 사진 레이어의 그룹을 만든다(이미 있으면 그 그룹을 고친다,

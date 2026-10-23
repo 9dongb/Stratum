@@ -13,6 +13,7 @@ import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
@@ -55,8 +56,8 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
                 GroupContent -> layer.withSkinMapped((scaleX + scaleY) / 2f, scaled)
             }
         }
-        // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')
-        return document.copy(width = width, height = height, layers = layers, selection = null)
+        // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구'). 피부 정돈도 함께 바뀌어 낡지 않는다(결정 기록 '피부 보정'의 4단계).
+        return SkinRecord.rebased(document, document.copy(width = width, height = height, layers = layers, selection = null))
     }
 
     /** 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다. 경계가 있는 마스크는 픽셀 하나에 1바이트를 더한다. */

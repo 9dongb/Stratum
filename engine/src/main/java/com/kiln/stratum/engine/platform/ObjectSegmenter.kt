@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.CompositeKey
 import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
@@ -153,60 +154,6 @@ class ObjectSegmenter(private val model: SegmentModel) {
 
     /** 마스크와 같은 크기로 그린 보이는 그림(경계 다듬기의 길잡이, R·G·B·A 바이트) */
     private class Guide(val bytes: ByteArray, val rowBytes: Int, val width: Int, val height: Int)
-
-    /** 합친 그림을 정하는 것: 문서 크기와, 합성 계획([CompositePlan])의 단계마다 픽셀 객체·불투명도·혼합 모드·보정 */
-    private class CompositeKey(private val width: Int, private val height: Int, private val steps: List<StepKey>) {
-
-        fun matches(document: Document): Boolean {
-            if (document.width != width || document.height != height) return false
-            val plan = CompositePlan.of(document)
-            return plan.size == steps.size && plan.indices.all { steps[it].matches(plan[it]) }
-        }
-
-        companion object {
-            fun of(document: Document) =
-                CompositeKey(
-                    document.width, document.height,
-                    CompositePlan.of(document).map { step ->
-                        when (step) {
-                            is CompositeStep.Draw -> DrawKey(step)
-                            is CompositeStep.Adjust -> AdjustKey(step)
-                        }
-                    }
-                )
-        }
-    }
-
-    /** 합성 단계 하나의 열쇠 */
-    private interface StepKey {
-        fun matches(step: CompositeStep): Boolean
-    }
-
-    /** 조정 레이어 단계의 열쇠(결정 기록 '피부 보정'의 1e). 마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */
-    private class AdjustKey(step: CompositeStep.Adjust) : StepKey {
-        private val mask = WeakReference(step.mask)
-        private val opacity = step.opacity
-        private val blendMode = step.blendMode
-        private val adjustments = step.adjustments
-        private val skin = step.skin
-
-        override fun matches(step: CompositeStep): Boolean =
-            step is CompositeStep.Adjust && mask.get() === step.mask && step.opacity == opacity &&
-                step.blendMode == blendMode && step.adjustments == adjustments && step.skin == skin
-    }
-
-    /** 그리는 단계 하나의 열쇠. 픽셀·마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */
-    private class DrawKey(step: CompositeStep.Draw) : StepKey {
-        private val pixels = WeakReference(step.raster)
-        private val mask = WeakReference(step.mask)
-        private val opacity = step.opacity
-        private val blendMode = step.blendMode
-        private val adjustments = step.adjustments
-
-        override fun matches(step: CompositeStep): Boolean =
-            step is CompositeStep.Draw && pixels.get() === step.raster && mask.get() === step.mask && step.opacity == opacity &&
-                step.blendMode == blendMode && step.adjustments == adjustments
-    }
 
     companion object {
         /** 찾은 모양 마스크의 긴 변 최대 픽셀. Kotlin 반복은 이 크기 이하에서만 한다. */

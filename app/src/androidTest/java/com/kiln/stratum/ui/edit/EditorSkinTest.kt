@@ -15,17 +15,26 @@ import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.SkinMasker
+import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.skin.SkinUnavailableException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -33,7 +42,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 피부 도구의 흐름(ViewModel, 결정 기록 '피부 보정'의 2c 화면): 고르면 그룹 만들기, 이미 있으면 그대로, 알림, 마스크 보기와 마스크 칠하기.
+ * 피부 도구의 흐름(ViewModel, 결정 기록 '피부 보정'의 2c 화면·3·4단계): 고르면 그룹 만들기, 이미 있으면 그대로, 알림, 마스크 보기와 마스크 칠하기,
+ * 색 슬라이더·기준 스포이드, 피부 정돈(세기 슬라이더·질감 유지·낡음과 다시 만들기).
  * 빨간 덩어리를 얼굴·피부로 보는 가짜 모델([FakeFaceModel]·[FakeSkinModel])로 진짜 찾는 순서·마스크 만들기를 거친다.
  */
 @RunWith(AndroidJUnit4::class)
@@ -269,6 +279,104 @@ class EditorSkinTest {
         onMain { viewModel.skinActions.autoReference(LayerId(2)) }
         awaitReady { it.revision > picked.revision }
         assertNull(recordedSkinColor().faces[0].reference)
+    }
+
+    /** 기록된 문서의 [id] 레이어 */
+    private fun recordedLayer(id: Long) = checkNotNull(viewModel.recordedDocument).let { it.layers[it.indexOfLayer(LayerId(id))] }
+
+    /** 기록된 피부 정돈 레이어(3)의 픽셀 */
+    private fun recordedSmoothPixels(): Raster = (recordedLayer(3).content as RasterContent).raster
+
+    @Test
+    fun theSmoothLayer_coversOnlyTheSkinMask_andKeepsAPlainSkinColor() {
+        created()
+
+        val smooth = recordedLayer(3)
+        val tiles = recordedSmoothPixels().tiles
+        val mask = checkNotNull(smooth.mask)
+        assertTrue(tiles.isNotEmpty())
+        assertTrue("tiles ${tiles.keys} outside ${mask.tiles.keys}", mask.tiles.keys.containsAll(tiles.keys))
+        // 고른 빨강(가짜 피부)은 정돈해도 빨강이다. 처음 세기는 0이다
+        val color = checkNotNull(tiles[TileKey(470 / TILE_SIZE, 470 / TILE_SIZE)]).pixelAt(470 % TILE_SIZE, 470 % TILE_SIZE)
+        assertTrue("color ${Integer.toHexString(color)}", Color.red(color) > 240 && Color.green(color) < 16 && Color.blue(color) < 16)
+        assertEquals(0f, smooth.opacity)
+    }
+
+    @Test
+    fun theSmoothingSlider_previewsTheLayerOpacity_andRecordsOneStep() {
+        val ready = created()
+
+        onMain { viewModel.skinActions.previewSmooth(LayerId(3), 0.7f) }
+        // 끄는 동안은 미리 보기만 하고 기록하지 않는다
+        assertEquals(LiveSkinSmooth(LayerId(3), 0.7f), viewModel.liveSkinSmooth.value)
+        assertEquals(0f, recordedLayer(3).opacity)
+
+        onMain { viewModel.skinActions.commitColor() }
+        val committed = awaitReady { it.revision > ready.revision }
+        assertNull(viewModel.liveSkinSmooth.value)
+        assertEquals(0.7f, committed.layers.first { it.id == LayerId(3) }.opacity)
+
+        // 실행 취소 한 단계로 돌아온다
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > committed.revision }
+        assertEquals(0f, undone.layers.first { it.id == LayerId(3) }.opacity)
+    }
+
+    @Test
+    fun theTexture_rebuildsTheSmoothing_inOneStep() {
+        val ready = created()
+        val before = recordedSmoothPixels()
+
+        onMain { viewModel.skinActions.setTexture(LayerId(1), 0.8f) }
+        val rebuilt = awaitReady { it.revision > ready.revision }
+        assertEquals(0.8f, rebuilt.layers.last().skin?.texture)
+        assertNotSame(before, recordedSmoothPixels())
+
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > rebuilt.revision }
+        assertEquals(0.5f, undone.layers.last().skin?.texture)
+        assertSame(before, recordedSmoothPixels())
+    }
+
+    @Test
+    fun paintingThePhoto_makesTheSmoothingStale_untilItIsRebuilt() {
+        val ready = created()
+        assertEquals(false, ready.layers.last().skin?.stale)
+
+        // 정돈 세기를 바꾸는 것은 정돈의 바탕이 아니다
+        onMain {
+            viewModel.skinActions.previewSmooth(LayerId(3), 0.5f)
+            viewModel.skinActions.commitColor()
+        }
+        val stronger = awaitReady { it.revision > ready.revision }
+        assertEquals(false, stronger.layers.last().skin?.stale)
+
+        // 원본에 칠하면 정돈의 바탕이 바뀐다
+        val dabs = StrokeDabs.place(listOf(StrokePoint(470f, 470f)), 1f)
+        onMain { viewModel.edit(PaintStroke(LayerId(0), dabs, BrushSettings(size = 20f, hardness = 1f, color = Color.BLUE), false)) }
+        val painted = awaitReady { it.revision > stronger.revision }
+        assertEquals(true, painted.layers.last().skin?.stale)
+
+        // 다시 만들면(실행 취소 한 단계) 새 바탕에 맞는다
+        onMain { viewModel.skinActions.rebuild(LayerId(1)) }
+        val rebuilt = awaitReady { it.revision > painted.revision }
+        assertEquals(false, rebuilt.layers.last().skin?.stale)
+        val pixel = checkNotNull(recordedSmoothPixels().tiles[TileKey(470 / TILE_SIZE, 470 / TILE_SIZE)]).pixelAt(470 % TILE_SIZE, 470 % TILE_SIZE)
+        assertTrue("rebuilt ${Integer.toHexString(pixel)}", Color.blue(pixel) > Color.red(pixel))
+
+        onMain { viewModel.undo() }
+        assertEquals(true, awaitReady { it.revision > rebuilt.revision }.layers.last().skin?.stale)
+    }
+
+    @Test
+    fun turningTheWholeImage_keepsTheSmoothingFresh() {
+        val ready = created()
+
+        onMain { viewModel.edit(CropImage(PixelRect(0, 0, SIZE.width, SIZE.height), SIZE, Orientation.ROTATE_CLOCKWISE)) }
+        val turned = awaitReady { it.revision > ready.revision }
+
+        assertEquals(PixelSize(SIZE.height, SIZE.width), turned.documentSize)
+        assertFalse(checkNotNull(turned.layers.last().skin).stale)
     }
 
     private companion object {

@@ -5,6 +5,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
@@ -57,8 +58,9 @@ object RasterTransform {
                 GroupContent -> layer.withSkinMapped(1f, plan::mapPoint)
             }
         }
-        // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')
-        return document.copy(width = plan.targetSize.width, height = plan.targetSize.height, layers = layers, selection = null)
+        // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구'). 피부 정돈도 함께 바뀌어 낡지 않는다(결정 기록 '피부 보정'의 4단계).
+        val after = document.copy(width = plan.targetSize.width, height = plan.targetSize.height, layers = layers, selection = null)
+        return SkinRecord.rebased(document, after)
     }
 
     /** [raster]를 [plan]대로 옮긴 새 래스터. 원본 조각이 모두 투명(타일 없음)인 자리는 대상도 비워 둔다. */

@@ -25,6 +25,8 @@ import com.kiln.stratum.engine.skin.SkinUnavailableException
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -129,8 +131,13 @@ class SkinRetouchTest {
 
         assertEquals(result.layers.map { it.id }, loaded.layers.map { it.id })
         assertEquals(result.layers.map { it.parent }, loaded.layers.map { it.parent })
-        // 만들 때의 붉은 사진 표시는 저장하지 않는다(만든 뒤 한 번 알리는 데만 씀)
-        assertEquals(result.layers.last().skin?.copy(redCast = false), loaded.layers.last().skin)
+        // 만들 때의 붉은 사진 표시와 피부 정돈의 바탕(지문)은 저장하지 않는다. 바탕은 연 그림으로 다시 정해 낡지 않았다
+        val record = checkNotNull(loaded.layers.last().skin)
+        assertEquals(result.layers.last().skin?.copy(redCast = false, smoothBasis = null), record.copy(smoothBasis = null))
+        assertNotNull(record.smoothBasis)
+        assertFalse(record.isStale(loaded))
+        // 피부 정돈 픽셀도 그대로다
+        assertEquals((result.layers[2].content as RasterContent).raster.tiles.keys, (loaded.layers[2].content as RasterContent).raster.tiles.keys)
         assertEquals(result.layers[3].content, loaded.layers[3].content)
         assertEquals(0f, loaded.layers[2].opacity, 0f)
         val mask = checkNotNull(loaded.layers[3].mask)

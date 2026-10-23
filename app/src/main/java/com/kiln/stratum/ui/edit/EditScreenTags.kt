@@ -256,6 +256,11 @@ object EditScreenTags {
     const val SKIN_GLOBAL = "skinGlobal"
     const val SKIN_EVEN = "skinEven"
 
+    /** 피부 정돈 세기·질감 유지 슬라이더와 [다시 만들기](4단계) */
+    const val SKIN_SMOOTH = "skinSmooth"
+    const val SKIN_TEXTURE = "skinTexture"
+    const val SKIN_REBUILD = "skinRebuild"
+
     /** 피부 색 기준 목록의 줄(자동·스포이드) */
     fun skinReference(choice: SkinReferenceChoice): String = "skinReference_${choice.name}"
 

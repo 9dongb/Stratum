@@ -18,6 +18,7 @@ import com.kiln.stratum.engine.skin.SkinColor
 internal const val SKIN_CREATE_KEY = "skinCreate"
 internal const val SKIN_MASK_KEY = "skinMask"
 internal const val SKIN_REFERENCE_KEY = "skinReference"
+internal const val SKIN_REBUILD_KEY = "skinRebuild"
 
 /** 피부 색 보정의 기준 고르기(결정 기록 '피부 보정'의 3단계): 자동(그 사람 피부의 가운데 색), 스포이드(누른 자리 피부색) */
 enum class SkinReferenceChoice(@get:StringRes val label: Int, @get:DrawableRes val icon: Int) {
@@ -30,6 +31,7 @@ enum class SkinReferenceChoice(@get:StringRes val label: Int, @get:DrawableRes v
  * 얼굴 특징점처럼 큰 값은 담지 않는다(화면이 쓰지 않고, 레이어 요약을 견줄 때 느려지지 않게).
  *
  * @property faceCount 찾은 얼굴 수, [segmented]는 분할 모델로 피부를 골랐는지(아니면 얼굴 윤곽만)
+ * @property texture 피부 정돈의 질감 유지(0..1), [stale]은 피부 정돈이 낡았는지(원본·잡티 제거가 만든 뒤 바뀜, 4단계)
  */
 data class SkinSummary(
     val source: LayerId,
@@ -38,16 +40,20 @@ data class SkinSummary(
     val spots: LayerId,
     val faceCount: Int,
     val segmented: Boolean,
-    val texture: Float
+    val texture: Float,
+    val stale: Boolean = false
 ) {
     companion object {
-        fun of(record: SkinRecord): SkinSummary =
-            SkinSummary(record.source, record.color, record.smooth, record.spots, record.faces.size, record.segmented, record.texture)
+        fun of(record: SkinRecord, stale: Boolean = false): SkinSummary =
+            SkinSummary(record.source, record.color, record.smooth, record.spots, record.faces.size, record.segmented, record.texture, stale)
     }
 }
 
 /** 피부 도구의 색 슬라이더를 끄는 동안의 값(기록 전, 결정 기록 '피부 보정'의 3단계): 그룹의 색 보정 레이어 [layer]와 그 피부 색 */
 data class LiveSkinColor(val layer: LayerId, val color: SkinColor)
+
+/** 피부 도구의 정돈 슬라이더를 끄는 동안의 값(기록 전, 4단계): 그룹의 피부 정돈 레이어 [layer]와 그 불투명도(= 정돈 세기) */
+data class LiveSkinSmooth(val layer: LayerId, val opacity: Float)
 
 /** 피부 도구가 하는 일(결정 기록 '피부 보정'의 2c 화면·3단계). 편집 화면이 ViewModel에 넘긴다. */
 interface SkinActions {
@@ -70,6 +76,15 @@ interface SkinActions {
     /** 기준을 '자동'(그 사람 피부의 가운데 색)으로 되돌린다(스포이드로 고른 기준을 지움, 실행 취소 한 단계) */
     fun autoReference(colorLayer: LayerId) {}
 
+    /** 정돈 슬라이더를 끄는 동안 [smoothLayer](피부 정돈 레이어)의 불투명도를 [strength]로 미리 본다. 놓으면 [commitColor]로 기록한다. */
+    fun previewSmooth(smoothLayer: LayerId, strength: Float) {}
+
+    /** 질감 유지를 [texture]로 바꾸고 피부 정돈을 다시 만든다(손을 뗄 때, 실행 취소 한 단계) */
+    fun setTexture(group: LayerId, texture: Float) {}
+
+    /** [다시 만들기]: 피부 정돈과 색 기준(얼굴마다 피부 색 통계)을 지금 사진으로 다시 만든다(실행 취소 한 단계) */
+    fun rebuild(group: LayerId) {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : SkinActions {
         override fun picked() = Unit
@@ -87,6 +102,10 @@ interface SkinActions {
  * @property picking 기준 스포이드를 켜서 캔버스를 누르기를 기다리는 중인지
  * @property onColor 색 슬라이더를 끄는 동안(지금 값을 받아 새 값을 돌려줌), [onColorFinished]는 놓을 때
  * @property onAutoReference 기준을 '자동'으로, [onPickReference]는 스포이드로 고르기 시작
+ * @property smooth 피부 정돈 세기(정돈 레이어의 불투명도, 끄는 중이면 그 값). 정돈 레이어가 없으면 null이라 그 칸이 없다.
+ * @property texture 질감 유지(끄는 중이면 그 값). 정돈 레이어가 없으면 null이다.
+ * @property onSmooth 정돈 세기를 끄는 동안, [onTexture]는 질감 유지를 끄는 동안, [onTextureFinished]는 질감 유지를 놓을 때(다시 만듦)
+ * @property onRebuild [다시 만들기]. [SkinSummary.stale]이면 앞세운다.
  */
 data class SkinControls(
     val group: SkinSummary?,
@@ -100,7 +119,13 @@ data class SkinControls(
     val onColor: ((SkinColor) -> SkinColor) -> Unit = {},
     val onColorFinished: () -> Unit = {},
     val onAutoReference: () -> Unit = {},
-    val onPickReference: () -> Unit = {}
+    val onPickReference: () -> Unit = {},
+    val smooth: Float? = null,
+    val texture: Float? = null,
+    val onSmooth: (Float) -> Unit = {},
+    val onTexture: (Float) -> Unit = {},
+    val onTextureFinished: () -> Unit = {},
+    val onRebuild: () -> Unit = {}
 )
 
 /**

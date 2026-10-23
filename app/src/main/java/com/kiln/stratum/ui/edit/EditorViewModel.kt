@@ -110,6 +110,7 @@ import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.ScreenGainmap
 import com.kiln.stratum.engine.platform.CreateSkinRetouch
+import com.kiln.stratum.engine.platform.RebuildSkinRetouch
 import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
 import com.kiln.stratum.engine.platform.SelectAll
@@ -521,6 +522,11 @@ class EditorViewModel internal constructor(
 
     private val _liveSkin = MutableStateFlow<LiveSkinColor?>(null)
 
+    private val _liveSkinSmooth = MutableStateFlow<LiveSkinSmooth?>(null)
+
+    /** 피부 도구의 정돈 슬라이더를 끄는 동안의 값(기록 전, 4단계). [liveSkin]과 같은 방식으로 피부 정돈 레이어의 불투명도에 건다. */
+    val liveSkinSmooth: StateFlow<LiveSkinSmooth?> = _liveSkinSmooth.asStateFlow()
+
     /**
      * 피부 도구의 색 슬라이더를 끄는 동안의 값(기록 전, 결정 기록 '피부 보정'의 3단계). [liveAdjustments]와 같은 방식이지만,
      * 고른 레이어가 아니라 그룹의 색 보정 레이어([LiveSkinColor.layer])에 건다.
@@ -706,6 +712,9 @@ class EditorViewModel internal constructor(
         override fun previewColor(colorLayer: LayerId, change: (SkinColor) -> SkinColor) = previewSkinColor(colorLayer, change)
         override fun commitColor() = commitLive()
         override fun autoReference(colorLayer: LayerId) = recordSkinColor(colorLayer) { it.withoutReferences() }
+        override fun previewSmooth(smoothLayer: LayerId, strength: Float) = previewSkinSmooth(smoothLayer, strength)
+        override fun setTexture(group: LayerId, texture: Float) = rebuildSkin(group, texture, remeasure = false)
+        override fun rebuild(group: LayerId) = rebuildSkin(group, texture = null, remeasure = true)
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -2172,7 +2181,9 @@ class EditorViewModel internal constructor(
             when {
                 editing && job != null && job.isActive -> job.join()
                 hasLiveValues ->
-                    combine(_liveAdjustments, _liveOpacity, _liveSkin) { adjustments, opacity, skin -> adjustments == null && opacity == null && skin == null }.first { it }
+                    combine(_liveAdjustments, _liveOpacity, _liveSkin, _liveSkinSmooth) { adjustments, opacity, skin, smooth ->
+                        adjustments == null && opacity == null && skin == null && smooth == null
+                    }.first { it }
                 else -> return
             }
         }
@@ -3029,7 +3040,8 @@ class EditorViewModel internal constructor(
         val adjustments = _liveAdjustments.value
         val opacity = _liveOpacity.value
         val skin = _liveSkin.value
-        if (adjustments == null && opacity == null && skin == null) return
+        val smooth = _liveSkinSmooth.value
+        if (adjustments == null && opacity == null && skin == null && smooth == null) return
         if (editing) {
             liveCommitPending = true
             return
@@ -3039,6 +3051,7 @@ class EditorViewModel internal constructor(
             _liveAdjustments.value = null
             _liveOpacity.value = null
             _liveSkin.value = null
+            _liveSkinSmooth.value = null
             return
         }
         liveDocument = null
@@ -3048,7 +3061,28 @@ class EditorViewModel internal constructor(
             if (_liveAdjustments.value == adjustments) _liveAdjustments.value = null
             if (_liveOpacity.value == opacity) _liveOpacity.value = null
             if (_liveSkin.value == skin) _liveSkin.value = null
+            if (_liveSkinSmooth.value == smooth) _liveSkinSmooth.value = null
         }
+    }
+
+    /** 피부 도구의 정돈 슬라이더를 끄는 동안 [smoothLayer](피부 정돈 레이어)의 불투명도(정돈 세기)를 [strength]로 미리 본다. 기록하지 않는다. */
+    fun previewSkinSmooth(smoothLayer: LayerId, strength: Float) {
+        if (_state.value !is EditorState.Ready) return
+        val document = history?.document ?: return
+        if (document.indexOfLayer(smoothLayer) < 0) return
+        _liveSkinSmooth.value = LiveSkinSmooth(smoothLayer, strength.coerceIn(0f, 1f) + 0f)
+        afterLiveChange()
+    }
+
+    /**
+     * [group] 피부 보정 그룹을 지금 그림에 맞게 다시 만든다(실행 취소 한 단계, [RebuildSkinRetouch]): 피부 정돈을 질감 유지 [texture](없으면 지금 값)로
+     * 다시 만들고, [remeasure]면 색 보정의 얼굴마다 피부 색 통계도 다시 잰다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun rebuildSkin(group: LayerId, texture: Float?, remeasure: Boolean) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        val record = document.layers.getOrNull(document.indexOfLayer(group))?.skin ?: return
+        runEdit(RebuildSkinRetouch(group, (texture ?: record.texture).coerceIn(0f, 1f), remeasure))
     }
 
     /**
@@ -3085,7 +3119,7 @@ class EditorViewModel internal constructor(
 
     /** 끄는 동안의 값이 있는지(놓은 값을 아직 기록하지 못한 것 포함) */
     private val hasLiveValues: Boolean
-        get() = _liveAdjustments.value != null || _liveOpacity.value != null || _liveSkin.value != null
+        get() = _liveAdjustments.value != null || _liveOpacity.value != null || _liveSkin.value != null || _liveSkinSmooth.value != null
 
     /** 끄는 값이 바뀌었다. 놓았던 값은 이번 끌기와 합쳐 기록하고, 편집 중이 아니면 바로 그린다. */
     private fun afterLiveChange() {
@@ -3130,7 +3164,9 @@ class EditorViewModel internal constructor(
             _liveAdjustments.value?.let { SetLayerAdjustments(layer, it) },
             _liveOpacity.value?.let { SetLayerOpacity(layer, it) },
             // 피부 색은 고른 레이어가 아니라 그룹의 색 보정 레이어에 건다(결정 기록 '피부 보정'의 3단계)
-            _liveSkin.value?.let { SetSkinColor(it.layer, it.color) }
+            _liveSkin.value?.let { SetSkinColor(it.layer, it.color) },
+            // 피부 정돈 세기는 그룹의 피부 정돈 레이어의 불투명도다(4단계)
+            _liveSkinSmooth.value?.let { SetLayerOpacity(it.layer, it.opacity) }
         )
 
     /** 끄는 값을 고른 레이어에 건 문서를 그린다. 그리는 동안 또 바뀌면 가장 나중 것만 그린다. */
@@ -3775,7 +3811,7 @@ class EditorViewModel internal constructor(
                     LayerSummary(
                         it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null,
                         maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent, it.content is GroupContent, it.parent,
-                        it.skin?.let(SkinSummary::of), (it.content as? AdjustmentContent)?.skin
+                        it.skin?.let { record -> SkinSummary.of(record, record.isStale(document)) }, (it.content as? AdjustmentContent)?.skin
                     )
                 },
                 activeLayer = activeLayerIn(document),
@@ -3941,6 +3977,7 @@ class EditorViewModel internal constructor(
         _liveAdjustments.value = null
         _liveOpacity.value = null
         _liveSkin.value = null
+        _liveSkinSmooth.value = null
         liveCommitPending = false
         drawing = null
         // 글자 레이어에 시작한 획과 그 질문도 버린다. 홈으로 나간 뒤 획이 끝나도(손가락 자리가 사라짐) 다음 문서에서 묻지 않게.

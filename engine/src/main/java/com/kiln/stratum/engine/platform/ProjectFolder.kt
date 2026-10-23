@@ -266,7 +266,8 @@ class ProjectFolder(val directory: File) {
         savedMasks.putAll(loadedMasks)
         savedMeshes.clear()
         savedMeshes.putAll(loadedMeshes)
-        return LoadedProject(document, manifest.createdMillis)
+        // 피부 정돈의 바탕 지문은 저장하지 않아 지금 그림으로 정한다(결정 기록 '피부 보정'의 4단계)
+        return LoadedProject(SkinRecord.withBases(document), manifest.createdMillis)
     }
 
     /**
