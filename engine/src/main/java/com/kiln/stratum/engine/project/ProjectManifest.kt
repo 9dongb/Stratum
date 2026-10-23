@@ -156,6 +156,12 @@ object ProjectManifestCodec {
     /** 레이어 덧붙임 꼬리표: 다시 고칠 수 있는 유동화 기록(결정 기록 '얼굴 인식 보정' 3단계) */
     private const val EXTRA_LIQUIFY = 5
 
+    /**
+     * 레이어 덧붙임 꼬리표: 기본 보정의 틴트(실수 하나, 결정 기록 '피부 보정'의 1b). 0이면 적지 않는다.
+     * 보정 값([EXTRA_ADJUSTMENTS])과 따로 두어, 틴트를 모르는 앞 판 앱도 틴트만 빼고 연다.
+     */
+    private const val EXTRA_TINT = 6
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
 
@@ -186,9 +192,10 @@ object ProjectManifestCodec {
                     writeTiles(out, content.tiles)
                 }
             }
-            // 레이어 덧붙임: 보정 값·게인맵(있을 때만)
+            // 레이어 덧붙임: 보정 값·틴트·게인맵(있을 때만)
             val extras = ArrayList<Pair<Int, ByteArray>>()
-            if (!layer.adjustments.isIdentity) extras += EXTRA_ADJUSTMENTS to adjustmentBytes(layer.adjustments)
+            if (!layer.adjustments.copy(tint = 0f).isIdentity) extras += EXTRA_ADJUSTMENTS to adjustmentBytes(layer.adjustments)
+            if (layer.adjustments.tint != 0f) extras += EXTRA_TINT to floatBytes(layer.adjustments.tint)
             layer.gainmap?.let { extras += EXTRA_GAINMAP to gainmapBytes(it) }
             if (!layer.visible) extras += EXTRA_HIDDEN to ByteArray(0)
             layer.text?.let { extras += EXTRA_TEXT to textBytes(it) }
@@ -221,6 +228,7 @@ object ProjectManifestCodec {
                     else -> throw UnreadableProjectException("Unknown layer content $type")
                 }
                 var adjustments = Adjustments.NONE
+                var tint = 0f
                 var gainmap: GainmapEntry? = null
                 var visible = true
                 var text: TextSpec? = null
@@ -232,9 +240,10 @@ object ProjectManifestCodec {
                         EXTRA_HIDDEN -> visible = false
                         EXTRA_TEXT -> text = textOf(bytes)
                         EXTRA_LIQUIFY -> liquify = liquifyOrNull(bytes)
+                        EXTRA_TINT -> tint = DataInputStream(ByteArrayInputStream(bytes)).readFloat()
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments, gainmap, visible, text, liquify)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null
@@ -478,7 +487,11 @@ object ProjectManifestCodec {
             else -> throw UnreadableProjectException("Unknown HDR primaries $code")
         }
 
-    /** 보정 값: 실수 7개(노출, 색온도, 그림자, 하이라이트, 밝기, 대비, 채도), 곡선 점 수와 점들(x, y) */
+    /** 실수 하나 */
+    private fun floatBytes(value: Float): ByteArray =
+        ByteArrayOutputStream().also { DataOutputStream(it).writeFloat(value) }.toByteArray()
+
+    /** 보정 값: 실수 7개(노출, 색온도, 그림자, 하이라이트, 밝기, 대비, 채도), 곡선 점 수와 점들(x, y). 틴트는 따로 적는다([EXTRA_TINT]). */
     private fun adjustmentBytes(adjustments: Adjustments): ByteArray =
         ByteArrayOutputStream().also { buffer ->
             val out = DataOutputStream(buffer)

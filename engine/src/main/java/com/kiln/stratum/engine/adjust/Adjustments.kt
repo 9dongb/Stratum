@@ -8,13 +8,15 @@ const val MAX_EXPOSURE = 2f
 /**
  * 레이어 하나의 기본 보정 값(비파괴, 결정 기록 '기본 보정'). 픽셀은 바꾸지 않고, 그릴 때마다 이 값대로 보정한다.
  * 노출은 -2..2 EV, 나머지는 -1..1(화면에는 -100..100)이고 0이면 그대로다. 곡선은 RGB 전체에 적용한다.
+ * 틴트는 +가 자홍, -가 초록이다(라이트룸과 같다, 결정 기록 '피부 보정'의 1b).
  *
  * 보정 순서(그릴 때, [AdjustmentMath]와 GPU 셰이더가 같다):
- * 노출 → 색온도(선형 빛) → 그림자·하이라이트 → 밝기 → 대비 → 곡선 → 채도
+ * 노출 → 색온도·틴트(선형 빛) → 그림자·하이라이트 → 밝기 → 대비 → 곡선 → 채도
  */
 data class Adjustments(
     val exposure: Float = 0f,
     val temperature: Float = 0f,
+    val tint: Float = 0f,
     val shadows: Float = 0f,
     val highlights: Float = 0f,
     val brightness: Float = 0f,
@@ -24,14 +26,14 @@ data class Adjustments(
 ) {
     init {
         require(exposure in -MAX_EXPOSURE..MAX_EXPOSURE) { "Exposure out of range: $exposure" }
-        for (value in listOf(temperature, shadows, highlights, brightness, contrast, saturation)) {
+        for (value in listOf(temperature, tint, shadows, highlights, brightness, contrast, saturation)) {
             require(value in -1f..1f) { "Adjustment out of range: $value" }
         }
     }
 
     /** 바꾸는 것이 없는지. 곡선은 처음 모양(대각선 두 점)일 때만 그대로로 본다. */
     val isIdentity: Boolean
-        get() = exposure == 0f && temperature == 0f && shadows == 0f && highlights == 0f &&
+        get() = exposure == 0f && temperature == 0f && tint == 0f && shadows == 0f && highlights == 0f &&
             brightness == 0f && contrast == 0f && saturation == 0f && curve.isIdentity
 
     /** -0을 0으로 맞춘 값. 그대로 두면 같은 값인데도 다른 보정으로 비교된다(data class의 Float 비교). */
@@ -39,6 +41,7 @@ data class Adjustments(
         copy(
             exposure = exposure + 0f,
             temperature = temperature + 0f,
+            tint = tint + 0f,
             shadows = shadows + 0f,
             highlights = highlights + 0f,
             brightness = brightness + 0f,

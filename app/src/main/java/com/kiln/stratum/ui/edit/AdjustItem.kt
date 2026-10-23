@@ -8,7 +8,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * 보정 패널의 항목. 화면에 보이는 순서다: 빛(노출·밝기·대비·하이라이트·그림자) → 색(색온도·채도) → 곡선.
+ * 보정 패널의 항목. 화면에 보이는 순서다: 빛(노출·밝기·대비·하이라이트·그림자) → 색(색온도·틴트·채도) → 곡선.
  * 곡선 말고는 슬라이더 하나로 바꾼다. 노출은 -2..2 EV, 나머지는 -1..1(화면 숫자는 -100..100)이다.
  *
  * @property min 슬라이더 왼쪽 끝 값
@@ -21,6 +21,7 @@ enum class AdjustItem(@get:StringRes val label: Int, val min: Float = -1f, val m
     HIGHLIGHTS(R.string.adjust_highlights),
     SHADOWS(R.string.adjust_shadows),
     TEMPERATURE(R.string.adjust_temperature),
+    TINT(R.string.adjust_tint),
     SATURATION(R.string.adjust_saturation),
     CURVE(R.string.adjust_curve);
 
@@ -37,6 +38,7 @@ enum class AdjustItem(@get:StringRes val label: Int, val min: Float = -1f, val m
             HIGHLIGHTS -> adjustments.highlights
             SHADOWS -> adjustments.shadows
             TEMPERATURE -> adjustments.temperature
+            TINT -> adjustments.tint
             SATURATION -> adjustments.saturation
             CURVE -> throw IllegalStateException("Curve has no slider value")
         }
@@ -51,6 +53,7 @@ enum class AdjustItem(@get:StringRes val label: Int, val min: Float = -1f, val m
             HIGHLIGHTS -> adjustments.copy(highlights = rounded)
             SHADOWS -> adjustments.copy(shadows = rounded)
             TEMPERATURE -> adjustments.copy(temperature = rounded)
+            TINT -> adjustments.copy(tint = rounded)
             SATURATION -> adjustments.copy(saturation = rounded)
             CURVE -> throw IllegalStateException("Curve has no slider value")
         }.normalized()

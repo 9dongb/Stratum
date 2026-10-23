@@ -74,6 +74,35 @@ class AdjustmentsTest {
     }
 
     @Test
+    fun tint_movesGreenAgainstRedAndBlue_andKeepsGrayBrightness() {
+        val magenta = apply(Adjustments(tint = 1f), 0.5f, 0.5f, 0.5f)
+        val green = apply(Adjustments(tint = -1f), 0.5f, 0.5f, 0.5f)
+
+        // +는 자홍(빨강·파랑이 늘고 초록이 줄어듦), -는 초록이다
+        assertTrue(magenta[0] > 0.5f && magenta[2] > 0.5f && magenta[1] < 0.5f)
+        assertTrue(green[0] < 0.5f && green[2] < 0.5f && green[1] > 0.5f)
+        assertEquals(magenta[0], magenta[2], 1e-6f)
+        // 회색의 밝기(선형 빛의 휘도)는 그대로다
+        val gray = AdjustmentMath.toLinear(0.5f)
+        for (color in listOf(magenta, green)) {
+            val luminance = AdjustmentMath.luma(
+                AdjustmentMath.toLinear(color[0]), AdjustmentMath.toLinear(color[1]), AdjustmentMath.toLinear(color[2])
+            )
+            assertEquals(gray, luminance, 1e-4f)
+        }
+        // 색온도와 함께 걸면 따로따로 곱한다(초록은 색온도와 상관없다)
+        val both = apply(Adjustments(temperature = 0.5f, tint = 0.5f), 0.5f, 0.5f, 0.5f)
+        assertEquals(apply(Adjustments(tint = 0.5f), 0.5f, 0.5f, 0.5f)[1], both[1], 1e-6f)
+    }
+
+    @Test
+    fun tint_isPartOfIdentityRangeAndNormalizing() {
+        assertFalse(Adjustments(tint = 0.1f).isIdentity)
+        assertThrows(IllegalArgumentException::class.java) { Adjustments(tint = 1.2f) }
+        assertEquals(Adjustments.NONE, Adjustments(tint = -0f).normalized())
+    }
+
+    @Test
     fun values_outOfRange_areRejected_andMinusZeroIsNormalized() {
         assertThrows(IllegalArgumentException::class.java) { Adjustments(exposure = 2.5f) }
         assertThrows(IllegalArgumentException::class.java) { Adjustments(contrast = -1.1f) }

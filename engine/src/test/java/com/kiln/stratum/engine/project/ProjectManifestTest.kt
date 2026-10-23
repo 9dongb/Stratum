@@ -134,6 +134,21 @@ class ProjectManifestTest {
     }
 
     @Test
+    fun tint_roundTrips_inItsOwnExtra() {
+        fun withTop(adjustments: Adjustments) = manifest.copy(layers = listOf(manifest.layers[0].copy(adjustments = adjustments), manifest.layers[1]))
+        val tinted = withTop(Adjustments(tint = -0.4f))
+        val both = withTop(Adjustments(exposure = 0.2f, tint = 0.3f))
+        val exposureOnly = withTop(Adjustments(exposure = 0.2f))
+
+        assertEquals(tinted, read(bytesOf(tinted)))
+        assertEquals(both, read(bytesOf(both)))
+        // 틴트만 바꾼 레이어는 틴트 덧붙임 하나(꼬리표·길이·실수 하나)만 더 쓴다
+        assertEquals(bytesOf(manifest).size + 12, bytesOf(tinted).size)
+        // 보정 값 덧붙임은 틴트가 없을 때와 같아, 틴트를 모르는 앞 판 앱도 나머지 보정을 그대로 읽는다
+        assertEquals(bytesOf(exposureOnly).size + 12, bytesOf(both).size)
+    }
+
+    @Test
     fun gainmapAndHdrValues_roundTrip() {
         val hdr = HdrInfo(
             ratioMin = GainRgb(1f),

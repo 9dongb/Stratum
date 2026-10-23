@@ -40,6 +40,7 @@ internal class AdjustShader private constructor(private val shader: RuntimeShade
             val shader = RuntimeShader(SOURCE)
             shader.setFloatUniform("gain", 2f.pow(adjustments.exposure))
             shader.setFloatUniform("temperature", adjustments.temperature)
+            shader.setFloatUniform("tint", adjustments.tint)
             shader.setFloatUniform("shadows", adjustments.shadows)
             shader.setFloatUniform("highlights", adjustments.highlights)
             shader.setFloatUniform("gamma", 2f.pow(-adjustments.brightness))
@@ -76,6 +77,7 @@ internal class AdjustShader private constructor(private val shader: RuntimeShade
             uniform shader curve;
             uniform float gain;
             uniform float temperature;
+            uniform float tint;
             uniform float shadows;
             uniform float highlights;
             uniform float gamma;
@@ -108,10 +110,11 @@ internal class AdjustShader private constructor(private val shader: RuntimeShade
                 }
                 float3 c = clamp(float3(color.rgb) / alpha, 0.0, 1.0);
                 float shift = ${AdjustmentMath.TEMPERATURE_SHIFT} * temperature;
+                float magenta = 1.0 + ${AdjustmentMath.TINT_SHIFT} * tint;
                 c = float3(
-                    toSrgb(toLinear(c.r) * gain * (1.0 + shift)),
-                    toSrgb(toLinear(c.g) * gain),
-                    toSrgb(toLinear(c.b) * gain * (1.0 - shift))
+                    toSrgb(toLinear(c.r) * gain * (1.0 + shift) * magenta),
+                    toSrgb(toLinear(c.g) * gain * (1.0 - ${AdjustmentMath.TINT_GREEN_SHIFT} * tint)),
+                    toSrgb(toLinear(c.b) * gain * (1.0 - shift) * magenta)
                 );
                 float l = luma(c);
                 float tone = ${AdjustmentMath.TONE_SHIFT} * (shadows * (1.0 - smoothstep(0.0, 0.6, l)) + highlights * smoothstep(0.4, 1.0, l));

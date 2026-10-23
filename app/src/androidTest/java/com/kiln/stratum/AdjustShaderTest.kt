@@ -40,6 +40,7 @@ class AdjustShaderTest {
     private val all = Adjustments(
         exposure = 0.4f,
         temperature = 0.3f,
+        tint = -0.35f,
         shadows = 0.5f,
         highlights = -0.4f,
         brightness = 0.2f,
@@ -88,6 +89,22 @@ class AdjustShaderTest {
             for (x in 0 until 256 step 5) {
                 val expected = reference(all, Color.rgb(x, y, (x + y) / 2))
                 if (!near(expected, rendered.getPixel(x, y))) fail("($x, $y): ${hex(rendered.getPixel(x, y))} vs ${hex(expected)}")
+            }
+        }
+    }
+
+    @Test
+    fun tint_matchesTheReference_bothWays() {
+        val document = gradient()
+        for (tint in listOf(0.8f, -0.8f)) {
+            val adjustments = Adjustments(tint = tint)
+            val rendered = software(PreviewRenderer.render(SetLayerAdjustments(LayerId(0), adjustments).applyTo(document), 0))
+
+            for (y in 0 until 256 step 7) {
+                for (x in 0 until 256 step 7) {
+                    val expected = reference(adjustments, Color.rgb(x, y, (x + y) / 2))
+                    if (!near(expected, rendered.getPixel(x, y))) fail("tint $tint ($x, $y): ${hex(rendered.getPixel(x, y))} vs ${hex(expected)}")
+                }
             }
         }
     }

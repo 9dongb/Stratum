@@ -18,16 +18,23 @@ object AdjustmentMath {
     /** 색온도 1(가장 따뜻함)에서 선형 빛의 빨강을 늘리고 파랑을 줄이는 몫 */
     const val TEMPERATURE_SHIFT = 0.25f
 
+    /** 틴트 1(가장 자홍)에서 선형 빛의 빨강·파랑을 늘리는 몫. 색온도와 같은 세기다. */
+    const val TINT_SHIFT = 0.25f
+
+    /** 틴트 1에서 선형 빛의 초록을 줄이는 몫. 빨강·파랑을 늘린 만큼 줄여 회색의 밝기(휘도)는 그대로다. */
+    const val TINT_GREEN_SHIFT = TINT_SHIFT * (LUMA_R + LUMA_B) / LUMA_G
+
     /** 그림자·하이라이트 1에서 밝기를 옮기는 최대 몫 */
     const val TONE_SHIFT = 0.35f
 
     /** [adjustments]를 색 [r]·[g]·[b]에 적용한 색(0..1). [curveTable]은 곡선 표(없으면 곡선을 쓰지 않는다). */
     fun apply(adjustments: Adjustments, r: Float, g: Float, b: Float, curveTable: FloatArray? = null): FloatArray {
-        // 1. 노출·색온도: 선형 빛에서 곱한다
+        // 1. 노출·색온도·틴트: 선형 빛에서 곱한다
         val gain = 2f.pow(adjustments.exposure)
-        var red = toSrgb(toLinear(r) * gain * (1f + TEMPERATURE_SHIFT * adjustments.temperature))
-        var green = toSrgb(toLinear(g) * gain)
-        var blue = toSrgb(toLinear(b) * gain * (1f - TEMPERATURE_SHIFT * adjustments.temperature))
+        val magenta = 1f + TINT_SHIFT * adjustments.tint
+        var red = toSrgb(toLinear(r) * gain * (1f + TEMPERATURE_SHIFT * adjustments.temperature) * magenta)
+        var green = toSrgb(toLinear(g) * gain * (1f - TINT_GREEN_SHIFT * adjustments.tint))
+        var blue = toSrgb(toLinear(b) * gain * (1f - TEMPERATURE_SHIFT * adjustments.temperature) * magenta)
 
         // 2. 그림자·하이라이트: 어두운 곳·밝은 곳의 밝기만 옮긴다
         val luma = luma(red, green, blue)

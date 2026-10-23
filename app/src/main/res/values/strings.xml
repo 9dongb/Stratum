@@ -153,6 +153,7 @@
     <string name="adjust_highlights">Highlights</string>
     <string name="adjust_shadows">Shadows</string>
     <string name="adjust_temperature">Temperature</string>
+    <string name="adjust_tint">Tint</string>
     <string name="adjust_saturation">Saturation</string>
     <string name="adjust_curve">Curve</string>
     <string name="adjust_reset_all">Reset all</string>

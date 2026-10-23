@@ -151,6 +151,7 @@
     <string name="adjust_highlights">하이라이트</string>
     <string name="adjust_shadows">그림자</string>
     <string name="adjust_temperature">색온도</string>
+    <string name="adjust_tint">틴트</string>
     <string name="adjust_saturation">채도</string>
     <string name="adjust_curve">곡선</string>
     <string name="adjust_reset_all">모두 초기화</string>
