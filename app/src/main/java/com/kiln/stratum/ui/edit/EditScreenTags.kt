@@ -199,6 +199,7 @@ object EditScreenTags {
     const val SELECTION_COPY = "selectionCopy"
     const val SELECTION_CUT = "selectionCut"
     const val SELECTION_AI_FILL = "selectionAiFill"
+    const val SELECTION_ENHANCE_TEXTURE = "selectionEnhanceTexture"
 
     /** 선택 도구를 고르면 캔버스 위에 겹치는 터치 자리 */
     const val SELECTION_OVERLAY = "selectionOverlay"
@@ -235,6 +236,7 @@ object EditScreenTags {
     const val RETOUCH_HARDNESS = "retouchHardness"
     const val RETOUCH_OPACITY = "retouchOpacity"
     const val RETOUCH_REMOVE_PICKED = "retouchRemovePicked"
+    const val RETOUCH_ENHANCE_TEXTURE = "retouchEnhanceTexture"
     const val RETOUCH_SOURCE_MARKER = "retouchSourceMarker"
 
     const val TONE_OVERLAY = "toneOverlay"

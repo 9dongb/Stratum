@@ -168,6 +168,7 @@
     <string name="layer_photo_name">Photo %1$d</string>
     <string name="edit_photo_insert_failed">Couldn\'t add this photo.</string>
     <string name="edit_liquify_baked">Liquify is now part of the pixels. Undo to edit it again.</string>
+    <string name="edit_texture_nothing">This fill is already as sharp as the photo, so there is no texture to add. Try it after removing something large in a big photo.</string>
     <string name="drop_to_add_layer">Drop to add as a new layer</string>
     <string name="drop_to_open">Drop to open this photo</string>
     <string name="shortcut_group_edit">Editing</string>
@@ -385,9 +386,11 @@
     <string name="retouch_source_locked">Source locked</string>
     <string name="retouch_source_unlocked">Source unlocked</string>
     <string name="subtool_ai_remove">AI remove</string>
-    <string name="retouch_hint_remove">Paint over what to remove, with a little margin for its shadow, and lift your finger to let AI fill it. Or tap an object to pick its shape, then tap Remove.</string>
+    <string name="retouch_hint_remove">Paint over what to remove, with a little margin for its shadow, and lift your finger to let AI fill it. Or tap an object to pick its shape, then tap Remove. If the fill looks blurry, tap Texture to bring in the fine texture around it.</string>
     <string name="retouch_remove_picked">Remove</string>
     <string name="retouch_remove_picked_description">Remove the picked object with AI</string>
+    <string name="texture_enhance">Texture</string>
+    <string name="texture_enhance_description">Add the fine texture around it to the AI fill</string>
     <string name="edit_remove_unavailable">AI remove can\'t run on this device. Try the spot healing brush.</string>
     <string name="edit_select_unavailable">Object select can\'t run on this device. Try the magic wand.</string>
     <string name="edit_pick_unavailable">Tapping to pick an object can\'t run on this device. Paint over what to remove instead.</string>

@@ -104,6 +104,9 @@ interface RetouchActions {
     /** 톡 눌러 고른 물체를 버린다(뒤로 가기·하위 도구를 바꿈) */
     fun clearPicked() {}
 
+    /** 가장 마지막 AI 채우기에 둘레의 고운 결을 더한다(질감 향상) */
+    fun enhanceTexture() {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : RetouchActions {
         override fun setSource(x: Float, y: Float) = Unit
@@ -162,6 +165,8 @@ val SubTool.retouchMode: RetouchMode?
  * @property objectPicked AI 제거에서 톡 눌러 고른 물체가 있는지. [지우기]는 그때만 켠다.
  * @property busy 편집을 처리하는 중이면 [지우기]를 막는다.
  * @property onRemovePicked [지우기]를 눌렀다(고른 물체를 지움)
+ * @property textureReady 보이는 문서가 가장 마지막 AI 채우기의 결과 그대로인지. [질감 향상]은 그때만 켠다.
+ * @property onEnhanceTexture [질감 향상]을 눌렀다
  */
 @Stable
 class RetouchControls(
@@ -171,7 +176,9 @@ class RetouchControls(
     val sizePreview: SizePreviewState? = null,
     val objectPicked: Boolean = false,
     val busy: Boolean = false,
-    val onRemovePicked: () -> Unit = {}
+    val onRemovePicked: () -> Unit = {},
+    val textureReady: Boolean = false,
+    val onEnhanceTexture: () -> Unit = {}
 )
 
 /**

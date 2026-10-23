@@ -135,6 +135,10 @@ class RetouchToolTest {
         override fun clearPicked() {
             calls += "clearPicked"
         }
+
+        override fun enhanceTexture() {
+            calls += "enhanceTexture"
+        }
     }
 
     /** 톡 눌러 고른 물체(문서 전체를 덮는 2단계 마스크 250×250, 한 칸 4px), 고를 때의 문서 번호 0 */
@@ -156,8 +160,11 @@ class RetouchToolTest {
 
     private var settings by mutableStateOf(BrushSettings(size = 60f, hardness = 0.5f))
 
-    private fun controls(source: CloneSource?, objectPicked: Boolean = false) =
-        RetouchControls(settings, onChange = { settings = it }, source = source, objectPicked = objectPicked, onRemovePicked = actions::removePicked)
+    private fun controls(source: CloneSource?, objectPicked: Boolean = false, textureReady: Boolean = false) =
+        RetouchControls(
+            settings, onChange = { settings = it }, source = source, objectPicked = objectPicked, onRemovePicked = actions::removePicked,
+            textureReady = textureReady, onEnhanceTexture = actions::enhanceTexture
+        )
 
     /** 커버 한 줄 막대에 리터칭의 칸을 놓는다(결정 기록 '커버 화면 개편') */
     private fun showOptions(mode: SubTool, source: CloneSource? = null, widthDp: Int = 411, objectPicked: Boolean = false) {
@@ -467,6 +474,27 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsEnabled().performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("removePicked"), actions.calls) }
+    }
+
+    @Test
+    fun aiRemove_theTextureButton_needsTheLastFillShown() {
+        var ready by mutableStateOf(false)
+        composeRule.setContent {
+            StratumTheme { CoverToolBar(retouchBar(SubTool.RETOUCH_REMOVE, controls(null, textureReady = ready)), rememberCoverBarState()) }
+        }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_ENHANCE_TEXTURE).assertIsDisplayed().assertIsNotEnabled()
+
+        composeRule.runOnIdle { ready = true }
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_ENHANCE_TEXTURE).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("enhanceTexture"), actions.calls) }
+    }
+
+    @Test
+    fun otherRetouchTools_haveNoTextureButton() {
+        showOptions(SubTool.RETOUCH_SPOT)
+
+        assertTrue(!exists(EditScreenTags.RETOUCH_ENHANCE_TEXTURE))
     }
 
     @Test

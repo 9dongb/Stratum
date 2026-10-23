@@ -26,8 +26,8 @@ import kotlin.math.roundToInt
 
 /**
  * 메인 화면 선택 도구의 작업 표시줄(사용자 피드백 10차 1: "그외 액션은 화면 중앙 하단에 가로로 보여주세요.(사진1 참고)", 태블릿 포토샵의
- * 상황별 작업 표시줄). 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기를 커버 옵션과 같은 버튼(아이콘·짧은 이름)으로 한 줄에 둔다.
- * 모두 선택은 늘, 나머지는 고른 곳이 있을 때만 켠다.
+ * 상황별 작업 표시줄). 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기·질감 향상을 커버 옵션과 같은 버튼(아이콘·짧은 이름)으로
+ * 한 줄에 둔다([SelectionActionButtons]).
  * 화면 가로 정중앙([screenCenterX], 창 x), 받은 영역(캔버스)의 아래쪽에 패널 색 카드로 뜬다([actionBarStarts]). 접히는 선이 지나가도 나누지 않고
  * 한 줄이다(사용자 피드백 11차 1). 받은 영역을 다 차지하지만 터치는 카드만 받는다(버튼 사이를 눌러도 캔버스로 가지 않음).
  * 아래에서 차지하는 높이(카드 + 아래 여백, px)를 [onInset]으로 알린다(알림 막대·떠 있는 패널을 그 위에 둔다). 사라지면 0을 알린다.
@@ -82,7 +82,8 @@ fun SelectionActionBar(controls: SelectionControls, screenCenterX: Float, modifi
 }
 
 /**
- * 선택 동작 버튼 일곱: 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기. 모두 선택은 늘, 나머지는 고른 곳이 있을 때만 켠다.
+ * 선택 동작 버튼 여덟: 모두 선택·해제·반전·지우기·새 레이어로 복사·잘라내기·AI 채우기·질감 향상. 모두 선택은 늘, 질감 향상은 보이는 문서가
+ * 가장 마지막 AI 채우기의 결과일 때, 나머지는 고른 곳이 있을 때만 켠다.
  * 메인 화면 작업 표시줄([SelectionActionBar])과 커버 한 줄 막대의 동작 줄(결정 기록 '커버 화면 개편', [compact]),
  * 커버를 가로로 돌렸을 때의 세로 막대([vertical], 띠 칸 모양)가 같이 쓴다.
  */
@@ -123,6 +124,10 @@ internal fun SelectionActionButtons(controls: SelectionControls, compact: Boolea
         actions.copyToLayer(cut = true)
     }
     button(R.drawable.ic_auto_awesome, R.string.selection_ai_fill, R.string.selection_ai_fill_description, selected, EditScreenTags.SELECTION_AI_FILL, actions::aiFill)
+    button(
+        R.drawable.ic_texture, R.string.texture_enhance, R.string.texture_enhance_description, ready && controls.textureReady,
+        EditScreenTags.SELECTION_ENHANCE_TEXTURE, actions::enhanceTexture
+    )
 }
 
 /** 작업 표시줄 버튼 사이 */

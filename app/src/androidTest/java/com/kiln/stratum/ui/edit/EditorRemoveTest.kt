@@ -312,6 +312,88 @@ class EditorRemoveTest {
         assertEquals(1, model.releases)
     }
 
+    @Test
+    fun afterABigRemove_textureIsOneMoreUndoStep_andComesBackOnWhenUndone_butAnotherEditTurnsItOff() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        val before = openWithDots(StrokePoint(500f, 400f))
+        // 반지름 300으로 칠하면 창이 문서만큼 커서(모델 1px이 문서 1.5px을 넘음) 결을 붙인다
+        onMain { viewModel.setRetouch(BrushSettings(size = 600f)) }
+        assertNull(viewModel.textureFill.value)
+
+        remove(StrokePoint(500f, 400f))
+        val filled = awaitReady { it.revision > before.revision }
+        assertEquals(filled.revision, viewModel.textureFill.value)
+        val fillCalls = model.calls
+
+        onMain { viewModel.retouchActions.enhanceTexture() }
+        val enhanced = awaitReady { it.revision > filled.revision }
+        // 같은 채우기를 채우기 전 픽셀에서 한 번 더 한다(같은 창들이라 모델을 같은 횟수만큼 더 부름)
+        assertEquals(2 * fillCalls, model.calls)
+        assertNull(viewModel.textureFill.value)
+
+        // 실행 취소 한 번이면 채운 결과로 돌아와 다시 켜진다
+        onMain { viewModel.undo() }
+        val back = awaitReady { it.revision > enhanced.revision }
+        assertEquals(back.revision, viewModel.textureFill.value)
+
+        // 다른 편집을 하면 꺼지고, 눌러도 아무것도 하지 않는다
+        onMain { viewModel.edit(PaintStroke(LayerId(0), listOf(StrokePoint(100f, 100f)), BrushSettings(size = 10f, color = Color.BLACK), false)) }
+        val edited = awaitReady { it.revision > back.revision }
+        assertNull(viewModel.textureFill.value)
+        onMain { viewModel.retouchActions.enhanceTexture() }
+        assertEquals(edited.revision, awaitReady { true }.revision)
+        assertEquals(2 * fillCalls, model.calls)
+    }
+
+    @Test
+    fun enhanceAfterASmallRemove_tellsThereIsNoTextureToAdd_andAddsNoStep() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        val before = openWithDots()
+        remove(StrokePoint(200f, 200f))
+        val filled = awaitReady { it.revision > before.revision }
+        assertEquals(filled.revision, viewModel.textureFill.value)
+
+        onMain { viewModel.retouchActions.enhanceTexture() }
+
+        assertEquals(EditorMessage.TextureNothing, awaitMessage())
+        val after = awaitReady { true }
+        assertEquals(filled.revision, after.revision)
+        // 창이 작아 모델을 다시 부르지 않는다
+        assertEquals(1, model.calls)
+        assertEquals(filled.revision, viewModel.textureFill.value)
+    }
+
+    @Test
+    fun aiFillOfABigSelection_canBeEnhanced_andKeepsTheSelection() {
+        FakeInpaintModel().also { viewModel.inpaintModel = it }
+        openWithDots(StrokePoint(500f, 400f))
+        onMain { viewModel.selectShape(SelectionShape.Rectangle(150f, 100f, 850f, 700f)) }
+        val selected = awaitReady { it.selection != null }
+        onMain { viewModel.selectionActions.aiFill() }
+        val filled = awaitReady { it.revision > selected.revision }
+        assertEquals(filled.revision, viewModel.textureFill.value)
+
+        onMain { viewModel.selectionActions.enhanceTexture() }
+        val enhanced = awaitReady { it.revision > filled.revision }
+
+        assertNotNull(enhanced.selection)
+        assertNull(viewModel.textureFill.value)
+    }
+
+    @Test
+    fun openingAnotherDocument_forgetsTheLastFill() {
+        FakeInpaintModel().also { viewModel.inpaintModel = it }
+        val before = openWithDots(StrokePoint(500f, 400f))
+        onMain { viewModel.setRetouch(BrushSettings(size = 600f)) }
+        remove(StrokePoint(500f, 400f))
+        awaitReady { it.revision > before.revision }
+        assertNotNull(viewModel.textureFill.value)
+
+        openWithDots()
+
+        assertNull(viewModel.textureFill.value)
+    }
+
     private companion object {
         val SIZE = PixelSize(1000, 800)
     }

@@ -162,6 +162,7 @@ import kotlinx.coroutines.flow.first
  * @param cloneSource 복제 도장·복구 브러시가 가져올 곳(정하지 않았으면 null)
  * @param retouchActions 리터칭 도구를 고른 채 캔버스를 누르거나 끌 때 보내는 일
  * @param removePick AI 제거에서 톡 눌러 고른 물체(없으면 null). 고를 때의 문서가 지금 보이는 문서일 때만 보인다.
+ * @param textureFill 질감 향상을 할 수 있는 문서 번호(보이는 문서가 가장 마지막 AI 채우기의 결과일 때, 아니면 null)
  * @param toneOptions 명암 도구 설정(범위·노출·크기·단단함), [onToneOptions]로 바꾼다
  * @param toneActions 명암 도구를 고른 채 캔버스를 끌 때 보내는 일
  * @param blurOptions 흐림 도구(흐림·선명) 설정(강도·크기·경도), [onBlurOptions]로 바꾼다
@@ -223,6 +224,7 @@ fun EditScreen(
     cloneSource: CloneSource? = null,
     retouchActions: RetouchActions = RetouchActions.None,
     removePick: RemovePick? = null,
+    textureFill: Long? = null,
     toneOptions: ToneOptions = ToneOptions(),
     onToneOptions: (ToneOptions) -> Unit = {},
     toneActions: ToneActions = ToneActions.None,
@@ -571,8 +573,13 @@ fun EditScreen(
             else -> null
         }
         val textControls = TextControls(textStyle, onTextStyle, colorControls(ColorTarget.TEXT)).takeIf { activeTool == EditTool.Text }
+        // 질감 향상은 보이는 문서가 가장 마지막 AI 채우기의 결과일 때만 켠다(결정 기록 'AI 제거·AI 선택'의 '질감 향상')
+        val textureReady = textureFill != null && textureFill == ready?.revision
         val selectionControls = ready?.takeIf { activeTool == EditTool.Select }?.let {
-            SelectionControls(selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions)
+            SelectionControls(
+                selectionOptions, onSelectionOptions, hasSelection = it.selection != null, busy = it.busy, actions = selectionActions,
+                textureReady = textureReady
+            )
         }
         // AI 선택을 고르면(고른 채 그림이 바뀌어도) 보이는 그림을 미리 읽어 둔다(처음 누를 때 오래 기다리지 않게, 결정 기록 'AI 제거·AI 선택')
         val objectChosen = ready != null && activeTool == EditTool.Select && selection.modeOf(EditTool.Select) == SubTool.SELECT_AI
@@ -637,7 +644,9 @@ fun EditScreen(
             sizePreview = sizePreview,
             objectPicked = shownPick != null,
             busy = ready?.busy == true,
-            onRemovePicked = retouchActions::removePicked
+            onRemovePicked = retouchActions::removePicked,
+            textureReady = textureReady,
+            onEnhanceTexture = retouchActions::enhanceTexture
         ).takeIf { activeTool == EditTool.Retouch }
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
         val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
@@ -1618,6 +1627,7 @@ private fun EditCanvas(
     val magicWand = stringResource(R.string.subtool_select_wand)
     val photoInsertFailed = stringResource(R.string.edit_photo_insert_failed)
     val liquifyBaked = stringResource(R.string.edit_liquify_baked)
+    val textureNothing = stringResource(R.string.edit_texture_nothing)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1659,6 +1669,7 @@ private fun EditCanvas(
                 EditorMessage.PickUnavailable -> snackbarHostState.showSnackbar(pickUnavailable, duration = SnackbarDuration.Long)
                 EditorMessage.PhotoUnreadable -> snackbarHostState.showSnackbar(photoInsertFailed)
                 EditorMessage.LiquifyBaked -> snackbarHostState.showSnackbar(liquifyBaked)
+                EditorMessage.TextureNothing -> snackbarHostState.showSnackbar(textureNothing, duration = SnackbarDuration.Long)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

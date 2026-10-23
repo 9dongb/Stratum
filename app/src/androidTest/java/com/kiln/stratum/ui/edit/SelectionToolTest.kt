@@ -103,6 +103,10 @@ class SelectionToolTest {
             calls += "aiFill"
         }
 
+        override fun enhanceTexture() {
+            calls += "enhanceTexture"
+        }
+
         override fun objectAt(x: Float, y: Float) {
             calls += "object"
             points += x to y
@@ -129,7 +133,7 @@ class SelectionToolTest {
     /** 편집 화면에 보내는 알림(알림 막대) */
     private val messages = Channel<EditorMessage>(Channel.UNLIMITED)
 
-    private fun show(widthDp: Int, heightDp: Int, outline: SelectionOutline? = null) {
+    private fun show(widthDp: Int, heightDp: Int, outline: SelectionOutline? = null, textureFill: Long? = null) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, heightDp.dp))) {
                 CompositionLocalProvider(LocalHinges provides hinges.value) {
@@ -149,7 +153,8 @@ class SelectionToolTest {
                             messages = messages.receiveAsFlow(),
                             selectionOptions = options,
                             onSelectionOptions = { options = it },
-                            selectionActions = actions
+                            selectionActions = actions,
+                            textureFill = textureFill
                         )
                     }
                 }
@@ -200,10 +205,22 @@ class SelectionToolTest {
         // 동작은 동작 칩을 펼친 버튼 줄이다(결정 기록 '커버 화면 개편')
         composeRule.expandBarChip("actions")
         composeRule.onNodeWithTag(EditScreenTags.SELECTION_ALL).performScrollTo().assertIsEnabled().performClick()
-        for (tag in listOf(EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL)) {
+        for (tag in listOf(EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE, EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_ENHANCE_TEXTURE)) {
             composeRule.onNodeWithTag(tag).assertIsNotEnabled()
         }
         composeRule.runOnIdle { assertEquals(listOf("all"), actions.calls) }
+    }
+
+    @Test
+    fun textureEnhance_needsTheLastFillShown_andIsSent() {
+        // 보이는 문서(번호 0)가 가장 마지막 AI 채우기의 결과다
+        show(411, 800, outline = square, textureFill = 0L)
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.expandBarChip("actions")
+
+        composeRule.onNodeWithTag(EditScreenTags.SELECTION_ENHANCE_TEXTURE).performScrollTo().assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("enhanceTexture"), actions.calls) }
     }
 
     @Test
@@ -448,7 +465,7 @@ class SelectionToolTest {
 
     private val barActionTags = listOf(
         EditScreenTags.SELECTION_ALL, EditScreenTags.SELECTION_NONE, EditScreenTags.SELECTION_INVERT, EditScreenTags.SELECTION_DELETE,
-        EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL
+        EditScreenTags.SELECTION_COPY, EditScreenTags.SELECTION_CUT, EditScreenTags.SELECTION_AI_FILL, EditScreenTags.SELECTION_ENHANCE_TEXTURE
     )
 
     @Test
@@ -464,7 +481,7 @@ class SelectionToolTest {
         val canvas = bounds(EditScreenTags.CANVAS)
         assertEquals(screen.center.x, bar.center.x, 2 * dp)
         assertEquals(canvas.bottom - 8 * dp, bar.bottom, 2 * dp)
-        // 버튼 일곱이 카드 안 한 줄에, 왼쪽부터 차례로
+        // 버튼 여덟이 카드 안 한 줄에, 왼쪽부터 차례로
         val buttons = barActionTags.map { bounds(it) }
         for (button in buttons) assertTrue("$button should be inside $bar", button.left >= bar.left - 1 && button.right <= bar.right + 1 && button.top >= bar.top - 1 && button.bottom <= bar.bottom + 1)
         assertEquals(buttons.map { it.left }.sorted(), buttons.map { it.left })
@@ -490,6 +507,18 @@ class SelectionToolTest {
         assertTrue("$gaps", gaps.max() - gaps.min() < 2f)
         val row = (buttons.first().left + buttons.last().right) / 2
         assertEquals(centerX.toFloat(), row, 4f)
+    }
+
+    @Test
+    fun medium_actionBar_keepsAllEightButtonsInOneRowOnTheScreen() {
+        // 펼친 화면을 세로로 든 폭(약 700dp)에서도 여덟 칸이 화면 안 한 줄이다
+        show(700, 900)
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Select)).performClick()
+
+        val screen = bounds(EditScreenTags.TOP_BAR)
+        val buttons = barActionTags.map { bounds(it) }
+        for (button in buttons) assertTrue("$button should be on $screen", button.left >= screen.left && button.right <= screen.right)
+        assertTrue("$buttons", buttons.all { abs(it.top - buttons.first().top) < 1f })
     }
 
     @Test

@@ -119,6 +119,7 @@ fun StratumApp(editor: EditorViewModel) {
             val retouch by editor.retouch.collectAsState()
             val cloneSource by editor.cloneSource.collectAsState()
             val removePick by editor.removePick.collectAsState()
+            val textureFill by editor.textureFill.collectAsState()
             val rasterizeAsk by editor.rasterizeAsk.collectAsState()
             val toneOptions by editor.tone.collectAsState()
             val blurOptions by editor.blur.collectAsState()
@@ -168,6 +169,7 @@ fun StratumApp(editor: EditorViewModel) {
                     cloneSource = cloneSource,
                     retouchActions = editor.retouchActions,
                     removePick = removePick,
+                    textureFill = textureFill,
                     toneOptions = toneOptions,
                     onToneOptions = editor::setTone,
                     toneActions = editor.toneActions,

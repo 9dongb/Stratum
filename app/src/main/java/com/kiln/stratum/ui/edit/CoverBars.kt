@@ -189,6 +189,18 @@ internal fun retouchBar(mode: SubTool, controls: RetouchControls): List<BarItem>
                 tag = EditScreenTags.RETOUCH_REMOVE_PICKED
             )
         )
+        // 가장 마지막 AI 채우기에 둘레의 결을 더한다(질감 향상, 채운 결과를 보일 때만 켜지는 칩)
+        add(
+            BarButton(
+                key = "enhanceTexture",
+                label = stringResource(R.string.texture_enhance),
+                icon = R.drawable.ic_texture,
+                onClick = controls.onEnhanceTexture,
+                enabled = controls.textureReady && !controls.busy,
+                description = stringResource(R.string.texture_enhance_description),
+                tag = EditScreenTags.RETOUCH_ENHANCE_TEXTURE
+            )
+        )
     }
     addAll(valueChips(retouchStrip(mode, controls)))
 }

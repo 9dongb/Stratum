@@ -53,6 +53,9 @@ interface SelectionActions {
     /** 고른 레이어의 고른 곳을 AI(채우기 모델)로 둘레에 맞게 채운다. 선택은 그대로 남는다. */
     fun aiFill() {}
 
+    /** 가장 마지막 AI 채우기에 둘레의 고운 결을 더한다(질감 향상) */
+    fun enhanceTexture() {}
+
     /** 문서 좌표 ([x], [y])를 누른 물체를 AI(분할 모델)가 모양대로 고른다(설정의 합치는 방법, AI 선택) */
     fun objectAt(x: Float, y: Float) {}
 

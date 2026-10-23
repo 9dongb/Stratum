@@ -220,6 +220,17 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
                     tag = EditScreenTags.RETOUCH_REMOVE_PICKED
                 )
             )
+            // 가장 마지막 AI 채우기에 둘레의 결을 더한다(질감 향상, 채운 결과를 보일 때만)
+            add(
+                IconCell(
+                    key = "enhanceTexture",
+                    icon = R.drawable.ic_texture,
+                    description = stringResource(R.string.texture_enhance_description),
+                    onClick = controls.onEnhanceTexture,
+                    enabled = controls.textureReady && !controls.busy,
+                    tag = EditScreenTags.RETOUCH_ENHANCE_TEXTURE
+                )
+            )
         }
     }
     return numbersLast(numbers, rest)

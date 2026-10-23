@@ -36,6 +36,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.effect.EffectKind
@@ -65,8 +66,10 @@ import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.Deselect
 import com.kiln.stratum.engine.platform.EffectStroke
+import com.kiln.stratum.engine.platform.EnhanceTexture
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.InpaintRegion
+import com.kiln.stratum.engine.platform.NothingToEnhanceException
 import com.kiln.stratum.engine.platform.InsertImageLayer
 import com.kiln.stratum.engine.platform.InvertSelection
 import com.kiln.stratum.engine.platform.LayerPreviewCache
@@ -102,6 +105,7 @@ import com.kiln.stratum.engine.platform.TranslateLayer
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.retouch.RetouchMode
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.MaskContour
@@ -201,6 +205,9 @@ sealed interface EditorMessage {
 
     /** 넣으려던 사진을 읽지 못했다(사진 넣기, 사용자 피드백 12차). 문서는 그대로다. */
     data object PhotoUnreadable : EditorMessage
+
+    /** 질감 향상에서 더할 결이 없다(원본 해상도와 거의 같게 채운 작은 곳 등, 결정 기록 'AI 제거·AI 선택'의 '질감 향상'). 문서는 그대로다. */
+    data object TextureNothing : EditorMessage
 
     /**
      * 다시 고칠 수 있던 유동화를 다른 편집(칠하기·옮기기·자르기 등)이 픽셀로 굳혔다(묻지 않음, 사용자 결정 "묻지 않고 굳히기").
@@ -631,6 +638,7 @@ class EditorViewModel internal constructor(
         override fun pickObject(x: Float, y: Float) = pickRemoveObject(x, y)
         override fun removePicked() = removePickedObject()
         override fun clearPicked() = clearRemovePick()
+        override fun enhanceTexture() = enhanceLastFill()
     }
 
     private val _rasterizeAsk = MutableStateFlow<LayerId?>(null)
@@ -649,6 +657,20 @@ class EditorViewModel internal constructor(
     /** AI 제거에서 톡 눌러 고른 물체. 없으면 null이다. 문서가 바뀌면 버린다(그 그림에서 찾은 모양이라). */
     val removePick: StateFlow<RemovePick?> = _removePick.asStateFlow()
 
+    /** AI 채우기 하나(질감 향상에 쓴다): 채운 명령, 채우기 전 그 레이어의 픽셀, 채운 결과 문서 */
+    private class AiFill(val command: InpaintRegion, val original: Raster, val result: Document)
+
+    /** 가장 마지막 AI 채우기(AI 제거 칠하기·톡 지우기, AI 채우기). 다른 문서를 열거나 닫으면 지운다. */
+    private var lastFill: AiFill? = null
+
+    private val _textureFill = MutableStateFlow<Long?>(null)
+
+    /**
+     * 질감 향상을 할 수 있는 보이는 문서의 번호([EditorState.Ready.revision], 결정 기록 'AI 제거·AI 선택'의 '질감 향상').
+     * 보이는 문서가 가장 마지막 AI 채우기의 결과 그대로일 때만 있다. 다른 편집이면 null이 되고, 실행 취소로 그 결과에 돌아오면 다시 생긴다.
+     */
+    val textureFill: StateFlow<Long?> = _textureFill.asStateFlow()
+
     private val _selectionOptions = MutableStateFlow(SelectionOptions())
 
     /** 선택 도구 설정(합치는 방법·페더·허용치·인접). 앱을 끌 때까지 남는다(다른 문서를 열어도). */
@@ -664,6 +686,7 @@ class EditorViewModel internal constructor(
         override fun delete() = deleteSelected()
         override fun copyToLayer(cut: Boolean) = copySelectionToLayer(cut)
         override fun aiFill() = fillSelection()
+        override fun enhanceTexture() = enhanceLastFill()
         override fun objectAt(x: Float, y: Float) = selectObject(x, y)
         override fun prepareObjects() = prepareObjectSelection()
     }
@@ -1659,7 +1682,34 @@ class EditorViewModel internal constructor(
         val layer = document.layers[document.indexOfLayer(activeLayerIn(document))]
         if (!layer.visible) return tellHiddenLayer()
         if (layer.text != null) return askRasterize(layer.id)
-        runEdit(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
+        runFill(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
+    }
+
+    /**
+     * AI 채우기 [command]를 기록하고([runEdit]), 기록되면 질감 향상에 쓸 수 있게 채우기 전 픽셀과 결과 문서를 남긴다([lastFill]).
+     * 채우기 전 픽셀은 [runEdit]가 계산할 문서(지금 기록된 문서)의 그 레이어 것이다.
+     */
+    private fun runFill(command: InpaintRegion, onCommitted: () -> Unit = {}, onFinished: () -> Unit = {}) {
+        val original = history?.document?.let { document ->
+            (document.layers.getOrNull(document.indexOfLayer(command.layerId))?.content as? RasterContent)?.raster
+        }
+        runEdit(command, onCommitted = {
+            onCommitted()
+            val result = history?.document
+            if (original != null && result != null) lastFill = AiFill(command, original, result)
+        }, onFinished = onFinished)
+    }
+
+    /**
+     * 가장 마지막 AI 채우기에 둘레 원본의 고운 결을 더한다(질감 향상, 실행 취소 한 단계, 결정 기록 'AI 제거·AI 선택'의 '질감 향상').
+     * 지금 기록된 문서가 그 채우기의 결과 그대로일 때만 하고([textureFill]), 다른 편집을 처리하는 중이면 무시한다.
+     * 더할 결이 없으면 [EditorMessage.TextureNothing], 모델을 돌리지 못하면 [EditorMessage.RemoveUnavailable]로 알린다.
+     */
+    fun enhanceLastFill() {
+        val fill = lastFill ?: return
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || document !== fill.result) return
+        runEdit(EnhanceTexture(fill.command.layerId, fill.command.area, inpaintModel, fill.original))
     }
 
     /**
@@ -2242,7 +2292,7 @@ class EditorViewModel internal constructor(
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
         if (layer.text != null) return askRasterize(layer.id)
-        runEdit(InpaintRegion(layer.id, pick.area, inpaintModel))
+        runFill(InpaintRegion(layer.id, pick.area, inpaintModel))
     }
 
     /** 톡 눌러 고른 물체를 버린다(뒤로 가기·하위 도구를 바꿈) */
@@ -2620,14 +2670,15 @@ class EditorViewModel internal constructor(
         if (editing) return
         val stroke = queuedStrokes.firstOrNull() ?: return
         strokeCommitting = true
-        runEdit(
-            stroke.command(),
-            onCommitted = { queuedStrokes.remove(stroke) }
-        ) {
+        val command = stroke.command()
+        val onCommitted = { queuedStrokes.remove(stroke) }
+        val onFinished = {
             // 기록하지 못했거나(메모리) 바뀐 것이 없어도 목록에서 뺀다
             queuedStrokes.remove(stroke)
             strokeCommitting = false
         }
+        // AI 제거 획은 질감 향상에 쓸 수 있게 남긴다
+        if (command is InpaintRegion) runFill(command, { onCommitted() }, onFinished) else runEdit(command, onCommitted = { onCommitted() }, onFinished = onFinished)
     }
 
     /**
@@ -2842,6 +2893,11 @@ class EditorViewModel internal constructor(
                 Log.w(TAG, "Could not read the photo for $command", e)
                 onFinished()
                 finishEditing(EditorMessage.PhotoUnreadable)
+                return@launch
+            } catch (e: NothingToEnhanceException) {
+                // 질감 향상: 더할 결이 없다(작게 채운 곳 등). 문서는 그대로다.
+                onFinished()
+                finishEditing(EditorMessage.TextureNothing)
                 return@launch
             }
             if (!history.commit(command, before, after)) {
@@ -3128,6 +3184,8 @@ class EditorViewModel internal constructor(
                 shownDocument = document
                 // 톡 눌러 고른 물체는 그 그림에서 찾은 모양이라 버린다(지운 뒤에도)
                 _removePick.value = null
+                // 질감 향상은 가장 마지막 AI 채우기의 결과를 보일 때만 할 수 있다(실행 취소로 돌아와도)
+                _textureFill.value = revision.takeIf { lastFill?.result === document }
                 // 문서 크기가 바뀌면(자르기·회전·크기 변경과 그 실행 취소) 가져올 곳이 다른 자리를 가리키므로 지운다
                 if (previous != null && (previous.width != document.width || previous.height != document.height)) _cloneSource.value = null
             }
@@ -3327,6 +3385,8 @@ class EditorViewModel internal constructor(
         outlined = null
         detailOutlined = null
         _cloneSource.value = null
+        lastFill = null
+        _textureFill.value = null
         closeLiquify()
     }
 

@@ -659,10 +659,12 @@ class OptionStripTest {
         pick(EditTool.Retouch)
         chooseSubTool(EditTool.Retouch, SubTool.RETOUCH_REMOVE)
 
-        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기와 [지우기] 칸(톡 눌러 고른 물체가 있을 때만 켜짐)만 있다
+        // 하위 도구 메뉴(4번째)에서 고르고, 띠에는 크기와 [지우기] 칸(톡 눌러 고른 물체가 있을 때만 켜짐),
+        // [질감 향상] 칸(AI로 채운 결과를 보일 때만 켜짐)만 있다
         cell("size").assertIsDisplayed()
         for (key in listOf("hardness", "opacity", "source")) cell(key).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsDisplayed().assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.RETOUCH_ENHANCE_TEXTURE).assertIsDisplayed().assertIsNotEnabled()
         // 물음표 칸은 없고(사용자 피드백 10차 5), 처음 고르면 안내 글이 알림으로 뜬다
         cell("help").assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.retouch_hint_remove))

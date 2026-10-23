@@ -59,6 +59,7 @@ import kotlin.math.sqrt
  *
  * @property hasSelection 지금 고른 곳이 있는지. 해제·반전·지우기·복사·잘라내기·AI 채우기는 고른 곳이 있을 때만 켠다.
  * @property busy 편집을 처리하는 중이면 동작 버튼을 막는다.
+ * @property textureReady 보이는 문서가 가장 마지막 AI 채우기의 결과 그대로인지. 질감 향상은 그때만 켠다.
  */
 @Stable
 class SelectionControls(
@@ -66,7 +67,8 @@ class SelectionControls(
     val onOptions: (SelectionOptions) -> Unit,
     val hasSelection: Boolean,
     val busy: Boolean,
-    val actions: SelectionActions
+    val actions: SelectionActions,
+    val textureReady: Boolean = false
 )
 
 /** 합치는 방법의 이름 */

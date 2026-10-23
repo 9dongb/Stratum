@@ -14,6 +14,24 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-23 · 질감 향상 4단계: 버튼과 ViewModel
+
+- 요청(사용자, 그대로): "질감 향상이라는 이름을 따로 붙여서 선택적으로 적용시키는건 어떤가요?(도구에서 옵션으로 체크를 하게하든,  AI 제거 후 누를 수 있게 하든,,가장 적합한 방법으로)" 승인된 계획(`docs/texture-enhance-plan.md`)의 4단계.
+- 의도: 말하지 않음
+- 커밋:
+  - "AI로 채운 뒤 누르는 질감 향상 버튼을 리터칭 AI 제거와 선택 도구에 더함"
+- 바꾼 것
+  - `EditorViewModel`: AI 채우기 세 곳을 `runFill`로 기록해 가장 마지막 채우기(`lastFill`: 명령·채우기 전 레이어 픽셀·결과 문서)를 남기고, 보이는 문서가 그 결과일 때의 번호를 `textureFill`로 알린다. `enhanceLastFill`(리터칭·선택 동작의 `enhanceTexture`)이 `EnhanceTexture`를 기록한다. 더할 결이 없으면 `EditorMessage.TextureNothing`. 다른 문서를 열거나 닫으면 잊는다.
+  - 화면: 커버 막대의 [지우기] 다음 칩, 펼친 화면 띠의 지우기 칸 다음 칸(`ToolStrips.retouchStrip`), 선택 동작 줄 맨 끝(`SelectionActionButtons`, 커버·가로 기둥·펼친 화면 동작 줄). 태그 `RETOUCH_ENHANCE_TEXTURE`·`SELECTION_ENHANCE_TEXTURE`. 알림 막대 문구.
+  - 아이콘 `ic_texture.xml`(Material Icons texture, Android Studio 내장 파일과 같은 경로). 문구 두 언어: `texture_enhance`('Texture'·'질감 향상'), `texture_enhance_description`, `edit_texture_nothing`, AI 제거 안내 글에 한 문장.
+- 정한 것(Claude 판단, 결정 기록 '질감 향상'의 '화면')
+  - 리터칭은 AI 제거를 골랐을 때만, 선택 도구는 하위 도구와 상관없이 보인다. 어느 도구에서 채웠든 가장 마지막 채우기를 향상한다.
+  - 영어 이름은 버튼 폭에 맞게 짧은 'Texture'이고, 화면 읽기는 'Add the fine texture around it to the AI fill'이다.
+- 확인한 것
+  - 에뮬레이터 테스트(접은 상태): EditorRemoveTest 16개(4개 더함: 큰 곳을 지운 뒤 켜짐 → 누르면 한 단계 → 실행 취소하면 다시 켜짐 → 다른 편집이면 꺼지고 눌러도 그대로, 작은 곳은 알림만, 선택 도구 AI 채우기 뒤에도 켜지고 선택 영역 그대로, 다른 문서를 열면 잊음), RetouchToolTest 31개(AI 제거에서만 칩, 보일 때만 켜짐), OptionStripTest 25개(띠의 칸), SelectionToolTest 22개(동작 줄 8칸이 펼친 화면 한 줄에 들어감) 통과.
+  - 처음 돌릴 때 EditorRemoveTest 하나가 모델 부름 횟수를 '창 하나'로 가정해 틀렸다(1000×800 문서의 반지름 300 칠하기는 창 둘). 앱은 맞게 같은 창들을 다시 채워, 테스트를 '채우기가 부른 횟수의 두 배'로 고쳤다.
+  - JVM 테스트 601개 통과.
+
 ## 2026-10-23 · 질감 향상 3단계: 결 붙이기와 명령
 
 - 요청(사용자, 그대로): "질감 향상이라는 이름을 따로 붙여서 선택적으로 적용시키는건 어떤가요?(…가장 적합한 방법으로)" 승인된 계획(`docs/texture-enhance-plan.md`)의 3단계.
