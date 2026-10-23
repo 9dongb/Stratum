@@ -206,8 +206,11 @@ sealed interface EditorMessage {
     /** 넣으려던 사진을 읽지 못했다(사진 넣기, 사용자 피드백 12차). 문서는 그대로다. */
     data object PhotoUnreadable : EditorMessage
 
-    /** 질감 향상에서 더할 결이 없다(원본 해상도와 거의 같게 채운 작은 곳 등, 결정 기록 'AI 제거·AI 선택'의 '질감 향상'). 문서는 그대로다. */
+    /** 질감 향상에서 더할 결이 없다: 원본 해상도와 거의 같게 채운 작은 곳이다(결정 기록 'AI 제거·AI 선택'의 '질감 향상'). 문서는 그대로다. */
     data object TextureNothing : EditorMessage
+
+    /** 질감 향상에서 더할 결이 없다: 둘레에 옮겨 올 결(다 알고 불투명한 곳)이 없다. 문서는 그대로다. */
+    data object TextureNoSource : EditorMessage
 
     /**
      * 다시 고칠 수 있던 유동화를 다른 편집(칠하기·옮기기·자르기 등)이 픽셀로 굳혔다(묻지 않음, 사용자 결정 "묻지 않고 굳히기").
@@ -657,11 +660,23 @@ class EditorViewModel internal constructor(
     /** AI 제거에서 톡 눌러 고른 물체. 없으면 null이다. 문서가 바뀌면 버린다(그 그림에서 찾은 모양이라). */
     val removePick: StateFlow<RemovePick?> = _removePick.asStateFlow()
 
-    /** AI 채우기 하나(질감 향상에 쓴다): 채운 명령, 채우기 전 그 레이어의 픽셀, 채운 결과 문서 */
-    private class AiFill(val command: InpaintRegion, val original: Raster, val result: Document)
+    /**
+     * AI 채우기 하나(질감 향상에 쓴다): 채운 명령, 채우기 전 그 레이어의 픽셀, 채운 결과 문서.
+     * [nothing]은 질감 향상을 해 보았는데 더할 결이 없던 까닭이다(다시 눌러도 모델을 다시 돌리지 않고 바로 알린다).
+     */
+    private class AiFill(val command: InpaintRegion, val original: Raster, val result: Document) {
+        var nothing: NothingToEnhanceException.Reason? = null
+    }
 
-    /** 가장 마지막 AI 채우기(AI 제거 칠하기·톡 지우기, AI 채우기). 다른 문서를 열거나 닫으면 지운다. */
+    /**
+     * 가장 마지막 AI 채우기(AI 제거 칠하기·톡 지우기, AI 채우기). 다른 문서를 열거나 닫으면 지우고, 그 결과 문서가 실행 취소 기록에서
+     * 버려지면(오래된 단계 버리기, 실행 취소한 뒤 다른 편집) 잊는다([forgetUnreachableFill]): 기록 밖에서 그 문서의 타일을 붙잡지 않게.
+     */
     private var lastFill: AiFill? = null
+
+    /** 질감 향상에 쓸 마지막 채우기를 붙잡고 있는지. 테스트가 본다. */
+    internal val keepsTextureFill: Boolean
+        get() = lastFill != null
 
     private val _textureFill = MutableStateFlow<Long?>(null)
 
@@ -1703,13 +1718,33 @@ class EditorViewModel internal constructor(
     /**
      * 가장 마지막 AI 채우기에 둘레 원본의 고운 결을 더한다(질감 향상, 실행 취소 한 단계, 결정 기록 'AI 제거·AI 선택'의 '질감 향상').
      * 지금 기록된 문서가 그 채우기의 결과 그대로일 때만 하고([textureFill]), 다른 편집을 처리하는 중이면 무시한다.
-     * 더할 결이 없으면 [EditorMessage.TextureNothing], 모델을 돌리지 못하면 [EditorMessage.RemoveUnavailable]로 알린다.
+     * 더할 결이 없으면 [EditorMessage.TextureNothing]·[EditorMessage.TextureNoSource], 모델을 돌리지 못하면 [EditorMessage.RemoveUnavailable]로 알린다.
+     * 한 번 더할 결이 없던 채우기는 다시 눌러도 계산하지 않고 바로 알린다.
      */
     fun enhanceLastFill() {
         val fill = lastFill ?: return
         val document = history?.document ?: return
         if (editing || hasLiveValues || document !== fill.result) return
+        fill.nothing?.let { reason ->
+            _messages.trySend(textureNothing(reason))
+            return
+        }
         runEdit(EnhanceTexture(fill.command.layerId, fill.command.area, inpaintModel, fill.original))
+    }
+
+    /** 질감 향상에서 더할 결이 없던 까닭의 알림 */
+    private fun textureNothing(reason: NothingToEnhanceException.Reason): EditorMessage =
+        when (reason) {
+            NothingToEnhanceException.Reason.SMALL -> EditorMessage.TextureNothing
+            NothingToEnhanceException.Reason.NO_SOURCE -> EditorMessage.TextureNoSource
+        }
+
+    /** 마지막 채우기의 결과 문서가 실행 취소 기록에서 버려졌으면 잊는다(기록 밖에서 그 문서의 타일을 붙잡지 않게, [lastFill]) */
+    private fun forgetUnreachableFill() {
+        val fill = lastFill ?: return
+        if (history?.contains(fill.result) == true) return
+        lastFill = null
+        _textureFill.value = null
     }
 
     /**
@@ -2895,9 +2930,11 @@ class EditorViewModel internal constructor(
                 finishEditing(EditorMessage.PhotoUnreadable)
                 return@launch
             } catch (e: NothingToEnhanceException) {
-                // 질감 향상: 더할 결이 없다(작게 채운 곳 등). 문서는 그대로다.
+                // 질감 향상: 더할 결이 없다(작게 채운 곳, 둘레에 옮겨 올 결이 없음). 문서는 그대로다.
+                // 같은 채우기는 다시 눌러도 바로 알리게 까닭을 남긴다(둘레에 결이 없으면 모델을 다시 돌려도 같다).
+                lastFill?.takeIf { it.result === before }?.nothing = e.reason
                 onFinished()
-                finishEditing(EditorMessage.TextureNothing)
+                finishEditing(textureNothing(e.reason))
                 return@launch
             }
             if (!history.commit(command, before, after)) {
@@ -3068,11 +3105,13 @@ class EditorViewModel internal constructor(
         if (needed <= 0L && work <= 0L) return
         val used = history.bytesInUse
         var remaining = history.releaseOldSteps((history.maxBytes - needed).coerceAtLeast(0L))
-        // 버린 단계의 타일은 가비지 컬렉터가 곧 돌려준다
+        // 버린 단계의 타일은 가비지 컬렉터가 곧 돌려준다(그 결과를 질감 향상이 붙잡고 있었으면 놓는다)
+        forgetUnreachableFill()
         var available = availableMemory() + (used - remaining)
         val shortage = needed + work - available
         if (work > 0L && shortage > 0L && remaining - history.unreleasableBytes >= shortage) {
             remaining = history.releaseOldSteps(remaining - shortage)
+            forgetUnreachableFill()
             available = availableMemory() + (used - remaining)
         }
         if (needed + work > available) throw NotEnoughMemoryException()
@@ -3184,7 +3223,9 @@ class EditorViewModel internal constructor(
                 shownDocument = document
                 // 톡 눌러 고른 물체는 그 그림에서 찾은 모양이라 버린다(지운 뒤에도)
                 _removePick.value = null
-                // 질감 향상은 가장 마지막 AI 채우기의 결과를 보일 때만 할 수 있다(실행 취소로 돌아와도)
+                // 질감 향상은 가장 마지막 AI 채우기의 결과를 보일 때만 할 수 있다(실행 취소로 돌아와도).
+                // 그 결과가 기록에서 버려졌으면(실행 취소한 뒤 다른 편집, 오래된 단계 버리기) 잊는다.
+                forgetUnreachableFill()
                 _textureFill.value = revision.takeIf { lastFill?.result === document }
                 // 문서 크기가 바뀌면(자르기·회전·크기 변경과 그 실행 취소) 가져올 곳이 다른 자리를 가리키므로 지운다
                 if (previous != null && (previous.width != document.width || previous.height != document.height)) _cloneSource.value = null

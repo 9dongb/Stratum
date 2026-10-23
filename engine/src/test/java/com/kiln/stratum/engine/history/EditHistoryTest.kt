@@ -51,6 +51,32 @@ class EditHistoryTest {
     }
 
     @Test
+    fun contains_knowsTheDocumentsItCanStillReach_andForgetsDroppedOnes() {
+        val initial = documentWithLayers(1)
+        val history = EditHistory(initial, maxUndoSteps = 2)
+        history.execute(makeHalfTransparent)
+        val first = history.document
+        history.execute(makeMultiply)
+        val second = history.document
+
+        assertTrue(history.contains(initial))
+        assertTrue(history.contains(first))
+        assertTrue(history.contains(second))
+        assertFalse(history.contains(documentWithLayers(1)))
+
+        // 실행 취소한 단계(다시 실행할 것)도 남아 있다
+        history.undo()
+        assertTrue(history.contains(second))
+        // 실행 취소한 뒤 다른 편집을 하면 그 단계는 버려진다
+        history.execute(makeScreen)
+        assertFalse(history.contains(second))
+        // 단계 수를 넘으면 가장 오래된 문서부터 버려진다
+        history.execute(SetLayerOpacity(LayerId(0), 0.25f))
+        assertFalse(history.contains(initial))
+        assertTrue(history.contains(history.document))
+    }
+
+    @Test
     fun undoAndRedo_returnToExactlyTheSameDocuments() {
         val initial = documentWithLayers(1)
         val history = EditHistory(initial)

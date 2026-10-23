@@ -381,6 +381,55 @@ class EditorRemoveTest {
     }
 
     @Test
+    fun undoingTheFill_thenAnotherEdit_letsGoOfIt() {
+        FakeInpaintModel().also { viewModel.inpaintModel = it }
+        val before = openWithDots(StrokePoint(500f, 400f))
+        onMain { viewModel.setRetouch(BrushSettings(size = 600f)) }
+        remove(StrokePoint(500f, 400f))
+        val filled = awaitReady { it.revision > before.revision }
+        assertTrue(viewModel.keepsTextureFill)
+
+        // 실행 취소만 했을 때는 다시 실행으로 돌아올 수 있어 붙잡아 둔다
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > filled.revision }
+        assertTrue(viewModel.keepsTextureFill)
+        assertNull(viewModel.textureFill.value)
+
+        // 다른 편집으로 다시 실행할 단계가 버려지면 놓는다(기록 밖에서 그 문서의 타일을 붙잡지 않게)
+        onMain { viewModel.edit(PaintStroke(LayerId(0), listOf(StrokePoint(100f, 100f)), BrushSettings(size = 10f, color = Color.BLACK), false)) }
+        awaitReady { it.revision > undone.revision }
+        assertFalse(viewModel.keepsTextureFill)
+        assertNull(viewModel.textureFill.value)
+    }
+
+    @Test
+    fun aFillWithNoTextureAround_isRemembered_soTheModelDoesNotRunAgain() {
+        val model = FakeInpaintModel().also { viewModel.inpaintModel = it }
+        // 반투명한 바탕: 둘레에 다 알고 불투명한 조각이 없다
+        onMain {
+            viewModel.onCanvasSize(1000, 800)
+            viewModel.newCanvas(SIZE.width, SIZE.height, CanvasFill.Solid(Color.argb(128, 200, 200, 200)))
+        }
+        val opened = awaitReady { it.documentSize == SIZE }
+        onMain { viewModel.edit(PaintStroke(LayerId(0), listOf(StrokePoint(500f, 400f)), BrushSettings(size = 30f, hardness = 1f, color = Color.BLACK), false)) }
+        val dotted = awaitReady { it.revision > opened.revision }
+        onMain { viewModel.setRetouch(BrushSettings(size = 600f)) }
+        remove(StrokePoint(500f, 400f))
+        val filled = awaitReady { it.revision > dotted.revision }
+        val fillCalls = model.calls
+
+        onMain { viewModel.retouchActions.enhanceTexture() }
+        assertEquals(EditorMessage.TextureNoSource, awaitMessage())
+        assertEquals(2 * fillCalls, model.calls)
+
+        // 다시 눌러도 바로 같은 알림이고 모델은 돌지 않는다
+        onMain { viewModel.retouchActions.enhanceTexture() }
+        assertEquals(EditorMessage.TextureNoSource, awaitMessage())
+        assertEquals(2 * fillCalls, model.calls)
+        assertEquals(filled.revision, awaitReady { true }.revision)
+    }
+
+    @Test
     fun openingAnotherDocument_forgetsTheLastFill() {
         FakeInpaintModel().also { viewModel.inpaintModel = it }
         val before = openWithDots(StrokePoint(500f, 400f))

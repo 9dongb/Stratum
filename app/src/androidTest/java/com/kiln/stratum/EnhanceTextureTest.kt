@@ -7,6 +7,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.inpaint.InpaintArea
+import com.kiln.stratum.engine.inpaint.InpaintModel
 import com.kiln.stratum.engine.platform.EnhanceTexture
 import com.kiln.stratum.engine.inpaint.InpaintTexture
 import com.kiln.stratum.engine.platform.InpaintRegion
@@ -74,6 +75,36 @@ class EnhanceTextureTest {
         return sum / (size * size)
     }
 
+    /** [fineDetail]과 같고 세로로 이웃한 두 픽셀이다 */
+    private fun fineDetailDown(document: Document, x0: Int, y0: Int, size: Int): Double {
+        var sum = 0.0
+        for (y in y0 until y0 + size) {
+            for (x in x0 until x0 + size) sum += abs(Color.green(pixel(document, x, y + 1)) - Color.green(pixel(document, x, y)))
+        }
+        return sum / (size * size)
+    }
+
+    /** 창의 왼쪽 반·오른쪽 반의 모르는 곳을 그쪽 아는 곳의 평균색으로 따로 채우는 가짜 모델(입력 1×4×size², 출력 1×3×size²) */
+    private class SideFillModel(override val size: Int = 512) : InpaintModel {
+        override fun fill(input: FloatArray): FloatArray {
+            val plane = size * size
+            val sums = Array(2) { DoubleArray(3) }
+            val counts = IntArray(2)
+            for (p in 0 until plane) {
+                if (input[p] <= 0f) continue
+                val side = if (p % size < size / 2) 0 else 1
+                counts[side]++
+                for (c in 0 until 3) sums[side][c] += input[(c + 1) * plane + p]
+            }
+            return FloatArray(InpaintModel.OUTPUT_CHANNELS * plane) { i ->
+                val c = i / plane
+                val p = i % plane
+                val side = if (p % size < size / 2) 0 else 1
+                if (input[p] > 0f) input[(c + 1) * plane + p] else (sums[side][c] / counts[side].coerceAtLeast(1)).toFloat()
+            }
+        }
+    }
+
     @Test
     fun enhance_bringsTheFineTextureBack_whereTheFillOnlyHasNoise() {
         val document = checkerWithRedDisc()
@@ -130,11 +161,14 @@ class EnhanceTextureTest {
         val area = painted(400f, 300f, radius = 30f)
         val filled = InpaintRegion(LayerId(0), area, FakeInpaintModel()).applyTo(document)
         val model = FakeInpaintModel()
+        val enhance = EnhanceTexture(LayerId(0), area, model, rasterOf(document))
 
-        assertThrows(NothingToEnhanceException::class.java) {
-            EnhanceTexture(LayerId(0), area, model, rasterOf(document)).applyTo(filled)
-        }
+        val nothing = assertThrows(NothingToEnhanceException::class.java) { enhance.applyTo(filled) }
+        assertEquals(NothingToEnhanceException.Reason.SMALL, nothing.reason)
         assertEquals(0, model.calls)
+        // 해 볼 것이 없으니 메모리를 비우라고 하지 않는다(실행 취소 단계를 버리지 않게)
+        assertEquals(0L, enhance.estimateNewBytes(filled))
+        assertEquals(0L, enhance.estimateWorkBytes(filled))
     }
 
     @Test
@@ -145,9 +179,49 @@ class EnhanceTextureTest {
         }
         val filled = InpaintRegion(LayerId(0), bigStroke, FakeInpaintModel()).applyTo(document)
 
-        assertThrows(NothingToEnhanceException::class.java) {
+        val nothing = assertThrows(NothingToEnhanceException::class.java) {
             EnhanceTexture(LayerId(0), bigStroke, FakeInpaintModel(), rasterOf(document)).applyTo(filled)
         }
+        assertEquals(NothingToEnhanceException.Reason.NO_SOURCE, nothing.reason)
+    }
+
+    /**
+     * 왼쪽 반은 세로 줄무늬(가로로 바뀜), 오른쪽 반은 가로 줄무늬(세로로 바뀜)이고 가운데에 빨간 원. 채운 곳의 왼쪽은 왼쪽 결을,
+     * 오른쪽은 오른쪽 결을 옮겨 와야 한다(짝 표·조각 판의 자리가 틀리면 다른 쪽이나 엉뚱한 조각의 결이 섞인다).
+     * 가짜 모델은 창의 왼쪽·오른쪽 반을 그쪽의 아는 곳 평균색으로 채워, 짝 찾기가 같은 쪽 조각을 고르게 한다.
+     */
+    @Test
+    fun eachSideOfTheFill_bringsTheTextureOfItsOwnSide() {
+        val document = documentOf(1600, 1200) { x, y ->
+            when {
+                hypot(x + 0.5f - 800f, y + 0.5f - 600f) <= 280f -> Color.RED
+                x < 800 -> gray(if (x % 2 == 0) 70 else 130)
+                else -> gray(if (y % 2 == 0) 150 else 210)
+            }
+        }
+        val model = SideFillModel()
+        val filled = InpaintRegion(LayerId(0), bigStroke, model).applyTo(document)
+
+        val enhanced = EnhanceTexture(LayerId(0), bigStroke, model, rasterOf(document)).applyTo(filled)
+
+        // 왼쪽(채운 곳 안, 가운데 줄에서 150px): 가로로 이웃한 픽셀이 크게 다르고 세로로는 거의 같다
+        val leftAcross = fineDetail(enhanced, 620, 570, 60)
+        val leftDown = fineDetailDown(enhanced, 620, 570, 60)
+        assertTrue("left across $leftAcross, down $leftDown", leftAcross > 10.0 && leftAcross > 3 * leftDown)
+        // 오른쪽: 그 반대
+        val rightAcross = fineDetail(enhanced, 920, 570, 60)
+        val rightDown = fineDetailDown(enhanced, 920, 570, 60)
+        assertTrue("right across $rightAcross, down $rightDown", rightDown > 10.0 && rightDown > 3 * rightAcross)
+    }
+
+    @Test
+    fun aSmallFillDoesNotAskForMemory_butABigOneDoes() {
+        val document = checkerWithRedDisc()
+        val model = FakeInpaintModel()
+        val enhance = EnhanceTexture(LayerId(0), bigStroke, model, rasterOf(document))
+
+        assertTrue(enhance.estimateNewBytes(document) > 0L)
+        assertTrue(enhance.estimateWorkBytes(document) > 0L)
     }
 
     @Test

@@ -62,14 +62,18 @@ internal object TextureTransfer {
                     if (cell.x >= 0.0 && cell.y >= 0.0 && cell.x < grid && cell.y < grid) {
                         float4 pair = float4(table.eval(cell + 0.5));
                         if (pair.a > 0.5) {
+                            // 정수 나눗셈은 몫을 (값 + 0.5) / 나눌 수로 구하고 나머지는 빼서 구한다. GPU의 나눗셈은 몇 ULP 틀릴 수 있어
+                            // floor(값 / 나눌 수)가 딱 나누어떨어지는 값에서 하나 작게 나올 수 있다(mod도 같은 나눗셈을 쓴다).
                             float red = floor(pair.r * 255.0 + 0.5);
-                            float2 source = (float2(mod(red, 128.0), floor(pair.g * 255.0 + 0.5)) + 1.0) * ${InpaintTexture.STRIDE}.0;
-                            float slot = floor(red / 128.0) * 256.0 + floor(pair.b * 255.0 + 0.5);
+                            float high = floor((red + 0.5) / 128.0);
+                            float2 source = (float2(red - high * 128.0, floor(pair.g * 255.0 + 0.5)) + 1.0) * ${InpaintTexture.STRIDE}.0;
+                            float slot = high * 256.0 + floor(pair.b * 255.0 + 0.5);
+                            float row = floor((slot + 0.5) / columns);
                             float2 wave = cos((model - center) * (3.14159265 / ${InpaintTexture.CELL}.0));
                             float w = wave.x * wave.x * wave.y * wave.y;
                             float2 from = floor(doc + (source - center) * pixels);
                             float2 start = floor(corner + source * pixels - ${InpaintTexture.CELL / 2}.0 * pixels) - ${InpaintTexture.BLOCK_MARGIN}.0;
-                            float2 at = float2(mod(slot, columns), floor(slot / columns)) * block + (from - start) + 0.5;
+                            float2 at = float2(slot - row * columns, row) * block + (from - start) + 0.5;
                             float4 original = float4(atlas.eval(at));
                             float4 low = bicubicAt((from + 0.5 - corner) / pixels);
                             sum += w * (original.rgb - low.rgb);
@@ -143,7 +147,14 @@ internal object TextureTransfer {
         val block = InpaintTexture.blockSize(scale)
         val columns = InpaintTexture.columns(match.sources.size)
         val atlas = atlas(raster, window, match, scale, block, columns)
-        return Inputs(table(match), atlas, window, modelSize, match.grid, block, columns)
+        val table = try {
+            table(match)
+        } catch (e: Throwable) {
+            // 짝 표를 만들지 못하면(메모리 등) 이미 만든 조각 판을 놓는다
+            atlas.recycle()
+            throw e
+        }
+        return Inputs(table, atlas, window, modelSize, match.grid, block, columns)
     }
 
     /**

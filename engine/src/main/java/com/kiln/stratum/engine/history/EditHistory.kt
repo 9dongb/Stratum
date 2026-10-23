@@ -132,6 +132,12 @@ class EditHistory(
         return bytes
     }
 
+    /**
+     * [document]가 아직 기록에 남아 있는지(지금 문서, 실행 취소·다시 실행으로 돌아갈 수 있는 문서). 같은 객체인지로 본다.
+     * 기록 밖에서 문서를 붙잡아 두는 쪽(질감 향상의 마지막 채우기)이, 버려진 단계의 문서를 놓아 주는 데 쓴다.
+     */
+    fun contains(document: Document): Boolean = base === document || steps.any { it.after === document }
+
     /** 한 단계 이전 문서로 돌아간다. 돌아갈 단계가 없으면 false를 돌려준다. */
     fun undo(): Boolean {
         if (!canUndo) return false

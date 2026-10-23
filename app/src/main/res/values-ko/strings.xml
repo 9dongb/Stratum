@@ -167,6 +167,7 @@
     <string name="edit_photo_insert_failed">이 사진을 넣을 수 없어요.</string>
     <string name="edit_liquify_baked">유동화를 픽셀로 굳혔어요. 실행 취소하면 다시 고칠 수 있어요.</string>
     <string name="edit_texture_nothing">이미 사진만큼 선명하게 채워서 더할 결이 없어요. 큰 사진에서 넓게 지운 곳에 써 보세요.</string>
+    <string name="edit_texture_no_source">둘레에서 옮겨 올 결을 찾지 못했어요. 결은 채운 곳 둘레의 투명하지 않은 곳에서 가져와요.</string>
     <string name="drop_to_add_layer">여기에 놓으면 새 레이어로 넣어요</string>
     <string name="drop_to_open">여기에 놓으면 사진을 열어요</string>
     <string name="shortcut_group_edit">편집</string>

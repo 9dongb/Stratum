@@ -169,6 +169,7 @@
     <string name="edit_photo_insert_failed">Couldn\'t add this photo.</string>
     <string name="edit_liquify_baked">Liquify is now part of the pixels. Undo to edit it again.</string>
     <string name="edit_texture_nothing">This fill is already as sharp as the photo, so there is no texture to add. Try it after removing something large in a big photo.</string>
+    <string name="edit_texture_no_source">Couldn\'t find texture around the fill to bring in. Texture comes from the solid, fully opaque area around it.</string>
     <string name="drop_to_add_layer">Drop to add as a new layer</string>
     <string name="drop_to_open">Drop to open this photo</string>
     <string name="shortcut_group_edit">Editing</string>
