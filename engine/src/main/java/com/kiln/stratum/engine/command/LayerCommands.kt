@@ -1,12 +1,15 @@
 package com.kiln.stratum.engine.command
 
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.Selection
 
 /**
  * 빈(투명한) 레이어를 [index] 위치에 추가한다. 0이면 맨 아래, 레이어 개수와 같으면 맨 위다.
@@ -20,6 +23,20 @@ data class AddLayer(val name: String, val index: Int) : EditCommand {
         val layer = Layer(LayerId(document.nextLayerId), name, RasterContent(Raster.EMPTY))
         val layers = document.layers.toMutableList().apply { add(index, layer) }
         return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1)
+    }
+}
+
+/**
+ * 조정 레이어를 [index] 자리(0이 맨 아래)에 더한다(결정 기록 '피부 보정'의 1e). 보정은 아직 없고, 앱의 조정 패널이 이 레이어의 보정을 고친다.
+ * 마스크는 선택 영역이 있으면 그 모양이고 선택을 푼다. 없으면 다 보이는 마스크다(포토샵 조정 레이어와 같다). 새 레이어 번호는 문서의 nextLayerId다.
+ */
+data class AddAdjustmentLayer(val name: String, val index: Int) : EditCommand {
+    override fun applyTo(document: Document): Document {
+        require(index in 0..document.layers.size) { "Layer index out of range: $index" }
+        val mask = document.selection ?: Selection.all(PixelSize(document.width, document.height))
+        val layer = Layer(LayerId(document.nextLayerId), name, AdjustmentContent, mask = mask)
+        val layers = document.layers.toMutableList().apply { add(index, layer) }
+        return document.copy(layers = layers, nextLayerId = document.nextLayerId + 1, selection = null)
     }
 }
 

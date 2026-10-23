@@ -64,4 +64,22 @@ class CompositePlanTest {
 
         assertEquals(listOf(a, c), CompositePlan.of(listOf(a, b, c)).map { it.layer })
     }
+
+    @Test
+    fun adjustmentLayer_becomesAnAdjustStep_unlessItChangesNothing() {
+        val adjust = Layer(LayerId(1), "A", AdjustmentContent, 0.5f, BlendMode.SCREEN, Adjustments(saturation = -1f), mask = Selection.EMPTY)
+        val plan = CompositePlan.of(document(layer(0), adjust))
+
+        val step = plan[1] as CompositeStep.Adjust
+        assertSame(adjust, step.layer)
+        assertEquals(0.5f, step.opacity, 0f)
+        assertEquals(BlendMode.SCREEN, step.blendMode)
+        assertSame(Selection.EMPTY, step.mask)
+        // 보정이 없어도 스크린은 아래를 자기와 섞어 바꾸고, 표준이면 그릴 것이 없다
+        val identity = adjust.copy(adjustments = Adjustments.NONE)
+        assertEquals(2, CompositePlan.of(document(layer(0), identity)).size)
+        assertEquals(1, CompositePlan.of(document(layer(0), identity.copy(blendMode = BlendMode.NORMAL))).size)
+        // 숨긴 조정 레이어도 빠진다
+        assertEquals(1, CompositePlan.of(document(layer(0), adjust.copy(visible = false))).size)
+    }
 }

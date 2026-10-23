@@ -34,6 +34,7 @@ import kotlin.math.ceil
  * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
  * 레이어는 합성 계획([CompositePlan])의 차례대로 기본 보정을 걸어 그리고, 불투명도·혼합 모드(표준·곱하기·스크린·오버레이)로 아래에 얹는다.
  * 레이어 마스크가 있으면 타일마다 같은 자리의 마스크 타일 알파를 곱하고, 마스크 타일이 없는(가린) 자리는 그리지 않는다.
+ * 조정 레이어는 지금까지 그린 묶음을 그림으로 만들어, 그것을 보정한 색을 몫만큼 바꿔 넣은 그림에서 이어 그린다(여러 번 그리기, [AdjustLayerShader]).
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
@@ -97,10 +98,12 @@ object PreviewRenderer {
         val scale = if (halve) 0.5f else 1f
         val width = if (halve) (block.width + 1) / 2 else block.width
         val height = if (halve) (block.height + 1) / 2 else block.height
-        val picture = Picture()
-        val canvas = picture.beginRecording(width, height)
+        var picture = Picture()
+        var canvas = picture.beginRecording(width, height)
         // 힙에 담긴 타일(테스트·작은 데이터)은 그리는 동안만 비트맵으로 바꿔 쓴다
         val temporary = ArrayList<Bitmap>()
+        // 조정 레이어가 읽은 아래 그림. 다음 조정 레이어나 끝에서 다 그린 뒤 돌려준다.
+        var below: Bitmap? = null
         try {
             // 합성 계획의 차례대로 그린다(보이는 레이어만, 결정 기록 '피부 보정'의 1단계)
             for (step in CompositePlan.of(document)) {
@@ -131,11 +134,32 @@ object PreviewRenderer {
                         }
                         if (saved != null) canvas.restoreToCount(saved)
                     }
+                    is CompositeStep.Adjust -> {
+                        // 지금까지 그린 아래를 그림으로 만들고, 그 그림을 바탕으로 새로 그린다(결정 기록 '피부 보정'의 1e)
+                        picture.endRecording()
+                        val drawn = drawOnGpu(picture, width, height) ?: return null
+                        below?.recycle()
+                        below = drawn
+                        picture = Picture()
+                        canvas = picture.beginRecording(width, height)
+                        val left = (block.firstColumn * TILE_SIZE).toFloat()
+                        val top = (block.firstRow * TILE_SIZE).toFloat()
+                        val mask = step.mask?.let { SelectionPreview.maskAt(it, left, top, scale, width, height).also { m -> temporary += m } }
+                        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
+                            shader = AdjustLayerShader.of(
+                                step,
+                                BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP),
+                                mask?.let { BitmapShader(it, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
+                            )
+                            blendMode = BlendMode.SRC
+                        })
+                    }
                 }
             }
             picture.endRecording()
             return drawOnGpu(picture, width, height)
         } finally {
+            below?.recycle()
             for (bitmap in temporary) bitmap.recycle()
         }
     }

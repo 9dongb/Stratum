@@ -165,19 +165,44 @@ class ObjectSegmenter(private val model: SegmentModel) {
 
         companion object {
             fun of(document: Document) =
-                CompositeKey(document.width, document.height, CompositePlan.of(document).map { step -> when (step) { is CompositeStep.Draw -> StepKey(step) } })
+                CompositeKey(
+                    document.width, document.height,
+                    CompositePlan.of(document).map { step ->
+                        when (step) {
+                            is CompositeStep.Draw -> DrawKey(step)
+                            is CompositeStep.Adjust -> AdjustKey(step)
+                        }
+                    }
+                )
         }
     }
 
+    /** 합성 단계 하나의 열쇠 */
+    private interface StepKey {
+        fun matches(step: CompositeStep): Boolean
+    }
+
+    /** 조정 레이어 단계의 열쇠(결정 기록 '피부 보정'의 1e). 마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */
+    private class AdjustKey(step: CompositeStep.Adjust) : StepKey {
+        private val mask = WeakReference(step.mask)
+        private val opacity = step.opacity
+        private val blendMode = step.blendMode
+        private val adjustments = step.adjustments
+
+        override fun matches(step: CompositeStep): Boolean =
+            step is CompositeStep.Adjust && mask.get() === step.mask && step.opacity == opacity &&
+                step.blendMode == blendMode && step.adjustments == adjustments
+    }
+
     /** 그리는 단계 하나의 열쇠. 픽셀·마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */
-    private class StepKey(step: CompositeStep.Draw) {
+    private class DrawKey(step: CompositeStep.Draw) : StepKey {
         private val pixels = WeakReference(step.raster)
         private val mask = WeakReference(step.mask)
         private val opacity = step.opacity
         private val blendMode = step.blendMode
         private val adjustments = step.adjustments
 
-        fun matches(step: CompositeStep): Boolean =
+        override fun matches(step: CompositeStep): Boolean =
             step is CompositeStep.Draw && pixels.get() === step.raster && mask.get() === step.mask && step.opacity == opacity &&
                 step.blendMode == blendMode && step.adjustments == adjustments
     }

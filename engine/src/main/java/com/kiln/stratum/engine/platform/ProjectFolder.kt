@@ -2,6 +2,7 @@ package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.Layer
@@ -10,6 +11,7 @@ import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyMeshCodec
+import com.kiln.stratum.engine.project.AdjustmentEntry
 import com.kiln.stratum.engine.project.GainmapEntry
 import com.kiln.stratum.engine.project.LayerEntry
 import com.kiln.stratum.engine.project.LiquifyEntry
@@ -105,8 +107,9 @@ class ProjectFolder(val directory: File) {
         // 게인맵 타일도 같은 타일 파일로 둔다(같은 객체는 한 번만 쓴다)
         fun entryOf(gainmap: HdrGainmap): GainmapEntry = GainmapEntry(gainmap.width, gainmap.height, entriesOf(gainmap.raster))
         val layers = document.layers.map { layer ->
-            val raster = when (val content = layer.content) {
-                is RasterContent -> content.raster
+            val content = when (val content = layer.content) {
+                is RasterContent -> RasterEntry(entriesOf(content.raster))
+                AdjustmentContent -> AdjustmentEntry
             }
             // 유동화 기록: 원래 픽셀은 결과와 바뀌지 않은 타일을 함께 써서 바뀐 타일만 더 쓴다
             val liquify = layer.liquify?.let { record ->
@@ -127,7 +130,7 @@ class ProjectFolder(val directory: File) {
                 }
             }
             LayerEntry(
-                layer.id.value, layer.name, layer.opacity, layer.blendMode, RasterEntry(entriesOf(raster)), layer.adjustments,
+                layer.id.value, layer.name, layer.opacity, layer.blendMode, content, layer.adjustments,
                 layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask
             )
         }
@@ -220,15 +223,16 @@ class ProjectFolder(val directory: File) {
             }
         }
         val layers = manifest.layers.map { entry ->
-            val raster = when (val content = entry.content) {
-                is RasterEntry -> rasterOf(content.tiles, grid)
+            val content = when (val content = entry.content) {
+                is RasterEntry -> RasterContent(rasterOf(content.tiles, grid))
+                AdjustmentEntry -> AdjustmentContent
             }
             try {
                 val gainmap = entry.gainmap?.let { HdrGainmap(it.width, it.height, rasterOf(it.tiles, TileGrid(it.width, it.height))) }
                 val liquify = entry.liquify?.let { recordOf(it) }
                 val mask = entry.mask?.let { maskOf(it) }
                 Layer(
-                    LayerId(entry.id), entry.name, RasterContent(raster), entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text,
+                    LayerId(entry.id), entry.name, content, entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text,
                     liquify, mask
                 )
             } catch (e: IllegalArgumentException) {
@@ -265,6 +269,7 @@ class ProjectFolder(val directory: File) {
             layer.mask?.forEach { tile -> tile.file?.let { masks += it } }
             val entries = when (val content = layer.content) {
                 is RasterEntry -> content.tiles
+                AdjustmentEntry -> emptyList()
             } + layer.gainmap?.tiles.orEmpty() + layer.liquify?.base.orEmpty() + layer.liquify?.baseGainmap?.tiles.orEmpty()
             for (tile in entries) {
                 when (val ref = tile.ref) {

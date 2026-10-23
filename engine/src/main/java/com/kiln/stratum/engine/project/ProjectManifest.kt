@@ -24,8 +24,8 @@ import java.io.OutputStream
 
 /**
  * 프로젝트 파일 형식의 판. 이 앱이 읽을 수 있는 가장 높은 판이다.
- * 판 2는 레이어 마스크를 담는다(결정 기록 '피부 보정'의 1c). 앞 판 앱이 마스크를 빼고 열면 보이는 모습이 달라지므로,
- * 마스크가 있는 프로젝트만 판 2로 쓰고 나머지는 판 1 그대로다([ProjectManifest.formatVersion]).
+ * 판 2는 레이어 마스크(결정 기록 '피부 보정'의 1c)와 조정 레이어(1e)를 담는다. 앞 판 앱이 그것을 빼고 열면 보이는 모습이 달라지므로,
+ * 그것이 있는 프로젝트만 판 2로 쓰고 나머지는 판 1 그대로다([ProjectManifest.formatVersion]).
  */
 const val PROJECT_FORMAT_VERSION = 2
 
@@ -58,9 +58,9 @@ data class ProjectManifest(
     val header: ProjectHeader
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
 
-    /** 이 목차를 쓸 판: 레이어 마스크가 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
+    /** 이 목차를 쓸 판: 레이어 마스크나 조정 레이어가 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
     val formatVersion: Int
-        get() = if (layers.any { it.mask != null }) 2 else 1
+        get() = if (layers.any { it.mask != null || it.content is AdjustmentEntry }) 2 else 1
 }
 
 /**
@@ -120,6 +120,9 @@ sealed interface ContentEntry
 /** 픽셀 레이어. 타일이 없는 자리는 투명이다. */
 data class RasterEntry(val tiles: List<TileEntry>) : ContentEntry
 
+/** 조정 레이어(판 2, 결정 기록 '피부 보정'의 1e). 픽셀이 없고, 보정 값은 레이어 덧붙임(꼬리표 1·6)에 있다. */
+data object AdjustmentEntry : ContentEntry
+
 /** [column]·[row] 자리의 타일 */
 data class TileEntry(val column: Int, val row: Int, val ref: TileRef)
 
@@ -156,6 +159,9 @@ object ProjectManifestCodec {
     private const val MAGIC = 0x5354524D
 
     private const val CONTENT_RASTER = 1
+
+    /** 내용 종류: 조정 레이어(판 2) */
+    private const val CONTENT_ADJUSTMENT = 2
 
     /** 레이어 덧붙임 꼬리표: 기본 보정 값 */
     private const val EXTRA_ADJUSTMENTS = 1
@@ -212,6 +218,7 @@ object ProjectManifestCodec {
                     out.writeInt(CONTENT_RASTER)
                     writeTiles(out, content.tiles)
                 }
+                AdjustmentEntry -> out.writeInt(CONTENT_ADJUSTMENT)
             }
             // 레이어 덧붙임: 보정 값·틴트·게인맵(있을 때만)
             val extras = ArrayList<Pair<Int, ByteArray>>()
@@ -247,6 +254,7 @@ object ProjectManifestCodec {
                 val blendMode = blendOf(data.readInt())
                 val content = when (val type = data.readInt()) {
                     CONTENT_RASTER -> RasterEntry(readTiles(data))
+                    CONTENT_ADJUSTMENT -> AdjustmentEntry
                     else -> throw UnreadableProjectException("Unknown layer content $type")
                 }
                 var adjustments = Adjustments.NONE

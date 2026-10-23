@@ -12,6 +12,7 @@ import android.graphics.Shader
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
@@ -108,7 +109,7 @@ class LayerPreviewCache {
         lastRasters.clear()
         for (layer in document.layers) lastRasters[layer.id] = rasterOf(layer)
 
-        val previews = ArrayList<Pair<CompositeStep.Draw, Bitmap>>()
+        val previews = IdentityHashMap<CompositeStep.Draw, Bitmap>()
         for (step in steps) {
             if (step !is CompositeStep.Draw) continue
             checkCanceled()
@@ -128,16 +129,21 @@ class LayerPreviewCache {
                     ?: return null
             }
             val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace, size) ?: return null else checkNotNull(base)
-            previews += step to bitmap
+            previews[step] = bitmap
         }
         val moving = shift?.takeIf { it.dx != 0 || it.dy != 0 }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
-        previews.singleOrNull()?.let { (step, bitmap) ->
-            if (step.isPlain && step.layer.id != moving?.layerId) return bitmap
+        (steps.singleOrNull() as? CompositeStep.Draw)?.let { step ->
+            val bitmap = previews[step]
+            if (bitmap != null && step.isPlain && step.layer.id != moving?.layerId) return bitmap
         }
-        val picture = Picture()
-        val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
-        for ((step, bitmap) in previews) {
+        val width = region.previewWidth
+        val height = region.previewHeight
+        var picture = Picture()
+        var canvas = picture.beginRecording(width, height)
+        // 조정 레이어가 읽은 아래 그림. 다음 조정 레이어나 끝에서 다 그린 뒤 돌려준다.
+        var below: Bitmap? = null
+        for (step in steps) {
             // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL). 마스크도 같이 옮긴다.
             val offset = if (step.layer.id == moving?.layerId) {
                 val scale = 1f / (1 shl level)
@@ -145,18 +151,39 @@ class LayerPreviewCache {
             } else {
                 null
             }
-            val shader = shaderOf(bitmap, offset)
-            // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
-            val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
             val maskStrokes = strokes.filter { it.layerId == step.layer.id && it.mask }
-            val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null }
-            val paint = layerPaint(step).apply {
-                this.shader = if (mask == null) adjusted else ComposeShader(adjusted, shaderOf(mask, offset), BlendMode.DST_IN)
+            when (step) {
+                is CompositeStep.Draw -> {
+                    val bitmap = previews[step] ?: continue
+                    val shader = shaderOf(bitmap, offset)
+                    // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
+                    val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
+                    val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null.also { below?.recycle() } }
+                    val paint = layerPaint(step).apply {
+                        this.shader = if (mask == null) adjusted else ComposeShader(adjusted, shaderOf(mask, offset), BlendMode.DST_IN)
+                    }
+                    canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
+                }
+                is CompositeStep.Adjust -> {
+                    // 조정 레이어: 지금까지 합친 아래를 그림으로 만들고, 그것을 보정한 색을 몫만큼 바꿔 넣은 그림에서 이어 그린다(결정 기록 '피부 보정'의 1e)
+                    picture.endRecording()
+                    val drawn = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null.also { below?.recycle() }
+                    below?.recycle()
+                    below = drawn
+                    picture = Picture()
+                    canvas = picture.beginRecording(width, height)
+                    val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null.also { below?.recycle() } }
+                    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
+                        shader = AdjustLayerShader.of(step, BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), mask?.let { shaderOf(it, offset) })
+                        blendMode = BlendMode.SRC
+                    })
+                }
             }
-            canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
         }
         picture.endRecording()
-        return PreviewRenderer.drawOnGpu(picture, region.previewWidth, region.previewHeight)
+        val result = PreviewRenderer.drawOnGpu(picture, width, height)
+        below?.recycle()
+        return result
     }
 
     /** 축소본 [bitmap]을 그리는 셰이더. [offset]이 있으면 그만큼 옮기고 밖은 투명이다(DECAL), 없으면 가장자리를 늘인다. */
@@ -301,6 +328,8 @@ class LayerPreviewCache {
                 when (step) {
                     is CompositeStep.Draw ->
                         listOf(IdentityKey(step.raster), IdentityKey(step.layer.gainmap?.raster), IdentityKey(step.mask), step.opacity, step.blendMode)
+                    // 조정 레이어는 게인맵을 바꾸지 않는다
+                    is CompositeStep.Adjust -> emptyList<Any>()
                 }
             }
         lastGainmap?.let { (lastKey, gainmap) -> if (lastKey == key) return gainmap }
@@ -527,6 +556,8 @@ class LayerPreviewCache {
     private fun rasterOf(layer: Layer): Raster =
         when (val content = layer.content) {
             is RasterContent -> content.raster
+            // 조정 레이어는 픽셀이 없다(빈 래스터로 보아 축소본·작은 그림을 그리지 않는다)
+            AdjustmentContent -> Raster.EMPTY
         }
 
     companion object {

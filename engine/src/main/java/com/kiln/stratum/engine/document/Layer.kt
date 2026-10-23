@@ -37,6 +37,12 @@ sealed interface LayerContent
 data class RasterContent(val raster: Raster) : LayerContent
 
 /**
+ * 조정 레이어의 내용(결정 기록 '피부 보정'의 1e): 픽셀이 없고, 이 레이어의 기본 보정 값([Layer.adjustments])을 그 아래에 합친 그림 전체에 건다.
+ * 레이어의 불투명도·혼합 모드·마스크가 그 세기와 자리를 정한다(포토샵 조정 레이어와 같다).
+ */
+data object AdjustmentContent : LayerContent
+
+/**
  * 문서 안의 레이어 하나. 한 번 만들면 바꾸지 않고, 바꿀 때는 copy로 새 레이어를 만든다.
  *
  * @property name 화면에 보이는 이름. 엔진은 문구를 만들지 않으므로 앱이 strings.xml에서 만들어 넘긴다.

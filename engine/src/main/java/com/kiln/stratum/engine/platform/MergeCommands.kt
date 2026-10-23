@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.Raster
@@ -49,9 +50,12 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
         return if (!canMerge(document, index)) 0L else LayerMerger.estimateNewBytes(mergedLayers(document, index))
     }
 
-    /** [index] 레이어를 아래와 합칠 수 있는지: 맨 아래가 아니고 두 레이어가 다 보인다 */
+    /**
+     * [index] 레이어를 아래와 합칠 수 있는지: 맨 아래가 아니고, 두 레이어가 다 보이고, 아래가 픽셀 레이어다.
+     * 위가 조정 레이어면 아래 레이어 픽셀에만 보정을 굳힌다(결정 기록 '피부 보정'의 1e). 조정 레이어 위로는 합치지 않는다.
+     */
     private fun canMerge(document: Document, index: Int): Boolean =
-        index > 0 && document.layers[index].visible && document.layers[index - 1].visible
+        index > 0 && document.layers[index].visible && document.layers[index - 1].visible && document.layers[index - 1].content is RasterContent
 
     /** 합칠 두 레이어. 아래 레이어의 불투명도·혼합 모드는 결과 레이어에 그대로 남으므로 픽셀에는 넣지 않는다(보정은 굳힌다). */
     private fun mergedLayers(document: Document, index: Int): List<Layer> =
@@ -59,16 +63,16 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
 }
 
 /**
- * 보이는(숨기지 않았고 불투명도가 0보다 큰) 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다(포토샵 '보이는 레이어 병합').
+ * 보이는(숨기지 않았고 불투명도가 0보다 큰) 레이어를 모두 가장 아래 보이는 픽셀 레이어 하나로 합친다(포토샵 '보이는 레이어 병합').
  *
  * 결과는 그 레이어의 번호·이름을 지니고 표준·100%·보정·마스크 없음이라, 화면에 보이던 모습 그대로다.
- * 숨긴(눈을 끈·0%) 레이어는 제자리에 그대로 남는다. 보이는 레이어가 둘보다 적으면 그대로 둔다.
+ * 숨긴(눈을 끈·0%) 레이어는 제자리에 그대로 남는다. 합칠 레이어([mergedLayers])가 둘보다 적으면 그대로 둔다.
+ * 그 픽셀 레이어보다 아래에 보이는 조정 레이어는 숨긴 레이어만 바꾸므로 합치지 않고 그대로 둔다(결정 기록 '피부 보정'의 1e).
  */
 data object MergeVisible : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
-        // 보이는 것은 합성 계획이 그리는 레이어다(결정 기록 '피부 보정'의 1단계)
-        val visible = CompositePlan.shownLayers(document)
+        val visible = mergedLayers(document)
         if (visible.size < 2) return document
         val base = visible.first()
         val merged = LayerMerger.merge(document, visible, checkCanceled)
@@ -86,9 +90,15 @@ data object MergeVisible : CancellableCommand {
     }
 
     override fun estimateNewBytes(document: Document): Long {
-        val visible = CompositePlan.shownLayers(document)
+        val visible = mergedLayers(document)
         return if (visible.size < 2) 0L else LayerMerger.estimateNewBytes(visible)
     }
+
+    /**
+     * 합칠 레이어(아래부터): 합성 계획이 그리는 레이어(결정 기록 '피부 보정'의 1단계) 가운데 가장 아래 픽셀 레이어부터 위로다.
+     * 맨 앞이 결과가 될 레이어다. 앱이 메뉴를 켜고 결과 레이어를 고를 때도 쓴다.
+     */
+    fun mergedLayers(document: Document): List<Layer> = CompositePlan.shownLayers(document).dropWhile { it.content !is RasterContent }
 }
 
 /**
@@ -145,11 +155,14 @@ internal object LayerMerger {
     /** 그대로 쓸 타일(자리 → 타일)과 다시 그릴 자리 */
     private fun plan(layers: List<Layer>): Pair<Map<TileKey, Tile>, List<TileKey>> {
         // 합성 계획의 그리는 단계(보이는 픽셀 레이어)만 본다
-        val steps = CompositePlan.of(layers).filterIsInstance<CompositeStep.Draw>()
+        val plan = CompositePlan.of(layers)
+        val steps = plan.filterIsInstance<CompositeStep.Draw>()
         val kept = HashMap<TileKey, Tile>()
         val render = ArrayList<TileKey>()
         val keys = LinkedHashSet<TileKey>()
         for (step in steps) keys += step.raster.tiles.keys
+        // 조정 레이어가 있으면 그 아래 픽셀이 모두 바뀌므로 픽셀이 있는 자리를 모두 다시 그린다(결정 기록 '피부 보정'의 1e)
+        if (plan.any { it is CompositeStep.Adjust }) return kept to keys.toList()
         for (key in keys) {
             val present = steps.filter { it.raster.tiles[key] != null }
             val only = present.singleOrNull()

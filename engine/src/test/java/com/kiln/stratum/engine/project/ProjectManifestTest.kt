@@ -165,6 +165,17 @@ class ProjectManifestTest {
     }
 
     @Test
+    fun adjustmentLayer_roundTrips_inVersion2() {
+        val adjust = LayerEntry(3, "Adjust", 0.6f, BlendMode.MULTIPLY, AdjustmentEntry, Adjustments(saturation = -0.5f, tint = 0.2f))
+        val withAdjustment = manifest.copy(layers = manifest.layers + adjust, nextLayerId = 4)
+        val bytes = bytesOf(withAdjustment)
+
+        assertEquals(withAdjustment, read(bytes))
+        // 앞 판 앱은 조정 레이어를 모르므로 판 2로 쓴다
+        assertEquals(2, ByteBuffer.wrap(bytes, 4, 4).int)
+    }
+
+    @Test
     fun gainmapAndHdrValues_roundTrip() {
         val hdr = HdrInfo(
             ratioMin = GainRgb(1f),

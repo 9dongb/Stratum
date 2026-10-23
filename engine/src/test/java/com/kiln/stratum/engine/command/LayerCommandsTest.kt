@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.command
 
 import com.kiln.stratum.engine.adjust.Adjustments
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.LiquifyRecord
@@ -11,6 +12,8 @@ import com.kiln.stratum.engine.layerIds
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.document.Document
@@ -351,5 +354,27 @@ class LayerCommandsTest {
         assertNull(layer.liquifySource.liquify)
         val plain = documentWithLayers(1).layers[0]
         assertSame(plain, plain.liquifySource)
+    }
+
+    @Test
+    fun addAdjustmentLayer_usesTheSelectionAsItsMask_orRevealsAll() {
+        val document = documentWithLayers(2)
+        val selection = Selection.of(mapOf(TileKey(0, 0) to MaskTile.FULL))
+
+        val added = AddAdjustmentLayer("Adjust", 1).applyTo(document.copy(selection = selection))
+
+        assertEquals(listOf(0L, 2L, 1L), added.layerIds())
+        assertEquals(3L, added.nextLayerId)
+        val layer = added.layers[1]
+        assertEquals("Adjust", layer.name)
+        assertSame(AdjustmentContent, layer.content)
+        assertEquals(Adjustments.NONE, layer.adjustments)
+        assertSame(selection, layer.mask)
+        // 선택을 풀어 마스크 모양이 그대로 보인다(레이어 마스크 더하기와 같다)
+        assertNull(added.selection)
+        // 선택이 없으면 다 보이는 마스크다
+        val all = checkNotNull(AddAdjustmentLayer("Adjust", 2).applyTo(document).layers[2].mask)
+        assertEquals(setOf(TileKey(0, 0)), all.tiles.keys)
+        assertSame(MaskTile.FULL, all.tiles[TileKey(0, 0)])
     }
 }

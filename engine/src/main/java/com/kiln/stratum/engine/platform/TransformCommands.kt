@@ -2,6 +2,7 @@ package com.kiln.stratum.engine.platform
 
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
@@ -81,8 +82,15 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         val index = document.indexOfLayer(layer)
         if (index < 0) return document
         val target = document.layers[index]
-        val raster = (target.content as? RasterContent)?.raster ?: return document
         val plan = TransformPlan.translate(document.size, dx, dy)
+        // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
+        if (target.content is AdjustmentContent) {
+            val mask = target.mask ?: return document
+            val layers = document.layers.toMutableList()
+            layers[index] = target.copy(mask = movedMask(mask, plan, checkCanceled))
+            return document.copy(layers = layers)
+        }
+        val raster = (target.content as? RasterContent)?.raster ?: return document
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())
             val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return document

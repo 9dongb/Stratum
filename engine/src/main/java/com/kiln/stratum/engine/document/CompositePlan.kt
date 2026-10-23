@@ -20,6 +20,9 @@ object CompositePlan {
             if (!layer.isShown) return@mapNotNull null
             when (val content = layer.content) {
                 is RasterContent -> CompositeStep.Draw(layer, content.raster, layer.opacity, layer.mask)
+                // 바꾸는 것이 없는 표준 조정 레이어는 그릴 것이 없다(다른 혼합 모드는 보정이 없어도 아래를 자기와 섞어 바꾼다)
+                AdjustmentContent ->
+                    if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) null else CompositeStep.Adjust(layer, layer.opacity, layer.mask)
             }
         }
 
@@ -53,5 +56,19 @@ sealed interface CompositeStep {
         /** 그대로 보이는지(불투명도 1, 보정·마스크 없음). 투명한 바탕 위에서는 혼합 모드와 상관없이 픽셀 그대로다. */
         val isPlain: Boolean
             get() = opacity == 1f && adjustments.isIdentity && mask == null
+    }
+
+    /**
+     * 조정 레이어 하나(결정 기록 '피부 보정'의 1e): 그 아래에 합친 그림에 레이어의 보정을 걸고, 혼합 모드로 섞은 색을 [opacity] × [mask]만큼 바꿔 넣는다.
+     * 알파는 아래 그대로라 투명한 곳은 그대로다. 그리는 쪽은 아래를 그림으로 만들어 다시 그린다(여러 번 그리기, `AdjustLayerShader`).
+     * [mask]가 없으면 모든 곳에 건다. [opacity]는 얹을 때 쓰는 불투명도다(그리기 단계와 같다).
+     */
+    class Adjust(override val layer: Layer, val opacity: Float, val mask: Selection? = null) : CompositeStep {
+
+        val blendMode: BlendMode
+            get() = layer.blendMode
+
+        val adjustments: Adjustments
+            get() = layer.adjustments
     }
 }

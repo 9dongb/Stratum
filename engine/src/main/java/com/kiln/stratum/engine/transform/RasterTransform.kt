@@ -1,5 +1,6 @@
 package com.kiln.stratum.engine.transform
 
+import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.RasterContent
@@ -48,6 +49,8 @@ object RasterTransform {
                     val masked = moved.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
                     if (text != null) masked.copy(text = text) else masked
                 }
+                // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
+                AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
             }
         }
         // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')
