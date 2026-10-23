@@ -158,6 +158,9 @@ object EditScreenTags {
     const val LAYER_MENU_MERGE_VISIBLE = "layerMenuMergeVisible"
     const val LAYER_MENU_DELETE = "layerMenuDelete"
     const val LAYER_MENU_RASTERIZE = "layerMenuRasterize"
+    const val LAYER_MENU_MASK_ADD = "layerMenuMaskAdd"
+    const val LAYER_MENU_MASK_INVERT = "layerMenuMaskInvert"
+    const val LAYER_MENU_MASK_DELETE = "layerMenuMaskDelete"
 
     /** 레이어 이름 바꾸기 창의 이름 칸과 확인 버튼 */
     const val LAYER_RENAME_FIELD = "layerRenameField"
@@ -280,6 +283,12 @@ object EditScreenTags {
 
     /** 다시 고칠 수 있는 유동화가 있는 레이어 줄의 유동화 표시 */
     fun layerLiquifyBadge(id: com.kiln.stratum.engine.document.LayerId): String = "layerLiquifyBadge_${id.value}"
+
+    /** 레이어 줄의 작은 그림(마스크가 있으면 누르면 픽셀을 고친다) */
+    fun layerThumbnail(id: com.kiln.stratum.engine.document.LayerId): String = "layerThumbnail_${id.value}"
+
+    /** 레이어 줄의 마스크 작은 그림(누르면 마스크를 고친다, 결정 기록 '피부 보정'의 1d) */
+    fun layerMask(id: com.kiln.stratum.engine.document.LayerId): String = "layerMask_${id.value}"
 
     /** 색 줄의 전경색·배경색 칸 */
     fun colorSlot(slot: com.kiln.stratum.settings.ColorSlot): String = "colorSlot_${slot.name}"

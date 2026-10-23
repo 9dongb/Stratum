@@ -561,7 +561,7 @@ fun EditScreen(
         val layerControls = ready?.let {
             LayerControls(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
-                viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
+                editingMask = it.editingMask, viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
                 onRename = { id -> renamingLayer = id.value },
                 onAddPhoto = onAddPhoto
             )
@@ -1620,6 +1620,7 @@ private fun EditCanvas(
     val view = stringResource(R.string.action_view)
     val autosaveFailed = stringResource(R.string.edit_autosave_failed)
     val hiddenLayer = stringResource(R.string.edit_hidden_layer)
+    val maskBrushOnly = stringResource(R.string.edit_mask_brush_only)
     val removeUnavailable = stringResource(R.string.edit_remove_unavailable)
     val spotHeal = stringResource(R.string.subtool_spot_heal_short)
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
@@ -1662,6 +1663,7 @@ private fun EditCanvas(
                 EditorMessage.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
                 EditorMessage.AutosaveFailed -> snackbarHostState.showSnackbar(autosaveFailed)
                 EditorMessage.HiddenLayer -> snackbarHostState.showSnackbar(hiddenLayer)
+                EditorMessage.MaskBrushOnly -> snackbarHostState.showSnackbar(maskBrushOnly)
                 EditorMessage.RemoveUnavailable -> {
                     // 지우지 못한 곳은 스팟 복구 브러시로 고칠 수 있게 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(removeUnavailable, actionLabel = spotHeal, duration = SnackbarDuration.Long)

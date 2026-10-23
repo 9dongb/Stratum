@@ -5,6 +5,8 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -124,6 +126,21 @@ interface LayerActions {
     /** [id] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청) */
     fun rename(id: LayerId, name: String) {}
 
+    /** 고른 레이어에 레이어 마스크를 더하고 그 마스크를 칠한다(선택 영역이 있으면 그 모양, 결정 기록 '피부 보정'의 1d) */
+    fun addMask() {}
+
+    /** 고른 레이어의 마스크를 뒤집는다 */
+    fun invertMask() {}
+
+    /** 고른 레이어의 마스크를 지운다(굳히지 않고 버림) */
+    fun deleteMask() {}
+
+    /** [id] 레이어를 고르고 그 마스크를 칠한다(브러시는 보이게, 지우개는 가리게). 레이어 줄의 마스크 작은 그림을 누를 때다. */
+    fun editMask(id: LayerId) = select(id)
+
+    /** [id] 레이어를 고르고 픽셀을 칠한다(마스크 칠하기를 끝냄). 마스크가 있는 레이어 줄의 작은 그림을 누를 때다. */
+    fun editPixels(id: LayerId) = select(id)
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : LayerActions {
         override fun select(id: LayerId) = Unit
@@ -149,6 +166,7 @@ interface LayerActions {
  * @property enabled 바꿀 수 있는지. 자르기 중에는 막는다(보정 패널과 같은 까닭).
  * @property busy 편집을 처리하는 중이면 더하기·지우기·옮기기·혼합 모드를 막는다(다른 편집 버튼과 같다).
  * @property colorSpace 문서 색 공간. 작은 그림을 그 꼬리표로 보인다.
+ * @property editingMask 고른 레이어의 마스크를 칠하는 중인지(결정 기록 '피부 보정'의 1d). 그 줄의 마스크 작은 그림에 테두리를 그린다.
  */
 @Stable
 class LayerControls(
@@ -159,6 +177,7 @@ class LayerControls(
     val busy: Boolean,
     val actions: LayerActions,
     val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
+    val editingMask: Boolean = false,
     /** 화면 반전(보기). 레이어 탭 버튼 줄에 그 버튼이 있어 함께 넘긴다(사용자 피드백 7차, 결정 기록 '화면 반전'). */
     val viewFlip: ViewFlip = ViewFlip.None,
     val onViewFlip: (ViewFlip) -> Unit = {},
@@ -189,6 +208,10 @@ private val RowHeight = 56.dp
 
 /** 작은 그림 칸의 크기와 그 바탕 체크 무늬 한 칸 */
 private val ThumbnailSize = 40.dp
+
+/** 마스크 작은 그림과 레이어 작은 그림 사이, 칠하는 쪽 작은 그림의 테두리(결정 기록 '피부 보정'의 1d) */
+private val MaskGap = 4.dp
+private val TargetBorder = 2.dp
 
 /** 작은 그림 구석의 글자 레이어 표시 크기 */
 private val TextBadgeSize = 16.dp
@@ -347,6 +370,10 @@ private fun LayerRow(
     val hiddenLabel = stringResource(R.string.layer_hidden)
     val textLabel = stringResource(R.string.layer_text_badge)
     val liquifyLabel = stringResource(R.string.layer_liquify_badge)
+    val maskLabel = stringResource(R.string.layer_mask)
+    val maskEditingLabel = stringResource(R.string.layer_mask_editing)
+    val maskEditLabel = stringResource(R.string.layer_mask_edit)
+    val pixelsLabel = stringResource(R.string.layer_pixels_edit)
     val rowState = listOfNotNull(
         selectedLabel.takeIf { selected },
         hiddenLabel.takeIf { !layer.visible },
@@ -434,8 +461,23 @@ private fun LayerRow(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를,
-                    // 다시 고칠 수 있는 유동화가 있는 레이어(결정 기록 '얼굴 인식 보정' 3단계)는 유동화 표시(유동화 도구 아이콘)를 단다
-                    Box(Modifier.size(ThumbnailSize)) {
+                    // 다시 고칠 수 있는 유동화가 있는 레이어(결정 기록 '얼굴 인식 보정' 3단계)는 유동화 표시(유동화 도구 아이콘)를 단다.
+                    // 마스크가 있으면 작은 그림을 누르면 픽셀을, 마스크 작은 그림을 누르면 마스크를 칠하고, 칠하는 쪽에 테두리를 그린다
+                    // (결정 기록 '피부 보정'의 1d, 포토샵과 같다)
+                    val maskTarget = selected && controls.editingMask && layer.hasMask
+                    Box(
+                        Modifier
+                            .size(ThumbnailSize)
+                            .then(if (layer.hasMask && selected && !maskTarget) Modifier.border(TargetBorder, colors.selectedContent, StratumShapes.Thumbnail) else Modifier)
+                            .then(
+                                if (layer.hasMask) {
+                                    Modifier.clickable(enabled = controls.enabled, onClickLabel = pixelsLabel) { actions.editPixels(layer.id) }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .testTag(EditScreenTags.layerThumbnail(layer.id))
+                    ) {
                         LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
                         val badge = when {
                             layer.text != null -> R.drawable.ic_text_fields to EditScreenTags.layerTextBadge(layer.id)
@@ -453,6 +495,23 @@ private fun LayerRow(
                                     .testTag(badge.second),
                                 tint = colors.textSecondary
                             )
+                        }
+                    }
+                    // 마스크 작은 그림: 흰 곳은 보이고 검은 곳은 가린다
+                    if (layer.hasMask) {
+                        Spacer(Modifier.width(MaskGap))
+                        Box(
+                            Modifier
+                                .size(ThumbnailSize)
+                                .then(if (maskTarget) Modifier.border(TargetBorder, colors.selectedContent, StratumShapes.Thumbnail) else Modifier)
+                                .clickable(enabled = controls.enabled, onClickLabel = maskEditLabel) { actions.editMask(layer.id) }
+                                .semantics {
+                                    contentDescription = maskLabel
+                                    if (maskTarget) stateDescription = maskEditingLabel
+                                }
+                                .testTag(EditScreenTags.layerMask(layer.id))
+                        ) {
+                            LayerThumbnail(layer.mask, DocumentColorSpace.SRGB, Modifier.fillMaxSize())
                         }
                     }
                     Spacer(Modifier.width(12.dp))
@@ -505,7 +564,7 @@ private fun LayerRow(
 
 /**
  * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 픽셀로 바꾸기(글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어에만 보임),
- * 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
+ * 마스크 더하기(마스크가 없을 때) 또는 마스크 반전·지우기(있을 때), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
  * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다(이름 바꾸기는 창에서 이름을 받은 뒤). 할 수 없는 항목은 꺼 둔다
  * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
  */
@@ -523,6 +582,13 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
         // 다시 고칠 수 있는 유동화도 같은 항목으로 직접 굳힌다(결정 기록 '얼굴 인식 보정' 3단계)
         if (layers[documentIndex].text != null || layers[documentIndex].liquify) {
             LayerMenuItem(R.string.layer_rasterize, canEdit, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
+        }
+        // 레이어 마스크(결정 기록 '피부 보정'의 1d): 없으면 더하기, 있으면 반전·지우기
+        if (layers[documentIndex].hasMask) {
+            LayerMenuItem(R.string.layer_mask_invert, canEdit, EditScreenTags.LAYER_MENU_MASK_INVERT, onDismiss, actions::invertMask)
+            LayerMenuItem(R.string.layer_mask_delete, canEdit, EditScreenTags.LAYER_MENU_MASK_DELETE, onDismiss, actions::deleteMask)
+        } else {
+            LayerMenuItem(R.string.layer_mask_add, canEdit, EditScreenTags.LAYER_MENU_MASK_ADD, onDismiss, actions::addMask)
         }
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
         val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible

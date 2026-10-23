@@ -185,6 +185,13 @@
     <string name="shortcut_cancel">취소·도구 닫기</string>
     <string name="layer_delete">레이어 삭제</string>
     <string name="layer_rasterize">픽셀로 바꾸기</string>
+    <string name="layer_mask_add">마스크 더하기</string>
+    <string name="layer_mask_invert">마스크 반전</string>
+    <string name="layer_mask_delete">마스크 지우기</string>
+    <string name="layer_mask">레이어 마스크</string>
+    <string name="layer_mask_editing">마스크를 칠하는 중</string>
+    <string name="layer_mask_edit">마스크 칠하기</string>
+    <string name="layer_pixels_edit">픽셀 칠하기</string>
     <string name="layer_move_up">레이어를 위로</string>
     <string name="layer_move_down">레이어를 아래로</string>
     <string name="view_flip_horizontal">화면 좌우 반전</string>
@@ -209,6 +216,7 @@
     <string name="rasterize_title">글자를 픽셀로 바꿀까요?</string>
     <string name="rasterize_message">칠하려면 픽셀이어야 해요. 바꾸면 글자를 다시 고칠 수 없어요.</string>
     <string name="edit_hidden_layer">숨긴 레이어에는 그릴 수 없어요. 레이어 목록에서 눈을 켜 주세요.</string>
+    <string name="edit_mask_brush_only">마스크에는 브러시·지우개만 써요. 레이어 작은 그림을 누르면 픽셀을 칠해요.</string>
     <string name="blend_normal">표준</string>
     <string name="blend_multiply">곱하기</string>
     <string name="blend_screen">스크린</string>

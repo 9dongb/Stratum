@@ -187,6 +187,13 @@
     <string name="shortcut_cancel">Cancel or close the tool</string>
     <string name="layer_delete">Delete layer</string>
     <string name="layer_rasterize">Convert to pixels</string>
+    <string name="layer_mask_add">Add mask</string>
+    <string name="layer_mask_invert">Invert mask</string>
+    <string name="layer_mask_delete">Delete mask</string>
+    <string name="layer_mask">Layer mask</string>
+    <string name="layer_mask_editing">Painting the mask</string>
+    <string name="layer_mask_edit">Paint the mask</string>
+    <string name="layer_pixels_edit">Paint the pixels</string>
     <string name="layer_move_up">Move layer up</string>
     <string name="layer_move_down">Move layer down</string>
     <string name="view_flip_horizontal">Flip view horizontally</string>
@@ -211,6 +218,7 @@
     <string name="rasterize_title">Convert the text to pixels?</string>
     <string name="rasterize_message">To paint on it, the text needs to be pixels. After converting, you can\'t edit the text again.</string>
     <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>
+    <string name="edit_mask_brush_only">Only the brush and eraser paint on a mask. Tap the layer thumbnail to paint its pixels.</string>
     <string name="blend_normal">Normal</string>
     <string name="blend_multiply">Multiply</string>
     <string name="blend_screen">Screen</string>

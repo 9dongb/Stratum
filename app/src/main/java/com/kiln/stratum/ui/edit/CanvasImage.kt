@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix as DrawMatrix
@@ -75,6 +76,9 @@ fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modi
     val detail = remember(detailImage, state.colorSpace, state.gainmap) {
         detailImage?.let { DocumentColors.forScreen(it.bitmap, state.colorSpace, state.gainmap, it.region.rect, state.documentSize).asImageBitmap() }
     }
+    // 마스크를 칠하는 동안 가린 곳을 보이는 빨간 막(결정 기록 '피부 보정'의 1d). 엔진이 그린 가린 정도(알파)를 빨갛게 물들여 얹는다.
+    val overlayImage = state.maskOverlay
+    val overlay = remember(overlayImage) { overlayImage?.bitmap?.asImageBitmap() }
     val checker = remember { checkerBitmap() }
     val outline = StratumTheme.colors.canvasOutline
     val description = stringResource(R.string.edit_canvas_description)
@@ -130,6 +134,9 @@ fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modi
                             if (detailImage != null && detailPreview != null) {
                                 drawPreview(detailImage, detailPreview, transform, orientation, state.documentSize)
                             }
+                            if (overlay != null && overlayImage != null) {
+                                drawPreview(overlay, overlayImage, transform, orientation, state.documentSize, ColorFilter.tint(CanvasOverlayColors.MaskHidden))
+                            }
                         }
                     }
                     // 선은 가운데를 기준으로 그려지므로, 두께의 반만큼 바깥으로 옮겨 캔버스를 덮지 않게 한다.
@@ -156,7 +163,14 @@ fun CanvasImage(state: EditorState.Ready, view: () -> CanvasView, modifier: Modi
  * 돌려 보이는 중이면([orientation], 원래 문서 크기 [original]) [screen]은 돌린 모습의 문서 기준이고, 같은 그림을 돌려 그린다.
  * 90° 단위라 돌린 경계도 정수 화면 픽셀에 맞는다.
  */
-private fun DrawScope.drawPreview(image: ImageBitmap, preview: PreviewImage, screen: ViewTransform, orientation: Orientation, original: PixelSize) {
+private fun DrawScope.drawPreview(
+    image: ImageBitmap,
+    preview: PreviewImage,
+    screen: ViewTransform,
+    orientation: Orientation,
+    original: PixelSize,
+    colorFilter: ColorFilter? = null
+) {
     val level = preview.region.level
     val step = (1 shl level).toDouble()
     val left = preview.region.rect.left
@@ -190,14 +204,14 @@ private fun DrawScope.drawPreview(image: ImageBitmap, preview: PreviewImage, scr
     val srcOffset = IntOffset(firstColumn, firstRow)
     val srcSize = IntSize(lastColumn - firstColumn, lastRow - firstRow)
     if (orientation == Orientation.IDENTITY) {
-        drawImage(image, srcOffset, srcSize, IntOffset(x0, y0), IntSize(x1 - x0, y1 - y0), filterQuality = filter)
+        drawImage(image, srcOffset, srcSize, IntOffset(x0, y0), IntSize(x1 - x0, y1 - y0), colorFilter = colorFilter, filterQuality = filter)
         return
     }
     // 돌리기 전 모양(가로·세로가 바뀌면 바꾼 크기)으로 (0, 0)에 그리고, 그 사각형을 화면 사각형으로 돌려 옮기는 변환을 건다
     val width = if (orientation.swapsAxes) y1 - y0 else x1 - x0
     val height = if (orientation.swapsAxes) x1 - x0 else y1 - y0
     withTransform({ transform(orientationMatrix(orientation, width, height, x0, y0)) }) {
-        drawImage(image, srcOffset, srcSize, IntOffset.Zero, IntSize(width, height), filterQuality = filter)
+        drawImage(image, srcOffset, srcSize, IntOffset.Zero, IntSize(width, height), colorFilter = colorFilter, filterQuality = filter)
     }
 }
 

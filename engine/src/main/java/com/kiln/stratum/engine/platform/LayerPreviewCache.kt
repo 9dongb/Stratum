@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.platform
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.BlendMode
+import android.graphics.Color
 import android.graphics.ComposeShader
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -60,6 +61,9 @@ class LayerPreviewCache {
     /** 마스크 객체마다의 알파 그림(축소본과 같은 단계, 결정 기록 '피부 보정'의 1c) */
     private val masks = IdentityHashMap<Selection, Entry>()
 
+    /** 마스크 객체마다의 작은 그림(레이어 패널, 결정 기록 '피부 보정'의 1d) */
+    private val maskThumbnails = IdentityHashMap<Selection, Bitmap>()
+
     /** 레이어 축소본을 새로 그린 횟수. 속성만 바뀌면 늘지 않는 것을 테스트로 확인한다. */
     var layerRenders = 0
         private set
@@ -110,7 +114,8 @@ class LayerPreviewCache {
             checkCanceled()
             val layer = step.layer
             val raster = step.raster
-            val layerStrokes = strokes.filter { it.layerId == layer.id }
+            // 마스크 획은 픽셀이 아니라 마스크 그림에 얹는다(아래 합칠 때)
+            val layerStrokes = strokes.filter { it.layerId == layer.id && !it.mask }
             val stroking = layerStrokes.isNotEmpty()
             // 빈 레이어는 그릴 것이 없다(끄는 획이 있으면 투명한 바탕에 그린다)
             if (raster.tiles.isEmpty() && !stroking) continue
@@ -143,7 +148,8 @@ class LayerPreviewCache {
             val shader = shaderOf(bitmap, offset)
             // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
             val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
-            val mask = step.mask?.let { maskPreview(it, region) ?: return null }
+            val maskStrokes = strokes.filter { it.layerId == step.layer.id && it.mask }
+            val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null }
             val paint = layerPaint(step).apply {
                 this.shader = if (mask == null) adjusted else ComposeShader(adjusted, shaderOf(mask, offset), BlendMode.DST_IN)
             }
@@ -160,6 +166,87 @@ class LayerPreviewCache {
         } else {
             BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         }
+
+    /**
+     * [mask]의 알파 그림([maskPreview])에 끄는 마스크 획 [strokes]를 얹은 그림(결정 기록 '피부 보정'의 1d). 획이 없으면 기억한 그림 그대로다.
+     * 보이게 칠하면 알파를 더하고 가리게 칠하면 덜어 낸다(기록하는 [PaintLayerMask]와 같은 붓). 그리지 못하면 null.
+     */
+    private fun liveMask(mask: Selection, region: PreviewRegion, strokes: List<LiveStroke>): Bitmap? {
+        val base = maskPreview(mask, region) ?: return null
+        if (strokes.isEmpty()) return base
+        val width = region.previewWidth.toFloat()
+        val height = region.previewHeight.toFloat()
+        val picture = Picture()
+        val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
+        canvas.drawColor(Color.BLACK)
+        MaskTiles.drawAlpha(canvas, base, BlendMode.DST_IN)
+        val scale = 1f / (1 shl region.level)
+        for (stroke in strokes) {
+            val clip = stroke.selection?.let { selectionMask(it, region) }
+            BrushPainter.drawStroke(canvas, stroke.dabs, stroke.settings.copy(color = Color.BLACK), stroke.erase, scale, 0f, 0f, width, height, clip = clip)
+        }
+        picture.endRecording()
+        return PreviewRenderer.drawOnGpu(picture, region.previewWidth, region.previewHeight)
+    }
+
+    /**
+     * [layerId] 레이어의 마스크가 가린 정도(알파 = 1 - 마스크)를 담은 그림(마스크를 칠하는 동안의 빨간 막, 결정 기록 '피부 보정'의 1d).
+     * 크기는 [level] 단계의 문서 전체 축소본과 같고, 끄는 마스크 획 [strokes]도 얹는다. 화면이 빨갛게 물들여 캔버스 위에 그린다.
+     * 마스크가 없거나 그리지 못하면 null. [render]와 같은 잠금 안에서 부른다.
+     */
+    fun maskOverlay(document: Document, layerId: LayerId, level: Int, strokes: List<LiveStroke> = emptyList()): Bitmap? {
+        val mask = document.layers.getOrNull(document.indexOfLayer(layerId))?.mask ?: return null
+        val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
+        val alpha = liveMask(mask, region, strokes.filter { it.layerId == layerId && it.mask }) ?: return null
+        val picture = Picture()
+        val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
+        canvas.drawColor(Color.BLACK)
+        MaskTiles.drawAlpha(canvas, alpha, BlendMode.DST_OUT)
+        picture.endRecording()
+        return PreviewRenderer.drawOnGpu(picture, region.previewWidth, region.previewHeight)
+    }
+
+    /**
+     * 레이어마다의 마스크 작은 그림(레이어 패널, 결정 기록 '피부 보정'의 1d): 흰 곳은 보이고 검은 곳은 가린다. 긴 변 [THUMBNAIL_EDGE] 이하.
+     * 마스크 객체마다 기억해 마스크가 그대로면 다시 그리지 않는다. 마스크가 없는 레이어는 빠진다. [render]와 같은 잠금 안에서 부른다.
+     */
+    fun maskThumbnails(document: Document): Map<LayerId, Bitmap> {
+        val wanted = IdentityHashMap<Selection, Unit>()
+        val result = HashMap<LayerId, Bitmap>()
+        for (layer in document.layers) {
+            val mask = layer.mask ?: continue
+            wanted[mask] = Unit
+            val thumbnail = maskThumbnails[mask] ?: maskThumbnail(mask, PixelSize(document.width, document.height))?.also { maskThumbnails[mask] = it } ?: continue
+            result[layer.id] = thumbnail
+        }
+        maskThumbnails.keys.removeIf { it !in wanted }
+        return result
+    }
+
+    /** [mask]의 작은 그림: 검은 바탕에 마스크 알파만큼 흰색. 그리지 못하면 null. */
+    private fun maskThumbnail(mask: Selection, size: PixelSize): Bitmap? {
+        val scale = minOf(1f, THUMBNAIL_EDGE.toFloat() / maxOf(size.width, size.height))
+        val width = (size.width * scale).roundToInt().coerceAtLeast(1)
+        val height = (size.height * scale).roundToInt().coerceAtLeast(1)
+        val alpha = try {
+            SelectionPreview.maskAt(mask, 0f, 0f, scale, width, height)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
+        try {
+            val picture = Picture()
+            val canvas = picture.beginRecording(width, height)
+            canvas.drawColor(Color.BLACK)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
+                shader = BitmapShader(alpha, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                color = Color.WHITE
+            })
+            picture.endRecording()
+            return PreviewRenderer.drawOnGpu(picture, width, height)
+        } finally {
+            alpha.recycle()
+        }
+    }
 
     /** [mask]를 [region](문서 전체, 축소본 단계)으로 그린 알파 그림. 같은 마스크 객체·단계면 다시 그리지 않는다. 그리지 못하면 null. */
     private fun maskPreview(mask: Selection, region: PreviewRegion): Bitmap? {
@@ -241,6 +328,7 @@ class LayerPreviewCache {
         entries.clear()
         thumbnails.clear()
         masks.clear()
+        maskThumbnails.clear()
         lastRasters.clear()
         lastGainmap = null
         lastEffect = null
@@ -455,6 +543,7 @@ class LayerPreviewCache {
  * [tone]이 있으면 칠하는 대신 레이어 픽셀을 닷지·번으로 바꾼 색을 보인다(명암 도구를 끄는 동안).
  * [effect]가 있으면 칠하는 대신 레이어 픽셀에 흐림·선명·모자이크를 건 색으로 바꿔 보인다(흐림·모자이크 도구를 끄는 동안).
  * [smudge]가 있으면 칠하는 대신 레이어 픽셀을 문질러 끈 모습을 보인다(스머지를 끄는 동안, 획마다 하나).
+ * [mask]면 픽셀이 아니라 그 레이어의 마스크에 얹는다(브러시는 보이게, [erase]면 가리게, 결정 기록 '피부 보정'의 1d).
  */
 /**
  * 이동 도구로 끄는 중인 레이어 옮기기(문서 픽셀, 결정 기록 '이동 도구'). [LayerPreviewCache.render]가 그 레이어 축소본을 옮겨 합친다.
@@ -471,5 +560,6 @@ class LiveStroke(
     val clone: SourceOffset? = null,
     val tone: ToneFill? = null,
     val effect: EffectFill? = null,
-    val smudge: SmudgePreview? = null
+    val smudge: SmudgePreview? = null,
+    val mask: Boolean = false
 )

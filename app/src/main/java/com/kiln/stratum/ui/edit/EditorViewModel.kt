@@ -60,6 +60,10 @@ import com.kiln.stratum.engine.face.FaceWarps
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
 import com.kiln.stratum.engine.liquify.MeshWarp
+import com.kiln.stratum.engine.platform.AddLayerMask
+import com.kiln.stratum.engine.platform.DeleteLayerMask
+import com.kiln.stratum.engine.platform.InvertLayerMask
+import com.kiln.stratum.engine.platform.PaintLayerMask
 import com.kiln.stratum.engine.platform.AddTextLayer
 import com.kiln.stratum.engine.platform.EditTextLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
@@ -196,6 +200,9 @@ sealed interface EditorMessage {
     /** 숨긴 레이어에는 그릴 수 없다(브러시·지우개·리터칭·명암·유동화). 레이어 줄의 눈을 켜면 그릴 수 있다. */
     data object HiddenLayer : EditorMessage
 
+    /** 마스크를 칠하는 동안 픽셀을 바꾸는 다른 도구를 썼다(결정 기록 '피부 보정'의 1d). 마스크에는 브러시·지우개만 쓴다. */
+    data object MaskBrushOnly : EditorMessage
+
     /** 이 기기에서는 AI 제거(채우기 모델)를 돌릴 수 없다. 문서는 그대로다. 화면은 스팟 복구 브러시로 바꾸는 버튼을 둔다. */
     data object RemoveUnavailable : EditorMessage
 
@@ -231,6 +238,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * @property visible 보이는지(레이어 줄의 눈). 불투명도와 따로다.
  * @property text 다시 고칠 수 있는 글자 레이어의 글자(사용자 피드백 8차 1-6). 글자 도구로 그 상자 안을 누르면 고치고, 레이어 줄에 글자 표시를 단다.
  * @property liquify 다시 고칠 수 있는 유동화 기록이 있는지(결정 기록 '얼굴 인식 보정' 3단계). 레이어 줄에 유동화 표시를 단다.
+ * @property hasMask 레이어 마스크가 있는지(결정 기록 '피부 보정'의 1d). [mask]는 그 작은 그림(흰 곳은 보이고 검은 곳은 가림)이다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -241,7 +249,9 @@ data class LayerSummary(
     val thumbnail: Bitmap? = null,
     val visible: Boolean = true,
     val text: TextSpec? = null,
-    val liquify: Boolean = false
+    val liquify: Boolean = false,
+    val mask: Bitmap? = null,
+    val hasMask: Boolean = false
 )
 
 /**
@@ -290,6 +300,8 @@ sealed interface EditorState {
      * @property colorSpace 문서 색 공간. 축소본 값이 이 색 공간의 값이라, 화면은 그릴 때 그 꼬리표로 보이고 창을 넓은 색 모드로 둔다.
      * @property hdr HDR 문서이고 이 기기가 게인맵을 다루는지(안드로이드 14 이상). JPEG로 내보내면 HDR이 남는다.
      * @property gainmap 화면 그림에 붙일 HDR 게인맵([hdr]일 때). 화면은 그릴 때 붙이고 창을 HDR 모드로 둔다.
+     * @property editingMask 고른 레이어의 마스크를 칠하는 중인지(결정 기록 '피부 보정'의 1d). 브러시는 보이게, 지우개는 가리게 칠한다.
+     * @property maskOverlay 마스크를 칠하는 동안 가린 곳을 빨갛게 보이는 막(축소본과 같은 자리). 아니면 null.
      */
     data class Ready(
         val base: PreviewImage,
@@ -305,7 +317,9 @@ sealed interface EditorState {
         val selectionDetail: SelectionOutline? = null,
         val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
         val hdr: Boolean = false,
-        val gainmap: ScreenGainmap? = null
+        val gainmap: ScreenGainmap? = null,
+        val editingMask: Boolean = false,
+        val maskOverlay: PreviewImage? = null
     ) : EditorState {
 
         /** 고른 레이어의 속성 */
@@ -406,6 +420,15 @@ class EditorViewModel internal constructor(
     /** 고른 레이어. 문서를 열면 맨 위 레이어이고, 그 레이어가 없어지면(실행 취소 등) 다시 맨 위 레이어다. */
     private var activeLayer: LayerId? = null
 
+    /**
+     * 고른 레이어의 마스크를 칠하는지(레이어 줄의 마스크 작은 그림을 누름, 결정 기록 '피부 보정'의 1d). 그 레이어에 마스크가 있을 때만 뜻이 있다([paintsMask]).
+     * 다른 레이어를 고르거나 픽셀 작은 그림을 누르면 끈다. 실행 취소로 마스크가 없어지면 저절로 픽셀을 칠한다.
+     */
+    private var editingMask = false
+
+    /** 마스크 칠하기를 켜거나 끈 뒤 빨간 막을 그리는 작업 */
+    private var maskOverlayJob: Job? = null
+
     /** 슬라이더를 끄는 동안 미리 볼 문서(기록하지 않음). 그리는 작업은 가장 나중 것만 그린다. */
     private var liveDocument: Document? = null
 
@@ -498,7 +521,7 @@ class EditorViewModel internal constructor(
      * 획 하나: 그릴 레이어, 설정, 지우개인지, 시작할 때의 선택 영역(미리 보기를 그 안으로 자름), 지금까지 놓은 자국.
      * [retouch]가 있으면 리터칭 획이고, [offset]은 복제 도장·복구 브러시가 가져올 간격(칠한 곳 - 가져올 곳)이다.
      * [tone]이 있으면 명암(닷지·번) 획이고, [effect]가 있으면 흐림·선명·모자이크 획, [smudge](강도)가 있으면 스머지 획이다.
-     * [inpaint](채우기 모델)가 있으면 AI 제거 획이다.
+     * [inpaint](채우기 모델)가 있으면 AI 제거 획이다. [mask]면 레이어 마스크를 칠하는 획이다(브러시는 보이게, 지우개는 가리게).
      */
     private class Stroke(
         val layer: LayerId,
@@ -510,7 +533,8 @@ class EditorViewModel internal constructor(
         val tone: ToneFill? = null,
         val effect: EffectFill? = null,
         val smudge: Float? = null,
-        val inpaint: InpaintModel? = null
+        val inpaint: InpaintModel? = null,
+        val mask: Boolean = false
     ) {
         val dabs = StrokeDabs(settings.spacing)
 
@@ -522,6 +546,7 @@ class EditorViewModel internal constructor(
          * 스팟 복구·AI 제거는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
         fun live(): LiveStroke = when {
+            mask -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, mask = true)
             inpaint != null || retouch == RetouchMode.SPOT_HEAL ->
                 LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             retouch == null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
@@ -530,6 +555,8 @@ class EditorViewModel internal constructor(
 
         /** 손을 뗀 뒤 기록할 명령 */
         fun command(): CancellableCommand = when {
+            // 마스크 획: 브러시는 보이게, 지우개는 가리게(결정 기록 '피부 보정'의 1d)
+            mask -> PaintLayerMask(layer, ArrayList(dabs.dabs), settings, reveal = !erase)
             inpaint != null -> InpaintRegion(layer, InpaintArea.Painted(ArrayList(dabs.dabs), settings.radius), inpaint)
             tone != null -> ToneStroke(layer, ArrayList(dabs.dabs), settings, tone)
             effect != null -> EffectStroke(layer, ArrayList(dabs.dabs), settings, effect)
@@ -914,6 +941,11 @@ class EditorViewModel internal constructor(
         override fun setVisible(id: LayerId, visible: Boolean) = setLayerVisible(id, visible)
         override fun rasterize() = rasterizeActiveLayer()
         override fun rename(id: LayerId, name: String) = renameLayer(id, name)
+        override fun addMask() = addLayerMask()
+        override fun invertMask() = invertLayerMask()
+        override fun deleteMask() = deleteLayerMask()
+        override fun editMask(id: LayerId) = editLayerMask(id)
+        override fun editPixels(id: LayerId) = editLayerPixels(id)
     }
 
     /** 실행 취소 기록과 지금 문서. 메인 스레드에서만 다룬다. */
@@ -1151,8 +1183,90 @@ class EditorViewModel internal constructor(
     fun selectLayer(id: LayerId) {
         val document = history?.document ?: return
         if (document.indexOfLayer(id) < 0 || hasLiveValues) return
+        // 다른 레이어를 고르면 그 레이어의 픽셀을 칠한다(마스크는 마스크 작은 그림을 눌러 고른다)
+        val switched = id != activeLayer && editingMask
+        if (id != activeLayer) editingMask = false
         activeLayer = id
         (_state.value as? EditorState.Ready)?.let { _state.value = it.copy(activeLayer = id) }
+        if (switched) refreshMaskOverlay()
+    }
+
+    /** 고른 레이어에 레이어 마스크를 더하고(선택 영역이 있으면 그 모양) 그 마스크를 칠한다(실행 취소 한 단계, 결정 기록 '피부 보정'의 1d). */
+    fun addLayerMask() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val layer = activeLayerIn(document)
+        if (document.layers[document.indexOfLayer(layer)].mask != null) return
+        // 포토샵처럼 더한 마스크를 바로 칠한다
+        editingMask = true
+        edit(AddLayerMask(layer))
+    }
+
+    /** 고른 레이어의 마스크를 뒤집는다(실행 취소 한 단계) */
+    fun invertLayerMask() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        edit(InvertLayerMask(activeLayerIn(document)))
+    }
+
+    /** 고른 레이어의 마스크를 지운다(굳히지 않고 버림, 실행 취소 한 단계). 픽셀을 칠하는 데로 돌아간다. */
+    fun deleteLayerMask() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        editingMask = false
+        edit(DeleteLayerMask(activeLayerIn(document)))
+    }
+
+    /** [id] 레이어를 고르고 그 마스크를 칠한다(레이어 줄의 마스크 작은 그림). 마스크가 없으면 고르기만 한다. */
+    fun editLayerMask(id: LayerId) {
+        selectLayer(id)
+        val document = history?.document ?: return
+        if (activeLayer != id || document.layers.getOrNull(document.indexOfLayer(id))?.mask == null || editingMask) return
+        editingMask = true
+        refreshMaskOverlay()
+    }
+
+    /** [id] 레이어를 고르고 픽셀을 칠한다(마스크가 있는 레이어 줄의 작은 그림) */
+    fun editLayerPixels(id: LayerId) {
+        selectLayer(id)
+        if (activeLayer != id || !editingMask) return
+        editingMask = false
+        refreshMaskOverlay()
+    }
+
+    /** [layer]의 마스크를 칠하는 중인지: 마스크 칠하기를 골랐고 그 레이어에 마스크가 있다 */
+    private fun paintsMask(layer: Layer): Boolean = editingMask && layer.mask != null
+
+    /** 마스크를 칠하는 중이면 알리고 true(픽셀을 바꾸는 다른 도구는 마스크에 쓰지 않는다, 결정 기록 '피부 보정'의 1d) */
+    private fun refusesMaskTool(layer: Layer): Boolean {
+        if (!paintsMask(layer)) return false
+        _messages.trySend(EditorMessage.MaskBrushOnly)
+        return true
+    }
+
+    /**
+     * 마스크 칠하기를 켜거나 끈 뒤 상태와 빨간 막을 고친다(문서는 그대로). 끄면 막만 지우고, 켜면 지금 문서와 끄는 획으로 막을 그린다.
+     * 문서가 바뀌는 편집은 [showPreview]가 막을 함께 그린다.
+     */
+    private fun refreshMaskOverlay() {
+        val ready = _state.value as? EditorState.Ready ?: return
+        val document = history?.document ?: return
+        val layer = document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document))) ?: return
+        maskOverlayJob?.cancel()
+        if (!paintsMask(layer)) {
+            _state.value = ready.copy(editingMask = false, maskOverlay = null)
+            return
+        }
+        maskOverlayJob = viewModelScope.launch {
+            val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+            val strokes = liveStrokes()
+            val overlay = renderMutex.withLock {
+                withContext(Dispatchers.Default) { layerPreviews.maskOverlay(document, layer.id, level, strokes) }
+            }
+            if (history?.document !== document) return@launch
+            val shown = _state.value as? EditorState.Ready ?: return@launch
+            _state.value = shown.copy(editingMask = true, maskOverlay = overlay?.let { PreviewImage(it, PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)) })
+        }
     }
 
     /**
@@ -1164,6 +1278,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || liquifySession != null || _state.value !is EditorState.Ready) return
         val layer = activeLayerIn(document)
         if (!document.layers[document.indexOfLayer(layer)].visible) return tellHiddenLayer()
+        if (refusesMaskTool(document.layers[document.indexOfLayer(layer)])) return
         if (document.layers[document.indexOfLayer(layer)].text != null) return askRasterize(layer)
         // 다시 고칠 수 있는 유동화면 그 기록에서 이어서 고친다(결정 기록 '얼굴 인식 보정' 3단계)
         val record = document.layers[document.indexOfLayer(layer)].liquify
@@ -1671,6 +1786,7 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (document.selection == null) return
         val layer = activeLayerIn(document)
+        if (refusesMaskTool(document.layers[document.indexOfLayer(layer)])) return
         if (document.layers.getOrNull(document.indexOfLayer(layer))?.text != null) return askRasterize(layer)
         edit(DeleteSelected(layer))
     }
@@ -1682,7 +1798,8 @@ class EditorViewModel internal constructor(
     fun copySelectionToLayer(cut: Boolean) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || document.selection == null) return
-        // 잘라내면 글자 레이어의 픽셀이 바뀐다(복사는 원래 레이어를 그대로 둔다)
+        // 잘라내면 픽셀이 바뀐다(복사는 원래 레이어를 그대로 둔다)
+        if (cut && refusesMaskTool(document.layers[document.indexOfLayer(activeLayerIn(document))])) return
         if (cut && document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document)))?.text != null) return askRasterize(activeLayerIn(document))
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
         runEdit(CopySelectedToLayer(activeLayerIn(document), name, cut), select = LayerId(document.nextLayerId))
@@ -1698,6 +1815,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || document.selection == null) return
         val layer = document.layers[document.indexOfLayer(activeLayerIn(document))]
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         runFill(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
     }
@@ -2112,6 +2230,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val options = _tone.value
         val fill = ToneFill(dodge, options.range, options.exposure)
@@ -2137,6 +2256,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val (brush, fill) = if (kind == EffectKind.MOSAIC) {
             val options = _mosaic.value
@@ -2156,6 +2276,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val options = _blur.value
         startStroke(Stroke(layer.id, options.brush.copy(opacity = 1f), erase = false, history?.document?.selection, smudge = options.strength), point)
@@ -2209,6 +2330,11 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        // 마스크를 칠하는 중이면 픽셀이 아니라 마스크를 칠한다(브러시는 보이게, 지우개는 가리게, 결정 기록 '피부 보정'의 1d).
+        // 픽셀은 그대로라 글자 레이어도 묻지 않는다
+        if (paintsMask(layer)) {
+            return startStroke(Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection, mask = true), point)
+        }
         if (layer.text != null) return holdTextStroke(layer.id)
         startStroke(Stroke(layer.id, if (erase) _eraser.value else _brush.value, erase, history?.document?.selection), point)
     }
@@ -2222,6 +2348,7 @@ class EditorViewModel internal constructor(
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         retouchOffsetFixedByStroke = false
         val offset = if (mode == RetouchMode.SPOT_HEAL) {
@@ -2259,6 +2386,7 @@ class EditorViewModel internal constructor(
         _removePick.value = null
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val settings = _retouch.value.copy(hardness = 1f, opacity = 1f)
         startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, inpaint = inpaintModel), point)
@@ -2276,6 +2404,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         val document = history.document
         val pickedAt = revision
@@ -2328,6 +2457,7 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues || pick.revision != revision) return
         val layer = currentLayer() ?: return
         if (!layer.visible) return tellHiddenLayer()
+        if (refusesMaskTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         runFill(InpaintRegion(layer.id, pick.area, inpaintModel))
     }
@@ -2735,11 +2865,14 @@ class EditorViewModel internal constructor(
                 val detailBase = detailBeforeStroke?.takeIf { strokesFitDetail(document) }
                 val detailLive = detailStrokes.map { it.live() }
                 val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
-                val (base, detail) = renderMutex.withLock {
+                // 마스크를 칠하는 중이면 빨간 막에도 끄는 획을 얹는다(결정 기록 '피부 보정'의 1d)
+                val maskLayer = document.layers[document.indexOfLayer(activeLayerIn(document))].takeIf { paintsMask(it) }
+                val (base, detail, overlay) = renderMutex.withLock {
                     withContext(Dispatchers.Default) {
                         val base = layerPreviews.render(document, level, strokes) { ensureActive() }
                         val detail = detailBase?.let { layerPreviews.strokeOver(it.bitmap, it.region, detailLive, document.colorSpace) }
-                        base to detail
+                        val overlay = maskLayer?.let { layerPreviews.maskOverlay(document, it.id, level, strokes) }
+                        Triple(base, detail, overlay)
                     }
                 }
                 // 그사이 획을 기록했으면 새 축소본(기록한 문서 + 남은 획)이 이미 보인다
@@ -2749,7 +2882,8 @@ class EditorViewModel internal constructor(
                 val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
                 _state.value = ready.copy(
                     base = PreviewImage(base, region),
-                    detail = if (detail != null && detailBase != null) PreviewImage(detail, detailBase.region) else null
+                    detail = if (detail != null && detailBase != null) PreviewImage(detail, detailBase.region) else null,
+                    maskOverlay = overlay?.let { PreviewImage(it, region) } ?: ready.maskOverlay
                 )
                 liveShown = true
             }
@@ -2766,7 +2900,8 @@ class EditorViewModel internal constructor(
         val top = steps.lastOrNull() as? CompositeStep.Draw ?: return false
         if (top.blendMode != BlendMode.NORMAL || !top.isPlain) return false
         // 스머지는 앞 자국의 결과에 기대어 축소본 사본에 이어서 그리므로 확대 그림에는 얹지 않는다(손을 떼면 다시 선명해진다)
-        return detailStrokes.all { it.smudge == null && it.layer == top.layer.id && (!it.readsLayer || steps.size == 1) }
+        // 마스크 획은 픽셀이 아니라 마스크를 바꾸므로 확대 그림에 얹지 않는다
+        return detailStrokes.all { !it.mask && it.smudge == null && it.layer == top.layer.id && (!it.readsLayer || steps.size == 1) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -3202,6 +3337,10 @@ class EditorViewModel internal constructor(
             val outline = withContext(Dispatchers.Default) { outlineOf(document) }
             // 레이어 패널의 작은 그림. 바뀐 레이어만 새로 만든다.
             val thumbnails = withContext(Dispatchers.Default) { layerPreviews.thumbnails(document, level) { ensureActive() } }
+            // 마스크 작은 그림과, 마스크를 칠하는 동안 가린 곳을 보이는 빨간 막(결정 기록 '피부 보정'의 1d)
+            val maskThumbnails = withContext(Dispatchers.Default) { layerPreviews.maskThumbnails(document) }
+            val maskLayer = document.layers[document.indexOfLayer(activeLayerIn(document))].takeIf { paintsMask(it) }
+            val maskOverlay = maskLayer?.let { withContext(Dispatchers.Default) { layerPreviews.maskOverlay(document, it.id, level, strokes) } }
             // HDR 문서는 화면 그림에 붙일 게인맵(안드로이드 14 이상). 레이어가 그대로면 다시 만들지 않는다.
             val hdr = document.hasHdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
             val gainmap = if (hdr) withContext(Dispatchers.Default) { layerPreviews.screenGainmap(document, level) } else null
@@ -3251,13 +3390,17 @@ class EditorViewModel internal constructor(
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
                 busy = editing,
-                layers = document.layers.map { LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null) },
+                layers = document.layers.map {
+                    LayerSummary(it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null, maskThumbnails[it.id], it.mask != null)
+                },
                 activeLayer = activeLayerIn(document),
                 selection = outline,
                 selectionDetail = selectionDetail,
                 colorSpace = document.colorSpace,
                 hdr = hdr,
-                gainmap = gainmap
+                gainmap = gainmap,
+                editingMask = maskLayer != null,
+                maskOverlay = maskOverlay?.let { PreviewImage(it, PreviewLevels.wholeRegion(size, level)) }
             )
         }
         // 축소본 단계가 바뀌었을 수 있어, 마지막 보기로 부분 그림을 다시 계획한다
@@ -3405,6 +3548,8 @@ class EditorViewModel internal constructor(
         editing = false
         shownDocument = null
         activeLayer = null
+        editingMask = false
+        maskOverlayJob?.cancel()
         liveDocument = null
         liveShown = false
         liveJob?.cancel()

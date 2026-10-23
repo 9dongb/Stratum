@@ -136,6 +136,30 @@ class LayerPanelTest {
             layers = layers.map { if (it.id == id) it.copy(name = name) else it }
         }
 
+        override fun addMask() {
+            calls += "addMask ${active.value}"
+            layers = layers.map { if (it.id == active) it.copy(hasMask = true) else it }
+        }
+
+        override fun invertMask() {
+            calls += "invertMask ${active.value}"
+        }
+
+        override fun deleteMask() {
+            calls += "deleteMask ${active.value}"
+            layers = layers.map { if (it.id == active) it.copy(hasMask = false) else it }
+        }
+
+        override fun editMask(id: LayerId) {
+            calls += "editMask ${id.value}"
+            active = id
+        }
+
+        override fun editPixels(id: LayerId) {
+            calls += "editPixels ${id.value}"
+            active = id
+        }
+
         companion object {
             fun summary(index: Int) = LayerSummary(LayerId(index.toLong()), "Layer $index", 1f, BlendMode.NORMAL, Adjustments.NONE)
         }
@@ -391,6 +415,43 @@ class LayerPanelTest {
 
         composeRule.runOnIdle { assertEquals("rasterize 0", fake.calls.last()) }
         composeRule.onNodeWithTag(EditScreenTags.layerLiquifyBadge(LayerId(0)), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun maskMenu_addsAMask_thenOffersInvertAndDelete() {
+        // 레이어 마스크(결정 기록 '피부 보정'의 1d): 없으면 '마스크 더하기', 있으면 '마스크 반전'·'마스크 지우기'
+        val fake = FakeLayers(2)
+        openCompactLayers(fake)
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_INVERT).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_ADD).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("addMask 1", fake.calls.last()) }
+        composeRule.onNodeWithTag(EditScreenTags.layerMask(LayerId(1))).assertIsDisplayed()
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_ADD).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_INVERT).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("invertMask 1", fake.calls.last()) }
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_DELETE).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("deleteMask 1", fake.calls.last()) }
+        composeRule.onNodeWithTag(EditScreenTags.layerMask(LayerId(1))).assertDoesNotExist()
+    }
+
+    @Test
+    fun maskThumbnail_paintsTheMask_andTheLayerThumbnailPaintsThePixels() {
+        val fake = FakeLayers(2)
+        fake.layers = fake.layers.map { if (it.id == LayerId(0)) it.copy(hasMask = true) else it }
+        openCompactLayers(fake)
+
+        composeRule.onNodeWithTag(EditScreenTags.layerMask(LayerId(1))).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.layerMask(LayerId(0))).performClick()
+        composeRule.runOnIdle { assertEquals("editMask 0", fake.calls.last()) }
+
+        composeRule.onNodeWithTag(EditScreenTags.layerThumbnail(LayerId(0))).performClick()
+        composeRule.runOnIdle { assertEquals("editPixels 0", fake.calls.last()) }
     }
 
     @Test
