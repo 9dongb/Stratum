@@ -129,6 +129,9 @@ interface LayerActions {
     /** 고른 레이어에 레이어 마스크를 더하고 그 마스크를 칠한다(선택 영역이 있으면 그 모양, 결정 기록 '피부 보정'의 1d) */
     fun addMask() {}
 
+    /** 고른 레이어 위에 조정 레이어를 더하고 고른다(선택 영역이 있으면 마스크가 그 모양, 결정 기록 '피부 보정'의 1f) */
+    fun addAdjustment() {}
+
     /** 고른 레이어의 마스크를 뒤집는다 */
     fun invertMask() {}
 
@@ -184,7 +187,9 @@ class LayerControls(
     /** 레이어 메뉴의 '이름 바꾸기': 편집 화면이 그 레이어의 이름 바꾸기 창을 띄운다 */
     val onRename: (LayerId) -> Unit = {},
     /** 사진 넣기 버튼(사용자 피드백 12차): 편집 화면이 사진 선택기를 띄우고, 고른 사진을 고른 레이어 위 새 레이어로 넣는다 */
-    val onAddPhoto: () -> Unit = {}
+    val onAddPhoto: () -> Unit = {},
+    /** 레이어 메뉴의 '조정 레이어 더하기': 편집 화면은 더한 뒤 조정 패널을 연다(결정 기록 '피부 보정'의 1f) */
+    val onAddAdjustment: () -> Unit = { actions.addAdjustment() }
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -374,9 +379,11 @@ private fun LayerRow(
     val maskEditingLabel = stringResource(R.string.layer_mask_editing)
     val maskEditLabel = stringResource(R.string.layer_mask_edit)
     val pixelsLabel = stringResource(R.string.layer_pixels_edit)
+    val adjustmentLabel = stringResource(R.string.layer_adjustment)
     val rowState = listOfNotNull(
         selectedLabel.takeIf { selected },
         hiddenLabel.takeIf { !layer.visible },
+        adjustmentLabel.takeIf { layer.adjustment },
         textLabel.takeIf { layer.text != null },
         liquifyLabel.takeIf { layer.liquify }
     ).joinToString(", ")
@@ -470,7 +477,8 @@ private fun LayerRow(
                             .size(ThumbnailSize)
                             .then(if (layer.hasMask && selected && !maskTarget) Modifier.border(TargetBorder, colors.selectedContent, StratumShapes.Thumbnail) else Modifier)
                             .then(
-                                if (layer.hasMask) {
+                                // 조정 레이어는 픽셀이 없어 마스크만 칠한다(아이콘을 눌러도 고르기만, 결정 기록 '피부 보정'의 1f)
+                                if (layer.hasMask && !layer.adjustment) {
                                     Modifier.clickable(enabled = controls.enabled, onClickLabel = pixelsLabel) { actions.editPixels(layer.id) }
                                 } else {
                                     Modifier
@@ -478,7 +486,14 @@ private fun LayerRow(
                             )
                             .testTag(EditScreenTags.layerThumbnail(layer.id))
                     ) {
-                        LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
+                        if (layer.adjustment) {
+                            // 조정 레이어는 작은 그림 대신 조정 아이콘이다
+                            Box(Modifier.fillMaxSize().background(colors.fieldBackground, StratumShapes.Thumbnail), contentAlignment = Alignment.Center) {
+                                Icon(painterResource(R.drawable.ic_tune), contentDescription = null, tint = colors.textSecondary)
+                            }
+                        } else {
+                            LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
+                        }
                         val badge = when {
                             layer.text != null -> R.drawable.ic_text_fields to EditScreenTags.layerTextBadge(layer.id)
                             layer.liquify -> R.drawable.ic_waves to EditScreenTags.layerLiquifyBadge(layer.id)
@@ -577,25 +592,32 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
         // 이름 바꾸기: 창에서 새 이름을 받는다(2026-10-22 사용자 요청: "옵션에 레이어 이름 변경 옵션도 넣으려 합니다")
         LayerMenuItem(R.string.layer_rename, canEdit, EditScreenTags.LAYER_MENU_RENAME, onDismiss) { controls.onRename(layers[documentIndex].id) }
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
+        // 조정 레이어(결정 기록 '피부 보정'의 1f): 고른 레이어 위에 더한다
+        LayerMenuItem(R.string.layer_adjustment_add, canEdit, EditScreenTags.LAYER_MENU_ADJUSTMENT_ADD, onDismiss, controls.onAddAdjustment)
         // 픽셀로 바꾸기는 글자 레이어에만 보인다(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6).
         // 다른 레이어에서는 꺼 두지 않고 뺀다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요").
         // 다시 고칠 수 있는 유동화도 같은 항목으로 직접 굳힌다(결정 기록 '얼굴 인식 보정' 3단계)
         if (layers[documentIndex].text != null || layers[documentIndex].liquify) {
             LayerMenuItem(R.string.layer_rasterize, canEdit, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
         }
-        // 레이어 마스크(결정 기록 '피부 보정'의 1d): 없으면 더하기, 있으면 반전·지우기
+        // 레이어 마스크(결정 기록 '피부 보정'의 1d): 없으면 더하기, 있으면 반전·지우기. 조정 레이어는 늘 마스크를 칠해 지우지 않는다(1f).
         if (layers[documentIndex].hasMask) {
             LayerMenuItem(R.string.layer_mask_invert, canEdit, EditScreenTags.LAYER_MENU_MASK_INVERT, onDismiss, actions::invertMask)
-            LayerMenuItem(R.string.layer_mask_delete, canEdit, EditScreenTags.LAYER_MENU_MASK_DELETE, onDismiss, actions::deleteMask)
+            if (!layers[documentIndex].adjustment) {
+                LayerMenuItem(R.string.layer_mask_delete, canEdit, EditScreenTags.LAYER_MENU_MASK_DELETE, onDismiss, actions::deleteMask)
+            }
         } else {
             LayerMenuItem(R.string.layer_mask_add, canEdit, EditScreenTags.LAYER_MENU_MASK_ADD, onDismiss, actions::addMask)
         }
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
-        val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible
+        // 조정 레이어 위로는 합치지 않는다(조정 레이어를 아래 픽셀 레이어에 굳히는 것은 된다)
+        val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible && !layers[documentIndex - 1].adjustment
         LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
+        // 보이는 레이어 병합은 가장 아래 보이는 픽셀 레이어부터 위로 합친다(그 아래 조정 레이어는 그대로, 엔진의 MergeVisible.mergedLayers와 같다)
+        val mergingVisible = layers.filter { it.visible && it.opacity > 0f }.dropWhile { it.adjustment }
         LayerMenuItem(
             R.string.layer_merge_visible,
-            canEdit && layers.count { it.visible && it.opacity > 0f } >= 2,
+            canEdit && mergingVisible.size >= 2,
             EditScreenTags.LAYER_MENU_MERGE_VISIBLE,
             onDismiss,
             actions::mergeVisible

@@ -136,6 +136,10 @@ class LayerPanelTest {
             layers = layers.map { if (it.id == id) it.copy(name = name) else it }
         }
 
+        override fun addAdjustment() {
+            calls += "addAdjustment ${active.value}"
+        }
+
         override fun addMask() {
             calls += "addMask ${active.value}"
             layers = layers.map { if (it.id == active) it.copy(hasMask = true) else it }
@@ -452,6 +456,30 @@ class LayerPanelTest {
 
         composeRule.onNodeWithTag(EditScreenTags.layerThumbnail(LayerId(0))).performClick()
         composeRule.runOnIdle { assertEquals("editPixels 0", fake.calls.last()) }
+    }
+
+    @Test
+    fun adjustmentLayer_showsAnIcon_andTheMenuAddsOne_andNothingMergesOntoIt() {
+        // 조정 레이어(결정 기록 '피부 보정'의 1f): 작은 그림 대신 조정 아이콘, 메뉴의 '조정 레이어 더하기', 그 위로는 합치지 않는다
+        val fake = FakeLayers(2)
+        fake.layers = fake.layers.map { if (it.id == LayerId(0)) it.copy(adjustment = true, hasMask = true) else it }
+        openCompactLayers(fake)
+
+        // 조정 레이어의 아이콘을 눌러도 픽셀을 칠하는 쪽으로 바꾸지 않는다(고르기만). 아이콘은 누르는 칸이 아니라 줄에 합쳐져 있다.
+        composeRule.onNodeWithTag(EditScreenTags.layerThumbnail(LayerId(0)), useUnmergedTree = true).performClick()
+        composeRule.runOnIdle { assertTrue(fake.calls.none { it.startsWith("editPixels") }) }
+        // 조정 레이어는 마스크를 지우지 않는다(늘 마스크를 칠함)
+        row(0).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_DELETE).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_INVERT).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("invertMask 0", fake.calls.last()) }
+
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_ADJUSTMENT_ADD).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("addAdjustment 1", fake.calls.last()) }
+        // 더하면 그 값을 고치게 레이어 시트 대신 조정이 열린다
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertDoesNotExist()
     }
 
     @Test

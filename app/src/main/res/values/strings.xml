@@ -194,6 +194,9 @@
     <string name="layer_mask_editing">Painting the mask</string>
     <string name="layer_mask_edit">Paint the mask</string>
     <string name="layer_pixels_edit">Paint the pixels</string>
+    <string name="layer_adjustment_add">Add adjustment layer</string>
+    <string name="layer_adjustment_name">Adjustment %1$d</string>
+    <string name="layer_adjustment">Adjustment layer</string>
     <string name="layer_move_up">Move layer up</string>
     <string name="layer_move_down">Move layer down</string>
     <string name="view_flip_horizontal">Flip view horizontally</string>
@@ -219,6 +222,7 @@
     <string name="rasterize_message">To paint on it, the text needs to be pixels. After converting, you can\'t edit the text again.</string>
     <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>
     <string name="edit_mask_brush_only">Only the brush and eraser paint on a mask. Tap the layer thumbnail to paint its pixels.</string>
+    <string name="edit_adjustment_no_pixels">An adjustment layer has no pixels. The brush and eraser paint its mask.</string>
     <string name="blend_normal">Normal</string>
     <string name="blend_multiply">Multiply</string>
     <string name="blend_screen">Screen</string>

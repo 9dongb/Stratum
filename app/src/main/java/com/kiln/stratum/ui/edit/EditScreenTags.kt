@@ -161,6 +161,7 @@ object EditScreenTags {
     const val LAYER_MENU_MASK_ADD = "layerMenuMaskAdd"
     const val LAYER_MENU_MASK_INVERT = "layerMenuMaskInvert"
     const val LAYER_MENU_MASK_DELETE = "layerMenuMaskDelete"
+    const val LAYER_MENU_ADJUSTMENT_ADD = "layerMenuAdjustmentAdd"
 
     /** 레이어 이름 바꾸기 창의 이름 칸과 확인 버튼 */
     const val LAYER_RENAME_FIELD = "layerRenameField"

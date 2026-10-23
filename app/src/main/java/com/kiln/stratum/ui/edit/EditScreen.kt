@@ -563,7 +563,12 @@ fun EditScreen(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
                 editingMask = it.editingMask, viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
                 onRename = { id -> renamingLayer = id.value },
-                onAddPhoto = onAddPhoto
+                onAddPhoto = onAddPhoto,
+                // 조정 레이어를 더하면 그 값을 바로 고치게 조정 패널을 연다(포토샵의 속성 패널처럼, 결정 기록 '피부 보정'의 1f)
+                onAddAdjustment = {
+                    layerActions.addAdjustment()
+                    if (floating.panel != MainPanel.ADJUST) floating.togglePanel(MainPanel.ADJUST)
+                }
             )
         }
         // 고른 브러시·지우개의 설정
@@ -1621,6 +1626,7 @@ private fun EditCanvas(
     val autosaveFailed = stringResource(R.string.edit_autosave_failed)
     val hiddenLayer = stringResource(R.string.edit_hidden_layer)
     val maskBrushOnly = stringResource(R.string.edit_mask_brush_only)
+    val adjustmentNoPixels = stringResource(R.string.edit_adjustment_no_pixels)
     val removeUnavailable = stringResource(R.string.edit_remove_unavailable)
     val spotHeal = stringResource(R.string.subtool_spot_heal_short)
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
@@ -1664,6 +1670,7 @@ private fun EditCanvas(
                 EditorMessage.AutosaveFailed -> snackbarHostState.showSnackbar(autosaveFailed)
                 EditorMessage.HiddenLayer -> snackbarHostState.showSnackbar(hiddenLayer)
                 EditorMessage.MaskBrushOnly -> snackbarHostState.showSnackbar(maskBrushOnly)
+                EditorMessage.AdjustmentNoPixels -> snackbarHostState.showSnackbar(adjustmentNoPixels)
                 EditorMessage.RemoveUnavailable -> {
                     // 지우지 못한 곳은 스팟 복구 브러시로 고칠 수 있게 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(removeUnavailable, actionLabel = spotHeal, duration = SnackbarDuration.Long)
