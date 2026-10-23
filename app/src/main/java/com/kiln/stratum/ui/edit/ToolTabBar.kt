@@ -59,12 +59,14 @@ import com.kiln.stratum.ui.theme.compactTextAutoSize
 import kotlin.math.roundToInt
 
 /**
- * 커버 화면(Compact) 아래 도구 탭 줄(결정 기록 '커버 화면 개편'): [자르기][선택][브러시][리터칭][유동화][더보기]
- * (사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요"). 여섯 칸이 폭을 똑같이 나누고 밀어 보지 않는다.
+ * 커버 화면(Compact) 아래 도구 탭 줄(결정 기록 '커버 화면 개편'): [이동][선택][흐림][리터칭][유동화][더보기]
+ * (사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요", 2026-10-23 "자르기 도구 위치에 이동 도구를,
+ * 브러시 위치에 흐림 도구를"). 여섯 칸이 폭을 똑같이 나누고 밀어 보지 않는다.
  * 도구 칸은 누르면 그 도구를 고르고, 다시 누르면 내려놓는다. 하위 도구가 있는 도구는 길게 누르거나 고른 뒤 다시 누르면 하위 도구 메뉴가 뜬다.
  * 도구 칸을 누르거나 그 칸의 하위 도구 메뉴에서 고르면 [onTabTap]을 먼저 부른다(편집 화면이 더보기 줄과 조정 막대를 닫는다).
  * 조정 막대를 닫으며 누른 것이면(참을 돌려줌) 같은 막대가 그 도구로 돌아오는 것이라, 이미 고른 도구를 내려놓거나 메뉴를 열지 않는다.
- * 더보기 칸은 나머지 도구 줄([CoverMoreTools])을 열고 닫는다([onMore]). 더보기 줄의 도구를 골라 두면 더보기 칸이 그 도구의 아이콘·이름으로 켜진다.
+ * 더보기 칸은 나머지 도구 줄([CoverMoreTools])을 열고 닫는다([onMore]). 더보기 줄의 도구를 골라 두면 더보기 칸이 그 도구의 아이콘·이름으로 켜지고,
+ * 그 도구에 하위 도구가 있으면 더보기 칸을 꾹 눌러 하위 도구 메뉴를 연다(막대에 하위 도구 칩이 없어서, 2026-10-23).
  * 고른 칸은 도구 막대처럼 아이콘 뒤 모서리 8dp 사각형(선택 배경)과 선택 색 아이콘·이름이다. 아래 시스템 바는 피한다(키보드는 보지 않는다).
  *
  * 커버를 가로로 돌렸으면([vertical], 사용자 피드백 12차 3: "커버화면 배치가 돌아간형태") 캔버스 오른쪽 끝에 세로로 서고(위에서 아래로, 더보기 칸이 맨 아래),
@@ -101,7 +103,7 @@ fun ToolTabBar(
                 for (tool in EditTool.coverTabs) {
                     key(tool) { TabToolItem(tool, selection, enabled, menu, onChoose, onTabTap, cell, MenuSide.START) }
                 }
-                MoreTabItem(selection, enabled, moreOpen, onMore, cell)
+                MoreTabItem(selection, enabled, moreOpen, onMore, cell, menu, onChoose, onTabTap, MenuSide.START)
             }
         }
         return
@@ -120,7 +122,7 @@ fun ToolTabBar(
             for (tool in EditTool.coverTabs) {
                 key(tool) { TabToolItem(tool, selection, enabled, menu, onChoose, onTabTap, cell, MenuSide.ABOVE) }
             }
-            MoreTabItem(selection, enabled, moreOpen, onMore, cell)
+            MoreTabItem(selection, enabled, moreOpen, onMore, cell, menu, onChoose, onTabTap, MenuSide.ABOVE)
         }
     }
 }
@@ -141,17 +143,13 @@ private fun TabToolItem(
     cell: Modifier,
     menuSide: MenuSide
 ) {
-    val haptic = LocalHapticFeedback.current
     val menuLabel = stringResource(R.string.subtool_menu)
     val label = stringResource(tool.label)
     val itemEnabled = enabled && tool.available
     val selected = selection.active == tool
     // 칸 자리(창 좌표). 메뉴를 그 위에 띄운다.
     val bounds = remember { arrayOfNulls<Region>(1) }
-    val openMenu = {
-        bounds[0]?.let { menu.open(tool, it, menuSide) }
-        Unit
-    }
+    val openMenu = { openSubToolMenu(menu, tool, bounds, menuSide) }
     // 고른 도구를 다시 누르면 하위 도구 메뉴를 연다(하위 도구가 없는 도구는 내려놓는다).
     // 조정 막대를 닫으며 누른 것이면 그 도구의 막대를 보이기만 한다(고르지 않았으면 고른다).
     val tap = {
@@ -171,32 +169,10 @@ private fun TabToolItem(
             onClick = tap,
             modifier = cell
                 .testTag(EditScreenTags.tabTool(tool))
-                .onGloballyPositioned { coordinates ->
-                    val position = coordinates.positionInWindow()
-                    val left = position.x.roundToInt()
-                    val top = position.y.roundToInt()
-                    bounds[0] = Region(left, top, left + coordinates.size.width, top + coordinates.size.height)
+                .subToolMenuOnHold(tool.takeIf { itemEnabled }, menu, menuSide, bounds) {
+                    onTabTap()
+                    onChoose(it)
                 }
-                .then(
-                    if (itemEnabled && tool.hasSubTools) {
-                        Modifier.longPressFirst(
-                            onLongPress = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                openMenu()
-                            },
-                            onDrag = { if (menu.hover(it)) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-                            onRelease = { position ->
-                                menu.release(position)?.let {
-                                    menu.close()
-                                    onTabTap()
-                                    onChoose(it)
-                                }
-                            }
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
                 // 안쪽 누르기의 의미를 지우므로 역할·선택·누르기를 여기서 다시 알린다
                 .clearAndSetSemantics {
                     contentDescription = label
@@ -226,50 +202,91 @@ private fun TabToolItem(
 /**
  * 탭 줄 맨 끝의 더보기 칸. 누르면 더보기 줄을 열고 닫는다. 더보기 줄의 도구를 골라 두면 그 도구의 아이콘·이름으로 켜지고,
  * 화면 읽기 기능은 '더보기: 지우개'처럼 읽는다. 더보기 줄이 열려 있어도 켜진 모양이다.
+ * 골라 둔 더보기 도구에 하위 도구가 있으면(자르기·명암) 꾹 눌러 그 도구의 하위 도구 메뉴를 연다(탭 칸과 같다, 2026-10-23).
  */
 @Composable
-private fun MoreTabItem(selection: ToolSelection, enabled: Boolean, open: Boolean, onMore: () -> Unit, cell: Modifier) {
+private fun MoreTabItem(
+    selection: ToolSelection,
+    enabled: Boolean,
+    open: Boolean,
+    onMore: () -> Unit,
+    cell: Modifier,
+    menu: SubToolMenuState,
+    onChoose: (SubTool) -> Unit,
+    onTabTap: () -> Boolean,
+    menuSide: MenuSide
+) {
     val active = selection.active?.takeIf { it in EditTool.coverMoreTools }
     val moreLabel = stringResource(R.string.tool_more)
+    val menuLabel = stringResource(R.string.subtool_menu)
     val description = active?.let { stringResource(R.string.tool_more_active, stringResource(it.label)) } ?: moreLabel
     val selected = open || active != null
-    TabCell(
-        selected = selected,
-        enabled = enabled,
-        label = active?.let { stringResource(it.shortLabel) } ?: moreLabel,
-        onClick = onMore,
-        modifier = cell
-            .testTag(EditScreenTags.MORE_TAB)
-            .clearAndSetSemantics {
-                contentDescription = description
-                role = Role.Tab
-                this.selected = selected
-                if (enabled) {
-                    onClick(description) {
-                        onMore()
-                        true
-                    }
-                } else {
-                    disabled()
+    // 꾹 눌러 메뉴를 열 도구(골라 둔 더보기 도구에 하위 도구가 있을 때만)
+    val menuTool = active?.takeIf { enabled && it.hasSubTools }
+    val bounds = remember { arrayOfNulls<Region>(1) }
+    MenuLongPress {
+        TabCell(
+            selected = selected,
+            enabled = enabled,
+            label = active?.let { stringResource(it.shortLabel) } ?: moreLabel,
+            onClick = onMore,
+            modifier = cell
+                .testTag(EditScreenTags.MORE_TAB)
+                .subToolMenuOnHold(menuTool, menu, menuSide, bounds) {
+                    onTabTap()
+                    onChoose(it)
                 }
+                .clearAndSetSemantics {
+                    contentDescription = description
+                    role = Role.Tab
+                    this.selected = selected
+                    if (enabled) {
+                        onClick(description) {
+                            onMore()
+                            true
+                        }
+                        if (menuTool != null) {
+                            onLongClick(menuLabel) {
+                                openSubToolMenu(menu, menuTool, bounds, menuSide)
+                                true
+                            }
+                        }
+                    } else {
+                        disabled()
+                    }
+                }
+        ) {
+            // 골라 둔 더보기 도구가 있으면 그 하위 도구의 아이콘(하위 도구가 있으면 작은 삼각형도), 없으면 더보기 아이콘
+            if (active != null) {
+                ToolIcon(active, selection.iconOf(active), contentDescription = null)
+            } else {
+                Icon(painterResource(R.drawable.ic_grid_view), contentDescription = null)
             }
-    ) {
-        // 더보기 칸은 하위 도구 메뉴를 열지 않아 삼각형 없이 아이콘만 그린다(하위 도구는 막대에서 고른다)
-        Icon(painterResource(active?.let { selection.iconOf(it) } ?: R.drawable.ic_grid_view), contentDescription = null)
+        }
     }
 }
 
 /**
- * 커버 화면 더보기 줄(결정 기록 '커버 화면 개편'): 탭 줄에 없는 도구(이동·지우개·텍스트·명암·흐림·모자이크)를 한 줄로 보인다.
+ * 커버 화면 더보기 줄(결정 기록 '커버 화면 개편'): 탭 줄에 없는 도구(자르기·지우개·텍스트·명암·브러시·모자이크)를 한 줄로 보인다.
  * 탭 줄의 더보기 칸을 누르면 한 줄 막대 자리에 뜨고(막대가 잠깐 이 줄로 바뀜, 사진을 가리지 않음, 2026-10-22 사용자 요청),
- * 하나를 고르면([onPick]) 편집 화면이 닫는다.
+ * 하나를 고르면([onPick]) 편집 화면이 닫는다. 하위 도구가 있는 도구(자르기·명암)는 꾹 눌러 하위 도구 메뉴([menu])를 칸 위(세로 줄은 왼쪽)에 열고,
+ * 거기서 고르면 [onChoose]다(탭 칸과 같다, 2026-10-23).
  * 칸 모양은 탭 줄과 같고 고른 도구는 선택 표시다. 화면 읽기 기능에는 창 이름 '도구 더보기'로 알린다.
  * 커버를 가로로 돌렸으면([vertical]) 세로 막대 자리에 세로 한 줄로 뜬다(사용자 피드백 12차 3).
  */
 @Composable
-fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool) -> Unit, modifier: Modifier = Modifier, vertical: Boolean = false) {
+fun CoverMoreTools(
+    selection: ToolSelection,
+    enabled: Boolean,
+    onPick: (EditTool) -> Unit,
+    modifier: Modifier = Modifier,
+    vertical: Boolean = false,
+    menu: SubToolMenuState = remember { SubToolMenuState() },
+    onChoose: (SubTool) -> Unit = {}
+) {
     val colors = StratumTheme.colors
     val title = stringResource(R.string.more_tools_title)
+    val menuSide = if (vertical) MenuSide.START else MenuSide.ABOVE
     Surface(
         modifier
             .then(if (vertical) Modifier.fillMaxHeight().edgeDivider(DividerEdge.Start, colors.divider) else Modifier.fillMaxWidth().edgeDivider(DividerEdge.Top, colors.divider))
@@ -277,7 +294,7 @@ fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool
             .semantics { paneTitle = title },
         color = colors.panel
     ) {
-        val cells: @Composable (Modifier) -> Unit = { cell -> MoreToolCells(selection, enabled, onPick, cell) }
+        val cells: @Composable (Modifier) -> Unit = { cell -> MoreToolCells(selection, enabled, onPick, cell, menu, onChoose, menuSide) }
         if (vertical) {
             Column(
                 Modifier
@@ -298,40 +315,103 @@ fun CoverMoreTools(selection: ToolSelection, enabled: Boolean, onPick: (EditTool
     }
 }
 
-/** 더보기 줄의 도구 칸들([cell]은 줄을 똑같이 나누는 칸 크기) */
+/** 더보기 줄의 도구 칸들([cell]은 줄을 똑같이 나누는 칸 크기). 하위 도구가 있는 도구는 꾹 눌러 하위 도구 메뉴를 연다([menuSide] 쪽). */
 @Composable
-private fun MoreToolCells(selection: ToolSelection, enabled: Boolean, onPick: (EditTool) -> Unit, cell: Modifier) {
+private fun MoreToolCells(
+    selection: ToolSelection,
+    enabled: Boolean,
+    onPick: (EditTool) -> Unit,
+    cell: Modifier,
+    menu: SubToolMenuState,
+    onChoose: (SubTool) -> Unit,
+    menuSide: MenuSide
+) {
+    val menuLabel = stringResource(R.string.subtool_menu)
     for (tool in EditTool.coverMoreTools) {
         key(tool) {
             val label = stringResource(tool.label)
             val selected = selection.active == tool
             val itemEnabled = enabled && tool.available
-            TabCell(
-                selected = selected,
-                enabled = itemEnabled,
-                label = stringResource(tool.shortLabel),
-                onClick = { onPick(tool) },
-                modifier = cell
-                    .testTag(EditScreenTags.moreTool(tool))
-                    .clearAndSetSemantics {
-                        contentDescription = label
-                        role = Role.Button
-                        this.selected = selected
-                        if (itemEnabled) {
-                            onClick(label) {
-                                onPick(tool)
-                                true
+            val menuTool = tool.takeIf { itemEnabled && it.hasSubTools }
+            val bounds = remember { arrayOfNulls<Region>(1) }
+            // 메뉴를 여는 꾹 누르기는 메뉴 묶음 시간(0.3초)이다(결정 기록 '꾹 누르기 시간')
+            MenuLongPress {
+                TabCell(
+                    selected = selected,
+                    enabled = itemEnabled,
+                    label = stringResource(tool.shortLabel),
+                    onClick = { onPick(tool) },
+                    modifier = cell
+                        .testTag(EditScreenTags.moreTool(tool))
+                        .subToolMenuOnHold(menuTool, menu, menuSide, bounds, onChoose)
+                        .clearAndSetSemantics {
+                            contentDescription = label
+                            role = Role.Button
+                            this.selected = selected
+                            if (itemEnabled) {
+                                onClick(label) {
+                                    onPick(tool)
+                                    true
+                                }
+                                if (menuTool != null) {
+                                    onLongClick(menuLabel) {
+                                        openSubToolMenu(menu, menuTool, bounds, menuSide)
+                                        true
+                                    }
+                                }
+                            } else {
+                                disabled()
                             }
-                        } else {
-                            disabled()
                         }
-                    }
-            ) {
-                // 고른 하위 도구의 아이콘(명암은 닷지·번, 흐림은 흐림·선명·스머지)
-                Icon(painterResource(selection.iconOf(tool)), contentDescription = null)
+                ) {
+                    // 고른 하위 도구의 아이콘(명암은 닷지·번, 자르기는 자르기·회전). 하위 도구가 있으면 작은 삼각형도 그린다.
+                    ToolIcon(tool, selection.iconOf(tool), contentDescription = null)
+                }
             }
         }
     }
+}
+
+/** [tool]의 하위 도구 메뉴를 칸 자리([bounds], 창 좌표) 옆([side])에 연다. 칸이 아직 놓이지 않았으면 열지 않는다. */
+private fun openSubToolMenu(menu: SubToolMenuState, tool: EditTool, bounds: Array<Region?>, side: MenuSide) {
+    bounds[0]?.let { menu.open(tool, it, side) }
+}
+
+/**
+ * 탭 줄·더보기 줄 칸의 꾹 누르기([MenuLongPress] 안에서 쓴다, 메뉴 묶음 0.3초): [tool]의 하위 도구 메뉴를 칸 옆([side])에 연다.
+ * 누른 채 끌면 손가락 밑 항목을 하이라이트하고(바뀔 때 짧은 진동), 항목 위에서 떼면 메뉴를 닫고 [onChosen]으로 그 하위 도구를 알린다.
+ * 항목 밖에서 떼면 메뉴는 열린 채 남아 눌러 고른다. [tool]이 null이거나 하위 도구가 없으면 꾹 누르기는 받지 않는다.
+ * 칸 자리(창 좌표)는 늘 [bounds]에 적는다(누르기·화면 읽기 기능의 길게 누르기로 열 때도 쓴다).
+ */
+@Composable
+private fun Modifier.subToolMenuOnHold(
+    tool: EditTool?,
+    menu: SubToolMenuState,
+    side: MenuSide,
+    bounds: Array<Region?>,
+    onChosen: (SubTool) -> Unit
+): Modifier {
+    val haptic = LocalHapticFeedback.current
+    val positioned = onGloballyPositioned { coordinates ->
+        val position = coordinates.positionInWindow()
+        val left = position.x.roundToInt()
+        val top = position.y.roundToInt()
+        bounds[0] = Region(left, top, left + coordinates.size.width, top + coordinates.size.height)
+    }
+    if (tool == null || !tool.hasSubTools) return positioned
+    return positioned.longPressFirst(
+        onLongPress = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            openSubToolMenu(menu, tool, bounds, side)
+        },
+        onDrag = { if (menu.hover(it)) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+        onRelease = { position ->
+            menu.release(position)?.let {
+                menu.close()
+                onChosen(it)
+            }
+        }
+    )
 }
 
 /**

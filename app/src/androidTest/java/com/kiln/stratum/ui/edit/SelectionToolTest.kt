@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
@@ -20,7 +19,6 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -319,24 +317,6 @@ class SelectionToolTest {
             assertTrue(actions.shapes.isEmpty())
             val (x, y) = actions.points.single()
             assertTrue("$x, $y vs $tapped", abs(x - tapped.x) < 30f && abs(y - tapped.y) < 30f)
-        }
-    }
-
-    @Test
-    fun cover_theFiveSubToolNames_fitOnOneRow() {
-        openCoverTool()
-        // 하위 도구 칩을 펼친 줄의 칩마다 이름이 잘리지 않는다(칩은 이름 폭이고 줄은 옆으로 밀어 본다)
-        composeRule.expandBarChip("subTool")
-
-        // 칸이 좁으면 글자는 칸 폭으로 놓이고 넘친 부분이 잘려 보인다('Rectangl'). 글자가 한 줄로 다 놓였는지 본다.
-        for (subTool in EditTool.Select.subTools) {
-            val label = composeRule.onNode(
-                hasText(composeRule.activity.getString(subTool.shortLabel)) and hasAnyAncestor(hasTestTag(EditScreenTags.subToolOption(subTool))),
-                useUnmergedTree = true
-            ).fetchSemanticsNode()
-            val layouts = mutableListOf<TextLayoutResult>()
-            label.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
-            assertTrue("$subTool label is cut", layouts.single().showsWholeLine())
         }
     }
 

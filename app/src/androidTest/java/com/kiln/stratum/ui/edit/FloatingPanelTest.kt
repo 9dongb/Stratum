@@ -288,7 +288,8 @@ class FloatingPanelTest {
         composeRule.onNodeWithTag(EditScreenTags.FLOATING_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertIsDisplayed()
         toggle(MainPanel.LAYERS).assertIsOn()
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).assertIsSelected()
+        // 브러시는 커버 더보기 줄의 도구라 더보기 칸이 브러시로 켜진다(2026-10-23)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).assertIsSelected()
 
         composeRule.runOnIdle { size.value = MAIN_LANDSCAPE }
         composeRule.waitForIdle()

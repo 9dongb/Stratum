@@ -82,11 +82,11 @@ class EffectToolsTest {
     private var blur by mutableStateOf(BlurOptions())
     private var mosaic by mutableStateOf(MosaicOptions())
 
-    /** 커버 한 줄 막대에 흐림의 칸을 놓는다(결정 기록 '커버 화면 개편') */
-    private fun showBlurOptions(mode: SubTool) {
+    /** 커버 한 줄 막대에 흐림의 칸을 놓는다(결정 기록 '커버 화면 개편'). 흐림·선명·스머지의 칸은 같다. */
+    private fun showBlurOptions() {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
-                StratumTheme { CoverToolBar(blurBar(mode, BlurControls(blur) { blur = it }, onChoose = {}), rememberCoverBarState()) }
+                StratumTheme { CoverToolBar(blurBar(BlurControls(blur) { blur = it }), rememberCoverBarState()) }
             }
         }
     }
@@ -107,19 +107,18 @@ class EffectToolsTest {
     )
 
     @Test
-    fun blurBar_hasTheSubToolThenSizeHardnessStrength() {
-        showBlurOptions(SubTool.EFFECT_SHARPEN)
+    fun blurBar_hasSizeHardnessStrength_andNoSubToolChip() {
+        showBlurOptions()
 
-        // 칸은 하위 도구 → 크기 → 경도 → 강도(띠와 같은 규칙, 사용자 피드백 9·10차)
-        val lefts = composeRule.barChipLefts(listOf("subTool", "size", "hardness", "strength"))
+        // 칸은 크기 → 경도 → 강도(띠와 같은 규칙, 사용자 피드백 9·10차). 하위 도구는 탭의 하위 도구 메뉴로만 고른다(2026-10-23).
+        val lefts = composeRule.barChipLefts(listOf("size", "hardness", "strength"))
         assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SHARPEN)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertDoesNotExist()
     }
 
     @Test
     fun blurOptions_change_andStrengthNeverGoesToZero() {
-        showBlurOptions(SubTool.EFFECT_BLUR)
+        showBlurOptions()
 
         composeRule.expandBarChip("strength")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0.3f) }
@@ -139,15 +138,6 @@ class EffectToolsTest {
         composeRule.expandBarChip("strength")
         composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.runOnIdle { assertEquals(0.01f, blur.strength, 0.0001f) }
-    }
-
-    @Test
-    fun blurOptions_offerSmudge() {
-        showBlurOptions(SubTool.EFFECT_SMUDGE)
-
-        composeRule.onNodeWithTag(EditScreenTags.bar("strength")).assertIsDisplayed()
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.EFFECT_SMUDGE)).assertIsSelected()
     }
 
     @Test

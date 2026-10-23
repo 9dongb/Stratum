@@ -1,22 +1,32 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * 커버 화면(Compact)에서 [tool]을 누른다(결정 기록 '커버 화면 개편'). 탭 줄에 있는 도구는 그 탭을 누르고,
- * 없는 도구(이동·지우개·텍스트·명암·흐림·모자이크)는 더보기 칸을 눌러 더보기 줄을 연 뒤 그 도구를 고른다.
- * 탭 줄의 도구를 이미 골랐으면 탭을 다시 누른 것과 같다(내려놓거나 하위 도구 메뉴). 더보기 줄의 도구는 다시 골라도 그대로다.
+ * 없는 도구(자르기·지우개·텍스트·명암·브러시·모자이크)는 더보기 줄을 연 뒤(떠 있지 않으면 더보기 칸을 누름) 그 도구를 고른다.
+ * 탭 줄의 도구를 이미 골랐으면 탭을 다시 누른 것과 같다(하위 도구 메뉴 등). 더보기 줄의 도구는 다시 골라도 그대로다.
  */
 fun SemanticsNodeInteractionsProvider.chooseCoverTool(tool: EditTool) {
     if (tool in EditTool.coverTabs) {
         onNodeWithTag(EditScreenTags.tabTool(tool)).performClick()
     } else {
-        onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        openCoverMoreTools()
         onNodeWithTag(EditScreenTags.moreTool(tool)).performClick()
+    }
+}
+
+/** 커버 더보기 줄이 떠 있지 않으면 더보기 칸을 눌러 연다 */
+private fun SemanticsNodeInteractionsProvider.openCoverMoreTools() {
+    if (onAllNodesWithTag(EditScreenTags.COVER_MORE_TOOLS).fetchSemanticsNodes().isEmpty()) {
+        onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
     }
 }
 
@@ -35,10 +45,19 @@ fun SemanticsNodeInteractionsProvider.collapseBar() {
     onNodeWithTag(EditScreenTags.BAR_DONE).performClick()
 }
 
-/** 커버에서 고른 도구의 하위 도구를 막대의 하위 도구 칩으로 고른다(펼친 줄이 넘치면 그 칩이 보이게 민 뒤 누른다) */
+/**
+ * 커버에서 [subTool]을 하위 도구 메뉴로 고른다(막대에는 하위 도구 칩이 없다, 2026-10-23 사용자 요청). 그 도구의 탭(더보기 줄의 도구면
+ * 더보기 줄을 열고 그 칸)을 길게 눌러(화면 읽기 기능의 길게 누르기와 같은 길) 메뉴를 열고 항목을 누른다. 도구를 고르지 않았어도 함께 고른다.
+ */
 fun SemanticsNodeInteractionsProvider.chooseCoverSubTool(subTool: SubTool) {
-    expandBarChip("subTool")
-    onNodeWithTag(EditScreenTags.subToolOption(subTool)).performScrollTo().performClick()
+    val tool = EditTool.of(subTool)
+    if (tool in EditTool.coverTabs) {
+        onNodeWithTag(EditScreenTags.tabTool(tool)).performSemanticsAction(SemanticsActions.OnLongClick)
+    } else {
+        openCoverMoreTools()
+        onNodeWithTag(EditScreenTags.moreTool(tool)).performSemanticsAction(SemanticsActions.OnLongClick)
+    }
+    onNodeWithTag(EditScreenTags.subTool(subTool)).performClick()
 }
 
 /** 커버 조정 막대에서 [item] 칩을 누른다(슬라이더 항목은 같은 줄이 슬라이더, 곡선은 막대 위에 곡선 편집기) */

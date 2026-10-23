@@ -125,15 +125,16 @@ class MoveToolTest {
     }
 
     @Test
-    fun cover_moveIsTheFirstInTheMoreRow_andTheBarHasTheTurnChips() {
+    fun cover_moveIsTheFirstTab_andTheBarHasTheTurnChips() {
         show(411, 800)
-        // 커버 탭 줄에는 없고(사용자 지정 탭: 자르기·선택·브러시·리터칭·유동화·더보기), 더보기 줄 맨 앞이다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).assertDoesNotExist()
+        // 커버 탭 줄 맨 앞이다(2026-10-23 사용자 요청: "자르기 도구 위치에 이동 도구를"). 더보기 줄에는 없다.
+        val move = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
+        val select = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select)).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("$move should be left of $select", move.right <= select.left + 1f)
         composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
-        val move = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
-        val eraser = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Eraser)).fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("$move should be left of $eraser", move.right <= eraser.left + 1f)
-        composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
 
         // 한 줄 막대에 돌리기·뒤집기 칩 넷(사용자 피드백 12차 2, 전에는 도구 이름만). 화면 읽기는 '레이어를 …'로 읽는다.
         composeRule.onNodeWithTag(EditScreenTags.MOVE_OVERLAY).assertExists()

@@ -292,13 +292,10 @@
     <!-- 선택 도구 -->
     <string name="tool_select">선택</string>
     <string name="subtool_select_rect">사각형</string>
-    <string name="subtool_select_rect_short">사각형</string>
     <string name="subtool_select_ellipse">원형</string>
     <string name="subtool_select_lasso">올가미</string>
     <string name="subtool_select_wand">자동 선택</string>
-    <string name="subtool_select_wand_short">자동</string>
     <string name="subtool_select_ai">개체 선택</string>
-    <string name="subtool_select_ai_short">개체</string>
     <string name="selection_mode_replace">새로</string>
     <string name="selection_mode_add">더하기</string>
     <string name="selection_mode_subtract">빼기</string>
@@ -370,9 +367,7 @@
     <string name="subtool_spot_heal">스팟 복구 브러시</string>
     <string name="subtool_spot_heal_short">스팟 복구</string>
     <string name="subtool_heal">복구 브러시</string>
-    <string name="subtool_heal_short">복구</string>
     <string name="subtool_clone">복제 도장</string>
-    <string name="subtool_clone_short">복제</string>
     <string name="retouch_hint_spot">고칠 곳을 칠하면 둘레의 비슷한 곳에서 가져와 메워요.</string>
     <string name="retouch_hint_heal">칠하면 가져올 곳의 무늬를 가져오고, 손을 떼면 둘레의 밝기·색에 맞춰요. 표시를 끌어 옮기고, 꾹 눌러 고정해요.</string>
     <string name="retouch_hint_clone">칠하면 가져올 곳을 그대로 베껴 와요. 표시를 끌어 옮기고, 꾹 눌러 고정해요.</string>

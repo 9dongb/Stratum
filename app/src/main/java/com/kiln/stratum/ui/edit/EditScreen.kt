@@ -667,10 +667,10 @@ fun EditScreen(
             else -> when (activeTool) {
                 EditTool.Brush, EditTool.Eraser -> brushControls?.let { brushBar(it) }
                 EditTool.Text -> textControls?.let { textBar(it) }
-                EditTool.Select -> selectionControls?.let { selectionBar(checkNotNull(selection.modeOf(EditTool.Select)), it, chooseSubTool) }
-                EditTool.Retouch -> retouchControls?.let { retouchBar(checkNotNull(selection.modeOf(EditTool.Retouch)), it, chooseSubTool) }
-                EditTool.Tone -> toneControls?.let { toneBar(checkNotNull(selection.modeOf(EditTool.Tone)), it, chooseSubTool) }
-                EditTool.Blur -> blurControls?.let { blurBar(checkNotNull(selection.modeOf(EditTool.Blur)), it, chooseSubTool) }
+                EditTool.Select -> selectionControls?.let { selectionBar(checkNotNull(selection.modeOf(EditTool.Select)), it) }
+                EditTool.Retouch -> retouchControls?.let { retouchBar(checkNotNull(selection.modeOf(EditTool.Retouch)), it) }
+                EditTool.Tone -> toneControls?.let { toneBar(checkNotNull(selection.modeOf(EditTool.Tone)), it) }
+                EditTool.Blur -> blurControls?.let { blurBar(it) }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicBar(it) }
                 // 이동 도구: 고른 레이어 돌리기·뒤집기(사용자 피드백 12차 2)
                 EditTool.Move -> ready?.let { moveBar(moveActions::orient, enabled = !it.busy) }
@@ -1146,7 +1146,14 @@ fun EditScreen(
                                         if (floating.panel == MainPanel.ADJUST) floating.closePanel()
                                         selection.pick(tool)
                                     },
-                                    vertical = coverLandscape
+                                    vertical = coverLandscape,
+                                    menu = subToolMenu,
+                                    // 칸을 꾹 눌러 연 하위 도구 메뉴에서 끌어 고르면 그 하위 도구를 고르고 닫는다(탭과 같다, 2026-10-23)
+                                    onChoose = { subTool ->
+                                        coverMoreOpen = false
+                                        if (floating.panel == MainPanel.ADJUST) floating.closePanel()
+                                        chooseSubTool(subTool)
+                                    }
                                 )
                             } else {
                                 // 조정을 켜면 같은 막대가 조정 칩이 되고 ✕는 조정을 끈다(화면 테스트는 그때 막대를 조정 칸으로 본다)

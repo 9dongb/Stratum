@@ -333,14 +333,16 @@ class EditCropTest {
                 )
             }
         }
-        // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)
-        val tabExists = composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(EditScreenTags.tabTool(EditTool.Transform)))
+        // 지금 배치에 맞는 도구 버튼(커버는 더보기 줄, 메인은 막대)
+        val onCover = composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(EditScreenTags.TOOL_TAB_BAR))
             .fetchSemanticsNodes().isNotEmpty()
-        composeRule.onNodeWithTag(
-            if (tabExists) EditScreenTags.tabTool(EditTool.Transform) else EditScreenTags.railTool(EditTool.Transform)
-        ).performClick()
+        if (onCover) {
+            composeRule.chooseCoverTool(EditTool.Transform)
+        } else {
+            composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform)).performClick()
+        }
         // 메인 화면은 띠의 비율 칸을 눌러야 비율 칩이 뜬다(밀어 보지 않는 옵션 창이라 바로 누른다, 펼친 에뮬레이터에서도 돌게)
-        if (tabExists) {
+        if (onCover) {
             chooseRatio(CropRatio.SQUARE)
         } else {
             composeRule.onNodeWithTag(EditScreenTags.strip("ratio")).performClick()

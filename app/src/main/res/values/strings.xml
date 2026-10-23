@@ -294,13 +294,10 @@
     <!-- 선택 도구 -->
     <string name="tool_select">Select</string>
     <string name="subtool_select_rect">Rectangle</string>
-    <string name="subtool_select_rect_short">Rect</string>
     <string name="subtool_select_ellipse">Ellipse</string>
     <string name="subtool_select_lasso">Lasso</string>
     <string name="subtool_select_wand">Magic wand</string>
-    <string name="subtool_select_wand_short">Wand</string>
     <string name="subtool_select_ai">Object select</string>
-    <string name="subtool_select_ai_short">Object</string>
     <string name="selection_mode_replace">New</string>
     <string name="selection_mode_add">Add</string>
     <string name="selection_mode_subtract">Subtract</string>
@@ -372,9 +369,7 @@
     <string name="subtool_spot_heal">Spot healing brush</string>
     <string name="subtool_spot_heal_short">Spot heal</string>
     <string name="subtool_heal">Healing brush</string>
-    <string name="subtool_heal_short">Heal</string>
     <string name="subtool_clone">Clone stamp</string>
-    <string name="subtool_clone_short">Clone</string>
     <string name="retouch_hint_spot">Paint over a spot. It is filled from a similar place nearby.</string>
     <string name="retouch_hint_heal">Paint to bring the texture from the source. When you lift your finger, it blends with the brightness and color around. Drag the marker to move it, or hold it to lock it.</string>
     <string name="retouch_hint_clone">Paint to copy the source as it is. Drag the marker to move it, or hold it to lock it.</string>

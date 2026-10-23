@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
@@ -163,7 +162,7 @@ class RetouchToolTest {
     private fun showOptions(mode: SubTool, source: CloneSource? = null, widthDp: Int = 411, objectPicked: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                StratumTheme { CoverToolBar(retouchBar(mode, controls(source, objectPicked), onChoose = {}), rememberCoverBarState()) }
+                StratumTheme { CoverToolBar(retouchBar(mode, controls(source, objectPicked)), rememberCoverBarState()) }
             }
         }
     }
@@ -222,12 +221,13 @@ class RetouchToolTest {
     }
 
     @Test
-    fun subToolChip_comesFirst_withoutHelpOrHints() {
-        // 커버 한 줄 막대(결정 기록 '커버 화면 개편'): 하위 도구 칩이 맨 앞, 그다음 크기·경도·불투명도
+    fun sizeComesFirst_withoutASubToolChipOrHints() {
+        // 커버 한 줄 막대(결정 기록 '커버 화면 개편'): 크기·경도·불투명도. 하위 도구 칩은 없다(탭의 하위 도구 메뉴로 고름, 2026-10-23 사용자 요청).
         showOptions(SubTool.RETOUCH_CLONE, source = CloneSource(100f, 100f))
 
-        val lefts = composeRule.barChipLefts(listOf("subTool", "size", "hardness", "opacity"))
+        val lefts = composeRule.barChipLefts(listOf("size", "hardness", "opacity"))
         assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
+        assertTrue(!exists(EditScreenTags.bar("subTool")))
         // 설명 줄도 물음표도 없다(안내는 처음 고를 때 편집 화면의 알림, 사용자 피드백 10차 5)
         composeRule.onNodeWithText(hint(R.string.retouch_hint_clone)).assertDoesNotExist()
     }
@@ -239,7 +239,7 @@ class RetouchToolTest {
 
         composeRule.onNodeWithText(hint(R.string.retouch_hint_heal)).assertDoesNotExist()
         assertTrue(!exists(EditScreenTags.bar("opacity")))
-        // 막대에는 하위 도구와 크기·경도뿐이다
+        // 막대에는 크기·경도뿐이다
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.bar("hardness")).assertIsDisplayed()
     }
@@ -260,23 +260,6 @@ class RetouchToolTest {
 
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
         assertTrue(!exists(EditScreenTags.bar("hardness")) && !exists(EditScreenTags.bar("opacity")))
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_REMOVE)).assertIsSelected()
-    }
-
-    @Test
-    fun theFourSubTools_fitOnOneLine_atTheCoverWidth() {
-        showOptions(SubTool.RETOUCH_REMOVE)
-        composeRule.expandBarChip("subTool")
-
-        // 하위 도구 넷의 이름이 커버 폭(411dp)에서 잘리지 않는다(칩은 이름 폭, 줄은 옆으로 밀어 봄)
-        for (subTool in EditTool.Retouch.subTools) {
-            val results = mutableListOf<TextLayoutResult>()
-            composeRule.onNodeWithText(composeRule.activity.getString(subTool.shortLabel), useUnmergedTree = true)
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
-            val result = results.single()
-            assertTrue("$subTool is cut: ${result.size}, line right ${result.getLineRight(0)}", result.showsWholeLine())
-        }
     }
 
     @Test
@@ -475,7 +458,7 @@ class RetouchToolTest {
     fun aiRemove_theRemoveButton_needsAPick() {
         var picked by mutableStateOf(false)
         composeRule.setContent {
-            StratumTheme { CoverToolBar(retouchBar(SubTool.RETOUCH_REMOVE, controls(null, objectPicked = picked), onChoose = {}), rememberCoverBarState()) }
+            StratumTheme { CoverToolBar(retouchBar(SubTool.RETOUCH_REMOVE, controls(null, objectPicked = picked)), rememberCoverBarState()) }
         }
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).assertIsNotEnabled()
 
@@ -521,12 +504,12 @@ class RetouchToolTest {
         // 뒤로 가기는 먼저 고른 물체만 버린다(도구는 그대로)
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.runOnIdle { assertEquals(listOf("clearPicked"), actions.calls) }
-        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertExists()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).performScrollTo().assertIsNotEnabled()
 
         // 그다음 뒤로 가기는 도구를 닫는다
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
-        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
     }
 
     @Test
@@ -742,7 +725,7 @@ class RetouchToolTest {
         composeRule.chooseCoverTool(EditTool.Retouch)
 
         // 한 줄 막대에 리터칭의 칸이 보인다(결정 기록 '커버 화면 개편')
-        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_OVERLAY).assertExists()
         // 탭 여섯(더보기 포함)이 커버 폭을 나눠 모두 보이고, 어떤 탭도 누르는 영역이 48dp보다 좁지 않다(결정 기록 '커버 화면 개편')
         val density = composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).fetchSemanticsNode().layoutInfo.density
@@ -813,8 +796,9 @@ class RetouchToolTest {
         composeRule.onNodeWithText(hint(R.string.edit_remove_unavailable)).assertIsDisplayed()
         composeRule.onNode(hasText(hint(R.string.subtool_spot_heal_short)) and hasAnyAncestor(hasTestTag(EditScreenTags.MESSAGE_BAR))).performClick()
         composeRule.onNodeWithTag(EditScreenTags.bar("hardness")).assertExists()
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RETOUCH_SPOT)).assertIsSelected()
+        // 탭의 하위 도구 메뉴를 다시 열면 스팟 복구가 골라져 있다(막대에는 하위 도구 칩이 없다, 2026-10-23)
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Retouch)).performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RETOUCH_SPOT)).assertIsSelected()
     }
 
     private companion object {

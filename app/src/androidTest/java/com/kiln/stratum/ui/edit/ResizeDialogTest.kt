@@ -75,15 +75,16 @@ class ResizeDialogTest {
         }
     }
 
-    /** 지금 배치의 자르기·변형 도구를 고르고, 옵션 위쪽의 크기 변경 버튼으로 창을 연다. */
+    /** 지금 배치의 자르기·변형 도구를 고르고, 크기 변경 버튼(커버는 자르기·회전 창의 칸)으로 창을 연다. */
     private fun openFromOptions() {
-        val tab = EditScreenTags.tabTool(EditTool.Transform)
-        val onCover = composeRule.onAllNodes(hasTestTag(tab)).fetchSemanticsNodes().isNotEmpty()
-        val button = composeRule.onNodeWithTag(if (onCover) tab else EditScreenTags.railTool(EditTool.Transform))
-        button.performClick()
+        val onCover = composeRule.onAllNodes(hasTestTag(EditScreenTags.TOOL_TAB_BAR)).fetchSemanticsNodes().isNotEmpty()
         if (onCover) {
+            // 자르기·변형은 커버 더보기 줄에 있다(2026-10-23)
+            composeRule.chooseCoverTool(EditTool.Transform)
             composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.RESIZE)).performClick()
         } else {
+            val button = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform))
+            button.performClick()
             // 메인 화면은 고른 도구를 다시 눌러 연 하위 도구 메뉴에서 고른다(띠에는 하위 도구 칸이 없다)
             button.performClick()
             composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RESIZE)).performClick()
@@ -110,7 +111,9 @@ class ResizeDialogTest {
     fun longPressMenu_opensTheDialog() {
         show()
 
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performTouchInput { longClick() }
+        // 커버 더보기 줄의 자르기·변형 칸을 꾹 누르면 하위 도구 메뉴가 뜬다(2026-10-23, 막대에 하위 도구 칩이 없어서)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Transform)).performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RESIZE)).performClick()
 
         widthField.assertTextContains("400")

@@ -76,21 +76,22 @@ class EditToolsTest {
         }
     }
 
-    private val transformTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform))
+    /** 커버 더보기 줄의 자르기·변형 칸(2026-10-23부터 탭 줄이 아니라 더보기 줄에 있다) */
+    private val transformMore get() = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Transform))
     private val transformRail get() = composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Transform))
-    private val brushTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush))
+    private val moveTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move))
     private val selectTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select))
 
     @Test
     fun compact_tapShowsOptions_tapAgainHides() {
         show(411, 800)
 
-        // 브러시의 칩은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편'). 다시 누르면 내려놓고 막대는 안내 글이다.
-        brushTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
+        // 이동의 칩(레이어 돌리기·뒤집기)은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편'). 다시 누르면 내려놓고 막대는 안내 글이다.
+        moveTab.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertIsDisplayed()
 
-        brushTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
+        moveTab.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
     }
 
@@ -98,7 +99,7 @@ class EditToolsTest {
     fun compact_transformStartsWithCrop_inItsOwnWindow() {
         show(411, 800)
 
-        transformTab.performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
 
         // 처음에는 자르기부터 시작하고, 닫힌 화면에서 자르기·회전은 새 창이다(결정 기록 '닫힌 화면 새 창')
         composeRule.onNodeWithTag(EditScreenTags.COVER_CROP_OPTIONS).assertIsDisplayed()
@@ -116,16 +117,19 @@ class EditToolsTest {
         composeRule.onNodeWithTag(EditScreenTags.bar("mode")).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_RECT)).assertIsSelected()
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
-        // 고른 하위 도구는 한 줄 막대의 하위 도구 칩에도 보인다(결정 기록 '커버 화면 개편')
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
+        // 막대에는 하위 도구 칩이 없고(2026-10-23 사용자 요청), 다시 연 메뉴에 고른 하위 도구가 보인다
+        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertDoesNotExist()
+        selectTab.performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).assertIsSelected()
     }
 
     @Test
     fun accessibilityLongClick_opensMenu() {
         show(411, 800)
 
-        transformTab.performSemanticsAction(SemanticsActions.OnLongClick)
+        // 자르기·변형은 더보기 줄에 있다. 더보기 줄의 칸도 길게 누르면 하위 도구 메뉴를 연다(2026-10-23).
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        transformMore.performSemanticsAction(SemanticsActions.OnLongClick)
 
         // 자르기·변형의 하위 도구는 자르기·회전과 크기 변경이다(회전·뒤집기는 자르기와 한 화면, 사용자 피드백 8차 1)
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.CROP)).assertIsDisplayed()
@@ -135,7 +139,7 @@ class EditToolsTest {
     @Test
     fun rotateButtons_onlyTurnThePreview_andCheckAppliesThemWithTheCrop() {
         show(411, 800)
-        transformTab.performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
         composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
 
         // 사용자 피드백 8차 1: 누르는 동안은 보이는 사진만 돌리고 편집하지 않는다
@@ -159,7 +163,7 @@ class EditToolsTest {
     @Test
     fun busy_disablesRotateButtons() {
         show(411, 800, ready(busy = true))
-        transformTab.performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
         composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
 
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_LEFT).assertIsNotEnabled()
@@ -169,7 +173,7 @@ class EditToolsTest {
     fun noDocument_disablesTools() {
         show(411, 800, EditorState.Empty)
 
-        transformTab.assertIsNotEnabled()
+        moveTab.assertIsNotEnabled()
     }
 
     @Test
@@ -293,8 +297,41 @@ class EditToolsTest {
         val tab = selectTab.fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("menu $menu should be above $tab", menu.bottom <= tab.top + 1f)
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).performClick()
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.SELECT_LASSO)).assertIsSelected()
+        selectTab.performClick()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.SELECT_LASSO)).assertIsSelected()
+    }
+
+    @Test
+    fun compact_moreRowTool_holdThenDrag_choosesTheSubTool_andClosesTheRow() {
+        show(411, 800)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        val tone = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Tone))
+        val cell = tone.fetchSemanticsNode().layoutBoundsInWindow()
+        // 막대에 하위 도구 칩이 없어(2026-10-23) 더보기 줄의 칸도 꾹 누르면 하위 도구 메뉴가 칸 위에 뜬다
+        tone.performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, -1f))
+        }
+        val menu = composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("menu $menu should be above $cell", menu.bottom <= cell.top + 1f)
+        val burn = composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.TONE_BURN)).fetchSemanticsNode().layoutBoundsInWindow()
+
+        // 누른 채 항목 위로 끌고 가서 떼면 그 하위 도구로 도구를 고르고 더보기 줄을 닫는다(탭과 같다)
+        tone.performTouchInput {
+            moveTo(burn.center - cell.topLeft)
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.SUB_TOOL_MENU).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("range")).assertExists()
+
+        // 더보기 칸은 명암으로 켜지고, 꾹 누르면 명암의 하위 도구 메뉴(번이 골라져 있음)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).assertIsSelected().performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.TONE_BURN)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.TONE_DODGE)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.TONE_DODGE)).assertIsSelected()
     }
 
     @Test
@@ -316,10 +353,10 @@ class EditToolsTest {
                 EditScreen(state = ready(), onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {}, onEdit = { commands += it })
             }
         }
-        // 지금 배치에 맞는 도구 버튼(커버는 탭, 메인은 막대)을 눌러 자르기·회전을 시작하고, 커버는 회전 탭을 연다
-        val tab = composeRule.onAllNodesWithTagOrNull(EditScreenTags.tabTool(EditTool.Transform))
-        (tab ?: transformRail).performClick()
-        if (tab != null) composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
+        // 지금 배치에 맞는 도구 버튼(커버는 더보기 줄, 메인은 막대)을 눌러 자르기·회전을 시작하고, 커버는 회전 탭을 연다
+        val cover = composeRule.onAllNodesWithTagOrNull(EditScreenTags.TOOL_TAB_BAR) != null
+        if (cover) composeRule.chooseCoverTool(EditTool.Transform) else transformRail.performClick()
+        if (cover) composeRule.onNodeWithTag(EditScreenTags.cropTab(CropTab.ROTATE)).performClick()
         // 오른쪽으로 돌려 둔다(아직 적용하지 않음)
         composeRule.onNodeWithTag(EditScreenTags.ROTATE_RIGHT).performClick()
 

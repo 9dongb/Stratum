@@ -19,7 +19,7 @@ import com.kiln.stratum.R
 /**
  * 하위 도구. 자르기·변형 도구, 선택 도구, 리터칭 도구, 명암 도구, 흐림 도구의 것이다. 어느 도구의 것인지는 [EditTool.subTools]가 정한다.
  *
- * @property shortLabel 옵션 위쪽 버튼에 보이는 짧은 이름. 커버 화면 폭에 한 줄로 들어가게 따로 둔다.
+ * @property shortLabel 좁은 칸에 보이는 짧은 이름(자르기·회전 창의 크기 변경 칸). 따로 없으면 [label]이다.
  * @property oneShot 고르면 창을 띄워 한 번 하고 끝나는 하위 도구(크기 변경). 도구를 다시 눌렀을 때 시작할 하위 도구로 기억하지 않는다.
  */
 enum class SubTool(
@@ -33,7 +33,7 @@ enum class SubTool(
     RESIZE(R.string.subtool_resize, R.drawable.ic_photo_size_select_large, R.string.subtool_resize_short, oneShot = true),
 
     /** 사각형 선택: 끌어서 사각형으로 고른다 */
-    SELECT_RECT(R.string.subtool_select_rect, R.drawable.ic_crop_square, R.string.subtool_select_rect_short),
+    SELECT_RECT(R.string.subtool_select_rect, R.drawable.ic_crop_square),
 
     /** 원형 선택: 끌어서 타원으로 고른다 */
     SELECT_ELLIPSE(R.string.subtool_select_ellipse, R.drawable.ic_panorama_fish_eye),
@@ -42,19 +42,19 @@ enum class SubTool(
     SELECT_LASSO(R.string.subtool_select_lasso, R.drawable.ic_gesture),
 
     /** 자동 선택(마술봉): 누른 곳과 비슷한 색을 고른다 */
-    SELECT_WAND(R.string.subtool_select_wand, R.drawable.ic_auto_fix_high, R.string.subtool_select_wand_short),
+    SELECT_WAND(R.string.subtool_select_wand, R.drawable.ic_auto_fix_high),
 
     /** AI 선택: 누른 물체를 AI(분할 모델)가 모양대로 고른다(결정 기록 'AI 제거·AI 선택') */
-    SELECT_AI(R.string.subtool_select_ai, R.drawable.ic_ads_click, R.string.subtool_select_ai_short),
+    SELECT_AI(R.string.subtool_select_ai, R.drawable.ic_ads_click),
 
     /** 스팟 복구 브러시: 칠한 곳을 둘레의 비슷한 곳에서 가져와 메운다 */
-    RETOUCH_SPOT(R.string.subtool_spot_heal, R.drawable.ic_blur_circular, R.string.subtool_spot_heal_short),
+    RETOUCH_SPOT(R.string.subtool_spot_heal, R.drawable.ic_blur_circular),
 
     /** 복구 브러시: 정한 곳의 무늬를 가져와 둘레 밝기·색에 맞춘다 */
-    RETOUCH_HEAL(R.string.subtool_heal, R.drawable.ic_healing, R.string.subtool_heal_short),
+    RETOUCH_HEAL(R.string.subtool_heal, R.drawable.ic_healing),
 
     /** 복제 도장: 정한 곳을 그대로 베낀다 */
-    RETOUCH_CLONE(R.string.subtool_clone, R.drawable.ic_approval, R.string.subtool_clone_short),
+    RETOUCH_CLONE(R.string.subtool_clone, R.drawable.ic_approval),
 
     /** AI 제거: 칠한 곳을 AI(채우기 모델)가 둘레에 맞게 새로 그려 채운다(결정 기록 'AI 제거·AI 선택') */
     RETOUCH_REMOVE(R.string.subtool_ai_remove, R.drawable.ic_auto_awesome),
@@ -158,13 +158,17 @@ enum class EditTool(
         val railTools: List<EditTool> = listOf(Move, Transform, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify)
 
         /**
-         * 커버 화면 아래 탭 줄의 도구(사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요").
+         * 커버 화면 아래 탭 줄의 도구(사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요",
+         * 2026-10-23 "자르기 도구 위치에 이동 도구를, 브러시 위치에 흐림 도구를 위치해주세요").
          * 맨 끝에 더보기 칸이 하나 더 있다. 조정·레이어는 메인 화면처럼 상단 바 버튼으로 연다(결정 기록 '커버 화면 개편').
          */
-        val coverTabs: List<EditTool> = listOf(Transform, Select, Brush, Retouch, Liquify)
+        val coverTabs: List<EditTool> = listOf(Move, Select, Blur, Retouch, Liquify)
 
-        /** 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구(승인된 계획의 순서: 이동·지우개·텍스트·명암·흐림·모자이크) */
-        val coverMoreTools: List<EditTool> = listOf(Move, Eraser, Text, Tone, Blur, Mosaic)
+        /**
+         * 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구. 탭과 자리를 바꾼 자르기·브러시는 이동·흐림이 있던 자리다
+         * (자르기·지우개·텍스트·명암·브러시·모자이크).
+         */
+        val coverMoreTools: List<EditTool> = listOf(Transform, Eraser, Text, Tone, Brush, Mosaic)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

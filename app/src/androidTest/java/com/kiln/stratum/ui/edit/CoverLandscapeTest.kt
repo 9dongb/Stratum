@@ -134,7 +134,7 @@ class CoverLandscapeTest {
     fun choosingATool_keepsTheCanvasSize_andShowsItsCellsTopToBottom() {
         show()
         val before = bounds(EditScreenTags.CANVAS)
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.waitForIdle()
         assertEquals(before, bounds(EditScreenTags.CANVAS))
         // 색 버튼 아래 크기·경도·불투명도 칸(기둥 밖으로 밀려 있어도 잘리지 않은 자리로 본다)
@@ -150,7 +150,7 @@ class CoverLandscapeTest {
     @Test
     fun aValueCell_becomesAVerticalSlider_draggingUpGrowsIt_andDoneReturns() {
         show()
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         // 접은 에뮬레이터에서는 강제 크기를 줄여 넣어 기둥이 낮아져 경도 칸이 밀려 있다(기술 주의점). 밀어 보이게 한 뒤 누른다.
         composeRule.onNodeWithTag(EditScreenTags.bar("hardness")).performScrollTo().performClick()
 
@@ -204,7 +204,7 @@ class CoverLandscapeTest {
         assertTrue("$covering should overlap the canvas $canvas", covering.left < canvas.right)
 
         // 도구를 고르면 막대 왼쪽에 붙고, 왼쪽 끝 자리는 그대로다
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Brush)).performClick()
+        composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.waitForIdle()
         val beside = bounds(EditScreenTags.COVER_LAYER_SHEET)
         val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
@@ -218,7 +218,7 @@ class CoverLandscapeTest {
     fun cropWindow_isARightColumn_checkOnTop_xAtTheBottom_andTabsKeepTheCanvasSize() {
         // 새 창도 돌아간 배치다: [캔버스 | 옵션 기둥 | ✓ · 탭 · X 기둥](닫힌 화면 새 창 공통 규칙의 맨 아래 줄을 돌린 것)
         show()
-        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Transform)).performClick()
+        composeRule.chooseCoverTool(EditTool.Transform)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(EditScreenTags.COVER_WINDOW_TOP_BAR).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOOL_TAB_ROW).assertDoesNotExist()

@@ -80,30 +80,25 @@ class ToneToolTest {
     private var options by mutableStateOf(ToneOptions())
 
     /** 커버 한 줄 막대에 명암의 칸을 놓는다(결정 기록 '커버 화면 개편') */
-    private fun showBar(mode: SubTool, onChoose: (SubTool) -> Unit = {}) {
+    private fun showBar(mode: SubTool) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
-                StratumTheme { CoverToolBar(toneBar(mode, ToneControls(options) { options = it }, onChoose), rememberCoverBarState()) }
+                StratumTheme { CoverToolBar(toneBar(mode, ToneControls(options) { options = it }), rememberCoverBarState()) }
             }
         }
     }
 
     @Test
-    fun bar_hasSubToolRangeSizeHardnessExposure_inOrder_withoutAHelpLine() {
-        val chosen = mutableListOf<SubTool>()
-        showBar(SubTool.TONE_BURN) { chosen += it }
+    fun bar_hasRangeSizeHardnessExposure_inOrder_withoutASubToolChipOrHelpLine() {
+        showBar(SubTool.TONE_BURN)
 
-        // 칸은 하위 도구 → 범위 → 크기 → 경도 → 노출(강도 자리) 순서다(띠와 같은 규칙, 사용자 피드백 9·10차)
-        val lefts = composeRule.barChipLefts(listOf("subTool", "range", "size", "hardness", "exposure"))
+        // 칸은 범위 → 크기 → 경도 → 노출(강도 자리) 순서다(띠와 같은 규칙, 사용자 피드백 9·10차)
+        val lefts = composeRule.barChipLefts(listOf("range", "size", "hardness", "exposure"))
         assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
+        // 하위 도구(닷지·번)는 막대에 두지 않고 더보기 줄의 하위 도구 메뉴로 고른다(2026-10-23 사용자 요청)
+        composeRule.onNodeWithTag(EditScreenTags.bar("subTool")).assertDoesNotExist()
         // 설명 줄이 없다(10차 5: 안내는 처음 고를 때 편집 화면의 알림)
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.tone_hint_burn)).assertDoesNotExist()
-        // 하위 도구 칩을 펼치면 닷지·번이 보이고 지금 하위 도구가 골라져 있다. 고르면 알리고 칩 줄로 돌아온다.
-        composeRule.expandBarChip("subTool")
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_BURN)).assertIsSelected()
-        composeRule.onNodeWithTag(EditScreenTags.subToolOption(SubTool.TONE_DODGE)).performClick()
-        composeRule.runOnIdle { assertEquals(listOf(SubTool.TONE_DODGE), chosen) }
-        composeRule.onNodeWithTag(EditScreenTags.bar("range")).assertExists()
     }
 
     @Test
