@@ -89,4 +89,12 @@ object FaceMeshIndex {
     /** 눈썹(오른쪽·왼쪽, 위 줄) */
     val RIGHT_BROW = intArrayOf(70, 63, 105, 66, 107)
     val LEFT_BROW = intArrayOf(300, 293, 334, 296, 336)
+
+    /** 눈썹 윤곽(위 줄 바깥 → 안쪽, 아래 줄 안쪽 → 바깥, 10점, 피부 마스크가 뺀다) */
+    val RIGHT_BROW_OUTLINE = intArrayOf(70, 63, 105, 66, 107, 55, 65, 52, 53, 46)
+    val LEFT_BROW_OUTLINE = intArrayOf(300, 293, 334, 296, 336, 285, 295, 282, 283, 276)
+
+    /** 콧구멍 둘레(오른쪽·왼쪽, 7점, 피부 마스크가 뺀다) */
+    val RIGHT_NOSTRIL = intArrayOf(166, 79, 239, 238, 20, 60, 75)
+    val LEFT_NOSTRIL = intArrayOf(392, 309, 459, 458, 250, 290, 305)
 }
