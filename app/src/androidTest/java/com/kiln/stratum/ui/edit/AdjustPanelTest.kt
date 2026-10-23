@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -129,6 +130,24 @@ class AdjustPanelTest {
         composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertIsDisplayed()
         item?.let { composeRule.expandAdjustChip(it) }
+    }
+
+    @Test
+    fun compact_expandedRow_centersTheNameAndTheValue() {
+        openCompactAdjust(AdjustItem.BRIGHTNESS)
+
+        // 커버 수치 조절 공통(2026-10-23 사용자 요청): 이름은 막대 왼쪽 끝과 슬라이더 사이, 숫자는 슬라이더 끝과 ✓ 사이의 가운데
+        val name = composeRule.activity.getString(AdjustItem.BRIGHTNESS.label)
+        val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode()
+        val density = bar.layoutInfo.density.density
+        val sliderNode = composeRule.onNode(
+            hasContentDescription(name) and hasAnyAncestor(hasTestTag(EditScreenTags.adjustSlider(AdjustItem.BRIGHTNESS)))
+        ).fetchSemanticsNode()
+        val slider = sliderNode.layoutBoundsInWindow()
+        val shown = sliderNode.config[SemanticsProperties.StateDescription]
+        val done = composeRule.onNodeWithTag(EditScreenTags.BAR_DONE).fetchSemanticsNode().layoutBoundsInWindow()
+        assertEquals((bar.layoutBoundsInWindow().left + slider.left) / 2f, composeRule.textCenterInWindow(name).x, 8 * density)
+        assertEquals((slider.right + done.left) / 2f, composeRule.textCenterInWindow(shown).x, 8 * density)
     }
 
     @Test

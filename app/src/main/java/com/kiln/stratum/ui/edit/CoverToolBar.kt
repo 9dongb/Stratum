@@ -382,7 +382,9 @@ private fun BarExpanded(item: BarItem, state: CoverBarState) {
                 tag = slider.tag,
                 onFinished = slider.onFinished,
                 origin = slider.origin,
-                onReset = slider.onReset.takeIf { item.cell.enabled }
+                onReset = slider.onReset.takeIf { item.cell.enabled },
+                // 이름은 왼쪽 끝과 슬라이더 사이, 값은 슬라이더 끝과 ✓ 사이의 가운데(커버 수치 조절 공통, 2026-10-23 사용자 요청)
+                centered = true
             )
         }
         is BarChoice -> Row(

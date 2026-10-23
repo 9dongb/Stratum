@@ -149,7 +149,8 @@ internal fun adjustBar(controls: AdjustControls): List<BarItem> =
             content = {
                 if (entry.isSlider) {
                     CommitOnDispose(controls.actions)
-                    AdjustSliderRow(entry, controls)
+                    // 이름·숫자는 빈 곳 가운데(커버 수치 조절 공통, 2026-10-23 사용자 요청)
+                    AdjustSliderRow(entry, controls, centered = true)
                 } else {
                     Text(
                         text = stringResource(entry.label),
@@ -286,21 +287,21 @@ private fun AdjustSliderColumn(item: AdjustItem, controls: AdjustControls) {
     val reset = { actions.record { item.resetIn(it) } }
     val colors = StratumTheme.colors
     val span = item.max - item.min
+    // 위에서 아래로 [이름 | 세로 슬라이더 | 숫자](세로 커버 줄의 [이름 | 슬라이더 | 숫자 | ✓]를 돌린 것, 맨 아래 ✓는 기둥이 둔다).
+    // 이름은 기둥 위 끝과 슬라이더 사이, 숫자는 슬라이더 끝과 ✓ 사이의 가운데다(커버 수치 조절 공통, 2026-10-23 사용자 요청).
     Column(
-        Modifier.fillMaxSize().padding(vertical = 4.dp).testTag(EditScreenTags.adjustSlider(item)),
+        Modifier.fillMaxSize().testTag(EditScreenTags.adjustSlider(item)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(Modifier.pointerInput(controls.enabled, item) { if (controls.enabled) detectTapGestures(onDoubleTap = { reset() }) }) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(ColumnSliderTextSpace)
+                .pointerInput(controls.enabled, item) { if (controls.enabled) detectTapGestures(onDoubleTap = { reset() }) },
+            contentAlignment = Alignment.Center
+        ) {
             CompactLabel(name, if (controls.enabled) colors.textSecondary else colors.textDisabled)
         }
-        Text(
-            text = shown,
-            color = if (controls.enabled) colors.textPrimary else colors.textDisabled,
-            style = MaterialTheme.typography.labelLarge,
-            autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
-            maxLines = 1,
-            overflow = TextOverflow.Clip
-        )
         StratumVerticalSlider(
             value = ((value - item.min) / span).coerceIn(0f, 1f),
             onValueChange = { fraction -> actions.preview { item.applyTo(it, item.min + fraction * span) } },
@@ -325,6 +326,16 @@ private fun AdjustSliderColumn(item: AdjustItem, controls: AdjustControls) {
                     }
                 }
         )
+        Box(Modifier.fillMaxWidth().height(ColumnSliderTextSpace), contentAlignment = Alignment.Center) {
+            Text(
+                text = shown,
+                color = if (controls.enabled) colors.textPrimary else colors.textDisabled,
+                style = MaterialTheme.typography.labelLarge,
+                autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
+                maxLines = 1,
+                overflow = TextOverflow.Clip
+            )
+        }
     }
 }
 
@@ -350,9 +361,11 @@ private fun AdjustChip(item: AdjustItem, changed: Boolean, enabled: Boolean, onC
 /**
  * 슬라이더 한 줄: 이름, 슬라이더, 숫자. 끄는 동안 미리 보고, 놓으면 기록한다.
  * 이름이나 슬라이더 원을 두 번 누르면 그 항목만 0으로 돌린다(라이트룸과 같은 방식). 화면 읽기 기능에서는 '초기화' 동작으로 한다.
+ * [centered]면 이름·숫자를 칸 가운데에 둔다(커버 막대: 이름은 왼쪽 끝과 슬라이더 사이, 숫자는 슬라이더 끝과 ✓ 사이, 2026-10-23).
+ * 메인 화면 조정 패널은 목록이라 이름을 왼쪽에 맞춘다.
  */
 @Composable
-private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
+private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls, centered: Boolean = false) {
     val value = item.valueIn(controls.adjustments)
     val name = stringResource(item.label)
     val resetLabel = stringResource(R.string.adjust_reset_item, name)
@@ -376,6 +389,7 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
                     if (controls.enabled) detectTapGestures(onDoubleTap = { reset() })
                 },
             color = labelColor,
+            textAlign = if (centered) TextAlign.Center else TextAlign.Start,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
@@ -408,7 +422,7 @@ private fun AdjustSliderRow(item: AdjustItem, controls: AdjustControls) {
             text = shown,
             modifier = Modifier.width(ValueWidth),
             color = valueColor,
-            textAlign = TextAlign.End,
+            textAlign = if (centered) TextAlign.Center else TextAlign.End,
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge
         )

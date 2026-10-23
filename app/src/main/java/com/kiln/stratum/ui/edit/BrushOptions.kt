@@ -54,6 +54,8 @@ internal fun EndPreviewOnDispose(preview: SizePreviewState?) {
  * [onFinished]는 손을 뗄 때 부른다. 펼친 화면 띠의 슬라이더는 세로 슬라이더 창이다(`SliderCell`).
  * [origin]이 0보다 크면 그 자리(0..1)를 0으로 보고 거기서 손잡이까지 칠한다(얼굴 보정처럼 양쪽으로 바꾸는 값).
  * [onReset]이 있으면 원을 두 번 톡하면 그것을 부르고, 화면 읽기 기능에는 '초기화' 동작을 준다(조정 슬라이더와 같다).
+ * [centered]면 이름은 줄 왼쪽 끝과 슬라이더 사이 빈 곳의 가운데, 숫자는 슬라이더 끝과 그 오른쪽(커버 막대의 ✓) 사이 가운데에 둔다
+ * (커버 수치 조절 공통, 2026-10-23 사용자 요청). 창 안의 줄(글자 창의 크기)은 창의 다른 칸과 왼쪽을 맞춰 그대로 둔다.
  */
 @Composable
 internal fun OptionSlider(
@@ -64,13 +66,15 @@ internal fun OptionSlider(
     tag: String,
     onFinished: () -> Unit = {},
     origin: Float = 0f,
-    onReset: (() -> Unit)? = null
+    onReset: (() -> Unit)? = null,
+    centered: Boolean = false
 ) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
             modifier = Modifier.width(88.dp),
             color = StratumTheme.colors.textSecondary,
+            textAlign = if (centered) TextAlign.Center else TextAlign.Start,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium
@@ -93,7 +97,7 @@ internal fun OptionSlider(
             text = shown,
             modifier = Modifier.width(64.dp),
             color = StratumTheme.colors.textPrimary,
-            textAlign = TextAlign.End,
+            textAlign = if (centered) TextAlign.Center else TextAlign.End,
             maxLines = 1,
             style = MaterialTheme.typography.labelLarge
         )

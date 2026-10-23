@@ -147,6 +147,26 @@ class CoverLandscapeTest {
     }
 
     @Test
+    fun anExpandedValueColumn_putsTheNameAboveAndTheValueBelow_centeredInTheirSpaces() {
+        show()
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).performScrollTo().performClick()
+
+        // 세로 커버의 [이름 | 슬라이더 | 값 | ✓]를 돌린 차례: 이름은 기둥 위 끝과 슬라이더 사이, 값은 슬라이더 끝과 ✓ 사이의 가운데(2026-10-23)
+        val column = bounds(EditScreenTags.COVER_TOOL_BAR)
+        val slider = bounds(EditScreenTags.BRUSH_SIZE)
+        val done = bounds(EditScreenTags.BAR_DONE)
+        val (caption, value) = composeRule.sliderCaptionAndValue(EditScreenTags.BRUSH_SIZE)
+        val name = composeRule.textCenterInWindow(caption)
+        val shown = composeRule.textCenterInWindow(value)
+        val dp = dp(EditScreenTags.COVER_TOOL_BAR)
+        assertEquals((column.top + slider.top) / 2f, name.y, 8 * dp)
+        assertEquals((slider.bottom + done.top) / 2f, shown.y, 8 * dp)
+        assertEquals(column.center.x, name.x, 4 * dp)
+        assertEquals(column.center.x, shown.x, 4 * dp)
+    }
+
+    @Test
     fun aValueCell_becomesAVerticalSlider_draggingUpGrowsIt_andDoneReturns() {
         show()
         composeRule.chooseCoverTool(EditTool.Brush)

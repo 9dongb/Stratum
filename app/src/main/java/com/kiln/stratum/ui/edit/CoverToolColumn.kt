@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -184,20 +185,16 @@ private fun BarCell(item: BarItem, expand: (String) -> Unit) {
 private fun BarExpandedColumn(item: BarItem, state: CoverBarState) {
     val colors = StratumTheme.colors
     when (item) {
-        // 이름·값과 세로 슬라이더(위로 끌면 커짐, 띠의 세로 슬라이더 창과 같은 얇은 슬라이더)
+        // 위에서 아래로 [이름 | 세로 슬라이더 | 값](세로 커버 막대의 [이름 | 슬라이더 | 값 | ✓]를 돌린 것, 맨 아래 ✓는 기둥이 둔다).
+        // 이름은 기둥 위 끝과 슬라이더 사이, 값은 슬라이더 끝과 ✓ 사이의 가운데다(커버 수치 조절 공통, 2026-10-23 사용자 요청).
+        // 슬라이더는 위로 끌면 커지는 띠의 세로 슬라이더 창과 같은 얇은 슬라이더다.
         is BarValue -> {
             val slider = item.cell.slider
             EndPreviewOnDispose(slider.preview)
-            Column(Modifier.fillMaxSize().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                CompactLabel(item.cell.caption, colors.textDescription)
-                Text(
-                    text = item.cell.value,
-                    color = colors.textPrimary,
-                    style = MaterialTheme.typography.labelLarge,
-                    autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip
-                )
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.fillMaxWidth().height(ColumnSliderTextSpace), contentAlignment = Alignment.Center) {
+                    CompactLabel(item.cell.caption, colors.textDescription)
+                }
                 StratumVerticalSlider(
                     value = slider.fraction,
                     onValueChange = slider.onFraction,
@@ -212,6 +209,16 @@ private fun BarExpandedColumn(item: BarItem, state: CoverBarState) {
                         .testTag(slider.tag)
                         .sliderSemantics(item.cell.caption, item.cell.value, slider.onReset.takeIf { item.cell.enabled })
                 )
+                Box(Modifier.fillMaxWidth().height(ColumnSliderTextSpace), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = item.cell.value,
+                        color = colors.textPrimary,
+                        style = MaterialTheme.typography.labelLarge,
+                        autoSize = compactTextAutoSize(MaterialTheme.typography.labelLarge),
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip
+                    )
+                }
             }
         }
         // 고를 것들을 위아래로. 고르면 칩 기둥으로 돌아간다.
@@ -280,3 +287,9 @@ private fun VerticalHint(text: String) {
 
 /** 펼친 세로 슬라이더의 폭(누르는 영역) */
 private val SliderThickness = 48.dp
+
+/**
+ * 펼친 세로 슬라이더 위 이름 칸·아래 값 칸의 높이. 글자를 칸 가운데에 두어 이름은 기둥 위 끝과 슬라이더 사이,
+ * 값은 슬라이더 끝과 ✓ 사이의 가운데에 온다(커버 수치 조절 공통, 2026-10-23 사용자 요청). 조정 기둥도 같은 높이를 쓴다.
+ */
+internal val ColumnSliderTextSpace = 40.dp

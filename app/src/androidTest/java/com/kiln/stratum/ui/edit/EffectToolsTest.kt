@@ -117,6 +117,21 @@ class EffectToolsTest {
     }
 
     @Test
+    fun expandedRow_centersTheNameAndTheValue() {
+        showBlurOptions()
+        composeRule.expandBarChip("size")
+
+        // 사용자 요청(2026-10-23, 커버 수치 조절 공통): 이름은 슬라이더 시작점과 남은 공간 중간, 수치는 체크(적용) 표시와 슬라이더 끝의 중간
+        val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode()
+        val density = bar.layoutInfo.density.density
+        val slider = composeRule.onNodeWithTag(EditScreenTags.BLUR_SIZE).fetchSemanticsNode().layoutBoundsInWindow()
+        val done = composeRule.onNodeWithTag(EditScreenTags.BAR_DONE).fetchSemanticsNode().layoutBoundsInWindow()
+        val (caption, value) = composeRule.sliderCaptionAndValue(EditScreenTags.BLUR_SIZE)
+        assertEquals((bar.layoutBoundsInWindow().left + slider.left) / 2f, composeRule.textCenterInWindow(caption).x, 8 * density)
+        assertEquals((slider.right + done.left) / 2f, composeRule.textCenterInWindow(value).x, 8 * density)
+    }
+
+    @Test
     fun blurOptions_change_andStrengthNeverGoesToZero() {
         showBlurOptions()
 

@@ -1,7 +1,10 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.onNodeWithTag
@@ -68,6 +71,27 @@ fun SemanticsNodeInteractionsProvider.expandAdjustChip(item: AdjustItem) {
 /** 상단 바의 [panel] 버튼(조정·레이어)을 누른다(켜고 끔). 커버·메인 화면 모두 같은 버튼이다. */
 fun SemanticsNodeInteractionsProvider.togglePanel(panel: MainPanel) {
     onNodeWithTag(EditScreenTags.panelToggle(panel)).performClick()
+}
+
+/** 슬라이더 [tag]의 이름과 보이는 값(화면 읽기 기능이 읽는 것: 커버 막대의 이름표·숫자와 같다) */
+fun SemanticsNodeInteractionsProvider.sliderCaptionAndValue(tag: String): Pair<String, String> {
+    val config = onNodeWithTag(tag).fetchSemanticsNode().config
+    return config[SemanticsProperties.ContentDescription].first() to config[SemanticsProperties.StateDescription]
+}
+
+/**
+ * 글자 [text]가 실제로 그려진 자리의 가운데(창 좌표). 글자 칸이 글자보다 넓어도 칸 안 어디에 맞췄는지 본다
+ * (커버 펼친 수치 줄의 가운데 맞춤, 2026-10-23).
+ */
+fun SemanticsNodeInteractionsProvider.textCenterInWindow(text: String): Offset {
+    val node = onNode(hasText(text), useUnmergedTree = true).fetchSemanticsNode()
+    val layouts = mutableListOf<TextLayoutResult>()
+    node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+    val layout = layouts.single()
+    return Offset(
+        node.positionInWindow.x + (layout.getLineLeft(0) + layout.getLineRight(0)) / 2f,
+        node.positionInWindow.y + (layout.getLineTop(0) + layout.getLineBottom(0)) / 2f
+    )
 }
 
 /**
