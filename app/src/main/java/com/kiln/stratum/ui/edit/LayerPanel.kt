@@ -177,6 +177,7 @@ interface LayerActions {
  * @property colorSpace 문서 색 공간. 작은 그림을 그 꼬리표로 보인다.
  * @property editingMask 고른 레이어의 마스크를 칠하는 중인지(결정 기록 '피부 보정'의 1d). 그 줄의 마스크 작은 그림에 테두리를 그린다.
  * @property collapsed 접은 그룹(결정 기록 '피부 보정'의 1h). 그 자손 줄은 목록에서 뺀다. 문서가 아니라 화면 상태다.
+ * @property maskOverlay 가린 곳의 빨간 막을 보이는 중인지. 조정 레이어의 마스크 작은 그림은 이것을 켜고 끈다(1i).
  */
 @Stable
 class LayerControls(
@@ -199,7 +200,8 @@ class LayerControls(
     val onAddAdjustment: () -> Unit = { actions.addAdjustment() },
     val collapsed: Set<LayerId> = emptySet(),
     /** 그룹 줄의 폴더 아이콘을 누르면 접고 펼친다 */
-    val onToggleGroup: (LayerId) -> Unit = {}
+    val onToggleGroup: (LayerId) -> Unit = {},
+    val maskOverlay: Boolean = false
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -409,7 +411,8 @@ private fun LayerRow(
     val liquifyLabel = stringResource(R.string.layer_liquify_badge)
     val maskLabel = stringResource(R.string.layer_mask)
     val maskEditingLabel = stringResource(R.string.layer_mask_editing)
-    val maskEditLabel = stringResource(R.string.layer_mask_edit)
+    // 조정 레이어는 늘 마스크를 칠해, 마스크 작은 그림은 빨간 막을 켜고 끈다(결정 기록 '피부 보정'의 1i)
+    val maskEditLabel = stringResource(if (layer.adjustment && selected && controls.maskOverlay) R.string.layer_mask_overlay_hide else R.string.layer_mask_edit)
     val pixelsLabel = stringResource(R.string.layer_pixels_edit)
     val adjustmentLabel = stringResource(R.string.layer_adjustment)
     val groupLabel = stringResource(R.string.layer_group_label)

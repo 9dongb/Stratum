@@ -193,6 +193,7 @@
     <string name="layer_mask">Layer mask</string>
     <string name="layer_mask_editing">Painting the mask</string>
     <string name="layer_mask_edit">Paint the mask</string>
+    <string name="layer_mask_overlay_hide">Hide the mask overlay</string>
     <string name="layer_pixels_edit">Paint the pixels</string>
     <string name="layer_adjustment_add">Add adjustment layer</string>
     <string name="layer_adjustment_name">Adjustment %1$d</string>

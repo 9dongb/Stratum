@@ -91,6 +91,56 @@ class MaskTransformTest {
         assertSame(Selection.EMPTY, MaskTransform.transform(Selection.EMPTY, TransformPlan.orient(size, Orientation.FLIP_VERTICAL), composer))
     }
 
+    /** 1000×800(4×4 타일) 다 보이는 마스크에서 안쪽 (1, 1) 타일만 가린 것: 가장자리는 모두 보인다 */
+    private val holeSize = PixelSize(1000, 800)
+    private val withHole: Selection by lazy { Selection.of(Selection.all(holeSize).tiles - TileKey(1, 1)) }
+
+    private fun inHole(x: Int, y: Int): Boolean = x in TILE_SIZE until 2 * TILE_SIZE && y in TILE_SIZE until 2 * TILE_SIZE
+
+    @Test
+    fun revealsOutside_whenEveryBorderTileIsFull() {
+        assertTrue(MaskTransform.revealsOutside(Selection.all(size), size))
+        assertTrue(MaskTransform.revealsOutside(withHole, holeSize))
+        assertEquals(false, MaskTransform.revealsOutside(patterned(size), size))
+        assertEquals(false, MaskTransform.revealsOutside(Selection.of(Selection.all(holeSize).tiles - TileKey(0, 2)), holeSize))
+    }
+
+    @Test
+    fun movedRevealAllMask_revealsTheEmptiedStrip_withoutNewTiles() {
+        // 다 보이는 마스크는 옮겨서 빈 자리도 보인다(포토샵 마스크의 기본색처럼, 결정 기록 '피부 보정'의 1i)
+        val moved = MaskTransform.transform(Selection.all(size), TransformPlan.translate(size, 37, -20), composer)
+
+        assertEquals(0, composer.composedMaskCount)
+        assertEquals(TileGrid(size.width, size.height).keys().toSet(), moved.tiles.keys)
+        assertTrue(moved.tiles.values.all { it === MaskTile.FULL })
+    }
+
+    @Test
+    fun movedMaskWithAHole_movesTheHole_andRevealsTheStrip() {
+        val moved = MaskTransform.transform(withHole, TransformPlan.translate(holeSize, 37, 20), composer)
+
+        assertAlphas(moved, holeSize) { x, y -> if (x >= 37 && y >= 20 && inHole(x - 37, y - 20)) 0 else 255 }
+    }
+
+    @Test
+    fun turnedLayerMask_revealsAroundThePlacedContent() {
+        // 레이어 돌리기처럼 내용 사각형만 돌려 놓으면, 그 밖(빈 자리)은 바깥이 보이는 마스크라 보인다
+        val rect = PixelRect(200, 200, 700, 450)
+        val plan = TransformPlan.place(holeSize, rect, Orientation.ROTATE_CLOCKWISE, holeSize, 300, 150)
+
+        val turned = MaskTransform.transform(withHole, plan, composer)
+
+        val placed = PixelRect(300, 150, 300 + rect.height, 150 + rect.width)
+        assertAlphas(turned, holeSize) { x, y ->
+            if (x in placed.left until placed.right && y in placed.top until placed.bottom) {
+                val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x - placed.left, y - placed.top, placed.width, placed.height)
+                withHole.alphaAt(from.x + rect.left, from.y + rect.top)
+            } else {
+                255
+            }
+        }
+    }
+
     @Test
     fun movingByWholeTiles_keepsTheSameTileObjects() {
         val mask = patterned(PixelSize(1024, 512))

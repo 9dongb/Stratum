@@ -125,6 +125,20 @@ class EditorAdjustmentLayerTest {
     }
 
     @Test
+    fun maskThumbnail_togglesTheRedOverlay_andTheBrushKeepsPaintingTheMask() {
+        // 조정 레이어는 늘 마스크를 칠해, 마스크 작은 그림은 빨간 막만 켜고 끈다(결정 기록 '피부 보정'의 1i)
+        val gray = grayAdjustment()
+        val adjustment = checkNotNull(gray.activeLayer)
+
+        onMain { viewModel.editLayerMask(adjustment) }
+        awaitReady { it.maskOverlay != null }
+        onMain { viewModel.editLayerMask(adjustment) }
+        val off = awaitReady { it.maskOverlay == null }
+
+        assertTrue(off.editingMask)
+    }
+
+    @Test
     fun mergingTheAdjustmentDown_bakesItIntoThePixelsBelow() {
         val gray = grayAdjustment()
 

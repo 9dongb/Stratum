@@ -777,7 +777,9 @@ class EditorViewModel internal constructor(
         var mesh: LiquifyMesh,
         val field: Bitmap,
         val reopened: Boolean = false,
-        val outdated: Boolean = false
+        val outdated: Boolean = false,
+        /** 레이어 마스크의 알파 그림([image]와 같은 크기). 비튼 미리 보기에 곱한다(적용은 마스크를 비틀지 않음). 마스크가 없으면 null */
+        val mask: Bitmap? = null
     ) {
         val displacements = FloatArray(mesh.columns * mesh.rows * 2)
         val halves = ShortArray(mesh.columns * mesh.rows * 4)
@@ -1283,12 +1285,21 @@ class EditorViewModel internal constructor(
         edit(DeleteLayerMask(layer))
     }
 
-    /** [id] 레이어를 고르고 그 마스크를 칠한다(레이어 줄의 마스크 작은 그림). 마스크가 없으면 고르기만 한다. */
+    /**
+     * [id] 레이어를 고르고 그 마스크를 칠한다(레이어 줄의 마스크 작은 그림). 마스크가 없으면 고르기만 한다.
+     * 조정 레이어는 늘 마스크를 칠하므로, 이미 빨간 막을 보이는 중이면 끈다(켜고 끔, 결정 기록 '피부 보정'의 1i).
+     */
     fun editLayerMask(id: LayerId) {
         selectLayer(id)
         val document = history?.document ?: return
-        if (activeLayer != id || document.layers.getOrNull(document.indexOfLayer(id))?.mask == null || editingMask) return
-        editingMask = true
+        val layer = document.layers.getOrNull(document.indexOfLayer(id))
+        if (activeLayer != id || layer?.mask == null) return
+        if (editingMask) {
+            if (layer.content !is AdjustmentContent) return
+            editingMask = false
+        } else {
+            editingMask = true
+        }
         refreshMaskOverlay()
     }
 
@@ -1362,10 +1373,13 @@ class EditorViewModel internal constructor(
         val level = levelFor(document)
         startEditing()
         editJob = viewModelScope.launch {
-            // 기록이 있으면 유동화 전 원래 픽셀을 그린다
-            val image = renderMutex.withLock {
-                withContext(Dispatchers.Default) { LiquifyRenderer.layerPreview(document, layer, level) }
+            // 기록이 있으면 유동화 전 원래 픽셀을 그린다. 마스크는 따로 그려 비튼 뒤에 곱한다(결정 기록 '피부 보정'의 1i).
+            val drawn = renderMutex.withLock {
+                withContext(Dispatchers.Default) {
+                    LiquifyRenderer.layerPreview(document, layer, level)?.let { it to LiquifyRenderer.layerMask(document, layer, level, it.width, it.height) }
+                }
             }
+            val image = drawn?.first
             if (image == null) {
                 finishEditing(EditorMessage.EditNotEnoughMemory)
                 return@launch
@@ -1379,7 +1393,7 @@ class EditorViewModel internal constructor(
             val mesh = record?.mesh?.copy() ?: LiquifyMesh.identity(size)
             val session = LiquifySession(
                 layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh),
-                reopened = record != null, outdated = record?.drawsDifferently == true
+                reopened = record != null, outdated = record?.drawsDifferently == true, mask = drawn.second
             )
             if (record != null && record.faces.isNotEmpty()) {
                 session.faces = record.faces
@@ -1392,8 +1406,8 @@ class EditorViewModel internal constructor(
             session.start = session.step()
             liquifySession = session
             if (liquifySize == null) liquifySize = defaultLiquifySize(size)
-            // 다시 연 유동화는 처음부터 기록대로 비튼 모습을 보인다(원래 픽셀이 잠깐 보이지 않게)
-            val preview = if (record != null) drawLiquify(session) else null
+            // 다시 연 유동화는 처음부터 기록대로 비튼 모습을 보인다(원래 픽셀이 잠깐 보이지 않게). 마스크가 있으면 처음부터 곱해 보인다.
+            val preview = if (record != null || session.mask != null) drawLiquify(session) else null
             finishEditing()
             publishLiquify(session, PreviewImage(preview ?: image, PreviewLevels.wholeRegion(size, level)))
             // 얼굴 모드로 닫았으면 열자마자 얼굴을 찾는다(기록에 얼굴이 있으면 다시 찾지 않는다)
@@ -1706,7 +1720,7 @@ class EditorViewModel internal constructor(
             withContext(Dispatchers.Default) {
                 LiquifyMesh.compose(session.displacements, columns, rows, cellSize, warps)
                 LiquifyRenderer.fill(session.field, session.displacements, session.halves)
-                LiquifyRenderer.preview(session.image, session.level, session.field, cellSize)
+                LiquifyRenderer.preview(session.image, session.level, session.field, cellSize, session.mask)
             }
         }
     }
@@ -1821,6 +1835,18 @@ class EditorViewModel internal constructor(
     /** 고른 레이어에서 문서 좌표 ([x], [y])의 색과 비슷한 곳을 고른다(자동 선택, 실행 취소 한 단계). */
     fun selectSimilar(x: Float, y: Float) {
         val document = history?.document ?: return
+        // 그룹·조정 레이어에는 고를 색이 없다(그리면 다 투명이라 문서 전체가 골라졌다, 결정 기록 '피부 보정'의 1i)
+        when (document.layers[document.indexOfLayer(activeLayerIn(document))].content) {
+            GroupContent -> {
+                _messages.trySend(EditorMessage.GroupNoPixels)
+                return
+            }
+            AdjustmentContent -> {
+                _messages.trySend(EditorMessage.AdjustmentNoPixels)
+                return
+            }
+            is RasterContent -> Unit
+        }
         val options = _selectionOptions.value
         edit(SelectSimilarColor(activeLayerIn(document), x, y, options.tolerance, options.contiguous, options.mode))
     }
@@ -2137,7 +2163,8 @@ class EditorViewModel internal constructor(
 
     /** 고른 레이어의 혼합 모드를 [mode]로 바꾼다(실행 취소 한 단계). */
     fun setBlendMode(mode: BlendMode) {
-        val layer = currentLayer() ?: return
+        // 그룹은 통과 그룹뿐이다(결정 기록 '피부 보정'의 1h)
+        val layer = currentLayer()?.takeIf { it.content !is GroupContent } ?: return
         if (hasLiveValues) return
         edit(SetLayerBlendMode(layer.id, mode))
     }
@@ -2798,7 +2825,8 @@ class EditorViewModel internal constructor(
      * 다른 편집을 처리하는 중이면 값만 받아 두고, 끝나면 그린다. 놓았던 값을 아직 기록하지 못했으면 이번 끌기와 합쳐 한 단계로 기록한다.
      */
     fun previewAdjustments(change: (Adjustments) -> Adjustments) {
-        val layer = currentLayer() ?: return
+        // 그룹은 그리지 않아 보정할 것이 없다(결정 기록 '피부 보정'의 1h)
+        val layer = currentLayer()?.takeIf { it.content !is GroupContent } ?: return
         _liveAdjustments.value = change(_liveAdjustments.value ?: layer.adjustments).normalized()
         afterLiveChange()
     }
@@ -2840,7 +2868,7 @@ class EditorViewModel internal constructor(
 
     /** 지금 보정 값에 [change]를 걸어 바로 기록한다(초기화·점 지우기 버튼). */
     fun recordAdjustments(change: (Adjustments) -> Adjustments) {
-        val layer = currentLayer() ?: return
+        val layer = currentLayer()?.takeIf { it.content !is GroupContent } ?: return
         _liveAdjustments.value = change(_liveAdjustments.value ?: layer.adjustments).normalized()
         liveCommitPending = false
         commitLive()
@@ -2871,11 +2899,17 @@ class EditorViewModel internal constructor(
     /**
      * 새 레이어(더하기·조정 레이어·글자·사진 넣기)를 넣을 [document] 자리와 들어갈 그룹(결정 기록 '피부 보정'의 1h).
      * 고른 레이어가 그룹이면 그 그룹 안 맨 위(그룹 줄 바로 아래), 아니면 고른 레이어 바로 위의 같은 그룹이다.
+     * 그 자리가 숨긴 그룹 안이면 가장 바깥의 숨긴 그룹 바로 위(그 그룹이 있던 그룹 안)다(1i).
      */
     private fun insertionIn(document: Document): Pair<Int, LayerId?> {
         val index = activeIndexIn(document)
         val layer = document.layers.getOrNull(index) ?: return document.layers.size to null
-        return if (layer.content is GroupContent) index to layer.id else index + 1 to layer.parent
+        val (at, parent) = if (layer.content is GroupContent) index to layer.id else index + 1 to layer.parent
+        // 숨긴 그룹 안에 넣으면 보이지 않아(글자는 다시 눌러 고칠 수도 없음), 가장 바깥의 숨긴 그룹 바로 위에 넣는다(결정 기록 '피부 보정'의 1i)
+        val byId = document.layers.associateBy { it.id }
+        val hidden = generateSequence(parent?.let(byId::get)) { it.parent?.let(byId::get) }.take(document.layers.size).lastOrNull { !it.visible }
+            ?: return at to parent
+        return document.indexOfLayer(hidden.id) + 1 to hidden.parent
     }
 
     /** [layer]가 보이는지: 자기와 감싼 그룹이 모두 눈을 켰다(숨긴 그룹 안에도 그리지 않는다, 결정 기록 '피부 보정'의 1h) */
@@ -3198,7 +3232,12 @@ class EditorViewModel internal constructor(
                 return@launch
             }
             val previousActive = activeLayer
-            if (select != null) activeLayer = select
+            val previousEditingMask = editingMask
+            if (select != null) {
+                // 다른 레이어를 고르면 픽셀을 칠한다(마스크 칠하기는 고른 레이어에 딸림, 결정 기록 '피부 보정'의 1d·1i)
+                if (select != activeLayer) editingMask = false
+                activeLayer = select
+            }
             onCommitted()
             // 끄던 값은 새 상태를 내보내는 바로 그 순간에 지운다(지우고 나서 보이는 상태가 앞 값으로 되돌아가지 않게)
             var finished = false
@@ -3211,6 +3250,7 @@ class EditorViewModel internal constructor(
                 // 새 축소본을 그리지 못하면 편집을 되돌려 화면과 기록을 맞춘다(다시 실행할 수 있게 남는다)
                 history.undo()
                 activeLayer = previousActive
+                editingMask = previousEditingMask
                 if (!finished) onFinished()
                 finishEditing(EditorMessage.EditNotEnoughMemory)
             }
@@ -3699,16 +3739,21 @@ class EditorViewModel internal constructor(
         closeLiquify()
     }
 
-    /** 레이어 요약을 [document]의 레이어 순서로. 레이어가 서로 다르면(더하거나 지움) 그대로 둔다. */
+    /** 레이어 요약을 [document]의 레이어 순서·감싼 그룹으로(옮기다 하지 못하면 되돌림). 레이어가 서로 다르면(더하거나 지움) 그대로 둔다. */
     private fun List<LayerSummary>.inOrderOf(document: Document?): List<LayerSummary> {
         if (document == null || size != document.layers.size) return this
         val byId = associateBy { it.id }
-        return document.layers.map { byId[it.id] ?: return this }
+        return document.layers.map { layer ->
+            val summary = byId[layer.id] ?: return this
+            if (summary.parent == layer.parent) summary else summary.copy(parent = layer.parent)
+        }
     }
 
     /** [document]에서 고른 레이어. 고른 레이어가 없거나 없어졌으면 맨 위 레이어를 고른다. */
     private fun activeLayerIn(document: Document): LayerId {
         val chosen = activeLayer?.takeIf { document.indexOfLayer(it) >= 0 }
+        // 고른 레이어가 없어져 다른 레이어를 고르면 픽셀을 칠한다(마스크 칠하기는 그 레이어에 딸림, 결정 기록 '피부 보정'의 1i)
+        if (chosen == null) editingMask = false
         return (chosen ?: document.layers.last().id).also { activeLayer = it }
     }
 }

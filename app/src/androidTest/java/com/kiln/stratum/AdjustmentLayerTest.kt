@@ -21,6 +21,7 @@ import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.PhotoImporter
@@ -197,6 +198,20 @@ class AdjustmentLayerTest {
         val turned = RotateImage(clockwise = true).applyTo(added)
         assertEquals(PixelSize(height, width), PixelSize(turned.width, turned.height))
         assertEquals(255, checkNotNull(turned.layers[1].mask).alphaAt(height - 1 - 10, 10))
+    }
+
+    @Test
+    fun movingARevealAllAdjustment_keepsItEverywhere_inThePreviewToo() {
+        // 다 보이는 마스크의 조정 레이어를 옮겨도 빈 자리에서 조정이 빠지지 않는다(포토샵 마스크의 기본색처럼, 결정 기록 '피부 보정'의 1i)
+        val document = document(pixelLayer(0, gradient), adjustment(1, mask = Selection.all(PixelSize(width, height))))
+
+        val moved = TranslateLayer(LayerId(1), 100, -30).applyTo(document)
+
+        assertTrue(checkNotNull(moved.layers[1].mask).tiles.values.all { it === MaskTile.FULL })
+        assertSameLook(look(document), look(moved))
+        // 끄는 동안의 미리 보기도 빈 자리에 조정이 걸려 있다
+        val preview = pixelsOf(checkNotNull(LayerPreviewCache().render(document, level = 0, shift = LayerShift(LayerId(1), 100, -30))))
+        assertSameLook(look(document), preview)
     }
 
     @Test

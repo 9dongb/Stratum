@@ -191,6 +191,7 @@
     <string name="layer_mask">레이어 마스크</string>
     <string name="layer_mask_editing">마스크를 칠하는 중</string>
     <string name="layer_mask_edit">마스크 칠하기</string>
+    <string name="layer_mask_overlay_hide">빨간 막 끄기</string>
     <string name="layer_pixels_edit">픽셀 칠하기</string>
     <string name="layer_adjustment_add">조정 레이어 더하기</string>
     <string name="layer_adjustment_name">조정 %1$d</string>

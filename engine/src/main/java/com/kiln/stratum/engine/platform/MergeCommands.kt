@@ -185,11 +185,12 @@ internal object LayerMerger {
         val kept = HashMap<TileKey, Tile>()
         val render = ArrayList<TileKey>()
         val keys = LinkedHashSet<TileKey>()
-        for (step in steps) keys += step.raster.tiles.keys
+        // 마스크가 다 가린 자리(마스크 타일이 없음)는 그 레이어의 픽셀이 보이지 않는다(투명한 타일을 남기지 않게, 결정 기록 '피부 보정'의 1i)
+        for (step in steps) keys += step.raster.tiles.keys.filter { step.shows(it) }
         // 조정 레이어가 있으면 그 아래 픽셀이 모두 바뀌므로 픽셀이 있는 자리를 모두 다시 그린다(결정 기록 '피부 보정'의 1e)
         if (plan.any { it is CompositeStep.Adjust }) return kept to keys.toList()
         for (key in keys) {
-            val present = steps.filter { it.raster.tiles[key] != null }
+            val present = steps.filter { it.raster.tiles[key] != null && it.shows(key) }
             val only = present.singleOrNull()
             if (only != null && only.isPlain) {
                 kept[key] = checkNotNull(only.raster.tiles[key])
@@ -199,6 +200,9 @@ internal object LayerMerger {
         }
         return kept to render
     }
+
+    /** [key] 자리에서 이 단계의 픽셀이 보일 수 있는지: 마스크가 없거나 그 자리 마스크 타일이 있다 */
+    private fun CompositeStep.Draw.shows(key: TileKey): Boolean = mask?.let { it.tiles[key] != null } ?: true
 
     /** [keys] 타일들을 모두 덮는 문서 사각형(묶음 하나 안) */
     private fun boundsOf(keys: List<TileKey>, grid: TileGrid): PixelRect {

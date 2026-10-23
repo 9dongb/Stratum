@@ -17,12 +17,14 @@ import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.importing.ImportResult
+import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.platform.AddLayerMask
 import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.DeleteLayerMask
 import com.kiln.stratum.engine.platform.ImageExporter
 import com.kiln.stratum.engine.platform.InvertLayerMask
 import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LiquifyRenderer
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.OrientLayer
@@ -194,6 +196,34 @@ class LayerMaskTest {
         val visible = MergeVisible.applyTo(before)
         assertNull(visible.layers.single().mask)
         assertSameLook(look(before), look(visible))
+    }
+
+    @Test
+    fun merging_aFullyHiddenLayer_keepsNoTransparentTiles() {
+        // 마스크가 다 가린 레이어를 합쳐도 투명한 타일을 남기지 않는다(메모리, 결정 기록 '피부 보정'의 1i)
+        val hidden = document(layer(0, Raster.EMPTY), layer(1, gradient, Selection.EMPTY))
+
+        val merged = MergeVisible.applyTo(hidden)
+
+        assertTrue((merged.layers.single().content as RasterContent).raster.tiles.isEmpty())
+    }
+
+    @Test
+    fun liquifyPreview_warpsThePixels_andAppliesTheMaskUnwarped() {
+        // 유동화는 마스크가 가린 픽셀도 비틀고 마스크는 그대로라, 미리 보기는 마스크 없이 그린 레이어를 비튼 뒤 비틀지 않은 마스크를 곱한다(1i)
+        val document = document(layer(0, gradient, mask))
+        val image = checkNotNull(LiquifyRenderer.layerPreview(document, LayerId(0), level = 0))
+        assertEquals(255, Color.alpha(pixelsOf(image)[10 * width + 10]))
+        val alpha = checkNotNull(LiquifyRenderer.layerMask(document, LayerId(0), 0, image.width, image.height))
+        val mesh = LiquifyMesh.identity(PixelSize(width, height))
+        val field = LiquifyRenderer.fieldBitmap(mesh)
+        LiquifyRenderer.fill(field, FloatArray(mesh.columns * mesh.rows * 2), ShortArray(mesh.columns * mesh.rows * 4))
+
+        val preview = pixelsOf(checkNotNull(LiquifyRenderer.preview(image, 0, field, mesh.cellSize, alpha)))
+
+        // 비틀지 않으면 마스크를 건 레이어 그대로다
+        assertSameLook(look(document), preview)
+        assertNull(LiquifyRenderer.layerMask(document(layer(0, gradient)), LayerId(0), 0, image.width, image.height))
     }
 
     @Test

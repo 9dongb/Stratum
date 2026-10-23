@@ -172,10 +172,11 @@ private fun movedMask(mask: Selection?, plan: TransformPlan, checkCanceled: () -
 /** 레이어 하나를 옮기거나 돌릴 때 새로 생길 수 있는 메모리: 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵·마스크 타일 */
 private fun layerTileBytes(document: Document, layer: LayerId): Long {
     val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
-    val raster = (target.content as? RasterContent)?.raster ?: return 0L
+    // 마스크는 픽셀이 없는 조정 레이어도 옮긴다(결정 기록 '피부 보정'의 1i)
+    val maskBytes = target.mask?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L
+    val raster = (target.content as? RasterContent)?.raster ?: return maskBytes
     val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
-    return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L) +
-        (target.mask?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
+    return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L) + maskBytes
 }
 
 /**
@@ -185,13 +186,13 @@ private fun layerTileBytes(document: Document, layer: LayerId): Long {
 private fun newTileBytes(document: Document, area: PixelRect): Long {
     var bytes = 0L
     for (layer in document.layers) {
+        // 마스크 타일(픽셀 하나에 1바이트, 다 보이는 타일은 0). 픽셀이 없는 조정 레이어의 마스크도 센다.
+        layer.mask?.let { mask -> bytes += mask.tiles.entries.sumOf { (key, tile) -> if (key.overlaps(area)) tile.byteCount.toLong() else 0L } }
         val raster = (layer.content as? RasterContent)?.raster ?: continue
         for ((key, tile) in raster.tiles) {
             if (tile.solidColor == null && key.overlaps(area)) bytes += tile.byteCount
         }
         layer.gainmap?.let { gainmap -> bytes += gainmap.raster.tiles.values.sumOf { it.byteCount.toLong() } }
-        // 마스크 타일(픽셀 하나에 1바이트, 다 보이는 타일은 0)
-        layer.mask?.let { mask -> bytes += mask.tiles.entries.sumOf { (key, tile) -> if (key.overlaps(area)) tile.byteCount.toLong() else 0L } }
     }
     return bytes
 }

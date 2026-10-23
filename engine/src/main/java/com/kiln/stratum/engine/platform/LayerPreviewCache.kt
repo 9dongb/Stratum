@@ -34,6 +34,7 @@ import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.tone.ToneFill
+import com.kiln.stratum.engine.transform.MaskTransform
 import java.util.IdentityHashMap
 import kotlin.math.roundToInt
 
@@ -147,47 +148,78 @@ class LayerPreviewCache {
         var canvas = picture.beginRecording(width, height)
         // 조정 레이어가 읽은 아래 그림. 다음 조정 레이어나 끝에서 다 그린 뒤 돌려준다.
         var below: Bitmap? = null
-        for (step in steps) {
-            // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL). 마스크도 같이 옮긴다.
-            val offset = if (moving != null && step.layer.id in movingIds) {
-                val scale = 1f / (1 shl level)
-                Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) }
-            } else {
-                null
-            }
-            val maskStrokes = strokes.filter { it.layerId == step.layer.id && it.mask }
-            when (step) {
-                is CompositeStep.Draw -> {
-                    val bitmap = previews[step] ?: continue
-                    val shader = shaderOf(bitmap, offset)
-                    // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
-                    val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
-                    val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null.also { below?.recycle() } }
-                    val paint = layerPaint(step).apply {
-                        this.shader = if (mask == null) adjusted else ComposeShader(adjusted, shaderOf(mask, offset), BlendMode.DST_IN)
+        // 옮기는 동안 빈 자리를 채워 다시 그린 마스크 그림. 다 그린 뒤(그리지 못해도) 돌려준다.
+        val movedMasks = ArrayList<Bitmap>()
+        try {
+            for (step in steps) {
+                // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL). 마스크도 같이 옮긴다.
+                val offset = if (moving != null && step.layer.id in movingIds) {
+                    val scale = 1f / (1 shl level)
+                    Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) }
+                } else {
+                    null
+                }
+                val maskStrokes = strokes.filter { it.layerId == step.layer.id && it.mask }
+                when (step) {
+                    is CompositeStep.Draw -> {
+                        val bitmap = previews[step] ?: continue
+                        val shader = shaderOf(bitmap, offset)
+                        // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
+                        val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
+                        val mask = step.mask?.let { selection ->
+                            val alpha = liveMask(selection, region, maskStrokes) ?: return null.also { below?.recycle() }
+                            maskShaderOf(selection, alpha, offset, size, movedMasks) ?: return null.also { below?.recycle() }
+                        }
+                        val paint = layerPaint(step).apply {
+                            this.shader = if (mask == null) adjusted else ComposeShader(adjusted, mask, BlendMode.DST_IN)
+                        }
+                        canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
                     }
-                    canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
-                }
-                is CompositeStep.Adjust -> {
-                    // 조정 레이어: 지금까지 합친 아래를 그림으로 만들고, 그것을 보정한 색을 몫만큼 바꿔 넣은 그림에서 이어 그린다(결정 기록 '피부 보정'의 1e)
-                    picture.endRecording()
-                    val drawn = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null.also { below?.recycle() }
-                    below?.recycle()
-                    below = drawn
-                    picture = Picture()
-                    canvas = picture.beginRecording(width, height)
-                    val mask = step.mask?.let { liveMask(it, region, maskStrokes) ?: return null.also { below?.recycle() } }
-                    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
-                        shader = AdjustLayerShader.of(step, BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), mask?.let { shaderOf(it, offset) })
-                        blendMode = BlendMode.SRC
-                    })
+                    is CompositeStep.Adjust -> {
+                        // 조정 레이어: 지금까지 합친 아래를 그림으로 만들고, 그것을 보정한 색을 몫만큼 바꿔 넣은 그림에서 이어 그린다(결정 기록 '피부 보정'의 1e)
+                        picture.endRecording()
+                        val drawn = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null.also { below?.recycle() }
+                        below?.recycle()
+                        below = drawn
+                        picture = Picture()
+                        canvas = picture.beginRecording(width, height)
+                        val mask = step.mask?.let { selection ->
+                            val alpha = liveMask(selection, region, maskStrokes) ?: return null.also { below?.recycle() }
+                            maskShaderOf(selection, alpha, offset, size, movedMasks) ?: return null.also { below?.recycle() }
+                        }
+                        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
+                            shader = AdjustLayerShader.of(step, BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), mask)
+                            blendMode = BlendMode.SRC
+                        })
+                    }
                 }
             }
+            picture.endRecording()
+            val result = PreviewRenderer.drawOnGpu(picture, width, height)
+            below?.recycle()
+            return result
+        } finally {
+            for (bitmap in movedMasks) bitmap.recycle()
+        }
+    }
+
+    /**
+     * 레이어 마스크 [selection]의 알파 그림 [alpha]를 그리는 셰이더. 옮기는 중([offset])이면 그만큼 옮기고, 옮겨서 빈 자리는 기록하는 옮기기와 같이
+     * 마스크의 바깥([MaskTransform.revealsOutside])으로 채운다(다 보이는 마스크면 보이고 아니면 가림, 결정 기록 '피부 보정'의 1i).
+     * 빈 자리를 채워 다시 그린 그림은 [made]에 넣는다(다 그린 뒤 돌려줌). 그리지 못하면 null.
+     */
+    private fun maskShaderOf(selection: Selection, alpha: Bitmap, offset: Matrix?, size: PixelSize, made: MutableList<Bitmap>): Shader? {
+        if (offset == null || !MaskTransform.revealsOutside(selection, size)) return shaderOf(alpha, offset)
+        val picture = Picture()
+        picture.beginRecording(alpha.width, alpha.height).apply {
+            // 다 보이는 바탕에 옮긴 마스크를 그대로 놓는다(마스크 밖은 바탕이 남음)
+            drawColor(Color.BLACK)
+            drawBitmap(alpha, offset, Paint().apply { blendMode = BlendMode.SRC })
         }
         picture.endRecording()
-        val result = PreviewRenderer.drawOnGpu(picture, width, height)
-        below?.recycle()
-        return result
+        val moved = PreviewRenderer.drawOnGpu(picture, alpha.width, alpha.height) ?: return null
+        made += moved
+        return BitmapShader(moved, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
     }
 
     /** 축소본 [bitmap]을 그리는 셰이더. [offset]이 있으면 그만큼 옮기고 밖은 투명이다(DECAL), 없으면 가장자리를 늘인다. */

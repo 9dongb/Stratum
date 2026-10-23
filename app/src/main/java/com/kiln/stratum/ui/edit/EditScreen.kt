@@ -584,6 +584,7 @@ fun EditScreen(
                     if (floating.panel != MainPanel.ADJUST) floating.togglePanel(MainPanel.ADJUST)
                 },
                 collapsed = collapsed,
+                maskOverlay = it.maskOverlay != null,
                 onToggleGroup = { id ->
                     collapsedGroups = if (id.value in collapsedGroups) collapsedGroups.filter { it != id.value }.toLongArray() else collapsedGroups + id.value
                 }

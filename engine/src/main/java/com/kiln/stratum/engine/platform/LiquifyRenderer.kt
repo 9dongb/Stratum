@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.platform
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.BlendMode
+import android.graphics.ComposeShader
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.RuntimeShader
@@ -123,12 +124,14 @@ object LiquifyRenderer {
 
     /**
      * 작업 모드 미리 보기: 레이어 축소본 [image](문서를 1/2^[level]로 그린 것)를 [field](칸 [cellSize] 픽셀)대로 비틀어 그린 하드웨어 비트맵.
-     * 크기는 [image]와 같다. GPU가 그리지 못하면 null.
+     * 크기는 [image]와 같다. [mask](레이어 마스크의 알파 그림, [layerMask])가 있으면 비튼 그림에 비틀지 않은 마스크를 곱한다:
+     * 적용은 픽셀만 비틀고 마스크는 그대로라, 적용한 모습과 같게 보인다(결정 기록 '피부 보정'의 1i). GPU가 그리지 못하면 null.
      */
-    fun preview(image: Bitmap, level: Int, field: Bitmap, cellSize: Int): Bitmap? {
+    fun preview(image: Bitmap, level: Int, field: Bitmap, cellSize: Int, mask: Bitmap? = null): Bitmap? {
         val scale = (1 shl level).toFloat()
         val shader = shaderOf(image, field, cellSize, outputLeft = 0f, outputTop = 0f, outputScaleX = scale, outputScaleY = scale, imageLeft = 0f, imageTop = 0f, imageScaleX = scale, imageScaleY = scale)
-        return draw(shader, image.width, image.height)
+        val masked = mask?.let { ComposeShader(shader, BitmapShader(it, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), BlendMode.DST_IN) } ?: shader
+        return draw(masked, image.width, image.height)
     }
 
     /** [raster]의 [changed]에 닿는 타일을 [mesh]대로 다시 그린 새 래스터. 그릴 것이 없으면 [raster] 그대로다. */
@@ -277,7 +280,7 @@ object LiquifyRenderer {
             setFloatUniform("cellSize", cellSize.toFloat())
         }
 
-    private fun draw(shader: RuntimeShader, width: Int, height: Int): Bitmap? {
+    private fun draw(shader: Shader, width: Int, height: Int): Bitmap? {
         val picture = Picture()
         val canvas = picture.beginRecording(width, height)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
@@ -310,12 +313,19 @@ object LiquifyRenderer {
     """
 
     /**
-     * 미리 보기용 레이어 축소본: [document]에서 [layerId] 레이어만, 불투명도·혼합 모드 없이(보정은 건 채) [level] 단계로.
+     * 미리 보기용 레이어 축소본: [document]에서 [layerId] 레이어만, 불투명도·혼합 모드·마스크 없이(보정은 건 채) [level] 단계로.
      * 유동화 기록이 있는 레이어는 유동화 전 원래 픽셀이다(다시 연 유동화는 원래 픽셀에 격자·얼굴 보정을 다시 건다, [liquifySource]).
+     * 마스크는 비튼 뒤에 곱한다([layerMask], [preview]): 적용은 마스크가 가린 픽셀도 비틀기 때문이다.
      */
     fun layerPreview(document: Document, layerId: LayerId, level: Int): Bitmap? {
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId))?.liquifySource ?: return null
-        val alone = document.copy(layers = listOf(layer.copy(opacity = 1f, blendMode = LayerBlendMode.NORMAL)), selection = null)
+        val alone = document.copy(layers = listOf(layer.copy(opacity = 1f, blendMode = LayerBlendMode.NORMAL, mask = null)), selection = null)
         return PreviewRenderer.render(alone, level)
+    }
+
+    /** [layerId] 레이어 마스크의 알파 그림([layerPreview]와 같은 [level] 단계, [width]×[height]). 마스크가 없으면 null. */
+    fun layerMask(document: Document, layerId: LayerId, level: Int, width: Int, height: Int): Bitmap? {
+        val mask = document.layers.getOrNull(document.indexOfLayer(layerId))?.mask ?: return null
+        return SelectionPreview.maskAt(mask, 0f, 0f, 1f / (1 shl level), width, height)
     }
 }

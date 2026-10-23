@@ -43,7 +43,8 @@ class FaceFinder(private val model: FaceModel) {
      * 그리지 못하면(메모리 부족) [NotEnoughMemoryException]을 던진다.
      */
     fun render(document: Document, layer: Layer, checkCanceled: () -> Unit = {}): FacePicture {
-        val alone = document.copy(layers = listOf(layer.copy(opacity = 1f, blendMode = LayerBlendMode.NORMAL)), selection = null)
+        // 유동화는 마스크가 가린 픽셀도 비트므로 마스크 없이 그린다(유동화 미리 보기와 같다, 결정 기록 '피부 보정'의 1i)
+        val alone = document.copy(layers = listOf(layer.copy(opacity = 1f, blendMode = LayerBlendMode.NORMAL, mask = null)), selection = null)
         val level = imageLevel(PixelSize(document.width, document.height))
         val drawn = PreviewRenderer.render(alone, level, checkCanceled) ?: throw NotEnoughMemoryException()
         val base = try {

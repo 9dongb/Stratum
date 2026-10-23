@@ -131,6 +131,25 @@ class EditorMaskTest {
     }
 
     @Test
+    fun anotherLayerChosenByAnEdit_paintsItsPixels() {
+        // 마스크를 칠하던 레이어를 지우면 고르게 되는 레이어는 마스크가 있어도 픽셀을 칠한다(결정 기록 '피부 보정'의 1i)
+        val masked = addMask(blueOverOrange())
+        onMain {
+            viewModel.selectLayer(LayerId(0))
+            viewModel.addLayerMask()
+        }
+        awaitReady { !it.busy && it.revision > masked.revision && it.activeLayer == LayerId(0) && it.active?.hasMask == true }
+        onMain { viewModel.editLayerMask(checkNotNull(masked.activeLayer)) }
+        val painting = awaitReady { it.activeLayer == masked.activeLayer && it.editingMask }
+
+        onMain { viewModel.deleteLayer() }
+        val deleted = awaitReady { !it.busy && it.revision > painting.revision && it.layers.size == 1 }
+
+        assertEquals(LayerId(0), deleted.activeLayer)
+        assertFalse(deleted.editingMask)
+    }
+
+    @Test
     fun deletingTheMask_returnsToPixels_andUndoBringsItBack() {
         val masked = addMask(blueOverOrange())
 

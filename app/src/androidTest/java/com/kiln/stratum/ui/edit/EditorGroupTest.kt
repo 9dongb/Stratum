@@ -98,6 +98,24 @@ class EditorGroupTest {
     }
 
     @Test
+    fun newLayers_skipAHiddenGroup_andTheWandRefusesAGroup() {
+        val grouped = openGrouped()
+        onMain { viewModel.setLayerVisible(LayerId(1), false) }
+        val hidden = awaitReady { !it.busy && it.revision > grouped.revision }
+
+        onMain { viewModel.addLayer() }
+        val added = awaitReady { !it.busy && it.revision > hidden.revision }
+
+        // 숨긴 그룹 안에 넣으면 보이지 않아, 그 그룹 바로 위(그룹 밖)에 넣는다(결정 기록 '피부 보정'의 1i)
+        assertEquals(listOf(0L to 1L, 1L to null, 2L to null), tree(added))
+        // 자동 선택은 그룹에 고를 색이 없다
+        onMain { viewModel.selectLayer(LayerId(1)) }
+        awaitReady { it.activeLayer == LayerId(1) }
+        onMain { viewModel.selectSimilar(10f, 10f) }
+        assertEquals(EditorMessage.GroupNoPixels, awaitMessage())
+    }
+
+    @Test
     fun ungroup_bringsTheLayersOut_andPicksTheTopOne() {
         val grouped = openGrouped()
 
