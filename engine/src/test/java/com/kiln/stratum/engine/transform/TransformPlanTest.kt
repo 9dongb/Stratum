@@ -24,6 +24,18 @@ class TransformPlanTest {
     )
 
     @Test
+    fun mapPoint_followsCropTurnAndMove_likeThePixels() {
+        val source = PixelSize(1000, 600)
+        // 왼쪽 위 (100, 50)에서 800×500을 잘라 오른쪽으로 90° 돌린다: 원본 (300, 150)은 자른 그림 (200, 100) → 돌린 그림 (500 − 100, 200)
+        val turned = TransformPlan.cropThenOrient(source, PixelRect(100, 50, 900, 550), Orientation.ROTATE_CLOCKWISE)
+        assertEquals(400f to 200f, turned.mapPoint(300f, 150f))
+        // 좌우 뒤집기는 가로 자리만 뒤집는다
+        assertEquals(700f to 150f, TransformPlan.orient(source, Orientation.FLIP_HORIZONTAL).mapPoint(300f, 150f))
+        // 옮기기는 그만큼 옮긴다
+        assertEquals(330f to 110f, TransformPlan.translate(source, 30, -40).mapPoint(300f, 150f))
+    }
+
+    @Test
     fun orient_movesEveryPixelOnce() {
         for (size in sizes) {
             for (orientation in Orientation.entries) {

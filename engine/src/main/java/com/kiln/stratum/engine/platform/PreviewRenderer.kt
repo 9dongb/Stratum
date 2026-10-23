@@ -149,7 +149,9 @@ object PreviewRenderer {
                             shader = AdjustLayerShader.of(
                                 step,
                                 BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP),
-                                mask?.let { BitmapShader(it, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
+                                mask?.let { BitmapShader(it, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) },
+                                // 묶음 그림의 자리 → 문서 자리(피부 색 보정의 얼굴 무게)
+                                document.colorSpace, left, top, 1f / scale
                             )
                             blendMode = BlendMode.SRC
                         })

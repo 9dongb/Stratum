@@ -13,6 +13,10 @@ import com.kiln.stratum.engine.face.FaceModel
 import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinFaceTone
+import com.kiln.stratum.engine.skin.SkinReference
+import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -97,7 +101,7 @@ data class SkinEntry(
     val color: Long,
     val smooth: Long,
     val spots: Long,
-    val faces: List<FaceLandmarks>,
+    val faces: List<SkinFaceArea>,
     val segmented: Boolean,
     val texture: Float
 )
@@ -501,7 +505,7 @@ object ProjectManifestCodec {
             null
         }
 
-    /** 피부 기록: 판, 원본·색 보정·피부 정돈·잡티 제거 레이어 번호, 분할했는지, 질감 유지, 얼굴 수와 얼굴마다 점수·점 좌표 수·좌표들 */
+    /** 피부 기록: 판, 원본·색 보정·피부 정돈·잡티 제거 레이어 번호, 분할했는지, 질감 유지, 얼굴 수와 얼굴마다 자리(가운데 x·y, 반지름, 길이 단위) */
     private fun skinBytes(skin: SkinEntry): ByteArray =
         ByteArrayOutputStream().also { buffer ->
             val out = DataOutputStream(buffer)
@@ -513,11 +517,7 @@ object ProjectManifestCodec {
             out.writeBoolean(skin.segmented)
             out.writeFloat(skin.texture)
             out.writeInt(skin.faces.size)
-            for (face in skin.faces) {
-                out.writeFloat(face.presence)
-                out.writeInt(face.points.size)
-                for (value in face.points) out.writeFloat(value)
-            }
+            for (face in skin.faces) writeFaceArea(out, face)
             out.flush()
         }.toByteArray()
 
@@ -533,14 +533,7 @@ object ProjectManifestCodec {
             val segmented = data.readBoolean()
             val texture = data.readFloat()
             if (!(texture in 0f..1f)) throw UnreadableProjectException("Broken texture $texture")
-            val faces = List(data.readCount()) {
-                val presence = data.readFloat()
-                val count = data.readInt()
-                if (count != FaceModel.LANDMARK_COUNT * 2) throw UnreadableProjectException("Broken face points $count")
-                FaceLandmarks(FloatArray(count) { data.readFloat() }, presence).also {
-                    if (!it.isFinite) throw UnreadableProjectException("Broken face points")
-                }
-            }
+            val faces = List(data.readCount()) { readFaceArea(data) }
             SkinEntry(source, color, smooth, spots, faces, segmented, texture)
         } catch (e: IOException) {
             null
@@ -548,7 +541,10 @@ object ProjectManifestCodec {
             null
         }
 
-    /** 피부 색: 판, 부분 붉은기, 전체 붉은기, 톤 균일화 */
+    /**
+     * 피부 색: 판, 부분 붉은기, 전체 붉은기, 톤 균일화, 얼굴 수와 얼굴마다 자리, 피부 통계(가운데 L·색상·채도, 보통 채도 직선 둘, 퍼짐 둘),
+     * 기준이 있는지와 그 색상·채도
+     */
     private fun skinColorBytes(color: SkinColor): ByteArray =
         ByteArrayOutputStream().also { buffer ->
             val out = DataOutputStream(buffer)
@@ -556,15 +552,49 @@ object ProjectManifestCodec {
             out.writeFloat(color.local)
             out.writeFloat(color.global)
             out.writeFloat(color.even)
+            out.writeInt(color.faces.size)
+            for (face in color.faces) {
+                writeFaceArea(out, face.area)
+                val tone = face.tone
+                for (value in floatArrayOf(tone.lightness, tone.hue, tone.chroma, tone.chromaBase, tone.chromaSlope, tone.hueSpread, tone.chromaSpread)) {
+                    out.writeFloat(value)
+                }
+                val reference = face.reference
+                out.writeBoolean(reference != null)
+                if (reference != null) {
+                    out.writeFloat(reference.hue)
+                    out.writeFloat(reference.chroma)
+                }
+            }
             out.flush()
         }.toByteArray()
+
+    /** 피부 보정의 얼굴 자리: 가운데 x·y, 반지름, 길이 단위 */
+    private fun writeFaceArea(out: DataOutputStream, area: SkinFaceArea) {
+        out.writeFloat(area.centerX)
+        out.writeFloat(area.centerY)
+        out.writeFloat(area.radius)
+        out.writeFloat(area.unit)
+    }
+
+    /** [writeFaceArea]로 쓴 것을 읽는다. 망가졌으면 IllegalArgumentException(SkinFaceArea가 거름)이다. */
+    private fun readFaceArea(data: DataInputStream): SkinFaceArea = SkinFaceArea(data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat())
 
     /** 피부 색을 읽는다. 망가졌거나 이 앱보다 새 판이면 null이다(바꾸는 것이 없는 피부 색으로 연다). */
     private fun skinColorOrNull(bytes: ByteArray): SkinColor? =
         try {
             val data = DataInputStream(ByteArrayInputStream(bytes))
             if (data.readInt() != SKIN_VERSION) throw UnreadableProjectException("Unknown skin color")
-            SkinColor(data.readFloat(), data.readFloat(), data.readFloat())
+            val local = data.readFloat()
+            val global = data.readFloat()
+            val even = data.readFloat()
+            val faces = List(data.readCount()) {
+                val area = readFaceArea(data)
+                val tone = SkinTone(data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat())
+                val reference = if (data.readBoolean()) SkinReference(data.readFloat(), data.readFloat()) else null
+                SkinFaceTone(area, tone, reference)
+            }
+            SkinColor(local, global, even, faces)
         } catch (e: IOException) {
             null
         } catch (e: IllegalArgumentException) {

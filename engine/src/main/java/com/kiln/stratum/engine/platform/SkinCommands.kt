@@ -16,7 +16,10 @@ import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.skin.NoFaceException
+import com.kiln.stratum.engine.skin.OkLab
 import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinFaceTone
 
 /** [피부 보정] 그룹과 그 안 레이어들의 이름. 엔진은 문구를 만들지 않으므로 앱이 strings.xml에서 만들어 넘긴다. */
 data class SkinLayerNames(val group: String, val color: String, val smooth: String, val spots: String)
@@ -33,7 +36,8 @@ data class SkinLayerNames(val group: String, val color: String, val smooth: Stri
  * 원본 사진
  * ```
  * - 얼굴은 원본 레이어 하나(불투명도·혼합 모드·마스크 없이, 보정은 건 채)에서 찾는다([FaceFinder]). 찾지 못하면 [NoFaceException]이고 문서는 그대로다.
- * - 피부 마스크는 [SkinMasker]가 얼굴마다 만들어 합친다. 두 마스크는 같은 타일을 함께 써서 메모리가 늘지 않는다(그 뒤에는 따로 칠한다).
+ * - 피부 마스크는 [SkinMasker]가 얼굴마다 만들어 합친다. 두 마스크는 같은 타일을 함께 써서 메모리가 늘지 않는다(함께 칠한다, MaskCommands).
+ * - 색 보정은 얼굴마다 그 사람 피부의 색 통계를 지닌다(3단계, 슬라이더는 처음에 0이라 아직 바꾸는 것이 없다).
  * - 그룹은 원본이 있던 그룹 안이고, 새 레이어 번호는 문서의 nextLayerId부터다.
  *
  * [finder]·[masker]는 오래 사는 서비스 참조다. 실행 취소 기록은 명령을 보관만 하므로 서비스를 붙잡지 않는다(SelectObject와 같다).
@@ -57,7 +61,7 @@ data class CreateSkinRetouch(
             try {
                 faces = finder.search(picture, checkCanceled)
                 if (faces.isEmpty()) throw NoFaceException()
-                masks = masker.masks(picture, faces, checkCanceled)
+                masks = masker.masks(picture, faces, OkLab.Space.of(document.colorSpace), checkCanceled)
             } finally {
                 picture.close()
             }
@@ -70,11 +74,13 @@ data class CreateSkinRetouch(
         val colorId = LayerId(next++)
         val smoothId = LayerId(next++)
         val spotsId = LayerId(next++)
-        val record = SkinRecord(source, colorId, smoothId, spotsId, faces, masks.segmented)
+        val areas = faces.map(SkinFaceArea::of)
+        val tones = masks.masks.indices.mapNotNull { i -> masks.masks[i].tone?.let { SkinFaceTone(areas[i], it) } }
+        val record = SkinRecord(source, colorId, smoothId, spotsId, areas, masks.segmented)
         val created = listOf(
             Layer(spotsId, names.spots, RasterContent(Raster.EMPTY), parent = groupId),
             Layer(smoothId, names.smooth, RasterContent(Raster.EMPTY), opacity = 0f, mask = mask, parent = groupId),
-            Layer(colorId, names.color, AdjustmentContent(skin = SkinColor()), mask = mask, parent = groupId),
+            Layer(colorId, names.color, AdjustmentContent(skin = SkinColor(faces = tones)), mask = mask, parent = groupId),
             Layer(groupId, names.group, GroupContent, parent = layer.parent, skin = record)
         )
         val layers = document.layers.toMutableList().apply { addAll(index + 1, created) }

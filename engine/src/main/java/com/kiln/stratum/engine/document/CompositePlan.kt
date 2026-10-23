@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.document
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.skin.SkinColor
 
 /**
  * 문서를 그리는 차례(합성 계획, 결정 기록 '피부 보정'의 1단계). 레이어를 합치는 모든 곳(축소본·레이어 축소본 합치기·HDR 게인맵·병합·
@@ -31,9 +32,11 @@ object CompositePlan {
             if (!visible || opacity <= 0f) return@mapNotNull null
             when (val content = layer.content) {
                 is RasterContent -> CompositeStep.Draw(layer, content.raster, opacity, layer.mask)
-                // 바꾸는 것이 없는 표준 조정 레이어는 그릴 것이 없다(다른 혼합 모드는 보정이 없어도 아래를 자기와 섞어 바꾼다)
+                // 바꾸는 것이 없는 표준 조정 레이어는 그릴 것이 없다(다른 혼합 모드는 보정이 없어도 아래를 자기와 섞어 바꾼다).
+                // 피부 색 종류는 피부 색 값도 바꾸는 것이 없어야 한다(결정 기록 '피부 보정'의 3단계).
                 is AdjustmentContent ->
-                    if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) null else CompositeStep.Adjust(layer, opacity, layer.mask)
+                    if (layer.adjustments.isIdentity && content.skin?.isIdentity != false && layer.blendMode == BlendMode.NORMAL) null
+                    else CompositeStep.Adjust(layer, opacity, layer.mask)
                 GroupContent -> null
             }
         }
@@ -86,5 +89,9 @@ sealed interface CompositeStep {
 
         val adjustments: Adjustments
             get() = layer.adjustments
+
+        /** 피부 색 종류면 그 값([피부 보정] 그룹의 색 보정, 결정 기록 '피부 보정'의 3단계). 기본 보정 종류면 null. */
+        val skin: SkinColor?
+            get() = (layer.content as? AdjustmentContent)?.skin
     }
 }

@@ -97,10 +97,10 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
     private fun moved(document: Document, target: Layer, plan: TransformPlan, checkCanceled: () -> Unit): Layer? {
         val raster = when (val content = target.content) {
             is RasterContent -> content.raster
-            // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
-            is AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled))
-            // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김)
-            GroupContent -> return target
+            // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e). 피부 색이면 얼굴 자리도 함께(3단계).
+            is AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled)).withSkinMapped(1f, plan::mapPoint)
+            // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김). 피부 보정 그룹이면 기록의 얼굴 자리를 옮긴다.
+            GroupContent -> return target.withSkinMapped(1f, plan::mapPoint)
         }
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())

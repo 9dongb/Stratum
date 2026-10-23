@@ -40,14 +40,19 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val target = PixelSize(width, height)
         if (source == target) return document
         val plan = ResizePlan(source, target)
+        // 피부 보정의 얼굴 자리는 같은 비율로 옮기고 길이는 두 배율의 가운데만큼(결정 기록 '피부 보정'의 3단계)
+        val scaleX = width / document.width.toFloat()
+        val scaleY = height / document.height.toFloat()
+        val scaled = { x: Float, y: Float -> x * scaleX to y * scaleY }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
                 is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled))
                     .copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
                 // 조정 레이어는 마스크만 바꾼다(결정 기록 '피부 보정'의 1e)
                 is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
+                    .withSkinMapped((scaleX + scaleY) / 2f, scaled)
                 // 그룹은 그리는 것이 없다(1g)
-                GroupContent -> layer
+                GroupContent -> layer.withSkinMapped((scaleX + scaleY) / 2f, scaled)
             }
         }
         // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')

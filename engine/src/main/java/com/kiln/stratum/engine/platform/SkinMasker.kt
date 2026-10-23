@@ -15,8 +15,10 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.skin.OkLab
 import com.kiln.stratum.engine.skin.SkinModel
 import com.kiln.stratum.engine.skin.SkinRegion
+import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.skin.SkinUnavailableException
 import java.nio.ByteBuffer
 import kotlin.math.ceil
@@ -29,22 +31,31 @@ import kotlin.math.min
  *
  * - [masks]: 얼굴마다 잘라 세운 정사각형([SkinRegion.frameOf])을 얼굴 찾기 그림([FacePicture])에서 읽어 분할 모델에 넣고,
  *   [SkinRegion.mask]로 [SkinRegion.MASK_SIZE]² 마스크를 만든다. 모델을 쓸 수 없으면 윤곽만으로 만든다([FaceMasks.segmented]가 false).
+ *   같은 그림·마스크로 그 얼굴의 피부 색 통계([SkinTone])도 잰다(3단계, 색 보정의 기준).
  * - [tiles]: 그 마스크들을 문서 크기 알파 타일로 그린다(정사각형이 닿는 타일만, 안드로이드 소프트웨어 그리기로 쌍선형).
  * - 메인 스레드가 아닌 곳에서 부른다. 모델 계산은 AI 스레드에서 돌고, 나머지는 작은 배열에서만 돈다.
  */
 class SkinMasker(private val model: SkinModel) {
 
-    /** 얼굴 하나의 마스크: 잘라 세운 정사각형 [frame](문서 좌표)을 [size]²로 나눈 알파([alphas], 줄마다) */
-    class FaceMask(val frame: FaceRoi, val size: Int, val alphas: ByteArray)
+    /**
+     * 얼굴 하나의 마스크: 잘라 세운 정사각형 [frame](문서 좌표)을 [size]²로 나눈 알파([alphas], 줄마다).
+     * [tone]은 그 마스크 안 피부의 색 통계다(피부가 너무 적으면 null, 그 얼굴은 색을 바꾸지 않는다).
+     */
+    class FaceMask(val frame: FaceRoi, val size: Int, val alphas: ByteArray, val tone: SkinTone? = null)
 
     /** 얼굴들의 마스크. [segmented]가 false면 분할 모델을 쓸 수 없어 윤곽만으로 만든 것이다(목·귀·이마 위가 빠짐). */
     class FaceMasks(val masks: List<FaceMask>, val segmented: Boolean)
 
     /**
-     * [faces](문서 좌표)의 피부 마스크를 [picture]에서 만든다. 메모리가 모자라면 [NotEnoughMemoryException]을 던진다.
-     * [checkCanceled]는 얼굴 사이마다 부른다.
+     * [faces](문서 좌표)의 피부 마스크를 [picture]에서 만든다. 피부 색 통계는 [space](문서 색 공간)의 OKLab으로 잰다.
+     * 메모리가 모자라면 [NotEnoughMemoryException]을 던진다. [checkCanceled]는 얼굴 사이마다 부른다.
      */
-    fun masks(picture: FacePicture, faces: List<FaceLandmarks>, checkCanceled: () -> Unit = {}): FaceMasks {
+    fun masks(
+        picture: FacePicture,
+        faces: List<FaceLandmarks>,
+        space: OkLab.Space = OkLab.Space.SRGB,
+        checkCanceled: () -> Unit = {}
+    ): FaceMasks {
         val scaleX = picture.width / picture.documentWidth.toFloat()
         val scaleY = picture.height / picture.documentHeight.toFloat()
         var segmented = true
@@ -68,13 +79,14 @@ class SkinMasker(private val model: SkinModel) {
             checkCanceled()
             val size = SkinRegion.MASK_SIZE
             val crop = picture.read(pictureFrame, size, FaceImage.Outside.EDGE)
-            val values = try {
-                SkinRegion.mask(probabilities, face, frame, crop, size)
+            val (values, tone) = try {
+                val values = SkinRegion.mask(probabilities, face, frame, crop, size)
+                values to measureTone(crop, values, size, space)
             } catch (e: OutOfMemoryError) {
                 throw NotEnoughMemoryException(e)
             }
-            Log.i(TAG, "Skin mask in ${SystemClock.elapsedRealtime() - started} ms (side ${frame.side.toInt()} px, segmented ${probabilities != null})")
-            FaceMask(frame, size, toAlphas(values))
+            Log.i(TAG, "Skin mask in ${SystemClock.elapsedRealtime() - started} ms (side ${frame.side.toInt()} px, segmented ${probabilities != null}, tone $tone)")
+            FaceMask(frame, size, toAlphas(values), tone)
         }
         return FaceMasks(masks, segmented)
     }
@@ -146,6 +158,25 @@ class SkinMasker(private val model: SkinModel) {
         private const val SNAP = 0.02f
 
         private const val TAG = "SkinMasker"
+
+        /** 피부 색 통계는 마스크의 [TONE_STRIDE]칸마다 한 칸으로 잰다(얼굴 하나에 피부 픽셀 수만 개면 통계가 같고 네 배 빠르다) */
+        private const val TONE_STRIDE = 2
+
+        /** [size]² 그림 [crop]과 마스크 [values]에서 [TONE_STRIDE]칸마다 한 칸으로 피부 색 통계를 잰다 */
+        private fun measureTone(crop: IntArray, values: FloatArray, size: Int, space: OkLab.Space): SkinTone? {
+            val side = (size + TONE_STRIDE - 1) / TONE_STRIDE
+            val pixels = IntArray(side * side)
+            val weights = FloatArray(side * side)
+            for (y in 0 until side) {
+                for (x in 0 until side) {
+                    val source = (y * TONE_STRIDE) * size + x * TONE_STRIDE
+                    pixels[y * side + x] = crop[source]
+                    weights[y * side + x] = values[source]
+                }
+            }
+            val (lightness, a, b) = OkLab.fromPixels(pixels, space)
+            return SkinTone.measure(lightness, a, b, weights)
+        }
 
         private fun toAlphas(values: FloatArray): ByteArray = ByteArray(values.size) {
             val value = values[it]

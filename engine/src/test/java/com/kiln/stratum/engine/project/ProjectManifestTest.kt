@@ -12,6 +12,10 @@ import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.face.TestFace
 import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinFaceTone
+import com.kiln.stratum.engine.skin.SkinReference
+import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import java.io.ByteArrayInputStream
@@ -189,8 +193,12 @@ class ProjectManifestTest {
 
     @Test
     fun skinGroupRecord_andSkinColor_roundTrip_inVersion2() {
-        val skin = SkinEntry(source = 0, color = 4, smooth = 5, spots = 6, faces = listOf(face), segmented = false, texture = 0.7f)
-        val color = LayerEntry(4, "Color", 1f, BlendMode.NORMAL, AdjustmentEntry, parent = 3, skinColor = SkinColor(0.2f, 0.5f, 1f))
+        val area = SkinFaceArea(120.5f, 340.25f, 90f, 41f)
+        val skin = SkinEntry(source = 0, color = 4, smooth = 5, spots = 6, faces = listOf(area), segmented = false, texture = 0.7f)
+        // 얼굴 둘: 하나는 자동 기준, 하나는 스포이드로 고른 기준(결정 기록 '피부 보정'의 3단계)
+        val tone = SkinTone(0.7f, 0.85f, 0.055f, 0.054f, 0.12f, 0.04f, 0.006f)
+        val faces = listOf(SkinFaceTone(area, tone), SkinFaceTone(area.copy(centerX = 600f), tone.copy(hue = 0.7f), SkinReference(0.82f, 0.06f)))
+        val color = LayerEntry(4, "Color", 1f, BlendMode.NORMAL, AdjustmentEntry, parent = 3, skinColor = SkinColor(0.2f, 0.5f, 1f, faces))
         val group = LayerEntry(3, "Skin", 1f, BlendMode.NORMAL, GroupEntry, skin = skin)
         val withSkin = manifest.copy(layers = listOf(manifest.layers[0], color, group), nextLayerId = 7)
         val bytes = bytesOf(withSkin)

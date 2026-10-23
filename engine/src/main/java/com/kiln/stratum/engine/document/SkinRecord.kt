@@ -1,6 +1,6 @@
 package com.kiln.stratum.engine.document
 
-import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.skin.SkinFaceArea
 
 /**
  * [피부 보정] 그룹의 기록(결정 기록 '피부 보정'의 2c). 그룹 레이어([Layer.skin])에 붙고 프로젝트에 저장된다.
@@ -8,22 +8,28 @@ import com.kiln.stratum.engine.face.FaceLandmarks
  *
  * @property source 원본 사진 레이어(그룹 바로 아래, 바꾸지 않음). 피부 정돈·잡티 제거가 읽는다.
  * @property color 색 보정 조정 레이어(피부 색 종류), [smooth] 피부 정돈 레이어, [spots] 잡티 제거 레이어. 사용자가 지우면 그 기능은 쉰다.
- * @property faces 찾은 얼굴(문서 좌표, 왼쪽부터). 색 통계·정돈 반지름·잡티 찾기가 얼굴마다 쓴다.
+ * @property faces 찾은 얼굴의 자리(문서 좌표, 왼쪽부터, 3단계). 피부 정돈의 반지름·잡티 찾기·다시 재기가 얼굴마다 쓰고,
+ *   자르기·회전·크기 변경·옮기기를 하면 함께 옮긴다([mapped]). 특징점은 남기지 않는다(마스크를 만든 뒤에는 자리와 크기만 쓴다).
  * @property segmented 분할 모델로 피부를 골랐는지. false면 얼굴 윤곽만으로 골랐다(목·귀·이마 위가 빠짐).
  * @property texture 질감 유지(0..1, 4단계): 피부 정돈이 고운 결을 얼마나 남기는지.
+ * @property redCast 만들 때 사진 전체가 붉었는지(흰자·채도 낮은 곳이 붉음, 3단계). 화면이 만든 뒤 한 번 알리는 데만 쓰고 저장하지 않는다.
  */
 data class SkinRecord(
     val source: LayerId,
     val color: LayerId,
     val smooth: LayerId,
     val spots: LayerId,
-    val faces: List<FaceLandmarks>,
+    val faces: List<SkinFaceArea>,
     val segmented: Boolean,
-    val texture: Float = DEFAULT_TEXTURE
+    val texture: Float = DEFAULT_TEXTURE,
+    val redCast: Boolean = false
 ) {
     init {
         require(texture in 0f..1f) { "Texture must be within 0..1: $texture" }
     }
+
+    /** 얼굴 자리를 옮긴 기록(자르기·회전·크기 변경·옮기기, [SkinFaceArea.mapped]) */
+    fun mapped(scale: Float, map: (Float, Float) -> Pair<Float, Float>): SkinRecord = copy(faces = faces.map { it.mapped(scale, map) })
 
     /** 그룹을 복제할 때: 안의 레이어 번호를 [ids](원래 → 복사본)대로 바꾼 기록. 원본 레이어는 그대로다. */
     fun remapped(ids: Map<LayerId, LayerId>): SkinRecord =

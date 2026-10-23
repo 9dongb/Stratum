@@ -14,6 +14,22 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 3a: 붉은기·톤 균일화 계산(엔진)
+
+- 요청: 승인된 피부 보정 계획의 3단계(붉은기·톤 균일화)의 엔진 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "얼굴마다 피부 색 통계를 재고, 색 보정 레이어가 GPU에서 붉은기·톤을 고치게 함"
+- 바꾼 것
+  - 엔진 순수 Kotlin: `SkinTone`(새: 얼굴 자리 `SkinFaceArea`, 피부 색 통계와 재기, 기준 `SkinReference`, `SkinFaceTone`), `SkinColorMath`(새: 계산식·얼굴 무게·섞기), `SkinColor`(얼굴들·기준 바꾸기), `OkLab`(문서 색 공간마다 행렬, 8비트 표), `SkinRecord`(얼굴은 자리, 만들 때의 붉은 사진 표시), `CompositePlan`(피부 색 단계), `TransformPlan.mapPoint`, `Layer.withSkinMapped`.
+  - 엔진 플랫폼: `SkinColorShader`(새, AGSL), `AdjustLayerShader`(피부 색, 마스크 밖은 계산 안 함), `PreviewRenderer`·`LayerPreviewCache`(문서 자리 넘김), `ObjectSegmenter`(기억 열쇠에 피부 색), `SkinMasker`(얼굴마다 통계), `CreateSkinRetouch`, 자르기·회전·크기 변경·옮기기(얼굴 자리), 저장(`ProjectManifest`).
+  - 테스트: JVM `SkinColorMathTest`(새, 10개: 통계·붉은 곳만·먼 색은 그대로·균일화·전체 붉은기의 상한·바닥·스포이드 기준·얼굴 무게·OKLab 두 색 공간), `TransformPlanTest`(점 옮기기), `ProjectManifestTest`(얼굴·통계·기준 왕복). 에뮬레이터 `SkinColorTest`(새, 4개: 셰이더 = Kotlin 계산·밝기 그대로, 0이면 그리지 않음, 얼굴마다 기준·반 크기 축소본·옮기기, P3), `SkinRetouchTest`(색 보정의 통계).
+  - 기록: progress.md(진행 중 3a, 결정 기록 '피부 보정'의 3a, 진행표), 이 항목.
+- 정한 것(Claude 판단, 2단계부터 묻지 않고 정함): 결정 기록 '피부 보정'의 3a.
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 662개).
+  - 에뮬레이터(접은 상태) `SkinColorTest` 4개, `SkinRetouchTest` 4개, `SkinPhotoTest` 2개(진짜 모델, 얼굴 넷의 피부 색상 43~47°), 그리고 그리기·변형이 바뀌어 다시 본 `AdjustmentLayerTest` 7개·`EditorSkinTest` 7개·`ProjectFolderTest` 10개·`TransformCommandsTest` 9개·`PreviewRendererTest` 9개·`ImageExporterTest` 8개·`SelectObjectTest` 9개·`LayerGroupTest` 6개·`ImageResizerTest` 8개·`TranslateLayerTest` 5개 통과.
+
 ## 2026-10-24 · 피부 보정 2c(화면): 피부 도구·그룹 자동 만들기·마스크 보기
 
 - 요청: 승인된 피부 보정 계획의 2단계 셋째 작은 단계(피부 도구와 그룹 만들기)의 화면 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`("'피부 보정' 버튼을 누르면 아래 레이어 묶음을 자동으로 만들어줘").

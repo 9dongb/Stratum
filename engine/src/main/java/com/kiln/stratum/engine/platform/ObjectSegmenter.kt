@@ -188,10 +188,11 @@ class ObjectSegmenter(private val model: SegmentModel) {
         private val opacity = step.opacity
         private val blendMode = step.blendMode
         private val adjustments = step.adjustments
+        private val skin = step.skin
 
         override fun matches(step: CompositeStep): Boolean =
             step is CompositeStep.Adjust && mask.get() === step.mask && step.opacity == opacity &&
-                step.blendMode == blendMode && step.adjustments == adjustments
+                step.blendMode == blendMode && step.adjustments == adjustments && step.skin == skin
     }
 
     /** 그리는 단계 하나의 열쇠. 픽셀·마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */

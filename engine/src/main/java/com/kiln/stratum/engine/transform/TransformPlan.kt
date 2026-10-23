@@ -37,8 +37,20 @@ class TransformPlan private constructor(
     val crop: PixelRect,
     val orientation: Orientation,
     /** 대상 타일들. 위 줄부터, 한 줄 안에서는 왼쪽부터 놓인다. */
-    val targets: List<TargetTile>
+    val targets: List<TargetTile>,
+    /** [crop]을 바꿔 놓은 자리(대상 캔버스 안 왼쪽 위) */
+    private val placeLeft: Int = 0,
+    private val placeTop: Int = 0
 ) {
+
+    /**
+     * 원본 문서 좌표의 점 ([x], [y])가 옮겨 가는 대상 문서 좌표(픽셀 가장자리 기준 실수 좌표, [Orientation.mapPoint]).
+     * 피부 보정의 얼굴 자리처럼 픽셀이 아닌 자리를 같이 옮기는 데 쓴다(결정 기록 '피부 보정'의 3단계).
+     */
+    fun mapPoint(x: Float, y: Float): Pair<Float, Float> {
+        val (mx, my) = orientation.mapPoint((x - crop.left).toDouble(), (y - crop.top).toDouble(), crop.width.toDouble(), crop.height.toDouble())
+        return (mx + placeLeft).toFloat() to (my + placeTop).toFloat()
+    }
 
     companion object {
         /** [source] 크기 이미지를 [orientation] 방향으로 바꾸는 계획. */
@@ -116,7 +128,7 @@ class TransformPlan private constructor(
                 }
                 TargetTile(key, targetBounds.width, targetBounds.height, parts)
             }
-            return TransformPlan(source, target, rect, orientation, targets)
+            return TransformPlan(source, target, rect, orientation, targets, left, top)
         }
 
         /** [source]에서 [crop]을 잘라 [orientation] 방향으로 바꾸는 계획. */

@@ -187,8 +187,13 @@ class LayerPreviewCache {
                             val alpha = liveMask(selection, region, maskStrokes) ?: return null.also { below?.recycle() }
                             maskShaderOf(selection, alpha, offset, size, movedMasks) ?: return null.also { below?.recycle() }
                         }
+                        // 축소본 자리 → 문서 자리(피부 색 보정의 얼굴 무게). 옮기는 중이면 얼굴도 그만큼 옮겨 보인다.
+                        val moved = moving?.takeIf { offset != null }
                         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
-                            shader = AdjustLayerShader.of(step, BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), mask)
+                            shader = AdjustLayerShader.of(
+                                step, BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), mask,
+                                document.colorSpace, -(moved?.dx ?: 0).toFloat(), -(moved?.dy ?: 0).toFloat(), (1 shl level).toFloat()
+                            )
                             blendMode = BlendMode.SRC
                         })
                     }

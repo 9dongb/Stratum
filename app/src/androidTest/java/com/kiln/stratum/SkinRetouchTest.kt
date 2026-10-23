@@ -21,7 +21,6 @@ import com.kiln.stratum.engine.platform.ProjectFolder
 import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
 import com.kiln.stratum.engine.skin.NoFaceException
-import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.skin.SkinUnavailableException
 import java.io.File
 import org.junit.After
@@ -75,7 +74,12 @@ class SkinRetouchTest {
         assertSame(GroupContent, group.content)
         assertEquals("Skin retouch", group.name)
         assertTrue(listOf(spots, smooth, color).all { it.parent == group.id })
-        assertEquals(AdjustmentContent(skin = SkinColor()), color.content)
+        // 색 보정은 슬라이더가 0이고, 얼굴마다 그 피부의 색 통계를 지닌다(빨간 덩어리라 색상 약 29°)
+        val skinColor = checkNotNull((color.content as AdjustmentContent).skin)
+        assertTrue(skinColor.isIdentity)
+        assertEquals(1, skinColor.faces.size)
+        assertEquals(29.0, Math.toDegrees(skinColor.faces[0].tone.hue.toDouble()), 3.0)
+        assertEquals(400f, skinColor.faces[0].area.centerX, 10f)
         assertEquals(0f, smooth.opacity, 0f)
         assertTrue(spots.content is RasterContent && smooth.content is RasterContent)
         assertNull(spots.mask)
@@ -126,7 +130,7 @@ class SkinRetouchTest {
         assertEquals(result.layers.map { it.id }, loaded.layers.map { it.id })
         assertEquals(result.layers.map { it.parent }, loaded.layers.map { it.parent })
         assertEquals(result.layers.last().skin, loaded.layers.last().skin)
-        assertEquals(AdjustmentContent(skin = SkinColor()), loaded.layers[3].content)
+        assertEquals(result.layers[3].content, loaded.layers[3].content)
         assertEquals(0f, loaded.layers[2].opacity, 0f)
         val mask = checkNotNull(loaded.layers[3].mask)
         assertEquals(result.layers[3].mask!!.alphaAt(330, 470), mask.alphaAt(330, 470))

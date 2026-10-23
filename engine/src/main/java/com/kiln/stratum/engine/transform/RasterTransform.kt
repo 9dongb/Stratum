@@ -50,10 +50,11 @@ object RasterTransform {
                     val masked = moved.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
                     if (text != null) masked.copy(text = text) else masked
                 }
-                // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e)
+                // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e). 피부 색이면 얼굴 자리도 함께(3단계).
                 is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
-                // 그룹은 그리는 것이 없다(안의 레이어가 따로 바뀐다, 1g)
-                GroupContent -> layer
+                    .withSkinMapped(1f, plan::mapPoint)
+                // 그룹은 그리는 것이 없다(안의 레이어가 따로 바뀐다, 1g). 피부 보정 그룹이면 기록의 얼굴 자리를 옮긴다.
+                GroupContent -> layer.withSkinMapped(1f, plan::mapPoint)
             }
         }
         // 선택 영역은 옮기지 않고 푼다(결정 기록 '선택 도구')

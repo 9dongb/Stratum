@@ -112,4 +112,14 @@ data class Layer(
     /** 유동화 기록 [record]를 원래 픽셀에 건 결과 [raster](게인맵은 [gainmap])로 바꾼 레이어(유동화 적용). 글자 정보는 지운다. */
     fun withLiquify(raster: Raster, gainmap: HdrGainmap?, record: LiquifyRecord): Layer =
         copy(content = RasterContent(raster), gainmap = gainmap, text = null, liquify = record)
+
+    /**
+     * 피부 보정의 얼굴 자리를 문서와 함께 옮긴 레이어(자르기·회전·크기 변경·옮기기, 결정 기록 '피부 보정'의 3단계): 피부 색 조정 레이어의 얼굴과
+     * [피부 보정] 그룹 기록의 얼굴을 [map](문서 좌표 → 새 문서 좌표)으로 옮기고 길이를 [scale]배 한다. 그 밖의 레이어는 그대로다.
+     */
+    fun withSkinMapped(scale: Float, map: (Float, Float) -> Pair<Float, Float>): Layer {
+        val color = (content as? AdjustmentContent)?.skin
+        if (color == null && skin == null) return this
+        return copy(content = color?.let { AdjustmentContent(it.mapped(scale, map)) } ?: content, skin = skin?.mapped(scale, map))
+    }
 }
