@@ -112,6 +112,22 @@ class EditScreenBackTest {
     }
 
     @Test
+    fun cover_backTurnsTheEyedropperOff_beforeGoingHome() {
+        // 커버는 도구를 내려놓지 않아, 켠 스포이드는 뒤로 가기로 먼저 끈다(끄지 않으면 홈으로 나갔다, 검토에서 고침)
+        show(COVER)
+        composeRule.chooseCoverTool(EditTool.Brush)
+        composeRule.onNodeWithTag(EditScreenTags.COLOR_EYEDROPPER).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.EYEDROPPER_OVERLAY).assertExists()
+
+        back()
+        composeRule.onNodeWithTag(EditScreenTags.EYEDROPPER_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
+        composeRule.runOnIdle { assertEquals(0, homeBacks) }
+        back()
+        composeRule.runOnIdle { assertEquals(1, homeBacks) }
+    }
+
+    @Test
     fun cover_aMoreRowOpenedOverATool_closesFirst() {
         show(COVER)
         composeRule.chooseCoverTool(EditTool.Select)

@@ -473,6 +473,10 @@ fun EditScreen(
         // 메인 화면 패널은 뒤로 가기로 닫지 않는다(사용자 결정). 자르기 중에는 패널을 숨기므로 보지 않는다.
         val coverPanel = floating.panel.takeIf { widthClass == WidthClass.Compact && !cropMode }
         BackHandler(enabled = coverPanel != null, onBack = floating::closePanel)
+        // 커버에서 켠 스포이드는 뒤로 가기로 끈다(커버는 도구를 내려놓지 않아, 끄지 않으면 홈으로 나간다, 2026-10-23).
+        // 메인 화면은 뒤로 가기가 도구를 닫으며 함께 끈다.
+        val coverEyedropper = widthClass == WidthClass.Compact && !cropMode && eyedropperTarget != null
+        BackHandler(enabled = coverEyedropper) { eyedropperTarget = null }
         // 커버 한 줄 막대의 내용(도구·하위 도구·조정). 펼친 칩은 이 내용에 딸려, 바뀌면 곧바로 칩 줄이 보인다(결정 기록 '커버 화면 개편').
         val activeMode = activeTool?.let { selection.modeOf(it) }
         val barContent = "${activeTool?.name}/${activeMode?.name}/${floating.panel == MainPanel.ADJUST}"
@@ -907,8 +911,9 @@ fun EditScreen(
             }
             // 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(맨 위라 도구가 받지 않는다). 패널만 열려 있으면 캔버스를 바로 쓴다.
             FloatingDismissLayer(floating, Modifier.fillMaxSize())
-            // 커버 더보기 줄이 떠 있는 동안 캔버스를 누르면 닫기만 한다(고르는 메뉴라, 그 터치는 도구로 가지 않는다)
-            if (moreShown) DismissLayer(onDismiss = { coverMoreOpen = false }, modifier = Modifier.fillMaxSize())
+            // 잠깐 연 커버 더보기 줄이 떠 있는 동안 캔버스를 누르면 닫기만 한다(고르는 메뉴라, 그 터치는 도구로 가지 않는다).
+            // 도구가 없어 늘 보이는 줄은 닫을 수 없어 캔버스를 그대로 둔다.
+            if (moreShown && !coverMoreDefault) DismissLayer(onDismiss = { coverMoreOpen = false }, modifier = Modifier.fillMaxSize())
         }
         // 닫힌 화면 자르기는 새 창이다(결정 기록 '닫힌 화면 새 창'): 위는 이름 줄, 아래는 X·✓ 줄이고 탭 줄을 숨긴다
         val coverCropWindow = widthClass == WidthClass.Compact && cropMode
@@ -1025,13 +1030,20 @@ fun EditScreen(
                     Shortcut.DeleteSelected -> if (editable && ready?.selection != null) selectionActions.delete()
                     Shortcut.Confirm -> if (crop != null && crop.canApply && ready?.busy != true) crop.onApply()
                     Shortcut.Pan -> Unit
-                    // 하나씩 닫는다: 하위 도구 메뉴 → 띠의 옵션 창 → 자르기(취소) → 고른 도구. 편집 화면을 나가지는 않는다.
-                    // 커버는 도구를 내려놓지 않는다(뒤로 가기와 같다, 2026-10-23).
+                    // 하나씩 닫는다: 하위 도구 메뉴 → 고르기 칩 목록 → 띠의 옵션 창 → 자르기(취소) → 고른 도구. 편집 화면을 나가지는 않는다.
+                    // 커버는 도구를 내려놓지 않고, 뒤로 가기와 같은 차례로 떠 있는 것(잠깐 연 더보기 줄·고른 물체·펼친 칩·스포이드·조정·레이어)만
+                    // 닫는다(2026-10-23).
                     Shortcut.Cancel -> when {
                         subToolMenu.isOpen -> subToolMenu.close()
+                        chipMenu.isOpen -> chipMenu.close()
                         floating.flyout != null -> floating.closeFlyout()
                         crop != null -> crop.onCancel()
-                        selection.active != null && widthClass != WidthClass.Compact -> selection.close()
+                        widthClass != WidthClass.Compact -> if (selection.active != null) selection.close() else handled = false
+                        moreShown && !coverMoreDefault -> coverMoreOpen = false
+                        shownPick != null -> retouchActions.clearPicked()
+                        coverBar.expandedFor(barContent) != null -> coverBar.collapse()
+                        coverEyedropper -> eyedropperTarget = null
+                        coverPanel != null -> floating.closePanel()
                         else -> handled = false
                     }
                 }

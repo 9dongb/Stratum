@@ -50,7 +50,7 @@ class ToolSelection(active: EditTool?, modes: Map<EditTool, SubTool> = emptyMap(
         active = if (active == tool) null else tool
     }
 
-    /** [tool]을 고른다. 이미 고른 도구여도 내려놓지 않는다(커버 화면 더보기 줄에서 고를 때). */
+    /** [tool]을 고른다. 이미 고른 도구여도 내려놓지 않는다(커버 화면 탭 줄·더보기 줄, 키보드 도구 키). */
     fun pick(tool: EditTool) {
         active = tool
     }

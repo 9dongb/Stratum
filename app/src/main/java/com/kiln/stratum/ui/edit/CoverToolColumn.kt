@@ -103,8 +103,9 @@ fun CoverToolColumn(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // 칸마다 따로 기억한다(도구를 바꿔도 끄던 손가락 처리가 다른 칸으로 넘어가지 않게)
-                            for (item in items) key(item.key) { BarCell(item, expand) }
+                            // 칸마다 막대 내용과 함께 따로 기억한다(크기·경도처럼 여러 도구에 있는 칸도, 끄는 도중 도구를 바꾸면
+                            // 끄던 손가락 처리가 새 도구의 칸으로 넘어가지 않게)
+                            for (item in items) key(content, item.key) { BarCell(item, expand) }
                         }
                     }
                 }
@@ -291,7 +292,7 @@ private fun BarExpandedColumn(item: BarItem, state: CoverBarState) {
     }
 }
 
-/** 세로 기둥에 쓰는 안내 글(도구를 고르지 않았을 때): 아래에서 위로 읽는 세로 글자. 기둥보다 길면 줄임표. */
+/** 칩이 없는 세로 기둥의 흐린 글자(칩이 없는 도구의 이름, 유동화 얼굴 모드의 안내): 아래에서 위로 읽는 세로 글자. 기둥보다 길면 줄임표. */
 @Composable
 private fun VerticalHint(text: String) {
     Text(

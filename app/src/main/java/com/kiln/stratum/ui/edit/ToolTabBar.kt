@@ -269,9 +269,9 @@ private fun MoreTabItem(
 
 /**
  * 커버 화면 더보기 줄(결정 기록 '커버 화면 개편'): 탭 줄에 없는 도구(자르기·지우개·텍스트·명암·브러시·모자이크)를 한 줄로 보인다.
- * 탭 줄의 더보기 칸을 누르면 한 줄 막대 자리에 뜨고(막대가 잠깐 이 줄로 바뀜, 사진을 가리지 않음, 2026-10-22 사용자 요청),
- * 하나를 고르면([onPick]) 편집 화면이 닫는다. 하위 도구가 있는 도구(자르기·명암)는 꾹 눌러 하위 도구 메뉴([menu])를 칸 위(세로 줄은 왼쪽)에 열고,
- * 거기서 고르면 [onChoose]다(탭 칸과 같다, 2026-10-23).
+ * 도구를 고르지 않았을 때는 한 줄 막대 자리에 늘 보이고(2026-10-23 사용자 요청), 도구를 고른 채 탭 줄의 더보기 칸을 누르면
+ * 막대가 잠깐 이 줄로 바뀐다(사진을 가리지 않음, 2026-10-22 사용자 요청). 하나를 고르면([onPick]) 잠깐 연 줄은 편집 화면이 닫는다.
+ * 하위 도구가 있는 도구(자르기·명암)는 꾹 눌러 하위 도구 메뉴([menu])를 칸 위(세로 줄은 왼쪽)에 열고, 거기서 고르면 [onChoose]다(탭 칸과 같다, 2026-10-23).
  * 칸 모양은 탭 줄과 같고 고른 도구는 선택 표시다. 화면 읽기 기능에는 창 이름 '도구 더보기'로 알린다.
  * 커버를 가로로 돌렸으면([vertical]) 세로 막대 자리에 세로 한 줄로 뜬다(사용자 피드백 12차 3).
  */
@@ -282,8 +282,8 @@ fun CoverMoreTools(
     onPick: (EditTool) -> Unit,
     modifier: Modifier = Modifier,
     vertical: Boolean = false,
-    menu: SubToolMenuState = remember { SubToolMenuState() },
-    onChoose: (SubTool) -> Unit = {}
+    menu: SubToolMenuState,
+    onChoose: (SubTool) -> Unit
 ) {
     val colors = StratumTheme.colors
     val title = stringResource(R.string.more_tools_title)

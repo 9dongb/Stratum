@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.LongPressTimes
 import kotlin.math.abs
+import kotlin.math.sign
 
 /**
  * 수치 칸·칩을 누른 채 끄는 축. [VERTICAL]은 위로 끌면 커진다(펼친 화면 띠, 세로 커버 막대).
@@ -29,7 +30,8 @@ enum class ScrubAxis { VERTICAL, HORIZONTAL }
  * 수치 칸·칩의 손가락 처리(공통 수치 칸 기능, 2026-10-23 사용자 요청: 칩을 누른 채 끌어 값 바꾸기와 꾹 눌러 0). 안쪽 누르기보다 먼저(Initial 단계)
  * 한 손가락을 끝까지 본다.
  * - 톡(움직이지 않고 뗌)은 아무것도 하지 않아 안쪽 누르기(슬라이더 줄·옵션 창 열기)가 받는다. 오래 눌렀다 떼도 0으로 되돌릴 값이 아니면 톡과 같다.
- * - [axis]로 터치 허용 거리를 넘게 움직이면 그 자리부터 값을 바꾼다([ScrubFullRange]가 처음~끝, 슬라이더와 같은 눈금). 손을 떼면 [StripSlider.onFinished]다.
+ * - [axis]로 터치 허용 거리를 넘게 움직이면 넘은 만큼부터 값을 바꾼다([ScrubFullRange]가 처음~끝, 슬라이더와 같은 눈금, 처음에 튀지 않게).
+ *   손을 떼면 [StripSlider.onFinished]다.
  *   다른 축으로 먼저 움직이면 놓아 둬 밀어 보기(칩 줄·기둥·띠)가 받는다.
  * - [StripSlider.onReset]이 있으면(-100~100 값) 움직이지 않고 0.3초(메뉴 묶음, 레이어 줄과 같음) 누르면 짧은 진동이고, 그대로 떼면 0으로 되돌리고 알린다.
  *   이미 0([StripSlider.origin] 자리)이면 진동만 한다. 진동 뒤라도 끌면 0이 아니라 값을 바꾼다(끌기 전에 잠깐 멈춘 것만으로 0이 되지 않게).
@@ -84,19 +86,21 @@ internal fun Modifier.valueGestures(
                 ValueMove.ALONG -> {
                     val start = last[0] ?: return@awaitEachGesture
                     start.consume()
-                    val from = start.position
+                    // 기준은 누른 자리에서 끄는 쪽으로 터치 허용 거리만큼 간 곳이다: 허용 거리를 넘은 만큼부터, 넘는 순간의 움직임도 바로 바꾼다
+                    val from = along(down.position, axis) + sign(along(start.position - down.position, axis)) * slop
                     val startFraction = currentSlider.fraction
+                    // 화면에서 위가 작은 y·왼쪽이 작은 x라, 위로(왼쪽으로) 끈 만큼 커진다
+                    fun scrubTo(position: Offset) = currentSlider.onFraction((startFraction + (from - along(position, axis)) / fullRange).coerceIn(0f, 1f))
                     scrubbingChanged(true)
                     if (showValue) feedback?.startScrub { pattern.format(currentCaption.value, currentValue.value) }
                     try {
+                        scrubTo(start.position)
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             val change = event.changes.firstOrNull { it.id == down.id }
                             event.changes.forEach { it.consume() }
                             if (change == null || !change.pressed) break
-                            // 화면에서 위가 작은 y·왼쪽이 작은 x라, 위로(왼쪽으로) 끈 만큼 커진다
-                            val moved = if (axis == ScrubAxis.VERTICAL) from.y - change.position.y else from.x - change.position.x
-                            currentSlider.onFraction((startFraction + moved / fullRange).coerceIn(0f, 1f))
+                            scrubTo(change.position)
                         }
                     } finally {
                         scrubbingChanged(false)
@@ -112,6 +116,9 @@ internal fun Modifier.valueGestures(
 
 /** 비율이 0의 자리와 이만큼 가까우면 이미 0이다 */
 private const val AT_ORIGIN = 0.0001f
+
+/** [offset]의 끄는 축 성분(세로는 y, 가로는 x) */
+private fun along(offset: Offset, axis: ScrubAxis): Float = if (axis == ScrubAxis.VERTICAL) offset.y else offset.x
 
 /** 손가락이 처음 한 일: 뗌, 끄는 축으로 움직임, 다른 축으로 움직임, 사라짐(다른 것이 가져감) */
 private enum class ValueMove { UP, ALONG, ACROSS, GONE }

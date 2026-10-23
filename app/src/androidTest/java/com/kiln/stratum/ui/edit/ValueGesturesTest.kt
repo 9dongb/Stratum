@@ -13,6 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -107,6 +110,20 @@ class ValueGesturesTest {
             assertTrue("fraction $fraction", fraction > 0.85f)
             assertEquals(listOf("finished"), calls)
         }
+    }
+
+    @Test
+    fun scrubbing_countsFromTheTouchSlop_includingTheFirstMove() {
+        // 펼친 화면 띠의 전 수치 끌기와 같다: 터치 허용 거리를 넘은 만큼부터, 넘는 순간의 움직임도 바로 바뀐다(검토에서 고침)
+        show()
+        var expected = 0f
+        cell.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -50.dp.toPx()))
+            expected = 0.5f + (50.dp.toPx() - viewConfiguration.touchSlop) / ScrubFullRange.toPx()
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(expected, fraction, 0.01f) }
     }
 
     @Test
@@ -232,6 +249,27 @@ class ValueGesturesTest {
 
         cell.performTouchInput { up() }
         composeRule.runOnIdle { assertTrue(toast.scrubText == null) }
+    }
+
+    @Test
+    fun afterLifting_theNoticeFadesWithTheLastValue_notAnOlderNotice() {
+        show(showValue = true)
+        // 먼저 떠 있던 알림은 끄는 값이 대신하고, 손을 뗀 뒤 사라지는 동안에도 다시 나오지 않는다(검토에서 고침)
+        composeRule.runOnIdle { toast.show("Undo") }
+        cell.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -40.dp.toPx()))
+            moveBy(Offset(0f, -40.dp.toPx()))
+        }
+        val shown = composeRule.runOnIdle { "${(fraction * 100).roundToInt()}" }
+        composeRule.mainClock.autoAdvance = false
+        cell.performTouchInput { up() }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST)
+            .assertTextEquals(composeRule.activity.getString(R.string.strip_choice_description, CAPTION, shown))
+            // 끄던 값은 사라지는 동안에도 화면 읽기 기능이 읽지 않는다
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        composeRule.mainClock.autoAdvance = true
     }
 
     private companion object {

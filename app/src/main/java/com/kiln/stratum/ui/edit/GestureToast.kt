@@ -53,6 +53,10 @@ class GestureToastState {
     internal var durationMillis: Long = GESTURE_TOAST_MILLIS
         private set
 
+    /** [last]가 끄던 값이다(손을 뗀 뒤 사라지는 동안 그 값을 보이고, 화면 읽기 기능은 읽지 않는다). 새로 띄우면 풀린다. */
+    internal var lastWasScrub: Boolean = false
+        private set
+
     /**
      * 수치 칸·칩을 누른 채 끄는 동안 손을 뗄 때까지 보일 글자('크기: 84 px', 2026-10-23 커버 막대). 값이 바뀌면 다시 읽는다.
      * 보이는 동안은 [text]보다 앞서고, 화면 읽기 기능은 읽지 않는다(끄는 값을 하나하나 읽지 않게). 없으면 null.
@@ -63,17 +67,25 @@ class GestureToastState {
     /** [text]를 [durationMillis] 동안 띄운다. */
     fun show(text: String, durationMillis: Long = GESTURE_TOAST_MILLIS) {
         last = text
+        lastWasScrub = false
         this.durationMillis = durationMillis
         this.text = text
         serial++
     }
 
-    /** 끄기를 시작했다: 손을 뗄 때([endScrub])까지 [text]를 보인다 */
+    /** 끄기를 시작했다: 손을 뗄 때([endScrub])까지 떠 있던 알림 대신 [text]를 보인다(뗀 뒤 지난 알림이 다시 나오지 않게 지운다) */
     fun startScrub(text: () -> String) {
         scrubText = text
+        this.text = null
     }
 
+    /** 손을 뗐다: 끄던 값이 마지막 값 그대로 사라진다. 그사이 새 알림이 떴으면 그 알림이 남는다. */
     fun endScrub() {
+        val scrub = scrubText ?: return
+        if (text == null) {
+            last = scrub()
+            lastWasScrub = true
+        }
         scrubText = null
     }
 
@@ -107,6 +119,8 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
         }
     }
     val scrub = state.scrubText
+    // 끄는 값은 읽지 않는다(손을 뗄 때까지 계속 바뀌고, 뗀 뒤에는 마지막 값 그대로 사라진다)
+    val quiet = scrub != null || state.lastWasScrub
     Box(modifier.padding(top = GESTURE_TOAST_TOP), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(visible = state.text != null || scrub != null, enter = fadeIn(), exit = fadeOut()) {
             // Surface는 아래로 가는 터치를 막으므로 쓰지 않는다. 알림이 떠 있어도 그 밑의 캔버스·옵션 창을 그대로 누를 수 있다.
@@ -118,8 +132,7 @@ fun GestureToast(state: GestureToastState, modifier: Modifier = Modifier) {
                     .shadow(3.dp, StratumShapes.Card)
                     .background(StratumTheme.colors.inverseBackground, StratumShapes.Card)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
-                    // 끄는 값은 읽지 않는다(손을 뗄 때까지 계속 바뀐다)
-                    .semantics { if (scrub == null) liveRegion = LiveRegionMode.Polite }
+                    .semantics { if (!quiet) liveRegion = LiveRegionMode.Polite }
                     .testTag(EditScreenTags.GESTURE_TOAST),
                 color = StratumTheme.colors.inverseText,
                 textAlign = TextAlign.Center,

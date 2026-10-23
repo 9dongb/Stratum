@@ -111,8 +111,7 @@ class ResizeDialogTest {
     fun longPressMenu_opensTheDialog() {
         show()
 
-        // 커버 더보기 줄의 자르기·변형 칸을 꾹 누르면 하위 도구 메뉴가 뜬다(2026-10-23, 막대에 하위 도구 칩이 없어서)
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        // 커버 더보기 줄(도구가 없으면 늘 보임)의 자르기·변형 칸을 꾹 누르면 하위 도구 메뉴가 뜬다(2026-10-23, 막대에 하위 도구 칩이 없어서)
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Transform)).performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.subTool(SubTool.RESIZE)).performClick()
 

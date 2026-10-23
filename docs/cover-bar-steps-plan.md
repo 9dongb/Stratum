@@ -60,14 +60,14 @@
    - 지우는 것: `CoverToolBar`·`CoverToolColumn`의 ✕와 `onClose`·`closeDescription`, `EditScreen`의 안내 글과 `sheetCoversBar`, `CoverLayerSheet`·`CoverLayerPanel`의 `extra`, 안 쓰게 된 문구 두 언어(`bar_hint_choose_tool`·`bar_hint_choose_tool_side`·`bar_close_tool`). 칩이 없는 막대의 흐린 글자(`empty`·`BAR_HINT`)는 유동화 얼굴 안내가 그대로 쓴다.
    - 테스트: `EditScreenBackTest`(커버 처음은 더보기 줄, 도구를 고른 채 뒤로 → 홈, 칩을 접은 뒤 홈, 잠깐 연 더보기 줄은 먼저 닫힘, 자르기 뒤로 → 취소하고 더보기 줄, 유동화를 열면 더보기 줄, 이동 탭을 다시 눌러도 그대로, 펼친 화면은 그대로), ✕·안내 글을 보던 `AdjustPanelTest`·`CoverOptionsTest`·`EditToolsTest`·`LayerPanelTest`·`CoverLandscapeTest`·`BrushToolsTest`를 고친다.
 2. **펼친 수치 줄 정렬**: `OptionSlider`(BrushOptions.kt)와 `AdjustSliderRow`(AdjustPanel.kt)에 글자를 가운데 맞추는 값(예: `centered`)을 더해, 이름·값 칸(이름 88dp, 값 64dp·48dp) 안에서 가운데 맞춘다. 커버 막대(`BarExpanded`, 조정 `adjustBar`)만 켜고, 글자 창·펼친 화면 조정 패널은 그대로. 가로 기둥(`BarExpandedColumn`의 값 칸, `AdjustSliderColumn`)은 [이름 칸 | 세로 슬라이더 | 값 칸]으로 바꾸고 두 칸을 같은 높이로 가운데 맞춘다. 화면 테스트는 글자 배치 결과(`GetTextLayoutResult`)로 글자 가운데가 그 빈 곳 가운데에 있는지 잰다(세로·가로).
-3. **공통 손가락 처리** `Modifier.valueGestures(slider, axis, enabled, …)`(ui/edit/OptionStrip.kt): 터치를 하나로 처리한다(Initial 단계, `longPressFirst`와 같은 방식). 겹쳐 쌓으면 0.3초 멈춘 뒤의 끌기를 꾹 누르기가 삼킨다.
+3. **공통 손가락 처리** `Modifier.valueGestures(slider, axis, enabled, …)`(ui/edit/OptionStrip.kt, 만들면서 바꿈: 아래 '진행하며 바꾼 것'): 터치를 하나로 처리한다(Initial 단계, `longPressFirst`와 같은 방식). 겹쳐 쌓으면 0.3초 멈춘 뒤의 끌기를 꾹 누르기가 삼킨다.
    - 톡이면 아무것도 하지 않아 안쪽 누르기(지금 동작)가 받는다.
    - 정한 축(`axis`)으로 터치 허용 거리를 넘게 움직이면 끌기, 다른 축이면 놓아 둬 밀어 보기가 받는다.
    - 0.3초(`LongPressTimes.MENU_MILLIS`) 움직이지 않으면 진동, 그대로 떼면 `onReset`(있을 때만).
    - 펼친 화면 띠 칸(`ValueCellView`)의 지금 수치 끌기를 이것으로 바꾼다(세로축, 결과는 같음).
    - 알림: 새 `LocalValueFeedback`(끄는 값 보이기·0 알림)을 편집 화면과 유동화 창이 넣는다(유동화 창이 편집 화면 알림 위를 덮어서 창 안에 따로). `GestureToastState`에 손을 뗄 때까지 보이고 화면 읽기가 읽지 않는 '끄는 값' 모드.
    - 화면 읽기: 0이 되는 칸·칩에 '밝기 초기화' 동작(`CellBox`의 의미에 넣는다, 지금은 `touch` 수식어의 의미가 지워짐). 고르기 칩에 목록을 여는 길게 누르기 동작(탭 줄처럼).
-4. **커버 칩**(CoverToolBar.kt `BarChip`, CoverToolColumn.kt `BarCell`): 값 칩·조정 칩에 `valueGestures`(막대는 세로축, 기둥은 가로축), 고르기 칩에 목록 열기(7). 칩 줄은 `key(item.key)`로 감싼다(도구를 바꿔도 끄던 상태가 넘어가지 않게).
+4. **커버 칩**(CoverToolBar.kt `BarChip`, CoverToolColumn.kt `BarCell`): 값 칩·조정 칩에 `valueGestures`(막대는 세로축, 기둥은 가로축), 고르기 칩에 목록 열기(7). 칩 줄은 `key(item.key)`로 감싼다(도구를 바꿔도 끄던 상태가 넘어가지 않게, 7단계 검토에서 막대 내용까지 더함).
 5. **조정 칩**(AdjustPanel.kt `AdjustChip`·`AdjustCell`): 끌기는 지금 슬라이더와 같이 미리 보기(`preview`) 후 떼면 한 단계(`commit`), 꾹 눌러 0은 한 단계(`record { item.resetIn(it) }`, 이름 두 번 톡과 같음). 곡선 칩·모두 초기화는 그대로.
 6. **유동화**(LiquifyMode.kt): 막대를 한 번만 만들고(지금 두 번 만듦), 목록 호스트와 `LocalValueFeedback`을 창 안에 둔다. 얼굴 칩·칸의 0은 지금 있는 `onReset`(`resetFaceValue`).
 7. **C 목록**: `SubToolMenu.kt`의 자리 계산·밖 누르기 바탕을 함께 쓰는 함수로 꺼내고(하위 도구 메뉴 동작은 그대로), 새 `ChipMenu.kt`를 만든다.
@@ -115,3 +115,12 @@
 ## 진행하며 바꾼 것
 
 - 2단계 전(사용자 요청, 그대로): "늘 고른 도구를 이동 도구가 아닌 더보기 도구로 변경해주세요." 승인 때의 '첫 탭(이동)을 늘 골라 둠'을 '도구가 없으면 더보기 줄을 늘 보임'으로 바꿨다(위 '정한 것'·'만들 것'에 반영).
+- 4단계: 공통 손가락 처리는 `OptionStrip.kt`가 아니라 새 파일 `ValueGestures.kt`의 `Modifier.valueGestures(slider, axis, caption, value, showValue, onScrubbing)`다(켜고 끄는 값 대신 칸·칩이 꺼져 있으면 붙이지 않음, 끄는 값 알림에 쓸 이름·값을 받음).
+- 7단계 검토(하위 에이전트)에서 고친 것:
+  - 끌기를 터치 허용 거리를 넘은 자리부터 재어, 넘는 순간의 움직임이 빠졌다(펼친 화면 띠의 수치 끌기가 전보다 덜 바뀜). 넘은 만큼부터, 넘는 순간도 바로 바꾼다(전과 같음).
+  - 손을 뗀 뒤 사라지는 알림에 지난 알림 글이 비쳤다. 마지막 끄는 값 그대로 사라지고 읽지 않는다.
+  - 커버 Esc가 하위 도구 메뉴·자르기만 닫았다. 고르기 칩 목록을 더하고, 커버는 뒤로 가기와 같은 차례로 떠 있는 것만 닫는다.
+  - 커버에서 켠 스포이드가 뒤로 가기로 꺼지지 않고 홈으로 나갔다(전에는 도구를 닫으며 꺼짐). 먼저 끈다.
+  - 칩 줄의 `key(item.key)`는 크기·경도처럼 여러 도구에 있는 칩을 가르지 못했다. 막대 내용과 함께 `key(content, item.key)`로.
+  - 늘 보이는 더보기 줄도 캔버스 터치를 받는 바탕을 깔았다. 잠깐 연 줄에만 깐다.
+  - 검토가 말한 'Esc를 받지 않으면 안드로이드가 뒤로 가기로 바꾼다'는 에뮬레이터(안드로이드 17)의 키 배치에는 없었다(Generic.kcm `base: none`).

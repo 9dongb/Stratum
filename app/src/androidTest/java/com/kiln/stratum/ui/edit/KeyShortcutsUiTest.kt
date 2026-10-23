@@ -14,6 +14,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -140,6 +142,27 @@ class KeyShortcutsUiTest {
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
         // 도구가 없을 때도 편집 화면을 나가지 않는다(닫을 것이 없으면 Esc를 받지 않고 화면으로 보낸다)
         assertFalse(press(KeyEvent.KEYCODE_ESCAPE))
+        composeRule.runOnIdle { assertEquals(0, backs) }
+    }
+
+    @Test
+    fun cover_escapeClosesWhatFloats_butKeepsTheTool() {
+        // 커버는 도구를 내려놓지 않고, 뒤로 가기와 같은 차례로 떠 있는 것만 하나씩 닫는다(2026-10-23)
+        show(411, 800)
+        press(KeyEvent.KEYCODE_B)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
+        assertTrue(press(KeyEvent.KEYCODE_ESCAPE))
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).performScrollTo().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_DONE).assertIsDisplayed()
+        assertTrue(press(KeyEvent.KEYCODE_ESCAPE))
+        composeRule.onNodeWithTag(EditScreenTags.BAR_DONE).assertDoesNotExist()
+
+        // 닫을 것이 없으면 받지 않고, 도구(브러시 칩)는 그대로다
+        assertFalse(press(KeyEvent.KEYCODE_ESCAPE))
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
         composeRule.runOnIdle { assertEquals(0, backs) }
     }
 

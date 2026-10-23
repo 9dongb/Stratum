@@ -131,9 +131,9 @@ class MoveToolTest {
         val move = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).fetchSemanticsNode().layoutBoundsInWindow()
         val select = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select)).fetchSemanticsNode().layoutBoundsInWindow()
         assertTrue("$move should be left of $select", move.right <= select.left + 1f)
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        // 도구를 고르지 않았으면 더보기 줄이 늘 보인다(2026-10-23)
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Move)).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
         composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).performClick()
 
         // 한 줄 막대에 돌리기·뒤집기 칩 넷(사용자 피드백 12차 2, 전에는 도구 이름만). 화면 읽기는 '레이어를 …'로 읽는다.

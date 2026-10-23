@@ -275,8 +275,9 @@ fun CoverToolBar(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Spacer(Modifier.width(2.dp))
-                            // 칩마다 따로 기억한다(도구를 바꿔도 끄던 손가락 처리가 다른 칩으로 넘어가지 않게)
-                            for (item in items) key(item.key) { BarChip(item, expand) }
+                            // 칩마다 막대 내용과 함께 따로 기억한다(크기·경도처럼 여러 도구에 있는 칩도, 끄는 도중 도구를 바꾸면
+                            // 끄던 손가락 처리가 새 도구의 칩으로 넘어가지 않게)
+                            for (item in items) key(content, item.key) { BarChip(item, expand) }
                             Spacer(Modifier.width(2.dp))
                         }
                     }

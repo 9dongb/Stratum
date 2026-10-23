@@ -132,8 +132,7 @@ class EditToolsTest {
     fun accessibilityLongClick_opensMenu() {
         show(411, 800)
 
-        // 자르기·변형은 더보기 줄에 있다. 더보기 줄의 칸도 길게 누르면 하위 도구 메뉴를 연다(2026-10-23).
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        // 자르기·변형은 더보기 줄에 있다(도구가 없으면 늘 보임). 더보기 줄의 칸도 길게 누르면 하위 도구 메뉴를 연다(2026-10-23).
         transformMore.performSemanticsAction(SemanticsActions.OnLongClick)
 
         // 자르기·변형의 하위 도구는 자르기·회전과 크기 변경이다(회전·뒤집기는 자르기와 한 화면, 사용자 피드백 8차 1)
@@ -309,7 +308,7 @@ class EditToolsTest {
     @Test
     fun compact_moreRowTool_holdThenDrag_choosesTheSubTool_andClosesTheRow() {
         show(411, 800)
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        // 도구가 없으면 더보기 줄이 늘 보인다(2026-10-23)
         val tone = composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Tone))
         val cell = tone.fetchSemanticsNode().layoutBoundsInWindow()
         // 막대에 하위 도구 칩이 없어(2026-10-23) 더보기 줄의 칸도 꾹 누르면 하위 도구 메뉴가 칸 위에 뜬다

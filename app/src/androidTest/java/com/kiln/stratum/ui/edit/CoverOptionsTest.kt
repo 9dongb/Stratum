@@ -76,7 +76,7 @@ class CoverOptionsTest {
         assertEquals(before.bottom, bar.top, 1f)
         composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
 
-        // 도구는 막대만 바뀐다(이동은 옵션이 없다)
+        // 도구를 바꿔도 막대 내용만 바뀐다
         for (tool in listOf(EditTool.Brush, EditTool.Select, EditTool.Retouch, EditTool.Tone, EditTool.Mosaic, EditTool.Text, EditTool.Move)) {
             tab(tool)
             composeRule.waitForIdle()

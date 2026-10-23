@@ -101,10 +101,8 @@ object EditScreenTags {
     /** 한 줄 막대의 [key] 칩 */
     fun bar(key: String): String = "bar_$key"
 
-    /** 한 줄 막대의 안내 글(도구를 고르지 않음)·도구 이름(옵션이 없는 이동 도구) */
+    /** 칩이 없는 한 줄 막대의 흐린 글자: 칩이 없는 도구의 이름, 유동화 얼굴 모드의 안내 */
     const val BAR_HINT = "barHint"
-
-    /** 한 줄 막대 오른쪽 끝의 ✕(도구 닫기) */
 
     /** 펼친 칩을 접는 ✓ */
     const val BAR_DONE = "barDone"
