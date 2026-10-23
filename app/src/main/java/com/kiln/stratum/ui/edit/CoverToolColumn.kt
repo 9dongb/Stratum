@@ -26,7 +26,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -97,7 +101,8 @@ fun CoverToolColumn(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            for (item in items) BarCell(item, expand)
+                            // 칸마다 따로 기억한다(도구를 바꿔도 끄던 손가락 처리가 다른 칸으로 넘어가지 않게)
+                            for (item in items) key(item.key) { BarCell(item, expand) }
                         }
                     }
                 }
@@ -116,7 +121,11 @@ fun CoverToolColumn(
     }
 }
 
-/** 기둥의 칩 하나(띠 칸 모양). 값·고르기·묶음 칩은 누르면 [expand](같은 기둥이 그 칩의 내용)다. */
+/**
+ * 기둥의 칩 하나(띠 칸 모양). 값·고르기·묶음 칩은 누르면 [expand](같은 기둥이 그 칩의 내용)다.
+ * 값 칸은 누른 채 왼쪽(캔버스 쪽)으로 끌면 값이 커지고(세로 커버의 위로 끌기를 돌린 것, 기둥은 위아래로 밀어 본다),
+ * 0으로 되돌릴 값(-100~100)은 꾹 눌러 0이다(공통 수치 칸 기능 [valueGestures], 2026-10-23).
+ */
 @Composable
 private fun BarCell(item: BarItem, expand: (String) -> Unit) {
     val colors = StratumTheme.colors
@@ -124,7 +133,16 @@ private fun BarCell(item: BarItem, expand: (String) -> Unit) {
     when (item) {
         is BarValue -> {
             val enabled = item.cell.enabled
-            CellBox(tag, item.cell.caption, item.cell.value, open = false, enabled = enabled, onClick = { expand(item.key) }) {
+            var scrubbing by remember { mutableStateOf(false) }
+            val touch = if (enabled) {
+                Modifier.valueGestures(item.cell.slider, ScrubAxis.HORIZONTAL, item.cell.caption, item.cell.value, showValue = true) { scrubbing = it }
+            } else {
+                Modifier
+            }
+            CellBox(
+                tag, item.cell.caption, item.cell.value, open = scrubbing, enabled = enabled, onClick = { expand(item.key) },
+                touch = touch, onReset = item.cell.slider.onReset
+            ) {
                 CompactLabel(item.cell.caption, if (enabled) colors.textDescription else colors.textDisabled)
                 Text(
                     text = item.cell.value,

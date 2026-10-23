@@ -28,8 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -40,7 +41,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -269,7 +272,8 @@ fun CoverToolBar(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Spacer(Modifier.width(2.dp))
-                            for (item in items) BarChip(item, expand)
+                            // 칩마다 따로 기억한다(도구를 바꿔도 끄던 손가락 처리가 다른 칩으로 넘어가지 않게)
+                            for (item in items) key(item.key) { BarChip(item, expand) }
                             Spacer(Modifier.width(2.dp))
                         }
                     }
@@ -289,25 +293,44 @@ fun CoverToolBar(
     }
 }
 
-/** 칩 줄의 칩 하나. 값·고르기·동작 칩은 누르면 [expand](같은 줄이 그 칩의 내용)이고, 화면 읽기 기능은 '이름: 값'으로 읽는다. */
+/**
+ * 칩 줄의 칩 하나. 값·고르기·동작 칩은 누르면 [expand](같은 줄이 그 칩의 내용)이고, 화면 읽기 기능은 '이름: 값'으로 읽는다.
+ * 값 칩은 누른 채 위로 끌면 값이 커지고, 0으로 되돌릴 값(-100~100)은 꾹 눌러 0이다(공통 수치 칸 기능 [valueGestures], 2026-10-23 사용자 요청).
+ */
 @Composable
 private fun BarChip(item: BarItem, expand: (String) -> Unit) {
     val colors = StratumTheme.colors
     val tag = Modifier.testTag(EditScreenTags.bar(item.key))
     when (item) {
         is BarValue -> {
-            val description = stringResource(R.string.strip_choice_description, item.cell.caption, item.cell.value)
+            val cell = item.cell
+            val description = stringResource(R.string.strip_choice_description, cell.caption, cell.value)
+            val resetLabel = stringResource(R.string.adjust_reset_item, cell.caption)
+            val reset = cell.slider.onReset.takeIf { cell.enabled }
             StratumActionChip(
                 onClick = { expand(item.key) },
-                enabled = item.cell.enabled,
+                enabled = cell.enabled,
                 label = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(item.cell.caption, color = colors.textDescription, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        Text(cell.caption, color = colors.textDescription, style = MaterialTheme.typography.labelMedium, maxLines = 1)
                         Spacer(Modifier.width(6.dp))
-                        Text(item.cell.value, maxLines = 1)
+                        Text(cell.value, maxLines = 1)
                     }
                 },
-                modifier = tag.semantics { contentDescription = description }
+                modifier = tag
+                    .semantics {
+                        contentDescription = description
+                        if (reset != null) {
+                            customActions = listOf(
+                                CustomAccessibilityAction(resetLabel) {
+                                    reset()
+                                    true
+                                }
+                            )
+                        }
+                    }
+                    // 칩이 손가락에 가려 끄는 값은 캔버스 위쪽 알림 자리에 보인다
+                    .then(if (cell.enabled) Modifier.valueGestures(cell.slider, ScrubAxis.VERTICAL, cell.caption, cell.value, showValue = true) else Modifier)
             )
         }
         is BarChoice -> {

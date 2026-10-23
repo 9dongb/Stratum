@@ -133,6 +133,38 @@ class AdjustPanelTest {
     }
 
     @Test
+    fun compact_chip_dragUp_previewsThenRecordsOnce_andHoldingResetsTheItem() {
+        openCompactAdjust()
+        // 사용자 요청(2026-10-23) "조정 칩에도": 칩을 누른 채 위로 끌면 미리 보다가 손을 떼면 실행 취소 한 단계
+        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.BRIGHTNESS)).performScrollTo().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -30.dp.toPx()))
+            moveBy(Offset(0f, -40.dp.toPx()))
+            up()
+        }
+        composeRule.runOnIdle {
+            assertTrue("previews=${fake.previews}", fake.previews > 0)
+            assertEquals(1, fake.commits)
+            assertTrue("${fake.committed.brightness}", fake.committed.brightness > 0.2f)
+        }
+        // 펼치지 않았다(슬라이더 줄이 없다)
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.BRIGHTNESS)).assertDoesNotExist()
+
+        // 꾹 눌렀다(0.3초) 떼면 그 항목만 0으로, 실행 취소 한 단계(이름 두 번 톡과 같다)
+        composeRule.onNodeWithTag(EditScreenTags.adjustChip(AdjustItem.BRIGHTNESS)).performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 1f))
+            up()
+        }
+        composeRule.runOnIdle {
+            assertEquals(1, fake.records)
+            assertEquals(0f, fake.committed.brightness, 0f)
+        }
+        composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.BRIGHTNESS)).assertDoesNotExist()
+    }
+
+    @Test
     fun compact_expandedRow_centersTheNameAndTheValue() {
         openCompactAdjust(AdjustItem.BRIGHTNESS)
 

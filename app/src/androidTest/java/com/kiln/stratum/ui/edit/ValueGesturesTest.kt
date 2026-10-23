@@ -53,6 +53,8 @@ class ValueGesturesTest {
                             onFraction = { fraction = it },
                             tag = "slider",
                             onFinished = { calls += "finished" },
+                            // 0으로 되돌릴 값은 가운데가 0이다(얼굴 보정·조정과 같다)
+                            origin = if (resettable) 0.5f else 0f,
                             onReset = if (resettable) {
                                 {
                                     calls += "reset"
@@ -158,6 +160,20 @@ class ValueGesturesTest {
         }
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST)
             .assertTextEquals(composeRule.activity.getString(R.string.value_reset_to_zero, CAPTION))
+    }
+
+    @Test
+    fun holdingAValueAlreadyAtZero_onlyBuzzes() {
+        show(resettable = true)
+        cell.performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 1f))
+            up()
+        }
+        // 되돌릴 것이 없어 0으로 되돌리지도 알리지도 않고, 슬라이더 줄도 열지 않는다
+        composeRule.runOnIdle { assertTrue("$calls", calls.isEmpty()) }
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertDoesNotExist()
     }
 
     @Test

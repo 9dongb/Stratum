@@ -361,6 +361,37 @@ class LiquifyModeTest {
     }
 
     @Test
+    fun holdingAFaceCellOrChip_resetsItToZero() {
+        // 공통 수치 칸 기능(2026-10-23): -100~100 값은 칸·칩을 0.3초 눌렀다 떼면 0
+        selectFace()
+        show(930, 700)
+        composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).performScrollTo().performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 1f))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(listOf("resetFaceValue:EYE_SIZE"), actions.calls) }
+        // 옵션 창은 열리지 않는다(누르기로 가지 않음)
+        composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertExists()
+    }
+
+    @Test
+    fun cover_holdingAFaceChip_resetsIt() {
+        selectFace()
+        show(411, 800)
+        composeRule.onNodeWithTag(EditScreenTags.bar("face_eye_size")).performScrollTo().performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 1f))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(listOf("resetFaceValue:EYE_SIZE"), actions.calls) }
+        composeRule.onNodeWithTag(EditScreenTags.faceSlider(FaceSlider.EYE_SIZE)).assertDoesNotExist()
+    }
+
+    @Test
     fun mainScreens_doubleTapOnTheFaceSliderThumb_resetsIt_withoutMovingIt() {
         selectFace()
         show(930, 700)

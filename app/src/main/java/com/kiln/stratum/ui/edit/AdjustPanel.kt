@@ -34,6 +34,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -143,9 +144,7 @@ internal fun adjustBar(controls: AdjustControls): List<BarItem> =
     AdjustItem.entries.map { entry ->
         BarCustom(
             key = adjustBarKey(entry),
-            chip = { expand ->
-                AdjustChip(entry, changed = entry.isChanged(controls.adjustments), enabled = controls.enabled, onClick = expand)
-            },
+            chip = { expand -> AdjustChip(entry, controls, onClick = expand) },
             content = {
                 if (entry.isSlider) {
                     CommitOnDispose(controls.actions)
@@ -162,9 +161,7 @@ internal fun adjustBar(controls: AdjustControls): List<BarItem> =
                 }
             },
             // 커버를 가로로 돌린 세로 막대(사용자 피드백 12차 3): 띠 칸 모양의 항목 칸과, 펼치면 같은 기둥의 세로 슬라이더
-            cell = { expand ->
-                AdjustCell(entry, changed = entry.isChanged(controls.adjustments), enabled = controls.enabled, onClick = expand)
-            },
+            cell = { expand -> AdjustCell(entry, controls, onClick = expand) },
             columnContent = {
                 if (entry.isSlider) {
                     CommitOnDispose(controls.actions)
@@ -247,19 +244,51 @@ private fun CommitOnDispose(actions: AdjustActions) {
 
 /** 세로 막대(커버 가로)의 조정 항목 칸: 이름과 그 아래 작은 점(바꾼 항목만). 가로 막대의 칩([AdjustChip])과 같은 이름표다. */
 @Composable
-private fun AdjustCell(item: AdjustItem, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun AdjustCell(item: AdjustItem, controls: AdjustControls, onClick: () -> Unit) {
     val colors = StratumTheme.colors
+    val enabled = controls.enabled
     val name = stringResource(item.label)
-    CellBox(EditScreenTags.adjustChip(item), name, null, open = false, enabled = enabled, onClick = onClick) {
+    // 누른 채 왼쪽(캔버스 쪽)으로 끌면 값, 꾹 눌러 그 항목만 0(가로 막대의 칩과 같다, 2026-10-23)
+    val scrub = adjustScrub(item, controls)
+    var scrubbing by remember { mutableStateOf(false) }
+    val touch = if (scrub != null && enabled) {
+        Modifier.valueGestures(scrub, ScrubAxis.HORIZONTAL, name, adjustShown(item, controls), showValue = true) { scrubbing = it }
+    } else {
+        Modifier
+    }
+    CellBox(EditScreenTags.adjustChip(item), name, null, open = scrubbing, enabled = enabled, onClick = onClick, touch = touch, onReset = scrub?.onReset) {
         CompactLabel(name, if (enabled) colors.textSecondary else colors.textDisabled)
         Box(
             Modifier
                 .padding(top = 4.dp)
                 .size(6.dp)
-                .background(if (changed) colors.sliderFill else Color.Transparent, StratumShapes.Dot)
+                .background(if (item.isChanged(controls.adjustments)) colors.sliderFill else Color.Transparent, StratumShapes.Dot)
         )
     }
 }
+
+/**
+ * 조정 항목 칩·칸을 누른 채 끄는 슬라이더(곡선은 null, 공통 수치 칸 기능 [valueGestures], 2026-10-23 사용자 요청 "조정 칩에도"):
+ * 끄는 동안 미리 보고 손을 떼면 실행 취소 한 단계로 기록한다(슬라이더 줄과 같다). 꾹 눌러 0은 그 항목만 초기화한다(이름·원 두 번 톡과 같다).
+ */
+private fun adjustScrub(item: AdjustItem, controls: AdjustControls): StripSlider? {
+    if (!item.isSlider) return null
+    val span = item.max - item.min
+    val actions = controls.actions
+    return StripSlider(
+        fraction = ((item.valueIn(controls.adjustments) - item.min) / span).coerceIn(0f, 1f),
+        onFraction = { fraction -> actions.preview { item.applyTo(it, item.min + fraction * span) } },
+        tag = EditScreenTags.adjustSlider(item),
+        onFinished = actions::commit,
+        origin = ((0f - item.min) / span).coerceIn(0f, 1f),
+        onReset = { actions.record { item.resetIn(it) } }
+    )
+}
+
+/** 조정 항목의 보이는 값('+35', 노출은 '+0.35') */
+@Composable
+private fun adjustShown(item: AdjustItem, controls: AdjustControls): String =
+    item.format(item.valueIn(controls.adjustments), LocalConfiguration.current.locales[0])
 
 /** 세로 막대(커버 가로)의 '모두 초기화' 칸. 가로 막대의 버튼([ResetAllButton])과 같은 이름표·조건이다. */
 @Composable
@@ -342,19 +371,43 @@ private fun AdjustSliderColumn(item: AdjustItem, controls: AdjustControls) {
 /** 세로 막대의 슬라이더 폭(누르는 영역) */
 private val SliderThickness = 48.dp
 
-/** 커버 화면 조정 막대의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다. */
+/**
+ * 커버 화면 조정 막대의 항목 칩. 바꾼 항목은 이름 옆에 작은 점을 찍는다.
+ * 슬라이더 항목은 누른 채 위로 끌면 값이 커지고 꾹 누르면 그 항목만 0이다([adjustScrub], 끄는 값은 캔버스 위쪽 알림 자리).
+ */
 @Composable
-private fun AdjustChip(item: AdjustItem, changed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun AdjustChip(item: AdjustItem, controls: AdjustControls, onClick: () -> Unit) {
+    val enabled = controls.enabled
+    val name = stringResource(item.label)
+    val resetLabel = stringResource(R.string.adjust_reset_item, name)
+    val scrub = adjustScrub(item, controls)
     StratumActionChip(
         onClick = onClick,
         enabled = enabled,
-        label = { Text(stringResource(item.label), maxLines = 1, softWrap = false) },
-        trailingIcon = if (changed) {
+        label = { Text(name, maxLines = 1, softWrap = false) },
+        trailingIcon = if (item.isChanged(controls.adjustments)) {
             { Box(Modifier.size(6.dp).background(StratumTheme.colors.sliderFill, StratumShapes.Dot)) }
         } else {
             null
         },
-        modifier = Modifier.testTag(EditScreenTags.adjustChip(item))
+        modifier = Modifier
+            .testTag(EditScreenTags.adjustChip(item))
+            .then(
+                if (scrub != null && enabled) {
+                    Modifier
+                        .semantics {
+                            customActions = listOf(
+                                CustomAccessibilityAction(resetLabel) {
+                                    scrub.onReset?.invoke()
+                                    true
+                                }
+                            )
+                        }
+                        .valueGestures(scrub, ScrubAxis.VERTICAL, name, adjustShown(item, controls), showValue = true)
+                } else {
+                    Modifier
+                }
+            )
     )
 }
 

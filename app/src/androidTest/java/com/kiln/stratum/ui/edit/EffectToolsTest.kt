@@ -132,6 +132,25 @@ class EffectToolsTest {
     }
 
     @Test
+    fun aValueChip_dragUp_changesTheValue_withoutOpeningTheRow() {
+        showBlurOptions()
+        val before = composeRule.runOnIdle { blur.strength }
+        // 사용자 요청 'A'(2026-10-23): 값 칩을 누른 채 위로 끌면 바로 값이 바뀐다(200dp가 처음~끝)
+        composeRule.onNodeWithTag(EditScreenTags.bar("strength")).performScrollTo().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -30.dp.toPx()))
+            moveBy(Offset(0f, -40.dp.toPx()))
+            up()
+        }
+        composeRule.runOnIdle { assertTrue("${blur.strength} should grow from $before", blur.strength > before + 0.2f) }
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertDoesNotExist()
+
+        // 톡은 지금처럼 슬라이더 줄이다
+        composeRule.expandBarChip("strength")
+        composeRule.onNodeWithTag(EditScreenTags.BLUR_STRENGTH).assertExists()
+    }
+
+    @Test
     fun blurOptions_change_andStrengthNeverGoesToZero() {
         showBlurOptions()
 

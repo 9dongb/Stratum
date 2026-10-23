@@ -32,7 +32,7 @@ enum class ScrubAxis { VERTICAL, HORIZONTAL }
  * - [axis]로 터치 허용 거리를 넘게 움직이면 그 자리부터 값을 바꾼다([ScrubFullRange]가 처음~끝, 슬라이더와 같은 눈금). 손을 떼면 [StripSlider.onFinished]다.
  *   다른 축으로 먼저 움직이면 놓아 둬 밀어 보기(칩 줄·기둥·띠)가 받는다.
  * - [StripSlider.onReset]이 있으면(-100~100 값) 움직이지 않고 0.3초(메뉴 묶음, 레이어 줄과 같음) 누르면 짧은 진동이고, 그대로 떼면 0으로 되돌리고 알린다.
- *   진동 뒤라도 끌면 0이 아니라 값을 바꾼다(끌기 전에 잠깐 멈춘 것만으로 0이 되지 않게).
+ *   이미 0([StripSlider.origin] 자리)이면 진동만 한다. 진동 뒤라도 끌면 0이 아니라 값을 바꾼다(끌기 전에 잠깐 멈춘 것만으로 0이 되지 않게).
  * 끄는 동안은 [onScrubbing]으로 알리고, [showValue]면 제스처 알림 자리([LocalValueFeedback])에 '[caption]: [value]'를 손을 뗄 때까지 보인다
  * (커버는 손가락이 칩을 가린다). 끈 터치·0으로 되돌린 터치는 안쪽 누르기로 가지 않는다.
  */
@@ -74,8 +74,12 @@ internal fun Modifier.valueGestures(
             when (move) {
                 ValueMove.UP -> if (armed) {
                     last[0]?.consume()
-                    currentSlider.onReset?.invoke()
-                    feedback?.show(currentResetText)
+                    val armedSlider = currentSlider
+                    // 이미 0이면 되돌릴 것이 없다(진동만)
+                    if (abs(armedSlider.fraction - armedSlider.origin) > AT_ORIGIN) {
+                        armedSlider.onReset?.invoke()
+                        feedback?.show(currentResetText)
+                    }
                 }
                 ValueMove.ALONG -> {
                     val start = last[0] ?: return@awaitEachGesture
@@ -105,6 +109,9 @@ internal fun Modifier.valueGestures(
         }
     }
 }
+
+/** 비율이 0의 자리와 이만큼 가까우면 이미 0이다 */
+private const val AT_ORIGIN = 0.0001f
 
 /** 손가락이 처음 한 일: 뗌, 끄는 축으로 움직임, 다른 축으로 움직임, 사라짐(다른 것이 가져감) */
 private enum class ValueMove { UP, ALONG, ACROSS, GONE }

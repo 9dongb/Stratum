@@ -167,6 +167,28 @@ class CoverLandscapeTest {
     }
 
     @Test
+    fun aValueCell_dragLeftGrowsIt_andUpAndDownLeaveIt() {
+        show()
+        composeRule.chooseCoverTool(EditTool.Brush)
+        val before = composeRule.runOnIdle { brush.size }
+        // 가로 커버 기둥은 캔버스 쪽(왼쪽)으로 끌면 커진다(세로 커버의 위로 끌기를 돌린 것, 2026-10-23). 위아래는 기둥을 밀어 보는 몫이다.
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).performScrollTo().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 30.dp.toPx()))
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(before, brush.size, 0f) }
+        composeRule.onNodeWithTag(EditScreenTags.bar("size")).performScrollTo().performTouchInput {
+            down(center)
+            moveBy(Offset(-30.dp.toPx(), 0f))
+            moveBy(Offset(-40.dp.toPx(), 0f))
+            up()
+        }
+        composeRule.runOnIdle { assertTrue("${brush.size} should grow from $before", brush.size > before) }
+        composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
+    }
+
+    @Test
     fun aValueCell_becomesAVerticalSlider_draggingUpGrowsIt_andDoneReturns() {
         show()
         composeRule.chooseCoverTool(EditTool.Brush)
