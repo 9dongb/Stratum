@@ -1054,9 +1054,9 @@ class LiquifyModeTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(1, started) }
-        // 작업 모드를 닫으면 편집 화면에는 고른 도구가 없다(한 줄 막대는 안내 글)
+        // 작업 모드를 닫으면 편집 화면에는 고른 도구가 없다(막대 자리는 더보기 줄)
         composeRule.runOnIdle { open = null }
         composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_MODE).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
     }
 }

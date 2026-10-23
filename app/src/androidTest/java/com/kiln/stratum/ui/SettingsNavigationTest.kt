@@ -54,18 +54,18 @@ class SettingsNavigationTest {
         composeRule.setContent { StratumTheme { StratumApp(viewModel) } }
         createSmallCanvas()
         val opened = composeRule.runOnIdle { viewModel.state.value as EditorState.Ready }
-        val brush = toolTag(EditTool.Brush)
-        composeRule.onNodeWithTag(brush).performClick()
-        composeRule.onNodeWithTag(brush).assertIsSelected()
+        val move = toolTag(EditTool.Move)
+        composeRule.onNodeWithTag(move).performClick()
+        composeRule.onNodeWithTag(move).assertIsSelected()
 
         composeRule.onNodeWithTag(EditScreenTags.SETTINGS).performClick()
         composeRule.onNodeWithTag(SettingsTags.LIST).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.TOP_BAR).assertDoesNotExist()
 
-        // 설정의 뒤로 버튼 → 보던 편집 화면(같은 문서, 브러시를 고른 채)
+        // 설정의 뒤로 버튼 → 보던 편집 화면(같은 문서, 이동 도구를 고른 채)
         composeRule.onNodeWithContentDescription(context.getString(R.string.action_back)).performClick()
         composeRule.onNodeWithTag(SettingsTags.LIST).assertDoesNotExist()
-        composeRule.onNodeWithTag(toolTag(EditTool.Brush)).assertIsSelected()
+        composeRule.onNodeWithTag(toolTag(EditTool.Move)).assertIsSelected()
         composeRule.runOnIdle { assertSame("the document was not reopened", opened, viewModel.state.value) }
 
         // 시스템 뒤로도 같다
@@ -73,14 +73,14 @@ class SettingsNavigationTest {
         composeRule.onNodeWithTag(SettingsTags.LIST).assertExists()
         composeRule.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.onNodeWithTag(SettingsTags.LIST).assertDoesNotExist()
-        composeRule.onNodeWithTag(toolTag(EditTool.Brush)).assertIsSelected()
+        composeRule.onNodeWithTag(toolTag(EditTool.Move)).assertIsSelected()
     }
 
     @Test
     fun goingHome_forgetsTheEditScreen() {
         composeRule.setContent { StratumTheme { StratumApp(viewModel) } }
         createSmallCanvas()
-        composeRule.onNodeWithTag(toolTag(EditTool.Brush)).performClick()
+        composeRule.onNodeWithTag(toolTag(EditTool.Move)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.SETTINGS).performClick()
         composeRule.onNodeWithContentDescription(context.getString(R.string.action_back)).performClick()
 
@@ -88,7 +88,7 @@ class SettingsNavigationTest {
         composeRule.onNodeWithContentDescription(context.getString(R.string.action_back)).performClick()
         composeRule.onNodeWithTag(HomeTags.TOP_BAR).assertExists()
         createSmallCanvas()
-        composeRule.onNodeWithTag(toolTag(EditTool.Brush)).assertIsNotSelected()
+        composeRule.onNodeWithTag(toolTag(EditTool.Move)).assertIsNotSelected()
     }
 
     /** 홈의 '+'로 작은 새 캔버스를 만들고 편집 화면이 문서를 보일 때까지 기다린다 */
@@ -102,7 +102,7 @@ class SettingsNavigationTest {
         assertEquals(PixelSize(400, 300), (viewModel.state.value as EditorState.Ready).documentSize)
     }
 
-    /** 펼친 화면은 도구 막대, 커버는 탭 줄의 [tool] */
+    /** 펼친 화면은 도구 막대, 커버는 탭 줄의 [tool](탭 줄에 있는 도구만: 브러시 등은 커버에서 더보기 줄에 있다) */
     private fun toolTag(tool: EditTool): String {
         val rail = EditScreenTags.railTool(tool)
         return if (composeRule.onAllNodesWithTag(rail).fetchSemanticsNodes().isNotEmpty()) rail else EditScreenTags.tabTool(tool)
