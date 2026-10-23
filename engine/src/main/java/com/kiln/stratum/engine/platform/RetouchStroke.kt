@@ -110,14 +110,14 @@ data class RetouchStroke(
         return tiles + work
     }
 
-    /** '아래 포함'이면 가져올 곳까지 합친 그림(묶음마다 그림·복사본·타일) */
+    /** '아래 포함'이면 가져올 곳까지 합친 그림(묶음마다 남는 타일과, 한 묶음을 그리는 동안의 그림) */
     override fun estimateWorkBytes(document: Document): Long {
         if (!sampleBelow) return 0L
         val size = PixelSize(document.width, document.height)
         val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return 0L
         val area = bounds.expanded(Retouch.sampleReach(mode, dabs, settings, offset)).intersect(PixelRect.of(size)) ?: return 0L
         val blocks = ((area.width + 2047L) / 1024) * ((area.height + 2047L) / 1024)
-        return blocks * BelowSampler.BLOCK_WORK_BYTES
+        return blocks * BelowSampler.BLOCK_BYTES + BelowSampler.RENDER_WORK_BYTES
     }
 }
 

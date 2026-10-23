@@ -8,15 +8,24 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.platform.CreateSkinRetouch
+import com.kiln.stratum.engine.platform.CropImage
 import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.HealSkinSpots
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.RebuildSkinRetouch
+import com.kiln.stratum.engine.platform.ResizeImage
+import com.kiln.stratum.engine.platform.SelectShape
 import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
+import com.kiln.stratum.engine.platform.TranslateLayer
+import com.kiln.stratum.engine.raster.PixelRect
+import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.SelectionMode
+import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.skin.NoSpotsException
+import com.kiln.stratum.engine.transform.Orientation
 import kotlin.math.abs
 import kotlin.math.hypot
 import org.junit.Assert.assertEquals
@@ -112,6 +121,32 @@ class HealSkinSpotsTest {
         assertFalse(again.isStale(rebuilt))
         // 다시 만들기는 결과를 알리지 않는다(지운 자리를 다시 지운 것뿐)
         assertEquals(null, again.healReport)
+    }
+
+    @Test
+    fun healing_ignoresTheSelection() {
+        // 6단계 검토: 그룹에 하는 일이라 선택 영역(한쪽 뾰루지만 덮음)과 상관없이 피부 마스크 안 전체를 지운다
+        val document = SelectShape(SelectionShape.Rectangle(300f, 450f, 360f, 510f), SelectionMode.REPLACE).applyTo(created())
+
+        val healed = HealSkinSpots(document.group.id).applyTo(document)
+
+        assertEquals(2, checkNotNull(healed.group.skin).healed.size)
+        for ((x, y) in PIMPLES) assertEquals(255, Color.alpha(healed.spotsPixel(x.toInt(), y.toInt())))
+        assertSame(document.selection, healed.selection)
+    }
+
+    @Test
+    fun wholeImageChanges_andMovingTheGroup_keepTheSkinMaskShared() {
+        // 6단계 검토: 색 보정·피부 정돈은 피부 마스크를 함께 쓰고, 자르기·회전·크기 변경·그룹 옮기기 뒤에도 함께 쓴다(함께 칠하게)
+        val document = created()
+        val record = checkNotNull(document.group.skin)
+        fun shared(d: Document) = d.layers[d.indexOfLayer(record.color)].mask.let { it != null && it === d.layers[d.indexOfLayer(record.smooth)].mask }
+        assertTrue(shared(document))
+
+        val size = PixelSize(document.width, document.height)
+        assertTrue(shared(CropImage(PixelRect(100, 100, 1100, 800), size, Orientation.ROTATE_CLOCKWISE).applyTo(document)))
+        assertTrue(shared(ResizeImage(600, 450).applyTo(document)))
+        assertTrue(shared(TranslateLayer(document.group.id, 30, -20).applyTo(document)))
     }
 
     private companion object {

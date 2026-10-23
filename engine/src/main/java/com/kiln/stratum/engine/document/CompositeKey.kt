@@ -39,13 +39,16 @@ class CompositeKey private constructor(private val width: Int, private val heigh
     /** 조정 레이어 단계의 열쇠(결정 기록 '피부 보정'의 1e). 마스크 객체는 같은 객체인지만 본다(약하게 붙잡음). */
     private class AdjustKey(step: CompositeStep.Adjust) : StepKey {
         private val mask = WeakReference(step.mask)
+
+        /** 마스크가 있었는지(약하게 붙잡은 마스크가 버려지면 null이 되어, 마스크가 없는 지금과 같다고 잘못 보지 않게) */
+        private val hadMask = step.mask != null
         private val opacity = step.opacity
         private val blendMode = step.blendMode
         private val adjustments = step.adjustments
         private val skin = step.skin
 
         override fun matches(step: CompositeStep): Boolean =
-            step is CompositeStep.Adjust && mask.get() === step.mask && step.opacity == opacity &&
+            step is CompositeStep.Adjust && (step.mask != null) == hadMask && mask.get() === step.mask && step.opacity == opacity &&
                 step.blendMode == blendMode && step.adjustments == adjustments && step.skin == skin
     }
 
@@ -53,12 +56,15 @@ class CompositeKey private constructor(private val width: Int, private val heigh
     private class DrawKey(step: CompositeStep.Draw) : StepKey {
         private val pixels = WeakReference(step.raster)
         private val mask = WeakReference(step.mask)
+
+        /** 마스크가 있었는지(약하게 붙잡은 마스크가 버려지면 null이 되어, 마스크가 없는 지금과 같다고 잘못 보지 않게) */
+        private val hadMask = step.mask != null
         private val opacity = step.opacity
         private val blendMode = step.blendMode
         private val adjustments = step.adjustments
 
         override fun matches(step: CompositeStep): Boolean =
-            step is CompositeStep.Draw && pixels.get() === step.raster && mask.get() === step.mask && step.opacity == opacity &&
+            step is CompositeStep.Draw && pixels.get() === step.raster && (step.mask != null) == hadMask && mask.get() === step.mask && step.opacity == opacity &&
                 step.blendMode == blendMode && step.adjustments == adjustments
     }
 }

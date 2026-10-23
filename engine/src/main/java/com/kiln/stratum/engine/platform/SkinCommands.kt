@@ -263,23 +263,24 @@ internal object SkinSpotWork {
     }
 
     /**
-     * 기록한 잡티([SkinRecord.healed])를 지금 그림으로 다시 지운 문서와 다시 지운 자리. 사용자가 지우개로 되살린 자리(가운데가 반 넘게 비었음)는 뺀다.
-     * 기록한 자리를 잡티 제거 레이어에서 먼저 비운다(지운 붓보다 조금 넓게, 단단히). 잡티 제거 레이어가 없으면 null이다.
+     * 기록한 잡티([SkinRecord.healed])를 지금 그림으로 다시 지운 문서와 다시 지운 자리. 사용자가 지우개로 되살린 자리(가운데가 반 넘게 비었음,
+     * 잡티 제거 레이어를 옮겨 비게 된 자리도)는 기록에서 빼고 건드리지 않는다. 남은 자리는 잡티 제거 레이어에서 먼저 비운다(지운 붓보다 조금 넓게, 단단히).
+     * 선택 영역과 상관없이 한다(그룹에 하는 일, 6단계 검토). 잡티 제거 레이어가 없으면 null이다.
      */
     fun reheal(document: Document, record: SkinRecord, checkCanceled: () -> Unit): Pair<Document, List<SkinSpot>>? {
         val layer = document.layers.getOrNull(document.indexOfLayer(record.spots)) ?: return null
         val raster = (layer.content as? RasterContent)?.raster ?: return null
         val kept = record.healed.filter { spot -> alphaAt(raster, spot.x.toInt(), spot.y.toInt(), document) >= 128 }
-        var cleared = document
-        for (spot in record.healed) {
+        var cleared = document.copy(selection = null)
+        for (spot in kept) {
             checkCanceled()
-            val settings = BrushSettings(size = SkinSpotHealer.brushOf(spot).size + 2f, hardness = 1f, opacity = 1f)
+            val settings = BrushSettings(size = (SkinSpotHealer.brushOf(spot).size + 2f).coerceAtMost(BrushSettings.MAX_SIZE), hardness = 1f, opacity = 1f)
             cleared = PaintStroke(record.spots, listOf(StrokePoint(spot.x, spot.y)), settings, erase = true).applyTo(cleared, checkCanceled)
         }
         val healed = SkinSpotHealer.heal(cleared, record.spots, kept, checkCanceled) ?: return null
         val index = cleared.indexOfLayer(record.spots)
         val layers = cleared.layers.toMutableList().apply { set(index, cleared.layers[index].withPixels(healed.raster, healed.gainmap)) }
-        return cleared.copy(layers = layers) to healed.spots
+        return document.copy(layers = layers) to healed.spots
     }
 
     /** [raster]의 ([x], [y]) 알파(문서 밖·빈 타일은 0) */

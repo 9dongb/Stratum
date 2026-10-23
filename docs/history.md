@@ -14,6 +14,22 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 6a: 스스로 검토에서 찾은 것 고침
+
+- 요청: 승인된 피부 보정 계획의 6단계(검토·마무리)의 스스로 검토. 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "피부 보정 검토에서 찾은 것(피부 마스크 공유·슬라이더·그룹 숨김·선택 영역·작은 얼굴 등)을 고침"
+- 바꾼 것
+  - 엔진: 변형(`RasterTransform`·`ResizeImage`·`TranslateLayer`)이 같은 마스크를 한 번만 옮김, `LayerTree.below`(감싼 그룹은 보이게·불투명도 1), `SkinSpotHealer`(얼굴 둘레만 자른 틀·한도·작은 얼굴 건너뜀·선택 영역 무시·붓 크기 한도), 다시 만들기(남은 자리만 비움·선택 영역 무시), `CompositeKey`(마스크가 있었는지), `ProjectManifest`(피부 색의 얼굴 수 거르기), `BelowSampler`·`RetouchStroke`(메모리 어림), `SkinColor`(스포이드 기준색 계산을 옮겨 옴).
+  - 화면: 끄는 피부 색은 슬라이더 셋만 지금 기록된 값에 건다, 확대 미리 보기는 '아래 포함' 그림을 읽지 않음, 같은 질감 유지로 놓으면 다시 만들지 않음, 스포이드 기준은 엔진 계산을 부름.
+  - 테스트: JVM `SkinColorMathTest`(스포이드 기준), `SkinSmoothMathTest`(그룹을 숨기거나 흐려도 낡지 않음), `ProjectManifestTest`(망가진 피부 색). 에뮬레이터 `HealSkinSpotsTest`(2개 더: 선택 영역 무시, 변형 뒤 마스크 함께 씀), `EditorSkinTest`(1개 더: 다시 만들기 도중에 놓은 슬라이더).
+  - 기록: progress.md(진행 중 6, 결정 기록 '피부 보정'의 6), 이 항목.
+- 정한 것(Claude 판단, 2단계부터 묻지 않고 정함): 결정 기록 '피부 보정'의 6.
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 685개).
+  - 에뮬레이터(접은 상태) `HealSkinSpotsTest` 6개, `EditorSkinTest` 17개, `SkinRetouchTest` 4개, `SkinToolTest` 9개, `SkinColorTest` 4개, 그리고 바뀐 곳을 다시 본 `TransformCommandsTest` 9개·`ImageResizerTest` 8개·`TranslateLayerTest` 5개·`LayerMaskTest` 10개·`AdjustmentLayerTest` 7개·`SelectObjectTest` 9개·`RetouchStrokeTest` 13개·`EditorRetouchTest` 9개 통과. 전체 에뮬레이터 테스트는 다음 커밋(6단계 마무리)에 적는다.
+
 ## 2026-10-24 · 피부 보정 5: 잡티 자동 제거·리터칭 아래 포함
 
 - 요청: 승인된 피부 보정 계획의 5단계(잡티 제거). 사용자 원문은 `docs/skin-retouch-plan.md`("잡티 제거: 작은 점·뾰루지를 자동으로 찾아 기존 스팟 복구로 지우기", 질문에 "바로 지우기, 점은 남김").

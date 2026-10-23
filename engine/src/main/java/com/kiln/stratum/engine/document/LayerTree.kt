@@ -61,15 +61,20 @@ object LayerTree {
     }
 
     /**
-     * [id] 레이어 아래에 합쳐지는 레이어들(아래부터): 목록에서 그 레이어보다 아래인 것과, 감싼 그룹들(보이기·불투명도를 물려주게 남김).
-     * [including]이면 그 레이어도 넣는다. 피부 보정의 기준 스포이드·피부 정돈이 '그 레이어 바로 아래까지 합친 그림'을,
-     * 리터칭의 '아래 포함' 가져오기가 '그 레이어와 그 아래를 합친 그림'을 그리는 데 쓴다. 없는 레이어면 비었다.
+     * [id] 레이어 아래에 합쳐지는 레이어들(아래부터): 목록에서 그 레이어보다 아래인 것과, 감싼 그룹들. [including]이면 그 레이어도 넣는다.
+     * 피부 보정의 기준 스포이드·피부 정돈·피부 색 재기가 '그 레이어 바로 아래까지 합친 그림'을, 리터칭의 '아래 포함' 가져오기와 잡티 자동 제거가
+     * '그 레이어와 그 아래를 합친 그림'을 그리는 데 쓴다. 없는 레이어면 비었다.
+     *
+     * 감싼 그룹들은 보이게, 불투명도 1로 둔다: 그 그림으로 만든 그 레이어의 픽셀은 그려질 때 그 그룹들을 다시 거친다(두 번 걸리지 않게).
+     * 그래서 피부 보정 그룹을 숨기거나 흐리게 해도 정돈이 낡지 않고, 숨긴 채 다시 만들어도 잡티 제거가 빠지지 않는다(6단계 검토).
+     * 그룹 밖의 아래 레이어는 그대로(숨긴 것은 빠짐)다.
      */
     fun below(layers: List<Layer>, id: LayerId, including: Boolean = false): List<Layer> {
         val index = layers.indexOfFirst { it.id == id }
         if (index < 0) return emptyList()
         val ancestors = ancestors(layers, layers[index]).mapTo(HashSet()) { it.id }
         return layers.filterIndexed { i, layer -> i < index || (including && i == index) || layer.id in ancestors }
+            .map { layer -> if (layer.id in ancestors && (!layer.visible || layer.opacity != 1f)) layer.copy(visible = true, opacity = 1f) else layer }
     }
 
     /** 감싼 그룹 수(그룹 밖이면 0). 레이어 목록이 들여 쓰는 깊이다. */

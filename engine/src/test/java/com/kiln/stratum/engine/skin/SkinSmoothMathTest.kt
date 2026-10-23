@@ -163,6 +163,9 @@ class SkinSmoothMathTest {
         // 위의 색 보정·정돈 세기를 바꿔도 낡지 않는다(정돈의 바탕이 아님)
         val stronger = built.copy(layers = built.layers.map { if (it.id == LayerId(3)) it.copy(opacity = 1f) else it })
         assertFalse(recordOf(stronger).isStale(stronger))
+        // 그룹을 숨기거나 흐리게 해도(앞뒤 비교) 낡지 않는다(6단계 검토)
+        val hidden = built.copy(layers = built.layers.map { if (it.id == LayerId(1)) it.copy(visible = false, opacity = 0.4f) else it })
+        assertFalse(recordOf(hidden).isStale(hidden))
         // 원본의 보정을 바꾸면 낡는다
         val warmer = built.copy(layers = built.layers.map { if (it.id == LayerId(0)) it.copy(adjustments = Adjustments(temperature = 0.2f)) else it })
         assertTrue(recordOf(warmer).isStale(warmer))

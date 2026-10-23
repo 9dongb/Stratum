@@ -12,6 +12,8 @@ import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.Selection
+import java.util.IdentityHashMap
 import kotlin.math.roundToInt
 
 /**
@@ -38,6 +40,9 @@ object RasterTransform {
         require(plan.sourceSize == PixelSize(document.width, document.height)) {
             "Plan for ${plan.sourceSize} applied to ${document.width}x${document.height}"
         }
+        // 함께 쓰던 마스크는 한 번 옮겨 계속 함께 쓴다(피부 보정의 색 보정·피부 정돈, 결정 기록 '피부 보정'의 2c)
+        val masks = IdentityHashMap<Selection, Selection>()
+        fun movedMask(mask: Selection?) = mask?.let { masks.getOrPut(it) { MaskTransform.transform(it, plan, composer, checkCanceled) } }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
                 is RasterContent -> {
@@ -48,12 +53,11 @@ object RasterTransform {
                     // 글자 레이어(사용자 피드백 8차 1-6): 자르기만 하면 글자 자리를 같이 옮겨 다시 고칠 수 있게 남기고, 돌리거나 뒤집으면 픽셀 레이어가 된다
                     val text = layer.text?.takeIf { plan.orientation == Orientation.IDENTITY }?.moved(-plan.crop.left.toFloat(), -plan.crop.top.toFloat())
                     // 레이어 마스크도 픽셀과 같은 계획으로 옮긴다(결정 기록 '피부 보정'의 1c)
-                    val masked = moved.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
+                    val masked = moved.copy(mask = movedMask(layer.mask))
                     if (text != null) masked.copy(text = text) else masked
                 }
                 // 조정 레이어는 마스크만 옮긴다(결정 기록 '피부 보정'의 1e). 피부 색이면 얼굴 자리도 함께(3단계).
-                is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
-                    .withSkinMapped(1f, plan::mapPoint)
+                is AdjustmentContent -> layer.copy(mask = movedMask(layer.mask)).withSkinMapped(1f, plan::mapPoint)
                 // 그룹은 그리는 것이 없다(안의 레이어가 따로 바뀐다, 1g). 피부 보정 그룹이면 기록의 얼굴 자리를 옮긴다.
                 GroupContent -> layer.withSkinMapped(1f, plan::mapPoint)
             }

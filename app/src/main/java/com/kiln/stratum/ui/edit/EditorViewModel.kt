@@ -134,10 +134,7 @@ import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.skin.NoFaceException
 import com.kiln.stratum.engine.skin.NoSpotsException
 import com.kiln.stratum.engine.platform.HealSkinSpots
-import com.kiln.stratum.engine.skin.OkLab
 import com.kiln.stratum.engine.skin.SkinColor
-import com.kiln.stratum.engine.skin.SkinColorMath
-import com.kiln.stratum.engine.skin.SkinReference
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.transform.Orientation
@@ -153,11 +150,7 @@ import com.kiln.stratum.settings.PreviewQuality
 import java.io.File
 import java.io.IOException
 import java.time.LocalDateTime
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.roundToInt
-import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -652,12 +645,13 @@ class EditorViewModel internal constructor(
          * 그리는 동안 바뀌지 않는 미리 보기용 사본. 복제 도장·복구 브러시는 가져올 곳을 베껴 보이고(복구는 손을 뗀 뒤 둘레에 맞춘다),
          * 스팟 복구·AI 제거는 칠한 곳을 반투명 검정으로 보인다(포토샵과 같다). 명암은 바꾼 색을 보인다.
          */
-        fun live(): LiveStroke = when {
+        fun live(detail: Boolean = false): LiveStroke = when {
             mask -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, mask = true)
             inpaint != null || retouch == RetouchMode.SPOT_HEAL ->
                 LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             retouch == null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
-            else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset, source = samplePreview?.bitmap)
+            // 확대 그림에 얹을 때는 그 그림이 이미 '그 레이어와 그 아래'라 따로 그린 축소본을 읽지 않는다(6단계 검토)
+            else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset, source = if (detail) null else samplePreview?.bitmap)
         }
 
         /** 손을 뗀 뒤 기록할 명령 */
@@ -2474,25 +2468,14 @@ class EditorViewModel internal constructor(
      */
     private fun belowSkinColor(document: Document): Document? {
         val colorLayer = skinColorLayerIn(document) ?: return null
-        val index = document.indexOfLayer(colorLayer)
-        val ancestors = LayerTree.ancestors(document.layers, document.layers[index]).mapTo(HashSet()) { it.id }
-        val below = document.layers.filterIndexed { i, layer -> i < index || layer.id in ancestors }
+        val below = LayerTree.below(document.layers, colorLayer)
         if (below.none { it.content is RasterContent }) return null
         return document.copy(layers = below)
     }
 
     /** 문서 자리 ([x], [y])에서 가까운 얼굴의 지금 기준색(스포이드로 고른 것, 없으면 그 사람 피부의 가운데 색, sRGB). 고칠 그룹이 없으면 null. */
-    private fun skinReferenceShown(document: Document, x: Float, y: Float): Int? {
-        val skin = skinColorLayerIn(document)?.let { skinColorOf(document, it) } ?: return null
-        val face = skin.faces.maxByOrNull { SkinColorMath.weight(it.area, x, y) } ?: return null
-        val hue = face.reference?.hue ?: face.tone.hue
-        val chroma = face.reference?.chroma ?: face.tone.chroma
-        val rgb = FloatArray(3)
-        OkLab.toRgb(face.tone.lightness, chroma * cos(hue), chroma * sin(hue), rgb)
-        return Color.rgb(
-            (rgb[0].coerceIn(0f, 1f) * 255).roundToInt(), (rgb[1].coerceIn(0f, 1f) * 255).roundToInt(), (rgb[2].coerceIn(0f, 1f) * 255).roundToInt()
-        )
-    }
+    private fun skinReferenceShown(document: Document, x: Float, y: Float): Int? =
+        skinColorLayerIn(document)?.let { skinColorOf(document, it) }?.referenceColorAt(x, y)
 
     /**
      * 스포이드로 고른 [color](sRGB, 색 보정 바로 아래까지 합친 색)를 문서 자리 ([x], [y])에서 가까운 얼굴의 기준으로 한다(실행 취소 한 단계).
@@ -2502,16 +2485,12 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         val colorLayer = skinColorLayerIn(document) ?: return
         val skin = skinColorOf(document, colorLayer) ?: return
-        val index = skin.faces.indices.maxByOrNull { SkinColorMath.weight(skin.faces[it].area, x, y) } ?: return
-        val lab = FloatArray(3)
-        OkLab.fromRgb(Color.red(color) / 255f, Color.green(color) / 255f, Color.blue(color) / 255f, lab)
-        val hue = atan2(lab[2], lab[1])
-        val chroma = hypot(lab[1], lab[2])
-        if (!SkinColorMath.isSkinLike(hue, chroma)) {
+        if (skin.faces.isEmpty()) return
+        if (skin.withReferenceFrom(x, y, color) == null) {
             _messages.trySend(EditorMessage.SkinReferenceNotSkin)
             return
         }
-        recordSkinColor(colorLayer) { it.withReference(index, SkinReference(hue, chroma)) }
+        recordSkinColor(colorLayer) { it.withReferenceFrom(x, y, color) ?: it }
     }
 
     /** 글자 모양을 바꾼다. 다음에 넣는 글자부터 쓴다. */
@@ -3231,8 +3210,12 @@ class EditorViewModel internal constructor(
         listOfNotNull(
             _liveAdjustments.value?.let { SetLayerAdjustments(layer, it) },
             _liveOpacity.value?.let { SetLayerOpacity(layer, it) },
-            // 피부 색은 고른 레이어가 아니라 그룹의 색 보정 레이어에 건다(결정 기록 '피부 보정'의 3단계)
-            _liveSkin.value?.let { SetSkinColor(it.layer, it.color) },
+            // 피부 색은 고른 레이어가 아니라 그룹의 색 보정 레이어에 건다(결정 기록 '피부 보정'의 3단계). 끄는 값은 슬라이더 셋만이고,
+            // 얼굴·통계·기준은 지금 기록된 것을 쓴다(끄는 동안 [다시 만들기]가 잰 통계를 놓을 때 덮지 않게, 6단계 검토)
+            _liveSkin.value?.let { live ->
+                val recorded = history?.document?.let { skinColorOf(it, live.layer) } ?: live.color
+                SetSkinColor(live.layer, recorded.withValues(local = live.color.local, global = live.color.global, even = live.color.even))
+            },
             // 피부 정돈 세기는 그룹의 피부 정돈 레이어의 불투명도다(4단계)
             _liveSkinSmooth.value?.let { SetLayerOpacity(it.layer, it.opacity) }
         )
@@ -3334,7 +3317,7 @@ class EditorViewModel internal constructor(
                 }
                 val strokes = liveStrokes()
                 val detailBase = detailBeforeStroke?.takeIf { strokesFitDetail(document) }
-                val detailLive = detailStrokes.map { it.live() }
+                val detailLive = detailStrokes.map { it.live(detail = true) }
                 // 마스크를 칠하는 중이면 빨간 막에도 끄는 획을 얹는다(결정 기록 '피부 보정'의 1d)
                 val maskLayer = document.layers[document.indexOfLayer(activeLayerIn(document))].takeIf { showsMaskOverlay(it) }
                 val (base, detail, overlay) = renderMutex.withLock {

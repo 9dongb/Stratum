@@ -744,8 +744,9 @@ fun EditScreen(
                 onSmooth = { strength -> smoothRow?.let { skinActions.previewSmooth(it.id, strength) } },
                 onTexture = { skinTextureDrag = it },
                 onTextureFinished = {
+                    // 같은 값으로 놓으면 다시 만들지 않는다(무거운 계산과 바뀌는 것 없는 실행 취소 단계를 만들지 않게, 6단계 검토)
                     val texture = skinTextureDrag
-                    if (groupRow != null && texture != null) skinActions.setTexture(groupRow.id, texture)
+                    if (groupRow != null && texture != null && texture != group?.texture) skinActions.setTexture(groupRow.id, texture)
                     skinTextureReleased = true
                 },
                 onRebuild = { groupRow?.let { skinActions.rebuild(it.id) } },

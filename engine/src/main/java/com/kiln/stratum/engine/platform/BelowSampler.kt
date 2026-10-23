@@ -122,8 +122,11 @@ internal class BelowSampler(document: Document, private val layerId: LayerId) {
         /** 한 번에 그리는 묶음의 한 변(타일 수, 1024px) */
         private const val BLOCK_TILES = 4
 
-        /** 묶음 하나를 그리는 동안의 메모리 어림(그린 그림·복사본·타일) */
-        const val BLOCK_WORK_BYTES = 3L * BLOCK_TILES * TILE_SIZE * BLOCK_TILES * TILE_SIZE * 4
+        /** 그린 묶음 하나가 남기는 타일(픽셀 하나에 4바이트) */
+        const val BLOCK_BYTES = 1L * BLOCK_TILES * TILE_SIZE * BLOCK_TILES * TILE_SIZE * 4
+
+        /** 묶음 하나를 그리는 동안만 쓰는 그림(GPU 그림과 그 복사본) */
+        const val RENDER_WORK_BYTES = 2 * BLOCK_BYTES
 
         /** 그대로 읽을 래스터: 빈 레이어를 뺀 단계가 그대로 보이는 픽셀 레이어 하나뿐이면 그 래스터 */
         private fun plainOf(document: Document): Raster? {

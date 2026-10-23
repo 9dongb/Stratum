@@ -19,6 +19,7 @@ import com.kiln.stratum.engine.transform.MaskTransform
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.transform.RasterTransform
 import com.kiln.stratum.engine.transform.TransformPlan
+import java.util.IdentityHashMap
 
 /** 문서 전체(모든 레이어)를 90° 돌린다. [clockwise]이면 시계 방향, 아니면 반시계 방향이다. */
 data class RotateImage(val clockwise: Boolean) : CancellableCommand {
@@ -85,32 +86,33 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         val index = document.indexOfLayer(layer)
         if (index < 0) return document
         val plan = TransformPlan.translate(document.size, dx, dy)
-        // 그룹은 안의 레이어를 모두 옮긴다(한 단계, 결정 기록 '피부 보정'의 1g)
+        // 그룹은 안의 레이어를 모두 옮긴다(한 단계, 결정 기록 '피부 보정'의 1g). 함께 쓰던 마스크는 한 번 옮겨 계속 함께 쓴다(피부 마스크).
         val layers = document.layers.toMutableList()
+        val masks = IdentityHashMap<Selection, Selection>()
         for (i in LayerTree.blockOf(document.layers, index)) {
-            layers[i] = moved(document, document.layers[i], plan, checkCanceled) ?: return document
+            layers[i] = moved(document, document.layers[i], plan, masks, checkCanceled) ?: return document
         }
         return document.copy(layers = layers)
     }
 
     /** [target]을 [plan]대로 옮긴 레이어. 글자를 다시 그리지 못하면 null(문서를 그대로 둔다). */
-    private fun moved(document: Document, target: Layer, plan: TransformPlan, checkCanceled: () -> Unit): Layer? {
+    private fun moved(document: Document, target: Layer, plan: TransformPlan, masks: MutableMap<Selection, Selection>, checkCanceled: () -> Unit): Layer? {
         val raster = when (val content = target.content) {
             is RasterContent -> content.raster
             // 조정 레이어는 픽셀이 없어 마스크만 옮긴다(결정 기록 '피부 보정'의 1e). 피부 색이면 얼굴 자리도 함께(3단계).
-            is AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, checkCanceled)).withSkinMapped(1f, plan::mapPoint)
+            is AdjustmentContent -> return target.copy(mask = movedMask(target.mask, plan, masks, checkCanceled)).withSkinMapped(1f, plan::mapPoint)
             // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김). 피부 보정 그룹이면 기록의 얼굴 자리를 옮긴다.
             GroupContent -> return target.withSkinMapped(1f, plan::mapPoint)
         }
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())
             val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return null
-            return target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, checkCanceled))
+            return target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, masks, checkCanceled))
         }
         return try {
             val moved = RasterTransform.transform(raster, plan, CanvasTileComposer, checkCanceled)
             val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
-            target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
+            target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, masks, checkCanceled))
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
@@ -148,7 +150,7 @@ data class OrientLayer(val layer: LayerId, val orientation: Orientation) : Cance
                 RasterTransform.orientGainmap(it, document.size, bounds, orientation, origin, CanvasTileComposer, checkCanceled)
             }
             val layers = document.layers.toMutableList()
-            layers[index] = target.withPixels(turned, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
+            layers[index] = target.withPixels(turned, gainmap).copy(mask = movedMask(target.mask, plan, IdentityHashMap(), checkCanceled))
             document.copy(layers = layers)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
@@ -162,9 +164,10 @@ private val Document.size: PixelSize
     get() = PixelSize(width, height)
 
 /** 레이어 마스크 [mask]를 픽셀과 같은 [plan]으로 옮긴 것(없으면 null). 메모리가 모자라면 [NotEnoughMemoryException]. */
-private fun movedMask(mask: Selection?, plan: TransformPlan, checkCanceled: () -> Unit) =
+/** [mask]를 [plan]대로 옮긴 마스크. [masks]에 이미 옮긴 같은 마스크가 있으면 그것을 함께 쓴다(피부 보정의 색 보정·피부 정돈이 함께 쓰는 마스크). */
+private fun movedMask(mask: Selection?, plan: TransformPlan, masks: MutableMap<Selection, Selection>, checkCanceled: () -> Unit) =
     try {
-        mask?.let { MaskTransform.transform(it, plan, CanvasTileComposer, checkCanceled) }
+        mask?.let { masks.getOrPut(it) { MaskTransform.transform(it, plan, CanvasTileComposer, checkCanceled) } }
     } catch (e: OutOfMemoryError) {
         throw NotEnoughMemoryException(e)
     }

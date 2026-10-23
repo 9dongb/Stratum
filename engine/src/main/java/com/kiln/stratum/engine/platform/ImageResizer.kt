@@ -23,7 +23,9 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.transform.ResizePlan
+import java.util.IdentityHashMap
 
 /**
  * 문서 전체(모든 레이어)의 크기를 [width]×[height]로 바꾼다. 픽셀을 다시 계산하는 일이라 GPU로 한다([ImageResizer]).
@@ -45,13 +47,14 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val scaleX = width / document.width.toFloat()
         val scaleY = height / document.height.toFloat()
         val scaled = { x: Float, y: Float -> x * scaleX to y * scaleY }
+        // 함께 쓰던 마스크는 한 번 바꿔 계속 함께 쓴다(피부 보정의 색 보정·피부 정돈, 결정 기록 '피부 보정'의 2c)
+        val masks = IdentityHashMap<Selection, Selection>()
+        fun resized(mask: Selection?) = mask?.let { masks.getOrPut(it) { MaskResizer.resize(it, plan, checkCanceled) } }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
-                is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled))
-                    .copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
+                is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled)).copy(mask = resized(layer.mask))
                 // 조정 레이어는 마스크만 바꾼다(결정 기록 '피부 보정'의 1e)
-                is AdjustmentContent -> layer.copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
-                    .withSkinMapped((scaleX + scaleY) / 2f, scaled)
+                is AdjustmentContent -> layer.copy(mask = resized(layer.mask)).withSkinMapped((scaleX + scaleY) / 2f, scaled)
                 // 그룹은 그리는 것이 없다(1g)
                 GroupContent -> layer.withSkinMapped((scaleX + scaleY) / 2f, scaled)
             }

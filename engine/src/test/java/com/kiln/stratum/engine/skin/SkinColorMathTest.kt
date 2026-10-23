@@ -183,6 +183,29 @@ class SkinColorMathTest {
     }
 
     @Test
+    fun theEyedropperReference_goesToTheNearFace_onlyForSkinColors() {
+        // 결정 기록 '피부 보정'의 3b(6단계 검토에서 엔진으로 옮김): 고른 색이 피부 색이면 가까운 얼굴의 기준, 아니면 null
+        val far = SkinFaceArea(400f, 100f, 50f, 40f)
+        val color = SkinColor(local = 0.5f, faces = listOf(SkinFaceTone(area, tone), SkinFaceTone(far, tone)))
+        val skinColor = (0xFF shl 24) or (222 shl 16) or (172 shl 8) or 142
+        val blue = (0xFF shl 24) or (40 shl 16) or (90 shl 8) or 220
+
+        val picked = checkNotNull(color.withReferenceFrom(390f, 110f, skinColor))
+
+        assertEquals(null, picked.faces[0].reference)
+        val reference = checkNotNull(picked.faces[1].reference)
+        assertEquals(0.5f, picked.local, 0f)
+        assertTrue("hue ${Math.toDegrees(reference.hue.toDouble())}", Math.toDegrees(reference.hue.toDouble()) in 40.0..75.0)
+        assertEquals(null, color.withReferenceFrom(390f, 110f, blue))
+        assertEquals(null, SkinColor().withReferenceFrom(0f, 0f, skinColor))
+        // 보이는 기준색: 고른 얼굴은 고른 색상, 다른 얼굴은 자기 피부의 가운데 색
+        assertEquals(0, color.nearestFace(110f, 90f))
+        val shown = checkNotNull(color.referenceColorAt(110f, 90f))
+        assertEquals(0xFF, shown ushr 24)
+        assertTrue("red ${(shown shr 16) and 0xFF} > blue ${shown and 0xFF}", ((shown shr 16) and 0xFF) > (shown and 0xFF))
+    }
+
+    @Test
     fun okLab_roundTripsBothColorSpaces_andGrayHasNoColor() {
         val lab = FloatArray(3)
         val rgb = FloatArray(3)

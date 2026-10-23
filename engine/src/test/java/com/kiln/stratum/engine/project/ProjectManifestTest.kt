@@ -236,6 +236,23 @@ class ProjectManifestTest {
     }
 
     @Test
+    fun aSkinColorWithAHugeFaceCount_isDropped_withoutBuildingAHugeList() {
+        val broken = ByteArrayOutputStream().also {
+            DataOutputStream(it).apply {
+                writeInt(1)
+                repeat(3) { writeFloat(0f) }
+                writeInt(Int.MAX_VALUE)
+                flush()
+            }
+        }.toByteArray()
+
+        val read = read(withTopLayerExtra(10, broken))
+
+        assertNull(read.layers[1].skinColor)
+        assertEquals(manifest, read)
+    }
+
+    @Test
     fun brokenOrNewerSkinRecords_areDropped_andTheProjectStillOpens() {
         val newer = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeInt(2); writeLong(0); flush() } }.toByteArray()
         for (payload in listOf(ByteArray(0), ByteArray(3) { 7 }, newer)) {

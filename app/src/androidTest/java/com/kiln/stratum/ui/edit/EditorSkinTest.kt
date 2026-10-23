@@ -34,6 +34,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -369,6 +370,27 @@ class EditorSkinTest {
 
         onMain { viewModel.undo() }
         assertEquals(true, awaitReady { it.revision > rebuilt.revision }.layers.last().skin?.stale)
+    }
+
+    @Test
+    fun releasingAColorSlider_duringARebuild_keepsTheRebuiltSkinTones() {
+        // 6단계 검토: [다시 만들기]가 도는 동안 끈 색 슬라이더를 놓아도, 다시 잰 얼굴 통계를 앞 값으로 덮지 않는다(슬라이더 값만 바꿈)
+        val ready = created()
+        val dabs = StrokeDabs.place(listOf(StrokePoint(470f, 470f)), 1f)
+        onMain { viewModel.edit(PaintStroke(LayerId(0), dabs, BrushSettings(size = 40f, hardness = 1f, color = Color.YELLOW), false)) }
+        val painted = awaitReady { it.revision > ready.revision }
+        val before = recordedSkinColor().faces.single().tone
+
+        onMain {
+            viewModel.skinActions.rebuild(LayerId(1))
+            viewModel.skinActions.previewColor(LayerId(2)) { it.withValues(local = 0.4f) }
+            viewModel.skinActions.commitColor()
+        }
+        awaitReady(timeout = 120_000) { it.revision >= painted.revision + 2 && viewModel.liveSkin.value == null }
+
+        val color = recordedSkinColor()
+        assertEquals(0.4f, color.local)
+        assertNotEquals(before, color.faces.single().tone)
     }
 
     @Test

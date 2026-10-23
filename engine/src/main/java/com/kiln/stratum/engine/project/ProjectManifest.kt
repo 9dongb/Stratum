@@ -607,7 +607,9 @@ object ProjectManifestCodec {
             val local = data.readFloat()
             val global = data.readFloat()
             val even = data.readFloat()
-            val faces = List(data.readCount()) {
+            // 수는 남은 바이트로 거른다(얼굴 하나는 적어도 45바이트, 망가진 큰 수로 큰 목록을 만들지 않게)
+            val count = data.readCount().also { if (it > data.available() / 45) throw UnreadableProjectException("Broken face count $it") }
+            val faces = List(count) {
                 val area = readFaceArea(data)
                 val tone = SkinTone(data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat(), data.readFloat())
                 val reference = if (data.readBoolean()) SkinReference(data.readFloat(), data.readFloat()) else null
