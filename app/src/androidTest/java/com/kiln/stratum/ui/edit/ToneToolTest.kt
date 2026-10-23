@@ -189,4 +189,74 @@ class ToneToolTest {
         composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST).assertTextEquals(composeRule.activity.getString(R.string.tone_hint_dodge))
     }
 
+    /** 커버 편집 화면에 명암 도구를 고르고, 범위는 [options]로 들고 바꾼다 */
+    private fun showCoverEditorWithTone() {
+        val ready = EditorState.Ready(
+            PreviewImage(Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888), PreviewLevels.wholeRegion(document, 1)),
+            document,
+            layers = listOf(LayerSummary(LayerId(0), "Background", 1f, BlendMode.NORMAL, Adjustments.NONE)),
+            activeLayer = LayerId(0)
+        )
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
+                StratumTheme {
+                    EditScreen(
+                        state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {},
+                        toneActions = actions, toneOptions = options, onToneOptions = { options = it }
+                    )
+                }
+            }
+        }
+        composeRule.chooseCoverTool(EditTool.Tone)
+    }
+
+    @Test
+    fun cover_rangeChip_holdThenDrag_picksTheRange() {
+        showCoverEditorWithTone()
+        val chip = composeRule.onNodeWithTag(EditScreenTags.bar("range"))
+        val chipBounds = chip.fetchSemanticsNode().layoutBoundsInWindow()
+        // 사용자 요청 'C'(2026-10-23): 고르기 칩을 꾹 누르면 칩 위에 고를 것 목록이 뜬다
+        chip.performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, -1f))
+        }
+        val menu = composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).fetchSemanticsNode().layoutBoundsInWindow()
+        assertTrue("menu $menu should be above $chipBounds", menu.bottom <= chipBounds.top + 1f)
+        composeRule.onNodeWithTag(EditScreenTags.chipMenu(EditScreenTags.toneRange(ToneRange.MIDTONES))).assertIsSelected()
+        val highlights = composeRule.onNodeWithTag(EditScreenTags.chipMenu(EditScreenTags.toneRange(ToneRange.HIGHLIGHTS)))
+            .fetchSemanticsNode().layoutBoundsInWindow()
+
+        // 누른 채 항목 위로 끌고 가서 떼면 그것을 고르고 목록이 닫힌다(고를 것 줄은 펼치지 않는다)
+        chip.performTouchInput {
+            moveTo(highlights.center - chipBounds.topLeft)
+            up()
+        }
+        composeRule.runOnIdle { assertEquals(ToneRange.HIGHLIGHTS, options.range) }
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.toneRange(ToneRange.SHADOWS)).assertDoesNotExist()
+    }
+
+    @Test
+    fun cover_rangeChip_releasingOffTheList_keepsItOpen_andTappingAnItemPicksIt() {
+        showCoverEditorWithTone()
+        composeRule.onNodeWithTag(EditScreenTags.bar("range")).performTouchInput {
+            down(center)
+            advanceEventTime(400)
+            moveBy(Offset(0f, 2f))
+            up()
+        }
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.chipMenu(EditScreenTags.toneRange(ToneRange.SHADOWS))).performClick()
+        composeRule.runOnIdle { assertEquals(ToneRange.SHADOWS, options.range) }
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).assertDoesNotExist()
+
+        // 화면 읽기 기능의 길게 누르기로도 열리고, 밖을 누르면 닫히기만 한다
+        composeRule.onNodeWithTag(EditScreenTags.bar("range")).performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU_DISMISS).performTouchInput { click(Offset(width * 0.5f, height * 0.3f)) }
+        composeRule.onNodeWithTag(EditScreenTags.CHIP_MENU).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(ToneRange.SHADOWS, options.range) }
+    }
+
 }

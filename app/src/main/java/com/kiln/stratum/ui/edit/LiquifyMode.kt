@@ -250,6 +250,8 @@ fun LiquifyMode(
     val sizePreview = rememberSizePreviewState()
     // 두 손가락 톡: 처리 중이면 아무것도 하지 않고, 한 획 되돌리거나 되돌릴 것이 없다고 알린다
     val gestureToast = rememberGestureToastState()
+    // 커버 막대 고르기 칩(얼굴 부위)을 꾹 눌러 연 목록(사용자 요청 'C', 2026-10-23)
+    val chipMenu = remember { ChipMenuState() }
     val undoneText = stringResource(R.string.action_undo)
     val nothingToUndoText = stringResource(R.string.gesture_nothing_to_undo)
     val twoFingerUndo: (() -> Unit)? = if (twoFingerTapUndo) {
@@ -319,8 +321,13 @@ fun LiquifyMode(
             val coverWindow = widthClass == WidthClass.Compact
             // 커버를 가로로 돌렸으면 그 줄들이 캔버스 오른쪽에 세로로 선다(사용자 피드백 12차 3: "커버화면 배치가 돌아간형태")
             val coverLandscape = isCoverLandscape(maxWidth.value, maxHeight.value)
-            // 배치가 바뀌거나(접기·펼치기) 적용하기 시작하면 띠의 옵션 창을 닫는다
-            LaunchedEffect(widthClass, state.busy) { floating.closeFlyout() }
+            // 배치가 바뀌거나(접기·펼치기) 적용하기 시작하면 띠의 옵션 창과 고르기 칩 목록을 닫는다
+            LaunchedEffect(widthClass, state.busy) {
+                floating.closeFlyout()
+                chipMenu.close()
+            }
+            // 커버의 한 줄 막대(세로 막대·가로 기둥과 고르기 칩 목록이 같이 쓴다)
+            val barItems = liquifyBar(state, actions, sizePreview, facePart, onFacePart)
             Column(Modifier.fillMaxSize()) {
                 LiquifyTopBar(state, actions, cancelAndApplyOnTop = !coverWindow)
                 if (coverWindow && coverLandscape) {
@@ -331,8 +338,8 @@ fun LiquifyMode(
                             Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                         )
                         BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
-                        CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
-                            CoverToolColumn(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                        CompositionLocalProvider(LocalValueFeedback provides gestureToast, LocalChipMenu provides chipMenu) {
+                            CoverToolColumn(items = barItems, state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                         }
                         CoverWorkBar(
                             onCancel = actions::cancel,
@@ -352,8 +359,8 @@ fun LiquifyMode(
                     BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
                     // 얼굴 모드는 막대에 칩이 없고 안내 글(찾는 중·고르기·고른 얼굴)을 보인다
                     // 칩을 끄는 값·꾹 눌러 0(얼굴 슬라이더)은 이 창의 제스처 알림 자리에 알린다(편집 화면의 알림은 이 창에 가린다, 2026-10-23)
-                    CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
-                        CoverToolBar(items = liquifyBar(state, actions, sizePreview, facePart, onFacePart), state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
+                    CompositionLocalProvider(LocalValueFeedback provides gestureToast, LocalChipMenu provides chipMenu) {
+                        CoverToolBar(items = barItems, state = coverBar, empty = faceHint(state).takeIf { state.faceMode })
                     }
                     // 맨 아래 줄: X(취소) · 도구 탭 · ✓(적용)(사용자 피드백 8차 1-1: 고르는 탭은 X와 ✓ 사이)
                     CoverWorkBar(
@@ -385,6 +392,8 @@ fun LiquifyMode(
             }
             // 제스처 알림은 옵션 칸과 상관없이 화면 가로 정중앙, 캔버스 위쪽 아래에 띄운다(편집 화면과 같다, 2026-10-20 사용자 요청)
             GestureToast(gestureToast, Modifier.fillMaxSize().padding(top = with(LocalDensity.current) { (canvasTop - screenTop).coerceAtLeast(0f).toDp() }))
+            // 커버 고르기 칩의 목록은 맨 위에 뜬다(고를 것은 지금 막대에서 찾는다)
+            ChipMenuHost(chipMenu, barItems)
         }
     }
 }

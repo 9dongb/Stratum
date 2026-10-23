@@ -252,6 +252,8 @@ fun EditScreen(
     val floating = rememberFloatingState()
     // 도구 막대·커버 탭 줄의 하위 도구 메뉴(편집 화면 맨 위에 하나, 결정 기록 '하위 도구 메뉴')
     val subToolMenu = remember { SubToolMenuState() }
+    // 커버 막대 고르기 칩을 꾹 눌러 연 목록(사용자 요청 'C', 2026-10-23)
+    val chipMenu = remember { ChipMenuState() }
     // 캔버스 보기 반전(좌우·상하, 결정 기록 '화면 반전'). 문서가 아니라 보기라 자르기·크기 변경 뒤에도, 접기·펼치기에도 남고,
     // 편집 화면을 나가면 풀린다. 레이어 탭의 버튼으로 켜고 끈다.
     var viewFlipBits by rememberSaveable { mutableIntStateOf(0) }
@@ -476,6 +478,8 @@ fun EditScreen(
         val barContent = "${activeTool?.name}/${activeMode?.name}/${floating.panel == MainPanel.ADJUST}"
         // 내용이 바뀌면 지난 내용에서 펼친 칩을 잊는다(같은 도구로 돌아와도 칩 줄부터). 화면이 다시 만들어질 때(접기·펼치기)는 그대로 둔다.
         LaunchedEffect(barContent) { if (coverBar.owner != null && coverBar.owner != barContent) coverBar.collapse() }
+        // 막대 내용(도구·하위 도구·조정)이 바뀌면 고르기 칩 목록을 닫는다(그 칩이 없어지거나 다른 칩이 된다)
+        LaunchedEffect(barContent) { chipMenu.close() }
         // 칩을 펼쳤으면(슬라이더·고를 것·동작 줄) 뒤로 가기는 칩 줄로 돌아간다(조정·레이어·도구보다 먼저)
         BackHandler(enabled = widthClass == WidthClass.Compact && coverBar.expandedFor(barContent) != null && !cropMode, onBack = coverBar::collapse)
         // AI 제거에서 톡 눌러 고른 물체(지금 보이는 문서의 것)가 있으면 뒤로 가기는 그것부터 버린다(그다음 도구를 닫는다)
@@ -733,6 +737,7 @@ fun EditScreen(
         // 배치가 바뀌면(접기·펼치기) 메뉴를 연 버튼 자리가 사라지므로 메뉴와 커버 더보기 줄을 닫는다
         LaunchedEffect(widthClass) {
             subToolMenu.close()
+            chipMenu.close()
             coverMoreOpen = false
         }
         // 메뉴가 뜨면 띠의 옵션 창은 닫는다(다른 곳을 눌렀으므로)
@@ -1164,8 +1169,8 @@ fun EditScreen(
                                 Box(if (coverAdjust) Modifier.testTag(EditScreenTags.ADJUST_PANEL) else Modifier) {
                                     // 칩이 없는 도구는 도구 이름을 흐린 글자로 보인다
                                     val empty = activeTool?.let { stringResource(it.shortLabel) }
-                                    // 칩을 끄는 값·꾹 눌러 0은 제스처 알림 자리에 알린다(2026-10-23)
-                                    CompositionLocalProvider(LocalValueFeedback provides gestureToast) {
+                                    // 칩을 끄는 값·꾹 눌러 0은 제스처 알림 자리에 알리고, 고르기 칩은 꾹 눌러 목록을 연다(2026-10-23)
+                                    CompositionLocalProvider(LocalValueFeedback provides gestureToast, LocalChipMenu provides chipMenu) {
                                         if (coverLandscape) {
                                             CoverToolColumn(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
                                         } else {
@@ -1321,6 +1326,8 @@ fun EditScreen(
                 chooseSubTool(it)
             }
         )
+        // 커버 고르기 칩의 목록도 캔버스·막대 위에 뜬다(고를 것은 지금 막대에서 찾는다)
+        ChipMenuHost(chipMenu, coverBarItems)
         // 화면 전체를 덮어야 해서 Scaffold 밖, 같은 Box의 마지막에 둔다
         if (state is EditorState.AskSize) {
             LargePhotoDialog(state = state, onChooseSize = onChooseSize, onCancel = onBack)

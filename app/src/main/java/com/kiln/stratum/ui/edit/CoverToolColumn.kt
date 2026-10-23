@@ -46,10 +46,12 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.StratumVerticalSlider
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.scrollFadeEdges
+import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumTheme
 import com.kiln.stratum.ui.theme.compactTextAutoSize
 
@@ -157,13 +159,22 @@ private fun BarCell(item: BarItem, expand: (String) -> Unit) {
         is BarChoice -> {
             val current = item.current
             val color = if (item.enabled) colors.textSecondary else colors.textDisabled
-            CellBox(tag, item.caption, current?.description, open = false, enabled = item.enabled, onClick = { expand(item.key) }) {
-                Box {
-                    current?.icon?.let { Icon(painterResource(it), contentDescription = null, tint = color) }
-                    // 고를 것이 더 있다는 작은 삼각형(띠의 고르기 칸과 같다)
-                    SubToolMark(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 2.dp))
+            // 꾹 누르면 칸 왼쪽에 고를 것 목록, 누른 채 끌어 떼면 고른다(사용자 요청 'C', 2026-10-23)
+            val menu = LocalChipMenu.current
+            val bounds = remember { arrayOfNulls<Region>(1) }
+            MenuLongPress {
+                CellBox(
+                    tag, item.caption, current?.description, open = false, enabled = item.enabled, onClick = { expand(item.key) },
+                    touch = Modifier.chipMenuOnHold(menu, item, MenuSide.START, bounds),
+                    onLongClick = menu?.let { { openChipMenu(it, item, MenuSide.START, bounds) } }
+                ) {
+                    Box {
+                        current?.icon?.let { Icon(painterResource(it), contentDescription = null, tint = color) }
+                        // 고를 것이 더 있다는 작은 삼각형(띠의 고르기 칸과 같다)
+                        SubToolMark(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 2.dp))
+                    }
+                    CompactLabel(current?.label.orEmpty(), if (item.enabled) colors.textDescription else colors.textDisabled)
                 }
-                CompactLabel(current?.label.orEmpty(), if (item.enabled) colors.textDescription else colors.textDisabled)
             }
         }
         // 전경색·배경색·바꾸기·스포이드를 위아래로(누르는 영역은 모두 48dp)

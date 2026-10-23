@@ -178,6 +178,13 @@ object EditScreenTags {
     const val SUB_TOOL_MENU = "subToolMenu"
     const val SUB_TOOL_MENU_DISMISS = "subToolMenuDismiss"
 
+    /** 커버 고르기 칩을 꾹 눌러 연 목록(2026-10-23)과 그 밖을 누르는 바탕 */
+    const val CHIP_MENU = "chipMenu"
+    const val CHIP_MENU_DISMISS = "chipMenuDismiss"
+
+    /** 고르기 칩 목록의 고를 것(고를 것의 이름표 [option]에 붙임. 펼친 줄의 이름표와 겹치지 않게) */
+    fun chipMenu(option: String): String = "chipMenu_$option"
+
     /** 옵션 위쪽에서 [subTool]로 바꾸는 버튼 */
     fun subToolOption(subTool: SubTool): String = "subToolOption_${subTool.name}"
 

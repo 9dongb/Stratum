@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -409,6 +410,7 @@ private fun StripCellView(item: StripItem, state: FloatingState) {
  * 화면 읽기 기능에는 [description]과 [state](값)를 읽히고, 안쪽 글자는 따로 읽지 않는다.
  * [touch]는 누르기보다 먼저 터치를 받는 것(수치 끌기, [valueGestures])이다. 그것이 터치를 가지면(끌면) 누르기는 되지 않는다.
  * [onReset]이 있으면(꾹 눌러 0이 되는 값) 화면 읽기 기능에 '[description] 초기화' 동작을 준다.
+ * [onLongClick]이 있으면(꾹 눌러 목록을 여는 고르기 칸) 화면 읽기 기능의 길게 누르기 '[description] 목록'으로 연다.
  * 커버를 가로로 돌렸을 때의 세로 막대([CoverToolColumn])도 같은 칸을 쓴다(사용자 피드백 12차 3).
  */
 @Composable
@@ -421,10 +423,12 @@ internal fun CellBox(
     onClick: () -> Unit,
     touch: Modifier = Modifier,
     onReset: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val colors = StratumTheme.colors
     val resetLabel = stringResource(R.string.adjust_reset_item, description)
+    val longClickLabel = stringResource(R.string.chip_menu_label, description)
     Column(
         modifier = Modifier
             .padding(horizontal = 4.dp)
@@ -448,6 +452,12 @@ internal fun CellBox(
                             true
                         }
                     )
+                }
+                if (enabled && onLongClick != null) {
+                    onLongClick(longClickLabel) {
+                        onLongClick()
+                        true
+                    }
                 }
             }
             .clip(StratumShapes.Control)

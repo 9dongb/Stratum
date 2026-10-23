@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,17 +132,37 @@ private val MenuMargin = 8.dp
 fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, onChoose: (SubTool) -> Unit, modifier: Modifier = Modifier) {
     val tool = state.tool ?: return
     val anchor = state.anchor ?: return
-    BackHandler { state.close() }
+    AnchoredMenu(anchor, state.side, onDismiss = state::close, dismissTag = EditScreenTags.SUB_TOOL_MENU_DISMISS, modifier = modifier) {
+        SubToolMenuCard(state, tool, current(tool), onChoose)
+    }
+}
+
+/**
+ * 버튼 옆에 뜨는 메뉴의 자리(하위 도구 메뉴와 커버 고르기 칩의 목록 [ChipMenuHost]가 같이 쓴다). 화면 전체를 덮는 자리에 둔다.
+ * 메뉴 밖을 누르면 닫기만 하는 바탕([onDismiss], 손을 뗄 때까지 그 터치를 가져 아래로 가지 않음, 이름표 [dismissTag])과
+ * 버튼 자리 [anchor](창 좌표) 옆([side])의 카드([card])를 놓는다. 카드는 화면 안으로 민다. 뒤로 가기로도 닫는다.
+ */
+@Composable
+internal fun AnchoredMenu(
+    anchor: Region,
+    side: MenuSide,
+    onDismiss: () -> Unit,
+    dismissTag: String,
+    modifier: Modifier = Modifier,
+    card: @Composable () -> Unit
+) {
+    val dismiss by rememberUpdatedState(onDismiss)
+    BackHandler { dismiss() }
     Box(modifier.fillMaxSize()) {
         // 메뉴 밖을 누르면 닫기만 한다(손을 뗄 때까지 그 터치를 가진다)
         Box(
             Modifier
                 .fillMaxSize()
-                .testTag(EditScreenTags.SUB_TOOL_MENU_DISMISS)
-                .pointerInput(state) {
+                .testTag(dismissTag)
+                .pointerInput(Unit) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false).consume()
-                        state.close()
+                        dismiss()
                         do {
                             val event = awaitPointerEvent()
                             event.changes.forEach { it.consume() }
@@ -149,7 +170,7 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
                     }
                 }
         )
-        Layout(content = { SubToolMenuCard(state, tool, current(tool), onChoose) }) { measurables, constraints ->
+        Layout(content = card) { measurables, constraints ->
             val width = constraints.maxWidth
             val height = constraints.maxHeight
             layout(width, height) {
@@ -159,10 +180,10 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
                 val margin = MenuMargin.roundToPx()
                 val gap = MenuGap.roundToPx()
                 val area = Region(left + margin, top + margin, left + width - margin, top + height - margin)
-                val (region, place) = when (state.side) {
+                val (region, place) = when (side) {
                     MenuSide.END -> area to { w: Int, h: Int -> flyoutOffset(anchor, w, h, area, gap) }
                     MenuSide.ABOVE -> {
-                        // 탭 위, 탭 가운데에 맞추고 화면 안으로 민다
+                        // 버튼 위, 버튼 가운데에 맞추고 화면 안으로 민다
                         val region = Region(area.left, area.top, area.right, anchor.top - gap)
                         region to { w: Int, h: Int ->
                             val x = ((anchor.left + anchor.right) / 2 - w / 2).coerceIn(area.left, (area.right - w).coerceAtLeast(area.left))
@@ -170,18 +191,18 @@ fun SubToolMenuHost(state: SubToolMenuState, current: (EditTool) -> SubTool?, on
                         }
                     }
                     MenuSide.START -> {
-                        // 탭 왼쪽, 위 끝을 탭 위 끝에 맞추고 화면 안으로 민다(커버를 가로로 돌렸을 때의 세로 탭 줄)
+                        // 버튼 왼쪽, 위 끝을 버튼 위 끝에 맞추고 화면 안으로 민다(커버를 가로로 돌렸을 때의 세로 줄)
                         val region = Region(area.left, area.top, anchor.left - gap, area.bottom)
                         region to { w: Int, h: Int ->
                             (anchor.left - gap - w).coerceAtLeast(area.left) to anchor.top.coerceAtMost(area.bottom - h).coerceAtLeast(area.top)
                         }
                     }
                 }
-                val card = measurables.first().measure(
+                val placeable = measurables.first().measure(
                     Constraints(maxWidth = region.width.coerceAtLeast(0), maxHeight = region.height.coerceAtLeast(0))
                 )
-                val (x, y) = place(card.width, card.height)
-                card.place(x - left, y - top)
+                val (x, y) = place(placeable.width, placeable.height)
+                placeable.place(x - left, y - top)
             }
         }
     }

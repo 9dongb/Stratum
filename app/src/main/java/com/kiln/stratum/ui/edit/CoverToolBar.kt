@@ -44,6 +44,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -51,11 +52,13 @@ import androidx.compose.ui.unit.dp
 import com.kiln.stratum.R
 import com.kiln.stratum.ui.components.AccentButton
 import com.kiln.stratum.ui.components.DividerEdge
+import com.kiln.stratum.ui.components.MenuLongPress
 import com.kiln.stratum.ui.components.StratumActionChip
 import com.kiln.stratum.ui.components.StratumFilterChip
 import com.kiln.stratum.ui.components.StratumIconButton
 import com.kiln.stratum.ui.components.edgeDivider
 import com.kiln.stratum.ui.components.horizontalScrollFadeEdges
+import com.kiln.stratum.ui.layout.Region
 import com.kiln.stratum.ui.theme.StratumTheme
 
 /*
@@ -336,14 +339,30 @@ private fun BarChip(item: BarItem, expand: (String) -> Unit) {
         is BarChoice -> {
             val current = item.current
             val description = stringResource(R.string.strip_choice_description, item.caption, current?.description.orEmpty())
-            StratumActionChip(
-                onClick = { expand(item.key) },
-                enabled = item.enabled,
-                leadingIcon = current?.icon?.let { icon -> { Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp)) } },
-                label = { Text(current?.label.orEmpty(), maxLines = 1) },
-                trailingIcon = { Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null, modifier = Modifier.size(18.dp)) },
-                modifier = tag.semantics { contentDescription = description }
-            )
+            val menuLabel = stringResource(R.string.chip_menu_label, item.caption)
+            // 꾹 누르면 칩 위에 고를 것 목록, 누른 채 끌어 떼면 고른다(사용자 요청 'C', 2026-10-23). 톡은 지금처럼 고를 것 줄이다.
+            val menu = LocalChipMenu.current
+            val bounds = remember { arrayOfNulls<Region>(1) }
+            MenuLongPress {
+                StratumActionChip(
+                    onClick = { expand(item.key) },
+                    enabled = item.enabled,
+                    leadingIcon = current?.icon?.let { icon -> { Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp)) } },
+                    label = { Text(current?.label.orEmpty(), maxLines = 1) },
+                    trailingIcon = { Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    modifier = tag
+                        .semantics {
+                            contentDescription = description
+                            if (menu != null && item.enabled) {
+                                onLongClick(menuLabel) {
+                                    openChipMenu(menu, item, MenuSide.ABOVE, bounds)
+                                    true
+                                }
+                            }
+                        }
+                        .chipMenuOnHold(menu, item, MenuSide.ABOVE, bounds)
+                )
+            }
         }
         is BarColors -> Row(tag, verticalAlignment = Alignment.CenterVertically) { ColorButtons(item.controls) }
         is BarButton -> if (item.accent) {
