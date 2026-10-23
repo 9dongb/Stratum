@@ -684,8 +684,17 @@ class EditorViewModel internal constructor(
      * 얼굴 보정 값, 작업 모드 안의 되돌리기(획·슬라이더마다 한 단계, 최대 [LIQUIFY_UNDO_STEPS]개), 끄는 손가락 자리.
      * 미리 보기와 적용은 격자에 얼굴 보정([warps])을 합친 것을 그린다(결정 기록 '얼굴 인식 보정').
      * [reopened]면 유동화 기록이 있는 레이어를 다시 연 것이다: 축소본은 유동화 전 원래 픽셀이고, 격자·얼굴·값은 기록에서 이어받는다(3단계).
+     * [outdated]면 그 기록이 앞 판 계산식이라 미리 보기(지금 계산식)가 레이어와 다르다(바꾼 것이 없어도 적용할 수 있음).
      */
-    private class LiquifySession(val layer: LayerId, val level: Int, val image: Bitmap, var mesh: LiquifyMesh, val field: Bitmap, val reopened: Boolean = false) {
+    private class LiquifySession(
+        val layer: LayerId,
+        val level: Int,
+        val image: Bitmap,
+        var mesh: LiquifyMesh,
+        val field: Bitmap,
+        val reopened: Boolean = false,
+        val outdated: Boolean = false
+    ) {
         val displacements = FloatArray(mesh.columns * mesh.rows * 2)
         val halves = ShortArray(mesh.columns * mesh.rows * 4)
         val undo = ArrayList<LiquifyStep>()
@@ -792,6 +801,7 @@ class EditorViewModel internal constructor(
          */
         fun canApply(): Boolean {
             if (!reopened) return changed()
+            if (outdated) return true
             val from = start ?: return true
             val count = maxOf(faceValues.size, from.faceValues.size)
             return !mesh.sameAs(from.mesh) || (0 until count).any { (faceValues.getOrNull(it) ?: FaceValues.ZERO) != (from.faceValues.getOrNull(it) ?: FaceValues.ZERO) }
@@ -1135,7 +1145,10 @@ class EditorViewModel internal constructor(
             }
             val size = PixelSize(document.width, document.height)
             val mesh = record?.mesh?.copy() ?: LiquifyMesh.identity(size)
-            val session = LiquifySession(layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh), reopened = record != null)
+            val session = LiquifySession(
+                layer, level, image, mesh, LiquifyRenderer.fieldBitmap(mesh),
+                reopened = record != null, outdated = record?.drawsDifferently == true
+            )
             if (record != null && record.faces.isNotEmpty()) {
                 session.faces = record.faces
                 session.faceValues = record.faceValues

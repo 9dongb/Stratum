@@ -2,10 +2,13 @@ package com.kiln.stratum.engine.face
 
 import com.kiln.stratum.engine.liquify.MeshWarp
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** 얼굴 보정 슬라이더의 부위(화면에서 부위를 고르면 그 부위의 슬라이더가 보인다, 계획 '화면') */
 enum class FacePart {
@@ -35,7 +38,7 @@ enum class FaceSlider(val code: Int, val part: FacePart) {
     /** 눈 간격: 두 눈을 얼굴 가로축 쪽으로 밖(+)·안으로 옮긴다 */
     EYE_DISTANCE(7, FacePart.EYES),
 
-    /** 뒷트임: 눈꼬리 둘레를 눈꼬리 쪽으로 늘인다(눈 안쪽 반은 그대로) */
+    /** 뒷트임: 눈꼬리 둘레를 눈꼬리 쪽으로 늘인다(눈 안쪽 반과 눈동자는 그대로, 2026-10-23부터 눈동자 대신 흰자가 늘어남) */
     EYE_TAIL(8, FacePart.EYES),
 
     /** 코 높이: 코를 위(+)·아래로 옮긴다 */
@@ -44,8 +47,17 @@ enum class FaceSlider(val code: Int, val part: FacePart) {
     /** 코 너비: 콧방울 사이를 콧방울 선 쪽으로만 넓히거나 좁힌다 */
     NOSE_WIDTH(2, FacePart.NOSE),
 
-    /** 콧등 너비: 콧등을 가로로만 넓히거나 좁힌다(눈머리와 콧방울에는 닿지 않음, 사용자 요청) */
+    /** 콧볼: 양쪽 콧방울만 밖(+)·안으로 옮긴다(코끝은 그대로, 2026-10-23 사용자 요청) */
+    NOSE_WINGS(20, FacePart.NOSE),
+
+    /**
+     * 콧대 너비: 미간~코 윗부분을 가로로만 넓히거나 좁힌다(눈머리와 콧방울에는 닿지 않음). 처음 이름은 '콧등 너비'였는데 콧대 쪽을 바꿔
+     * 사용자가 "콧대 너비로 남기고 추가"를 골랐다(2026-10-23, 계산·번호는 그대로)
+     */
     BRIDGE_WIDTH(10, FacePart.NOSE),
+
+    /** 콧등 너비: 코 가운데 몸통(눈머리 아래~코끝 위)을 가로로만 넓히거나 좁힌다(미간·코끝·콧볼은 그대로, 2026-10-23 사용자 요청) */
+    RIDGE_WIDTH(19, FacePart.NOSE),
 
     /** 미소: 입꼬리를 위·조금 바깥으로(−면 아래로) 옮긴다 */
     SMILE(11, FacePart.MOUTH),
@@ -65,6 +77,9 @@ enum class FaceSlider(val code: Int, val part: FacePart) {
     /** 이마: 눈썹 위부터 이마 끝까지를 위로 늘이거나(+) 줄인다 */
     FOREHEAD(16, FacePart.FACE_SHAPE),
 
+    /** 중안부: 눈 밑~윗입술을 늘이거나(+) 줄인다. 입·턱이 함께 아래(+)·위로 옮겨 얼굴이 길어지거나 짧아진다(2026-10-23 사용자 요청) */
+    MIDFACE(21, FacePart.FACE_SHAPE),
+
     /** 턱 높이: 아랫입술 아래부터 턱 끝까지를 아래로 늘이거나(+) 줄인다 */
     CHIN_HEIGHT(17, FacePart.FACE_SHAPE),
 
@@ -72,7 +87,10 @@ enum class FaceSlider(val code: Int, val part: FacePart) {
     JAWLINE(18, FacePart.FACE_SHAPE),
 
     /** 얼굴 너비: 볼·턱 윤곽을 얼굴 가로축(눈 선) 쪽으로만 밖·안으로 옮긴다 */
-    FACE_WIDTH(3, FacePart.FACE_SHAPE);
+    FACE_WIDTH(3, FacePart.FACE_SHAPE),
+
+    /** 머리 크기: 턱 끝을 기준으로 얼굴과 머리카락까지 머리 전체를 키우거나(+) 줄인다(목은 그대로, 2026-10-23 사용자 요청) */
+    HEAD_SIZE(22, FacePart.FACE_SHAPE);
 
     companion object {
         /** 저장 번호 [code]의 슬라이더. 모르는 번호(더 새 앱이 저장함)면 null */
@@ -126,16 +144,19 @@ class FaceValues private constructor(private val values: FloatArray) {
  *
  * - 눈(크기·높이·너비·기울기·간격): 눈마다 윤곽 16점의 가운데를 둘러싼 타원. 눈머리 → 눈꼬리 축으로 눈꼬리 쪽 눈 폭의 [EYE_OUTER]배, 눈머리 쪽
  *   [EYE_INNER]배(콧등까지 닿지 않게 좁다), 세로는 [EYE_TALL]배(두 눈 폭의 평균보다 작게 잡지 않는다: 고개를 돌려 먼 눈이 좁게 보여도 세로 크기는 그대로라서).
- *   크기·높이·너비는 같은 타원으로 따로 차례로 늘인다(한 번에 곱해 늘이면 감쇠 띠가 접힐 만큼 눌림). 뒷트임은 눈꼬리를 가운데로 한 작은 타원이다.
- * - 코: 콧방울(129·358) 가운데의 타원(콧방울 선 쪽 [NOSE_ACROSS], 위 [NOSE_UP], 아래 [NOSE_DOWN] × 콧방울 사이). 콧등 너비는 콧등 가운데 줄의 타원으로,
- *   가로는 눈머리 앞에서, 아래는 콧방울 선 위에서 끝난다.
+ *   크기·높이·너비는 같은 타원으로 따로 차례로 늘인다(한 번에 곱해 늘이면 감쇠 띠가 접힐 만큼 눌림). 뒷트임은 눈꼬리를 가운데로 한 작은 타원이고,
+ *   눈동자(둘레 점으로 잰 반지름의 [IRIS_KEEP]배 안)는 움직이지 않아 같은 거리를 눈동자 끝~눈꼬리 사이 흰자에서 늘인다([KeepOut]).
+ * - 코: 콧방울(129·358) 가운데의 타원(콧방울 선 쪽 [NOSE_ACROSS], 위 [NOSE_UP], 아래 [NOSE_DOWN] × 콧방울 사이). 콧대 너비는 콧등 가운데 줄의 타원으로,
+ *   가로는 눈머리 앞에서, 아래는 콧방울 선 위에서 끝난다. 콧등 너비는 그보다 아래(눈머리 높이 아래~코끝 위)의 코 몸통 타원, 콧볼은 콧방울마다의
+ *   점 감쇠 타원이다(코끝 가운데에 닿기 전에 0).
  * - 입: 입꼬리(61·291)와 입선(13·14)의 가운데. 위로는 콧방울 선까지, 아래로는 턱 끝까지의 거리에 비례한다. 입술은 입선에서 그 입술 쪽 반만 늘인다.
- * - 얼굴형: 얼굴 너비([FaceWidthWarp]), 턱선(턱 모서리 172·397 둘레를 가로로), 이마·턱 높이(얼굴 세로 띠 [BandMove]).
+ * - 얼굴형: 얼굴 너비([FaceWidthWarp]), 턱선(턱 모서리 172·397 둘레를 가로로), 이마·턱 높이·중안부(얼굴 세로 띠 [BandMove]),
+ *   머리 크기(턱 끝 기준 늘이기 [AnchoredScale], 머리카락은 찾지 못해 얼굴 크기로 머리 영역을 어림한다).
  * - 감쇠: 부위 전체를 고치는 것은 타원 거리 [PLATEAU]까지 다 걸리고(falloff), 한 점을 옮기는 것은 가운데에서만 다 걸린다(peak). 경계에서 정확히 0이라
  *   부위 상자 밖은 그대로다(배경이 휘지 않음).
  *
  * 늘이고 줄이는 부위는 사진에서 보이는 크기에 비례해 바뀌므로, 고개를 돌려 좁게 보이는 먼 쪽도 같은 비율로 고쳐진다.
- * 가로로 옮기는 것(얼굴 너비·턱선·눈 간격·뒷트임·미소의 바깥으로)은 먼 쪽을 좁게 보이는 만큼([FaceOutline.factor]) 덜 옮긴다
+ * 가로로 옮기는 것(얼굴 너비·턱선·눈 간격·뒷트임·미소의 바깥으로·콧볼)은 먼 쪽을 좁게 보이는 만큼([FaceOutline.factor]) 덜 옮긴다
  * (2026-10-22 사용자 요청: "돌린 얼굴의 먼 쪽을 약하게 고치는 것도 2단계에 넣으세요").
  * 모든 변형은 접히지 않는다(되돌려 찾는 지도의 야코비안이 ±100%에서도 0.3 넘게, 단위 테스트).
  */
@@ -168,6 +189,23 @@ object FaceWarps {
     const val EYE_TAIL_OUTER = 0.7f
     const val EYE_TAIL_TALL = 0.45f
 
+    /**
+     * 뒷트임이 움직이지 않는 눈동자: 둘레 점으로 잰 반지름의 이만큼 안(2026-10-23 사용자 요청: "뒷트임은 유지되면서 검은 동자는 기존처럼").
+     * 잰 반지름이 눈 폭의 [IRIS_MIN]~[IRIS_MAX]배 밖이면(점이 깨짐) 눈 폭의 [IRIS_TYPICAL]배로 어림한다(시험 사진 58눈: 0.18~0.29배).
+     */
+    const val IRIS_KEEP = 1.1f
+    const val IRIS_MIN = 0.1f
+    const val IRIS_MAX = 0.35f
+    const val IRIS_TYPICAL = 0.22f
+
+    /**
+     * 눈동자 끝~눈꼬리 사이(흰자)의 길이에 대한 뒷트임 거리의 한도: 늘일 때(+) [TAIL_STRETCH_LIMIT]배(야코비안 0.33 넘게), 줄일 때(−) [TAIL_SQUEEZE_LIMIT]배
+     * (눈꼬리가 눈동자에 닿지 않게). 흰자가 눈 폭의 0.1배 이상이면 +100%는 늘 눈 폭의 13%를 옮기고, −100%는 0.19배 이상일 때 13%를 다 줄인다
+     * (시험 사진 58눈의 흰자는 0.14~0.31배라 흰자가 짧은 눈은 −100%에서 덜 줄인다). 시선이 눈꼬리 쪽으로 많이 쏠린 눈만 +100%도 덜 옮긴다.
+     */
+    const val TAIL_STRETCH_LIMIT = 1.3f
+    const val TAIL_SQUEEZE_LIMIT = 0.7f
+
     /** 슬라이더 +100%에서 코(콧방울 사이)를 넓히는 배율 */
     const val NOSE_MAX_SCALE = 1.22f
 
@@ -179,11 +217,31 @@ object FaceWarps {
     /** 코 높이 ±100%에서 코를 옮기는 거리(U) */
     const val NOSE_HEIGHT_MAX = 0.05f
 
-    /** 콧등 너비 +100%의 배율. 타원의 가로 반지름은 콧등 줄에서 가까운 눈머리까지의 이만큼, 위는 168 위로 [BRIDGE_ABOVE]U, 아래는 콧방울 선 [BRIDGE_CLEAR]U 위까지 */
+    /** 콧대 너비 +100%의 배율. 타원의 가로 반지름은 콧등 줄에서 가까운 눈머리까지의 이만큼, 위는 168 위로 [BRIDGE_ABOVE]U, 아래는 콧방울 선 [BRIDGE_CLEAR]U 위까지 */
     const val BRIDGE_MAX_SCALE = 1.2f
     const val BRIDGE_ACROSS = 0.85f
     const val BRIDGE_ABOVE = 0.08f
     const val BRIDGE_CLEAR = 0.15f
+
+    /**
+     * 콧등 너비 +100%의 배율과 타원: 위 끝은 두 눈머리 높이보다 [RIDGE_BELOW_EYES]U 아래(미간·눈머리는 그대로), 아래 끝은 코끝·콧방울 중 높은 쪽보다
+     * [RIDGE_CLEAR]U 위, 가운데는 위 끝에서 그 사이의 [RIDGE_CENTER]만큼 아래(코 몸통 아래쪽이 다 걸리게), 가로 반지름은 콧방울 사이 반의 [RIDGE_ACROSS]배(코 옆면까지)
+     */
+    const val RIDGE_MAX_SCALE = 1.2f
+    const val RIDGE_BELOW_EYES = 0.12f
+    const val RIDGE_CLEAR = 0.04f
+    const val RIDGE_CENTER = 0.6f
+    const val RIDGE_ACROSS = 0.65f
+
+    /**
+     * 콧볼 ±100%에서 콧방울을 옮기는 거리(콧방울 사이 반 배)와 그 타원(콧방울 사이 반 배): 가운데는 콧방울 점에서 [WING_INWARD]만큼 안쪽,
+     * 안쪽 반지름 [WING_INNER](코끝 가운데에 닿기 전에 0), 바깥 [WING_OUTER], 세로 [WING_TALL]
+     */
+    const val WING_MAX = 0.15f
+    const val WING_INWARD = 0.1f
+    const val WING_INNER = 0.55f
+    const val WING_OUTER = 0.6f
+    const val WING_TALL = 0.5f
 
     /** 미소 ±100%에서 입꼬리를 올리는 거리(입 폭 배), 그에 대한 바깥으로 옮기는 비, 입꼬리 타원(입 폭 배: 입 가운데 쪽, 볼 쪽, 세로) */
     const val SMILE_MAX = 0.06f
@@ -227,6 +285,31 @@ object FaceWarps {
     const val CHIN_WIDTH = 0.8f
     const val CHIN_MIN_HALF = 0.25f
 
+    /**
+     * 중안부 ±100%에서 입·턱을 옮기는 거리(U). 띠는 두 아랫눈꺼풀(145·374) 중 낮은 쪽보다 [MIDFACE_GAP]U 아래에서 0, 윗입술(0)에서 1로 오르고(눈 밑~윗입술을
+     * 고르게 줄여 코도 조금 짧아짐) 턱 끝까지 1, 그 아래 [MIDFACE_BEYOND]U에서 0이다(목은 그 사이에서 늘거나 준다). 가로는 콧방울 높이의 얼굴 반폭(높이마다 같음).
+     */
+    const val MIDFACE_MAX = 0.1f
+    const val MIDFACE_GAP = 0.05f
+    const val MIDFACE_BEYOND = 0.35f
+
+    /**
+     * 머리 크기 +100%의 배율(−100%는 그 역수). 머리 영역(얼굴 좌표): 세로는 턱 끝부터 이마 끝(10) 위로 얼굴 높이의 [HEAD_ABOVE]배까지(머리카락 어림),
+     * 가로 반지름은 얼굴 폭의 [HEAD_WIDE]배(귀·옆머리까지). 그 밖 [HEAD_RING](반지름 배) 띠에서 0, 턱 끝 아래는 [HEAD_NECK]U 안에서 0.
+     */
+    const val HEAD_MAX_SCALE = 1.1f
+    const val HEAD_ABOVE = 0.45f
+    const val HEAD_WIDE = 0.62f
+    const val HEAD_RING = 0.6f
+    const val HEAD_NECK = 0.25f
+
+    /**
+     * 머리 크기가 다른 얼굴을 피할 때의 여유: 그 얼굴 윤곽이 바깥 띠 끝(타원 거리 1 + 띠 폭)의 이만큼 밖에 남게 한다. 옆 띠 폭은 [HEAD_RING_MIN]까지 좁힌다
+     * (옆으로는 거의 고르게 줄어드는 띠라 이만큼 좁혀도 시험 얼굴의 야코비안이 0.4를 넘는다).
+     */
+    const val HEAD_CLEAR = 1.05f
+    const val HEAD_RING_MIN = 0.25f
+
     /** 턱선 ±100%에서 턱 모서리를 옮기는 거리(U)와 그 타원(U: 얼굴 안쪽, 바깥쪽, 세로) */
     const val JAW_MAX = 0.06f
     const val JAW_INNER = 0.45f
@@ -242,29 +325,33 @@ object FaceWarps {
     /** 입선에서 콧방울 선·턱 끝까지 거리의 가장 작은 값(U, 점이 깨진 얼굴에서 타원이 0이 되지 않게) */
     private const val MIN_REACH = 0.1f
 
-    /** 얼굴 [faces]마다 값 [values](같은 순서, 없으면 0)를 건 변형들. 고친 것이 없으면 비었다. */
+    /** 얼굴 [faces]마다 값 [values](같은 순서, 없으면 0)를 건 변형들. 고친 것이 없으면 비었다. 머리 크기는 다른 얼굴을 피한다. */
     fun of(faces: List<FaceLandmarks>, values: List<FaceValues>): List<MeshWarp> =
-        faces.indices.flatMap { of(faces[it], values.getOrElse(it) { FaceValues.ZERO }) }
+        faces.indices.flatMap { i -> of(faces[i], values.getOrElse(i) { FaceValues.ZERO }, faces.filterIndexed { j, _ -> j != i }) }
 
     /**
-     * 얼굴 [face] 하나에 [values]를 건 변형들. 격자에 합칠 때 이 차례로 거꾸로 따라간다: 얼굴형(얼굴 너비 → 턱선 → 턱 높이 → 이마) → 눈 → 코 → 입이고,
+     * 얼굴 [face] 하나에 [values]를 건 변형들. 격자에 합칠 때 이 차례로 거꾸로 따라간다: 얼굴형(머리 크기 → 중안부 → 얼굴 너비 → 턱선 → 턱 높이 → 이마) → 눈 →
+     * 코(높이 → 콧볼 → 콧대 → 콧등 → 코 너비) → 입이고,
      * 원래 그림에는 그 반대로(입·코·눈을 먼저, 얼굴형을 마지막에) 건 것과 같다. 부위 안에서도 옮기기를 늘이기보다 나중에 건다.
+     * 머리 크기는 가장 바깥이라 고친 얼굴 전체를 함께 키우고 줄인다. 같은 사진의 다른 얼굴([others])이 옆에 있으면 머리 크기는 그쪽 영역을 좁힌다.
      * 특징점은 원래 그림의 것이고 부위끼리 거의 겹치지 않아 차례는 결과를 거의 바꾸지 않는다.
      */
-    fun of(face: FaceLandmarks, values: FaceValues): List<MeshWarp> {
+    fun of(face: FaceLandmarks, values: FaceValues, others: List<FaceLandmarks> = emptyList()): List<MeshWarp> {
         if (values.isZero || !face.isFinite) return emptyList()
         val frame = FaceFrame(face)
         if (frame.unit < MIN_PART) return emptyList()
         val outline = FaceOutline.of(face, frame)
         return buildList {
             if (outline != null) {
+                values[FaceSlider.HEAD_SIZE].takeIf { it != 0f }?.let { add(headSize(face, frame, outline, it, others)) }
+                values[FaceSlider.MIDFACE].takeIf { it != 0f }?.let { midface(face, frame, outline, it)?.let(::add) }
                 values[FaceSlider.FACE_WIDTH].takeIf { it != 0f }?.let { add(FaceWidthWarp.of(frame, outline, it)) }
                 values[FaceSlider.JAWLINE].takeIf { it != 0f }?.let { addAll(jaw(face, frame, outline, it)) }
                 values[FaceSlider.CHIN_HEIGHT].takeIf { it != 0f }?.let { chinHeight(face, frame, outline, it)?.let(::add) }
                 values[FaceSlider.FOREHEAD].takeIf { it != 0f }?.let { forehead(face, frame, outline, it)?.let(::add) }
             }
             addAll(eyes(face, frame, outline, values))
-            addAll(nose(face, frame, values))
+            addAll(nose(face, frame, outline, values))
             addAll(mouth(face, frame, outline, values))
         }
     }
@@ -295,20 +382,34 @@ object FaceWarps {
                 val move = EYE_DISTANCE_MAX * distance * frame.unit * factor * (if (plusSide) 1f else -1f)
                 moves += EllipseMove(shape, move * frame.acrossX, move * frame.acrossY, plateau = true)
             }
+            // 그림에서 시계 방향으로 돌릴 때 눈꼬리가 턱 쪽으로 가는 눈은 반대로 돌려야 눈꼬리가 올라간다
+            val clockwiseLowers = -eye.axisY * frame.downX + eye.axisX * frame.downY > 0f
+            val angle = Math.toRadians((EYE_TILT_MAX_DEGREES * tilt).toDouble()).toFloat()
+            val turn = if (clockwiseLowers) -angle else angle
             if (tail != 0f) {
                 val corner = PartEllipse.of(
                     eye.outerX, eye.outerY, eye.axisX, eye.axisY, frame,
                     eye.width * EYE_TAIL_INNER, eye.width * EYE_TAIL_OUTER, eye.width * EYE_TAIL_TALL, eye.width * EYE_TAIL_TALL
                 )
-                val move = EYE_TAIL_MAX * tail * eye.width * factor
-                tails += EllipseMove(corner, move * eye.axisX, move * eye.axisY, plateau = false)
+                // 눈동자는 움직이지 않고, 눈동자 끝부터 결과에서 보이는 눈꼬리까지(흰자) 고르게 늘인다.
+                // 뒷트임은 크기·높이·너비·기울기를 건 눈 위에 걸리므로(거꾸로 따라갈 차례) 눈동자·눈꼬리도 그만큼 옮겨 잰다(키운 눈동자도 지킴).
+                val along = EYE_WIDTH_MAX_SCALE.pow(width) * EYE_MAX_SCALE.pow(size)
+                val across = EYE_HEIGHT_MAX_SCALE.pow(height) * EYE_MAX_SCALE.pow(size)
+                val iris = irisOf(face, plusSide, eye.width)
+                val (ix, iy) = eye.transformed(iris.x, iris.y, along, across, turn)
+                val (cx, cy) = eye.transformed(eye.outerX, eye.outerY, along, across, turn)
+                val keep = iris.keep * max(along, across)
+                val gap = hypot(cx - ix, cy - iy) - keep
+                if (gap > MIN_PART) {
+                    val move = (EYE_TAIL_MAX * tail * eye.width * factor).coerceIn(-TAIL_SQUEEZE_LIMIT * gap, TAIL_STRETCH_LIMIT * gap)
+                    val reach = hypot(cx + move * eye.axisX - ix, cy + move * eye.axisY - iy)
+                    // 점이 깨져 눈동자가 눈꼬리 바깥에 있으면(옮긴 눈꼬리가 눈동자 원 안) 뒷트임을 걸지 않는다
+                    if (reach > keep + MIN_PART) {
+                        tails += EllipseMove(corner, move * eye.axisX, move * eye.axisY, plateau = false, keep = KeepOut(ix, iy, keep, reach))
+                    }
+                }
             }
-            if (tilt != 0f) {
-                // 그림에서 시계 방향으로 돌릴 때 눈꼬리가 턱 쪽으로 가는 눈은 반대로 돌려야 눈꼬리가 올라간다
-                val clockwiseLowers = -eye.axisY * frame.downX + eye.axisX * frame.downY > 0f
-                val angle = Math.toRadians((EYE_TILT_MAX_DEGREES * tilt).toDouble()).toFloat()
-                tilts += EllipseRotate(shape, if (clockwiseLowers) -angle else angle)
-            }
+            if (tilt != 0f) tilts += EllipseRotate(shape, turn)
             // 크기·높이·너비는 따로 차례로 건다. 한 번에 곱해 늘이면(예: 크기와 높이 모두 −100%면 세로 1/1.46배) 감쇠 띠가 접힐 만큼 눌린다.
             if (width != 0f) scales += EllipseScale(shape, EYE_WIDTH_MAX_SCALE.pow(width), 1f)
             if (height != 0f) scales += EllipseScale(shape, 1f, EYE_HEIGHT_MAX_SCALE.pow(height))
@@ -317,12 +418,28 @@ object FaceWarps {
         return moves + tails + tilts + scales
     }
 
-    /** 코: 거꾸로 따라갈 차례로 높이(옮기기) → 콧등 너비 → 코 너비 */
-    private fun nose(face: FaceLandmarks, frame: FaceFrame, values: FaceValues): List<MeshWarp> {
+    /** 눈동자 가운데와 뒷트임이 움직이지 않을 반지름 [keep](문서 픽셀) */
+    private class Iris(val x: Float, val y: Float, val keep: Float)
+
+    /** 눈동자(+ 쪽이면 [plusSide] = 왼쪽 눈): 둘레 4점까지의 평균 거리를 반지름으로, 이상하면 눈 폭 [eyeWidth]로 어림한다 */
+    private fun irisOf(face: FaceLandmarks, plusSide: Boolean, eyeWidth: Float): Iris {
+        val center = if (plusSide) FaceMeshIndex.LEFT_IRIS else FaceMeshIndex.RIGHT_IRIS
+        val ring = if (plusSide) FaceMeshIndex.LEFT_IRIS_RING else FaceMeshIndex.RIGHT_IRIS_RING
+        val x = face.x(center)
+        val y = face.y(center)
+        val measured = ring.map { hypot(face.x(it) - x, face.y(it) - y) }.average().toFloat()
+        val radius = if (measured in eyeWidth * IRIS_MIN..eyeWidth * IRIS_MAX) measured else eyeWidth * IRIS_TYPICAL
+        return Iris(x, y, radius * IRIS_KEEP)
+    }
+
+    /** 코: 거꾸로 따라갈 차례로 높이(옮기기) → 콧볼(옮기기) → 콧대 너비 → 콧등 너비 → 코 너비 */
+    private fun nose(face: FaceLandmarks, frame: FaceFrame, outline: FaceOutline?, values: FaceValues): List<MeshWarp> {
         val height = values[FaceSlider.NOSE_HEIGHT]
         val width = values[FaceSlider.NOSE_WIDTH]
         val bridge = values[FaceSlider.BRIDGE_WIDTH]
-        if (height == 0f && width == 0f && bridge == 0f) return emptyList()
+        val ridge = values[FaceSlider.RIDGE_WIDTH]
+        val wingsValue = values[FaceSlider.NOSE_WINGS]
+        if (height == 0f && width == 0f && bridge == 0f && ridge == 0f && wingsValue == 0f) return emptyList()
         val rx = face.x(FaceMeshIndex.NOSE_WING_RIGHT)
         val ry = face.y(FaceMeshIndex.NOSE_WING_RIGHT)
         val lx = face.x(FaceMeshIndex.NOSE_WING_LEFT)
@@ -338,13 +455,30 @@ object FaceWarps {
                 val move = NOSE_HEIGHT_MAX * height * frame.unit
                 add(EllipseMove(shape, -move * frame.downX, -move * frame.downY, plateau = true))
             }
+            if (wingsValue != 0f) {
+                // 콧방울마다 바깥(+)·안으로(먼 쪽은 덜). 오른쪽 콧방울(얼굴 좌표 − 쪽)의 바깥은 콧방울 선(오른쪽 → 왼쪽)의 반대쪽이다.
+                val axisX = (lx - rx) / wings
+                val axisY = (ly - ry) / wings
+                val halfWings = wings / 2f
+                for ((plusSide, x, y) in listOf(Triple(false, rx, ry), Triple(true, lx, ly))) {
+                    val outX = if (plusSide) axisX else -axisX
+                    val outY = if (plusSide) axisY else -axisY
+                    val wingShape = PartEllipse.of(
+                        x - outX * halfWings * WING_INWARD, y - outY * halfWings * WING_INWARD, outX, outY, frame,
+                        halfWings * WING_INNER, halfWings * WING_OUTER, halfWings * WING_TALL, halfWings * WING_TALL
+                    )
+                    val move = WING_MAX * wingsValue * halfWings * (outline?.factor(plusSide) ?: 1f)
+                    add(EllipseMove(wingShape, move * outX, move * outY, plateau = false))
+                }
+            }
             if (bridge != 0f) bridgeShape(face, frame)?.let { add(EllipseScale(it, BRIDGE_MAX_SCALE.pow(bridge), 1f)) }
+            if (ridge != 0f) ridgeShape(face, frame, wings)?.let { add(EllipseScale(it, RIDGE_MAX_SCALE.pow(ridge), 1f)) }
             if (width != 0f) add(EllipseScale(shape, NOSE_MAX_SCALE.pow(width), 1f))
         }
     }
 
     /**
-     * 콧등 타원(사용자 요청 '콧등 너비'): 가운데는 콧등 줄(168·6·197·195·5)의 가운데, 가로 반지름은 그 줄에서 가까운 눈머리(133·362)까지의 [BRIDGE_ACROSS]배라
+     * 콧대 타원(처음 이름 '콧등 너비'): 가운데는 콧등 줄(168·6·197·195·5)의 가운데, 가로 반지름은 그 줄에서 가까운 눈머리(133·362)까지의 [BRIDGE_ACROSS]배라
      * 눈머리에 닿기 전에 0이고, 위는 168보다 [BRIDGE_ABOVE]U 위, 아래는 콧방울 선보다 [BRIDGE_CLEAR]U 위에서 끝나 코 너비와 겹치지 않는다.
      */
     private fun bridgeShape(face: FaceLandmarks, frame: FaceFrame): PartEllipse? {
@@ -360,6 +494,27 @@ object FaceWarps {
         val up = max(MIN_REACH, centerV - topV + BRIDGE_ABOVE) * frame.unit
         val down = max(MIN_REACH, wingV - BRIDGE_CLEAR - centerV) * frame.unit
         return PartEllipse.of(frame.x(midU, centerV), frame.y(midU, centerV), frame.acrossX, frame.acrossY, frame, across, across, up, down)
+    }
+
+    /**
+     * 콧등 타원(사용자 요청 '콧등 너비', 2026-10-23): 콧대 타원보다 아래의 코 몸통. 위 끝은 두 눈머리(133·362) 높이보다 [RIDGE_BELOW_EYES]U 아래,
+     * 아래 끝은 코끝(1)·콧방울 선 중 높은 쪽보다 [RIDGE_CLEAR]U 위, 가운데는 위 끝에서 그 사이의 [RIDGE_CENTER]만큼 아래, 가로는 콧등 줄의 가운데에서
+     * 콧방울 사이 [wings]의 반 × [RIDGE_ACROSS]. 미간·코끝·콧볼에는 닿지 않는다.
+     */
+    private fun ridgeShape(face: FaceLandmarks, frame: FaceFrame, wings: Float): PartEllipse? {
+        val midU = FaceMeshIndex.NOSE_BRIDGE.map { frame.u(face, it) }.average().toFloat()
+        val eyesV = (frame.v(face, FaceMeshIndex.RIGHT_EYE_INNER) + frame.v(face, FaceMeshIndex.LEFT_EYE_INNER)) / 2f
+        val wingV = (frame.v(face, FaceMeshIndex.NOSE_WING_RIGHT) + frame.v(face, FaceMeshIndex.NOSE_WING_LEFT)) / 2f
+        val topV = eyesV + RIDGE_BELOW_EYES
+        val bottomV = min(frame.v(face, FaceMeshIndex.NOSE_TIP), wingV) - RIDGE_CLEAR
+        if (bottomV - topV < MIN_REACH) return null
+        val centerV = topV + (bottomV - topV) * RIDGE_CENTER
+        val across = wings / 2f * RIDGE_ACROSS
+        if (across < MIN_PART) return null
+        return PartEllipse.of(
+            frame.x(midU, centerV), frame.y(midU, centerV), frame.acrossX, frame.acrossY, frame,
+            across, across, (centerV - topV) * frame.unit, (bottomV - centerV) * frame.unit
+        )
     }
 
     /** 입: 거꾸로 따라갈 차례로 높이(옮기기) → 미소 → 너비 → 윗입술 → 아랫입술 */
@@ -462,6 +617,93 @@ object FaceWarps {
         return BandMove.of(frame, outline, CHIN_MAX * value, zeroV, fullV, fullV + CHIN_BEYOND, half, CHIN_MIN_HALF)
     }
 
+    /**
+     * 중안부: 아랫눈꺼풀 아래([MIDFACE_GAP])에서 0, 윗입술 위 끝(0)에서 다 옮기고 턱 끝(152)까지 머문 뒤 그 아래 [MIDFACE_BEYOND]U에서 0.
+     * 가로는 콧방울 높이의 얼굴 반폭으로 높이마다 같다(턱선 옆 배경도 함께 옮긴다: 사용자 결정 "코 아래 전체를 위로").
+     */
+    private fun midface(face: FaceLandmarks, frame: FaceFrame, outline: FaceOutline, value: Float): MeshWarp? {
+        val zeroV = max(frame.v(face, FaceMeshIndex.RIGHT_EYE_BOTTOM), frame.v(face, FaceMeshIndex.LEFT_EYE_BOTTOM)) + MIDFACE_GAP
+        val fullV = frame.v(face, FaceMeshIndex.UPPER_LIP_TOP)
+        val chinV = frame.v(face, FaceMeshIndex.CHIN)
+        if (fullV - zeroV < MIN_REACH || chinV <= fullV) return null
+        val wingV = (frame.v(face, FaceMeshIndex.NOSE_WING_RIGHT) + frame.v(face, FaceMeshIndex.NOSE_WING_LEFT)) / 2f
+        val half = (outline.half(wingV, plusSide = true) + outline.half(wingV, plusSide = false)) / 2f
+        return BandMove.of(frame, outline, MIDFACE_MAX * value, zeroV, fullV, chinV + MIDFACE_BEYOND, half, MIN_REACH, holdV = chinV)
+    }
+
+    /**
+     * 머리 크기: 턱 끝(152)을 기준으로 머리 영역(턱 끝 ~ 이마 끝 위 얼굴 높이의 [HEAD_ABOVE]배, 가로 반지름 얼굴 폭의 [HEAD_WIDE]배)을 [HEAD_MAX_SCALE]^값배.
+     * 머리카락은 얼굴 인식이 찾지 못해 얼굴 크기로 어림한다. 바깥 띠([HEAD_RING])에서 배경으로 이어지고, 턱 끝 아래는 [HEAD_NECK]U 안에서 0이다.
+     * 단체 사진: 다른 얼굴([others])의 윤곽이 바깥 띠 안에 들면 그 얼굴이 띠 밖([HEAD_CLEAR]배 여유)에 남게 머리 영역을 좁힌다.
+     * - 옆보다 위에 있는 얼굴(뒷줄)은 머리 영역의 위 끝을 낮춘다(이 얼굴의 이마 끝까지).
+     * - 옆에 있는 얼굴은 그쪽 가로 반지름을 좁히고(이 얼굴의 가장 넓은 곳까지), 그래도 닿으면 그쪽 띠 폭을 [HEAD_RING_MIN]까지 좁힌다.
+     * 이 얼굴은 늘 다 바뀌고, 얼굴끼리 그보다 가까우면 다른 얼굴 가장자리가 띠 끝자락에서 조금 움직인다.
+     */
+    private fun headSize(face: FaceLandmarks, frame: FaceFrame, outline: FaceOutline, value: Float, others: List<FaceLandmarks>): MeshWarp {
+        val chinV = frame.v(face, FaceMeshIndex.CHIN)
+        val foreheadV = frame.v(face, FaceMeshIndex.FOREHEAD)
+        val centerU = (outline.widest + outline.narrowest) / 2f
+        val halfU = max(MIN_REACH, (outline.widest - outline.narrowest) * HEAD_WIDE)
+        val reach = (1f + HEAD_RING) * HEAD_CLEAR
+        // 세로 반지름(가운데는 턱 끝에서 그만큼 위): 위에 있는 얼굴의 점이 띠 밖에 남을 만큼 낮춘다. 그 점까지 턱 끝에서 위로 D면
+        // (D / 반지름 − 1)² + (가로 거리 / 가로 반지름)² ≥ reach² 이어야 한다.
+        var halfV = max(MIN_REACH, (chinV - (foreheadV - max(MIN_REACH, chinV - foreheadV) * HEAD_ABOVE)) / 2f)
+        val lowest = max(MIN_REACH, (chinV - foreheadV) / 2f)
+        for (other in others) {
+            for (index in FaceMeshIndex.FACE_OVAL) {
+                val du = (frame.u(other, index) - centerU) / halfU
+                val up = chinV - frame.v(other, index)
+                val dv = 1f - up / halfV
+                // 가운데보다 아래이거나 위보다 옆으로 더 떨어진 점은 옆 얼굴로 본다
+                if (dv >= 0f || du * du >= dv * dv) continue
+                val room = reach * reach - du * du
+                if (room <= 0f) continue
+                halfV = min(halfV, max(lowest, up / (1f + sqrt(room))))
+            }
+        }
+        val centerV = chinV - halfV
+        var minusU = halfU
+        var plusU = halfU
+        for (other in others) {
+            for (index in FaceMeshIndex.FACE_OVAL) {
+                val v = frame.v(other, index)
+                // 목 아래(무게 0)와 바깥 띠보다 위·아래인 점, 옆보다 위·아래로 더 떨어진 점(위 얼굴은 위에서 피함)은 옆으로 좁히지 않는다
+                if (v > chinV + HEAD_NECK) continue
+                val dv = (v - centerV) / halfV
+                val u = frame.u(other, index) - centerU
+                if ((u / halfU) * (u / halfU) < dv * dv) continue
+                val room = reach * reach - dv * dv
+                if (room <= 0f) continue
+                val limit = abs(u) / sqrt(room)
+                if (u < 0f) minusU = min(minusU, limit) else plusU = min(plusU, limit)
+            }
+        }
+        minusU = max(minusU, max(MIN_REACH, centerU - outline.narrowest))
+        plusU = max(plusU, max(MIN_REACH, outline.widest - centerU))
+        // 반지름을 다 좁혀도 닿으면 그쪽 띠 폭을 좁힌다(띠 폭은 방향으로 섞이므로 옆쪽 몫(across, 반 이상)으로 나눔)
+        var minusRing = HEAD_RING
+        var plusRing = HEAD_RING
+        for (other in others) {
+            for (index in FaceMeshIndex.FACE_OVAL) {
+                val v = frame.v(other, index)
+                if (v > chinV + HEAD_NECK) continue
+                val u = frame.u(other, index) - centerU
+                val du = u / (if (u < 0f) minusU else plusU)
+                val dv = (v - centerV) / halfV
+                if (du * du < dv * dv) continue
+                val t = sqrt(du * du + dv * dv)
+                val across = du * du / (t * t)
+                val limit = (t / HEAD_CLEAR - 1f - HEAD_RING * (1f - across)) / across
+                if (u < 0f) minusRing = min(minusRing, limit) else plusRing = min(plusRing, limit)
+            }
+        }
+        return AnchoredScale(
+            frame, face.x(FaceMeshIndex.CHIN), face.y(FaceMeshIndex.CHIN), HEAD_MAX_SCALE.pow(value),
+            centerU, centerV, minusU, plusU, halfV, HEAD_RING,
+            minusRing.coerceIn(HEAD_RING_MIN, HEAD_RING), plusRing.coerceIn(HEAD_RING_MIN, HEAD_RING), chinV, HEAD_NECK
+        )
+    }
+
     /** 눈 하나: 윤곽 점들의 가운데, 눈꼬리 자리, 눈머리 → 눈꼬리 축(단위 벡터), 눈 폭 */
     private class EyeShape(face: FaceLandmarks, contour: IntArray, outer: Int, inner: Int) {
         val centerX = contour.map { face.x(it) }.average().toFloat()
@@ -471,5 +713,18 @@ object FaceWarps {
         val width = hypot(face.x(outer) - face.x(inner), face.y(outer) - face.y(inner))
         val axisX = if (width > 0f) (face.x(outer) - face.x(inner)) / width else 1f
         val axisY = if (width > 0f) (face.y(outer) - face.y(inner)) / width else 0f
+
+        /** 점 ([x], [y])를 눈 가운데에서 축 쪽으로 [along]배·그에 수직으로 [across]배 늘인 뒤 [turn](라디안)만큼 돌린 자리(눈 타원의 다 걸리는 곳 안에서 크기·높이·너비·기울기가 옮긴 자리) */
+        fun transformed(x: Float, y: Float, along: Float, across: Float, turn: Float): Pair<Float, Float> {
+            val ox = x - centerX
+            val oy = y - centerY
+            val a = (ox * axisX + oy * axisY) * along
+            val b = (-ox * axisY + oy * axisX) * across
+            val sx = a * axisX - b * axisY
+            val sy = a * axisY + b * axisX
+            val c = cos(turn)
+            val s = sin(turn)
+            return centerX + c * sx - s * sy to centerY + s * sx + c * sy
+        }
     }
 }

@@ -441,16 +441,20 @@ internal fun faceSliderLabel(slider: FaceSlider): Int = when (slider) {
     FaceSlider.EYE_TAIL -> R.string.liquify_face_eye_tail
     FaceSlider.NOSE_HEIGHT -> R.string.liquify_face_nose_height
     FaceSlider.NOSE_WIDTH -> R.string.liquify_face_nose_width
+    FaceSlider.NOSE_WINGS -> R.string.liquify_face_nose_wings
     FaceSlider.BRIDGE_WIDTH -> R.string.liquify_face_bridge_width
+    FaceSlider.RIDGE_WIDTH -> R.string.liquify_face_ridge_width
     FaceSlider.SMILE -> R.string.liquify_face_smile
     FaceSlider.UPPER_LIP -> R.string.liquify_face_upper_lip
     FaceSlider.LOWER_LIP -> R.string.liquify_face_lower_lip
     FaceSlider.MOUTH_WIDTH -> R.string.liquify_face_mouth_width
     FaceSlider.MOUTH_HEIGHT -> R.string.liquify_face_mouth_height
     FaceSlider.FOREHEAD -> R.string.liquify_face_forehead
+    FaceSlider.MIDFACE -> R.string.liquify_face_midface
     FaceSlider.CHIN_HEIGHT -> R.string.liquify_face_chin_height
     FaceSlider.JAWLINE -> R.string.liquify_face_jawline
     FaceSlider.FACE_WIDTH -> R.string.liquify_face_width
+    FaceSlider.HEAD_SIZE -> R.string.liquify_face_head_size
 }
 
 /** 얼굴 슬라이더 값(−1..1)의 글자: 조정 값처럼 −100..+100 정수이고 0에는 부호를 붙이지 않는다 */

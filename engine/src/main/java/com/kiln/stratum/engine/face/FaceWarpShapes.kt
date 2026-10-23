@@ -80,6 +80,31 @@ internal fun falloff(t: Float, plateau: Float = FaceWarps.PLATEAU): Float = when
 internal fun peak(t: Float): Float = 1f - smooth(t)
 
 /**
+ * 거의 고르게 오르는 0..1(양 끝 [EASE]만 매끈하게 굽음): 가장 큰 기울기가 1/(1 − [EASE])라 [smooth](15/8)보다 고르게 늘인다.
+ * 기울기는 이어지고(굽음은 양 끝에서 한 번 바뀜) 0 아래는 0, 1 위는 1이다.
+ */
+internal fun eased(x: Float): Float {
+    val c = x.coerceIn(0f, 1f)
+    val m = 1f / (1f - EASE)
+    return when {
+        c < EASE -> m * c * c / (2f * EASE)
+        c > 1f - EASE -> 1f - m * (1f - c) * (1f - c) / (2f * EASE)
+        else -> m * (c - EASE / 2f)
+    }
+}
+
+/** [eased]의 굽는 구간(양 끝 각각) */
+internal const val EASE = 0.15f
+
+/**
+ * 움직이지 않는 원(뒷트임의 눈동자): 가운데 ([centerX], [centerY])에서 [inner] 안은 무게 0, [outer]에서 1이고 사이는 [eased]로 거의 고르게 오른다.
+ * 결과 자리에서 잰다. [outer]를 옮긴 부위(눈꼬리)가 결과에서 보이는 거리로 두면, 눈동자 끝부터 옮긴 눈꼬리까지 고르게 늘어난다.
+ */
+internal class KeepOut(private val centerX: Float, private val centerY: Float, private val inner: Float, private val outer: Float) {
+    fun weight(x: Float, y: Float): Float = eased((hypot(x - centerX, y - centerY) - inner) / (outer - inner))
+}
+
+/**
  * 부위 타원: 가운데 ([centerX], [centerY]), 가로축 ([axisX], [axisY])(단위 벡터) 쪽으로 뒤 [inner]·앞 [outer], 그에 수직인 쪽([perpX], [perpY], 턱 쪽이 +)으로
  * 위 [up]·아래 [down] 반지름(문서 픽셀). 네 쪽 반지름이 달라도 축 위에서 매끈하게 이어진다.
  */
@@ -172,10 +197,17 @@ internal class EllipseScale(
 }
 
 /**
- * 타원 안을 앞으로 ([moveX], [moveY])(문서 픽셀)만큼 옮기는 변형(눈 간격·코 높이·입 높이는 [plateau] 감쇠로 부위 전체를, 미소·뒷트임·턱선은
+ * 타원 안을 앞으로 ([moveX], [moveY])(문서 픽셀)만큼 옮기는 변형(눈 간격·코 높이·입 높이는 [plateau] 감쇠로 부위 전체를, 미소·뒷트임·턱선·콧볼은
  * 점 감쇠 [peak]로 한 점 둘레를). 결과 자리에서 무게를 구한 뒤 그만큼 되돌린 자리에서 다시 구해 읽을 곳을 정한다.
+ * [keep]이 있으면 그 원(뒷트임의 눈동자)은 움직이지 않는다: 원의 무게는 결과 자리에서 한 번 구해 두 번 모두 곱한다.
  */
-internal class EllipseMove(shape: PartEllipse, private val moveX: Float, private val moveY: Float, private val plateau: Boolean) : EllipseWarp(shape) {
+internal class EllipseMove(
+    shape: PartEllipse,
+    private val moveX: Float,
+    private val moveY: Float,
+    private val plateau: Boolean,
+    private val keep: KeepOut? = null
+) : EllipseWarp(shape) {
 
     private fun weight(x: Float, y: Float): Float {
         val t = shape.distance(x, y)
@@ -183,13 +215,14 @@ internal class EllipseMove(shape: PartEllipse, private val moveX: Float, private
     }
 
     override fun displacement(x: Float, y: Float, out: FloatArray) {
-        val first = weight(x, y)
+        val held = keep?.weight(x, y) ?: 1f
+        val first = weight(x, y) * held
         if (first == 0f) {
             out[0] = 0f
             out[1] = 0f
             return
         }
-        val w = weight(x - moveX * first, y - moveY * first)
+        val w = weight(x - moveX * first, y - moveY * first) * held
         out[0] = -moveX * w
         out[1] = -moveY * w
     }
@@ -409,8 +442,9 @@ internal class FaceWidthWarp private constructor(
 }
 
 /**
- * 얼굴 세로 띠를 얼굴 세로축 쪽으로만 [move]U 옮기는 변형(이마·턱 높이, + = 턱 쪽). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth])이고
- * 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 → 그 아래). 가로로는 가운데 줄에서 반폭 [half]U 안은 1,
+ * 얼굴 세로 띠를 얼굴 세로축 쪽으로만 [move]U 옮기는 변형(이마·턱 높이·중안부, + = 턱 쪽). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth])이고
+ * [holdV]까지 1로 머문 뒤 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 → 그 아래로 머무는 구간이 없고,
+ * 중안부는 눈 밑 → 윗입술, 턱 끝까지 머묾 → 그 아래). 가로로는 가운데 줄에서 반폭 [half]U 안은 1,
  * 그 바깥 [FaceWidthWarp.BAND]U 띠에서 0이다. 가로로는 옮기지 않아 세로선은 곧게 남는다.
  * 반폭은 높이마다 같다: 윤곽을 따라 반폭이 급하게 바뀌면(턱 끝) 그 옆이 세로로 크게 눌려 접힐 수 있다.
  */
@@ -420,6 +454,7 @@ internal class BandMove private constructor(
     private val move: Float,
     private val zeroV: Float,
     private val fullV: Float,
+    private val holdV: Float,
     private val endV: Float,
     private val half: Float,
     box: FloatArray
@@ -436,8 +471,9 @@ internal class BandMove private constructor(
         val vertical = when {
             rise <= 0f -> return 0f
             rise < 1f -> smooth(rise)
+            holdV != fullV && (v - fullV) / (holdV - fullV) < 1f -> 1f
             else -> {
-                val fall = (v - fullV) / (endV - fullV)
+                val fall = (v - holdV) / (endV - holdV)
                 if (fall >= 1f) return 0f
                 1f - smooth(fall)
             }
@@ -466,8 +502,21 @@ internal class BandMove private constructor(
     }
 
     companion object {
-        /** 반폭은 [half]U이되 [minHalf]U보다 좁게 잡지 않는다. 상자는 무게가 0이 아닌 곳을 덮는다(가운데 줄은 높이에 따라 곧게 기운다). */
-        fun of(frame: FaceFrame, outline: FaceOutline, move: Float, zeroV: Float, fullV: Float, endV: Float, half: Float, minHalf: Float): BandMove {
+        /**
+         * 반폭은 [half]U이되 [minHalf]U보다 좁게 잡지 않는다. [holdV]를 주면 [fullV]부터 거기까지 1로 머문다(같으면 머무는 구간 없음).
+         * 상자는 무게가 0이 아닌 곳을 덮는다(가운데 줄은 높이에 따라 곧게 기운다).
+         */
+        fun of(
+            frame: FaceFrame,
+            outline: FaceOutline,
+            move: Float,
+            zeroV: Float,
+            fullV: Float,
+            endV: Float,
+            half: Float,
+            minHalf: Float,
+            holdV: Float = fullV
+        ): BandMove {
             val width = max(minHalf, half)
             val reach = width + FaceWidthWarp.BAND
             val xs = FloatArray(4)
@@ -481,7 +530,84 @@ internal class BandMove private constructor(
                     i++
                 }
             }
-            return BandMove(frame, outline, move, zeroV, fullV, endV, width, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
+            return BandMove(frame, outline, move, zeroV, fullV, holdV, endV, width, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
         }
     }
 }
+
+/**
+ * 한 점([anchorX], [anchorY], 머리 크기는 턱 끝)을 기준으로 [scale]배 하는 변형(머리 크기, 2026-10-23 사용자 요청). 얼굴 좌표의 타원(가운데 ([centerU], [centerV]),
+ * 가로 반지름 − 쪽 [minusU]·+ 쪽 [plusU], 세로 [halfV], 단위 U) 안은 다 걸리고 바깥 띠(타원 거리 1 → 1 + 띠 폭)에서 0으로 줄어 배경으로 이어진다.
+ * 띠 폭은 위아래로 [ring], 옆으로 그쪽 띠([minusRing]·[plusRing])이고 방향으로 매끈하게 섞는다. 가로 반지름·옆 띠는 쪽마다 달라도 가운데 줄에서
+ * 매끈하게 이어진다(옆 얼굴이 있는 쪽만 좁힘). [neckV] 아래는 [neck]U 안에서 0이 된다(목·어깨는 그대로).
+ * 거꾸로 찾는 변위 = 무게 × (자리 − 기준) × (1/배율 − 1).
+ * 줄일 때 바깥 띠가 늘어난다(야코비안 ≈ 1 − (1/배율 − 1) × (기준까지 거리 / 반지름) × (감쇠 띠의 가장 가파른 곳)). 기준(턱 끝)에서 먼 머리 위가
+ * 가장 많이 늘어나서, 띠는 거의 고르게 줄어드는 [eased]로 둔다(시험 얼굴 −100%에서 [smooth]면 0.34(머리 위 배경이 약 3배로 늘어 줄무늬가 보임), [eased]면 0.52).
+ * 옆으로는 기준까지 거리가 반지름에 비례해 가로 반지름을 좁혀도 야코비안이 그대로다.
+ */
+internal class AnchoredScale(
+    private val frame: FaceFrame,
+    private val anchorX: Float,
+    private val anchorY: Float,
+    scale: Float,
+    private val centerU: Float,
+    private val centerV: Float,
+    private val minusU: Float,
+    private val plusU: Float,
+    private val halfV: Float,
+    private val ring: Float,
+    private val minusRing: Float,
+    private val plusRing: Float,
+    private val neckV: Float,
+    private val neck: Float
+) : MeshWarp {
+    private val gain = 1f / scale - 1f
+    override val left: Float
+    override val top: Float
+    override val right: Float
+    override val bottom: Float
+
+    init {
+        val topV = centerV - halfV * (1f + ring)
+        val bottomV = min(centerV + halfV * (1f + ring), neckV + neck)
+        val xs = FloatArray(4)
+        val ys = FloatArray(4)
+        var i = 0
+        for (v in floatArrayOf(topV, bottomV)) {
+            for (u in floatArrayOf(centerU - minusU * (1f + ring), centerU + plusU * (1f + ring))) {
+                xs[i] = frame.x(u, v)
+                ys[i] = frame.y(u, v)
+                i++
+            }
+        }
+        left = xs.min()
+        top = ys.min()
+        right = xs.max()
+        bottom = ys.max()
+    }
+
+    /** 얼굴 좌표 (u, v)의 무게(0..1) */
+    private fun weight(u: Float, v: Float): Float {
+        val du = (u - centerU) / (if (u < centerU) minusU else plusU)
+        val dv = (v - centerV) / halfV
+        val t = sqrt(du * du + dv * dv)
+        val inside = if (t <= 1f) {
+            1f
+        } else {
+            // 띠 폭: 옆으로 갈수록 그쪽 띠, 위아래로 갈수록 [ring](가운데 줄에서는 양쪽 모두 [ring]이라 이어진다)
+            val across = du * du / (t * t)
+            val width = (if (u < centerU) minusRing else plusRing) * across + ring * (1f - across)
+            if (t >= 1f + width) return 0f
+            1f - eased((t - 1f) / width)
+        }
+        val below = if (v <= neckV) 1f else 1f - smooth((v - neckV) / neck)
+        return inside * below
+    }
+
+    override fun displacement(x: Float, y: Float, out: FloatArray) {
+        val w = weight(frame.u(x, y), frame.v(x, y))
+        out[0] = w * gain * (x - anchorX)
+        out[1] = w * gain * (y - anchorY)
+    }
+}
+

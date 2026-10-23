@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.face.FaceLandmarks
+import com.kiln.stratum.engine.face.FaceSlider
 import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.raster.Raster
@@ -32,9 +33,18 @@ class LiquifyRecord(
         require(faceValues.size == faces.size) { "${faceValues.size} face values for ${faces.size} faces" }
     }
 
+    /**
+     * 지금 계산식으로 그리면 레이어 픽셀(기록할 때의 계산식으로 그림)과 모양이 다른지. 다시 연 유동화는 바꾼 것이 없어도 이때 적용할 수 있다
+     * (미리 보기가 지금 계산식이라). 판 2에서 뒷트임이 바뀌었다.
+     */
+    val drawsDifferently: Boolean
+        get() = version < 2 && faceValues.any { it[FaceSlider.EYE_TAIL] != 0f }
+
     companion object {
-        /** 지금 얼굴 보정 계산식의 판 */
-        const val VERSION = 1
+        /**
+         * 지금 얼굴 보정 계산식의 판. 2(2026-10-23): 뒷트임이 눈동자를 움직이지 않게 바뀌었다. 판 1 기록도 열고, 다시 적용하면 판 2 계산식으로 그린다.
+         */
+        const val VERSION = 2
     }
 }
 

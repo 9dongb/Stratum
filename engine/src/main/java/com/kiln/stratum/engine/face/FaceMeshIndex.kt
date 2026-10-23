@@ -12,6 +12,10 @@ object FaceMeshIndex {
     /** 왼쪽 눈동자 가운데(473~477의 첫째) */
     const val LEFT_IRIS = 473
 
+    /** 오른쪽·왼쪽 눈동자 둘레 4점(가운데 다음 넷, 뒷트임이 눈동자를 움직이지 않게 반지름을 잰다) */
+    val RIGHT_IRIS_RING = intArrayOf(469, 470, 471, 472)
+    val LEFT_IRIS_RING = intArrayOf(474, 475, 476, 477)
+
     /** 오른쪽 눈꼬리(바깥) */
     const val RIGHT_EYE_OUTER = 33
 

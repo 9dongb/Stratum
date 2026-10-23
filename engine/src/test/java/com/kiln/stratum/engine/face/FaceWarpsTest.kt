@@ -1,14 +1,20 @@
 package com.kiln.stratum.engine.face
 
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.MeshWarp
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -278,6 +284,64 @@ class FaceWarpsTest {
     }
 
     @Test
+    fun eyeTail_keepsTheIrisStill_andMovesTheCornerAsBefore() {
+        // 눈꼬리는 전처럼 눈 폭(0.47)의 13%를 옮긴다(2026-10-23 사용자: "현재 뒷트임 정도를 유지한채로")
+        val tail = FaceWarps.EYE_TAIL_MAX * 0.47f
+        assertEquals(-0.72f - tail, moved(FaceSlider.EYE_TAIL, 1f, -0.72f, 0.02f).first, 3e-3f)
+        assertEquals(0.72f - tail, moved(FaceSlider.EYE_TAIL, -1f, 0.72f, 0.02f).first, 3e-3f)
+        // 눈동자 가운데와 둘레는 움직이지 않는다
+        val r = TestFace.IRIS_RADIUS
+        for (value in listOf(1f, -1f)) {
+            for ((u, v) in listOf(-0.5f to 0f, -0.5f - r to 0f, -0.5f + r to 0f, -0.5f to r, -0.5f to -r, 0.5f + r to 0f, 0.5f to r)) {
+                val (mu, mv) = moved(FaceSlider.EYE_TAIL, value, u, v)
+                assertEquals("$value ($u, $v)", u, mu, 1e-4f)
+                assertEquals("$value ($u, $v)", v, mv, 1e-4f)
+            }
+        }
+        // 그 대신 흰자(눈동자 끝과 눈꼬리 사이)가 늘어난다
+        assertTrue(moved(FaceSlider.EYE_TAIL, 1f, -0.66f, 0.02f).first < -0.66f - 0.015f)
+    }
+
+    @Test
+    fun eyeTail_movesLess_onlyWhenTheIrisNearlyTouchesTheCorner() {
+        val tail = FaceWarps.EYE_TAIL_MAX * 0.47f
+        // 두 눈동자가 그림 오른쪽(왼쪽 눈의 눈꼬리 쪽)으로 쏠림: 조금이면 전처럼 13%
+        val slight = upright.copy(gaze = 0.04f)
+        assertEquals(0.72f + tail, moved(FaceSlider.EYE_TAIL, 1f, 0.72f, 0.02f, slight).first, 3e-3f)
+        // 눈동자가 눈꼬리에 거의 닿으면 그 눈만 흰자가 찢어지지 않을 만큼 덜 옮긴다
+        val strong = upright.copy(gaze = 0.08f)
+        val strongMove = moved(FaceSlider.EYE_TAIL, 1f, 0.72f, 0.02f, strong).first - 0.72f
+        assertTrue("$strongMove", strongMove in 0.01f..tail - 0.01f)
+        assertEquals(-0.72f - tail, moved(FaceSlider.EYE_TAIL, 1f, -0.72f, 0.02f, strong).first, 3e-3f)
+        for (face in listOf(slight, strong)) {
+            for (value in listOf(1f, -1f)) {
+                val warps = FaceWarps.of(face.landmarks(), change(FaceSlider.EYE_TAIL to value))
+                val worst = smallestJacobian(warps, face, -1f..1f, -0.3f..0.35f, step = 0.01f)
+                assertTrue("gaze ${face.gaze} $value: $worst", worst > 0.3f)
+            }
+        }
+    }
+
+    @Test
+    fun eyeTail_keepsTheIris_evenWhenTheEyeIsMadeBigger() {
+        // 눈 크기 +100%와 뒷트임 +100%를 함께 걸면, 눈동자는 눈 크기만 걸었을 때와 같은 자리다(키운 눈동자도 뒷트임이 늘이지 않음)
+        val gazing = upright.copy(gaze = 0.04f)
+        val sized = FaceWarps.of(gazing.landmarks(), change(FaceSlider.EYE_SIZE to 1f))
+        val both = FaceWarps.of(gazing.landmarks(), change(FaceSlider.EYE_SIZE to 1f, FaceSlider.EYE_TAIL to 1f))
+        val r = TestFace.IRIS_RADIUS
+        for (center in listOf(-0.5f + 0.04f, 0.5f + 0.04f)) {
+            for ((du, dv) in listOf(0f to 0f, r to 0f, -r to 0f, 0f to r, 0f to -r)) {
+                val (su, sv) = shown(gazing, sized, center + du, dv)
+                val (bu, bv) = shown(gazing, both, center + du, dv)
+                assertEquals("($center + $du, $dv)", su, bu, 2e-3f)
+                assertEquals("($center + $du, $dv)", sv, bv, 2e-3f)
+            }
+        }
+        // 그래도 눈꼬리는 더 바깥으로 간다
+        assertTrue(shown(gazing, both, 0.72f, 0.02f).first > shown(gazing, sized, 0.72f, 0.02f).first + 0.03f)
+    }
+
+    @Test
     fun noseHeight_andBridgeWidth() {
         // 코는 위로 옮기고 눈은 그대로
         assertEquals(0.6f - FaceWarps.NOSE_HEIGHT_MAX, moved(FaceSlider.NOSE_HEIGHT, 1f, 0f, 0.6f).second, 3e-3f)
@@ -288,6 +352,41 @@ class FaceWarpsTest {
         assertEquals(0.06f / FaceWarps.BRIDGE_MAX_SCALE, moved(FaceSlider.BRIDGE_WIDTH, -1f, 0.06f, 0.32f).first, 2e-3f)
         for ((u, v) in listOf(0.25f to 0.02f, -0.25f to 0.02f, 0.3f to 0.68f, -0.3f to 0.68f)) {
             assertEquals("($u, $v)", u, moved(FaceSlider.BRIDGE_WIDTH, 1f, u, v).first, 1e-4f)
+        }
+    }
+
+    @Test
+    fun ridgeWidth_widensTheMiddleOfTheNose_belowTheBridge() {
+        // 시험 얼굴: 눈머리 v 0.02라 위 끝 0.14, 코끝 0.6이라 아래 끝 0.56, 가로 반지름은 콧방울 사이 반(0.3)의 0.65배
+        val center = 0.14f + (0.56f - 0.14f) * FaceWarps.RIDGE_CENTER
+        // 코 몸통(가운데 줄에서 0.06)은 1.2배로, 줄이면 1/1.2배. 세로로는 옮기지 않는다
+        assertEquals(0.06f * FaceWarps.RIDGE_MAX_SCALE, moved(FaceSlider.RIDGE_WIDTH, 1f, 0.06f, center).first, 2e-3f)
+        assertEquals(-0.06f / FaceWarps.RIDGE_MAX_SCALE, moved(FaceSlider.RIDGE_WIDTH, -1f, -0.06f, center).first, 2e-3f)
+        assertEquals(center, moved(FaceSlider.RIDGE_WIDTH, 1f, 0.06f, center).second, 1e-4f)
+        // 미간·눈머리·코끝·콧방울은 그대로
+        for ((u, v) in listOf(0.06f to 0.1f, 0.25f to 0.02f, -0.25f to 0.02f, 0.06f to 0.58f, 0.05f to 0.6f, 0.3f to 0.68f, -0.3f to 0.68f)) {
+            val (mu, mv) = moved(FaceSlider.RIDGE_WIDTH, 1f, u, v)
+            assertEquals("($u, $v)", u, mu, 1e-4f)
+            assertEquals("($u, $v)", v, mv, 1e-4f)
+        }
+        // 콧대 너비가 다 바꾸는 코 윗부분(v 0.2)은 콧등 너비가 조금만 바꾼다
+        val bridgeMove = moved(FaceSlider.BRIDGE_WIDTH, 1f, 0.06f, 0.2f).first - 0.06f
+        val ridgeMove = moved(FaceSlider.RIDGE_WIDTH, 1f, 0.06f, 0.2f).first - 0.06f
+        assertTrue("bridge $bridgeMove, ridge $ridgeMove", bridgeMove > ridgeMove * 2f)
+    }
+
+    @Test
+    fun noseWings_moveOnlyTheWings_andKeepTheTip() {
+        // 콧방울(±0.3, 0.68)은 콧방울 사이 반(0.3)의 15%만큼 바깥으로(−는 안으로)
+        val step = FaceWarps.WING_MAX * 0.3f
+        assertEquals(-0.3f - step, moved(FaceSlider.NOSE_WINGS, 1f, -0.3f, 0.68f).first, 4e-3f)
+        assertEquals(0.3f + step, moved(FaceSlider.NOSE_WINGS, 1f, 0.3f, 0.68f).first, 4e-3f)
+        assertEquals(0.3f - step, moved(FaceSlider.NOSE_WINGS, -1f, 0.3f, 0.68f).first, 4e-3f)
+        // 코끝·콧구멍 사이 가운데·콧등은 그대로
+        for ((u, v) in listOf(0f to 0.6f, 0f to 0.68f, 0.05f to 0.66f, 0f to 0.4f, 0.06f to 0.4f)) {
+            val (mu, mv) = moved(FaceSlider.NOSE_WINGS, 1f, u, v)
+            assertEquals("($u, $v)", u, mu, 1e-4f)
+            assertEquals("($u, $v)", v, mv, 1e-4f)
         }
     }
 
@@ -335,6 +434,145 @@ class FaceWarpsTest {
     }
 
     @Test
+    fun midface_movesTheMouthAndChin_andKeepsTheEyes() {
+        val step = FaceWarps.MIDFACE_MAX
+        // −100%면 윗입술·입꼬리·턱 끝이 0.1U 위로(얼굴이 짧아짐), +100%면 아래로. 가로로는 옮기지 않는다
+        for ((u, v) in listOf(0f to 0.92f, -0.38f to 1.0f, 0f to 1.65f)) {
+            assertEquals("($u, $v)", v - step, moved(FaceSlider.MIDFACE, -1f, u, v).second, 3e-3f)
+            assertEquals("($u, $v)", v + step, moved(FaceSlider.MIDFACE, 1f, u, v).second, 3e-3f)
+            assertEquals("($u, $v)", u, moved(FaceSlider.MIDFACE, -1f, u, v).first, 1e-4f)
+        }
+        // 코끝은 그 사이(눈 밑~윗입술을 고르게 줄여 조금 올라감)
+        val tip = moved(FaceSlider.MIDFACE, -1f, 0f, 0.6f).second
+        assertTrue("$tip", tip < 0.6f - 0.02f && tip > 0.6f - step)
+        // 눈·눈 밑·이마, 턱 끝 아래 0.35U 밖, 얼굴 옆 띠 밖은 그대로
+        for ((u, v) in listOf(-0.485f to 0.02f, 0.485f to 0.11f, 0f to 0.14f, 0f to -0.8f, 0f to 2.05f, 1.3f to 1.0f, -1.3f to 1.0f)) {
+            val (mu, mv) = moved(FaceSlider.MIDFACE, -1f, u, v)
+            assertEquals("($u, $v)", u, mu, 1e-4f)
+            assertEquals("($u, $v)", v, mv, 1e-4f)
+        }
+    }
+
+    @Test
+    fun headSize_scalesTheWholeHeadAboutTheChin_andKeepsTheNeck() {
+        val s = FaceWarps.HEAD_MAX_SCALE
+        val chin = 1.65f
+        // 이마 끝·눈·볼은 턱 끝(0, 1.65)을 기준으로 +100%면 1.1배, −100%면 1/1.1배
+        for ((u, v) in listOf(0f to -1.05f, -0.485f to 0.02f, 0.9f to 0.3f)) {
+            val (pu, pv) = moved(FaceSlider.HEAD_SIZE, 1f, u, v)
+            assertEquals("($u, $v)", u * s, pu, 3e-3f)
+            assertEquals("($u, $v)", chin + (v - chin) * s, pv, 3e-3f)
+            val (mu, mv) = moved(FaceSlider.HEAD_SIZE, -1f, u, v)
+            assertEquals("($u, $v)", u / s, mu, 3e-3f)
+            assertEquals("($u, $v)", chin + (v - chin) / s, mv, 3e-3f)
+        }
+        // 턱 끝은 그대로, 목(턱 끝 아래 0.25U 밖)과 머리 둘레 띠 밖 배경도 그대로
+        for ((u, v) in listOf(0f to chin, 0f to 1.95f, 0.5f to 2.0f, 2.2f to 0f, 0f to -3.6f)) {
+            val (mu, mv) = moved(FaceSlider.HEAD_SIZE, -1f, u, v)
+            assertEquals("($u, $v)", u, mu, 1e-4f)
+            assertEquals("($u, $v)", v, mv, 1e-4f)
+        }
+    }
+
+    @Test
+    fun headSize_leavesTheFaceNextToIt_inAGroupPhoto() {
+        // 사진 부스처럼 나란한 두 얼굴(가운데 사이 2.3U, 윤곽 사이 0.4U). 피하지 않으면 옆 얼굴 볼이 0.15U 움직인다.
+        val near = TestFace(eyeX = 400f, eyeY = 600f, eyeDistance = 100f)
+        val next = TestFace(eyeX = 630f, eyeY = 600f, eyeDistance = 100f)
+        val faces = listOf(near.landmarks(), next.landmarks())
+        for (value in listOf(1f, -1f)) {
+            val warps = FaceWarps.of(faces, listOf(FaceValues.ZERO.with(FaceSlider.HEAD_SIZE, value)))
+            // 옆 얼굴의 윤곽·눈·코는 거의 그대로(0.03U 안)
+            val marks = faces[1]
+            for (index in FaceMeshIndex.FACE_OVAL + intArrayOf(FaceMeshIndex.RIGHT_IRIS, FaceMeshIndex.LEFT_IRIS, FaceMeshIndex.NOSE_TIP)) {
+                val (sx, sy) = source(warps, marks.x(index), marks.y(index))
+                assertTrue("$value point $index", hypot(sx - marks.x(index), sy - marks.y(index)) < 3f)
+            }
+            // 고친 얼굴은 옆 얼굴 쪽 볼도 턱 끝(0, 1.65) 기준으로 바뀐다(키우면 그 볼이 좁힌 띠 안쪽 끝에 걸려 9할쯤만 바뀐다)
+            val s = FaceWarps.HEAD_MAX_SCALE.pow(value)
+            for ((u, tolerance) in listOf(-0.9f to 0.01f, 0.9f to 0.02f)) {
+                val (pu, pv) = shown(near, warps, u, 0.3f)
+                assertEquals("$value ($u, 0.3)", u * s, pu, tolerance)
+                assertEquals("$value ($u, 0.3)", 1.65f + (0.3f - 1.65f) * s, pv, tolerance)
+            }
+            // 옆 얼굴이 없는 쪽은 혼자일 때와 같다
+            val alone = FaceWarps.of(near.landmarks(), FaceValues.ZERO.with(FaceSlider.HEAD_SIZE, value))
+            for ((u, v) in listOf(-1.4f to 0f, -1.2f to -1.5f)) {
+                val (au, av) = shown(near, alone, u, v)
+                val (pu, pv) = shown(near, warps, u, v)
+                assertEquals("$value ($u, $v)", au, pu, 1e-4f)
+                assertEquals("$value ($u, $v)", av, pv, 1e-4f)
+            }
+            val worst = smallestJacobian(warps, near, -2f..3.5f, -3.5f..2.2f, step = 0.05f)
+            assertTrue("$value: Jacobian $worst", worst > 0.3f)
+        }
+    }
+
+    @Test
+    fun headSize_avoidsAFaceAbove_byLoweringTheTop_notByNarrowingTheSides() {
+        // 뒷줄처럼 바로 위의 얼굴(4U 위, 턱 끝이 이 얼굴 이마 끝보다 1.3U 위): 머리 영역의 위 끝을 낮춰 피한다
+        val near = TestFace(eyeX = 400f, eyeY = 700f, eyeDistance = 100f)
+        val above = TestFace(eyeX = 400f, eyeY = 300f, eyeDistance = 100f)
+        val faces = listOf(near.landmarks(), above.landmarks())
+        val marks = faces[1]
+        for (value in listOf(1f, -1f)) {
+            val values = FaceValues.ZERO.with(FaceSlider.HEAD_SIZE, value)
+            val warps = FaceWarps.of(faces, listOf(values))
+            for (index in FaceMeshIndex.FACE_OVAL + intArrayOf(FaceMeshIndex.RIGHT_IRIS, FaceMeshIndex.LEFT_IRIS, FaceMeshIndex.NOSE_TIP)) {
+                val (sx, sy) = source(warps, marks.x(index), marks.y(index))
+                assertTrue("$value point $index", hypot(sx - marks.x(index), sy - marks.y(index)) < 3f)
+            }
+            // 이 얼굴은 혼자일 때처럼 다 바뀐다(옆으로 좁히지 않음: 볼·눈은 같은 자리)
+            val alone = FaceWarps.of(near.landmarks(), values)
+            for ((u, v) in listOf(-0.9f to 0.3f, 0.9f to 0.3f, -0.5f to 0f, 0.5f to 0f, 0f to -1.0f)) {
+                val (au, av) = shown(near, alone, u, v)
+                val (pu, pv) = shown(near, warps, u, v)
+                assertEquals("$value ($u, $v)", au, pu, 2e-3f)
+                assertEquals("$value ($u, $v)", av, pv, 2e-3f)
+            }
+            val worst = smallestJacobian(warps, near, -2f..2f, -4f..2.2f, step = 0.05f)
+            assertTrue("$value: Jacobian $worst", worst > 0.3f)
+        }
+    }
+
+    @Test
+    fun headSize_aVeryCloseFace_isPartlyKept_andNothingFolds() {
+        // 가운데 사이 2.0U(윤곽 사이 0.1U): 반지름과 옆 띠를 다 좁혀도 옆 얼굴 가장자리가 띠 끝에 걸린다. 피하지 않을 때의 반보다 덜 움직인다.
+        val near = TestFace(eyeX = 400f, eyeY = 600f, eyeDistance = 100f)
+        val next = TestFace(eyeX = 600f, eyeY = 600f, eyeDistance = 100f)
+        val faces = listOf(near.landmarks(), next.landmarks())
+        val marks = faces[1]
+        for (value in listOf(1f, -1f)) {
+            val values = FaceValues.ZERO.with(FaceSlider.HEAD_SIZE, value)
+            val kept = FaceWarps.of(faces, listOf(values))
+            val unaware = FaceWarps.of(near.landmarks(), values)
+            var keptMost = 0f
+            var unawareMost = 0f
+            for (index in FaceMeshIndex.FACE_OVAL) {
+                val x = marks.x(index)
+                val y = marks.y(index)
+                val (kx, ky) = source(kept, x, y)
+                val (ux, uy) = source(unaware, x, y)
+                keptMost = max(keptMost, hypot(kx - x, ky - y))
+                unawareMost = max(unawareMost, hypot(ux - x, uy - y))
+            }
+            assertTrue("$value: $keptMost vs $unawareMost", keptMost < unawareMost * 0.5f)
+            val worst = smallestJacobian(kept, near, -2f..3f, -3.5f..2.2f, step = 0.05f)
+            assertTrue("$value: Jacobian $worst", worst > 0.3f)
+        }
+    }
+
+    @Test
+    fun recordsOfTheFirstFormula_withEyeTail_drawDifferently() {
+        // 판 2에서 뒷트임이 바뀌어, 판 1 기록 가운데 뒷트임을 쓴 것만 지금 계산식으로 그린 모습이 레이어와 다르다
+        val faces = listOf(upright.landmarks())
+        fun record(values: FaceValues, version: Int) = LiquifyRecord(Raster.EMPTY, null, null, faces, listOf(values), version)
+        assertTrue(record(change(FaceSlider.EYE_TAIL to 0.4f), 1).drawsDifferently)
+        assertFalse(record(change(FaceSlider.EYE_SIZE to 0.4f), 1).drawsDifferently)
+        assertFalse(record(change(FaceSlider.EYE_TAIL to 0.4f), LiquifyRecord.VERSION).drawsDifferently)
+    }
+
+    @Test
     fun everySlider_foldsNothing_andLeavesTheFarBackground() {
         val face = upright.landmarks()
         // 하나씩은 0.3 넘게, 모두 함께 ±100%면 0.2 넘게 눌린다(눈꼬리 바깥에서 눈 슬라이더 여섯의 눌림이 곱해짐, 접히지는 않음)
@@ -343,9 +581,16 @@ class FaceWarpsTest {
         for ((values, limit) in changes) {
             val warps = FaceWarps.of(face, values)
             assertTrue("$values", warps.isNotEmpty())
-            val worst = smallestJacobian(warps, upright, -1.5f..1.5f, -1.6f..2.2f, step = 0.02f)
+            // 얼굴은 촘촘히, 머리 크기의 바깥 띠까지는 성기게 본다
+            val worst = min(
+                smallestJacobian(warps, upright, -1.5f..1.5f, -1.6f..2.2f, step = 0.02f),
+                smallestJacobian(warps, upright, -2f..2f, -3.5f..2.2f, step = 0.05f)
+            )
             assertTrue("$values: Jacobian $worst", worst > limit)
-            for ((u, v) in listOf(1.45f to 0.8f, -1.45f to 0.8f, 0f to -1.5f, 0f to 2.1f, 1.25f to -0.6f)) {
+            // 얼굴 둘레보다 먼 배경(머리 크기를 켰으면 그 바깥 띠(머리 영역 반지름의 1.6배)보다 먼 곳)
+            val far = if (values[FaceSlider.HEAD_SIZE] != 0f) listOf(2.2f to 0.8f, -2.2f to 0.8f, 0f to -3.6f, 0f to 2.1f, 1.8f to -2.0f)
+            else listOf(1.45f to 0.8f, -1.45f to 0.8f, 0f to -1.5f, 0f to 2.1f, 1.25f to -0.6f)
+            for ((u, v) in far) {
                 val (x, y) = upright.at(u, v)
                 val (sx, sy) = source(warps, x, y)
                 assertEquals("$values at ($u, $v)", 0f, hypot(sx - x, sy - y), 1e-4f)
@@ -402,6 +647,10 @@ class FaceWarpsTest {
         val eyeNear = moved(FaceSlider.EYE_DISTANCE, 1f, 0.485f, 0.02f, turned).first - 0.485f
         val eyeFar = -0.485f - moved(FaceSlider.EYE_DISTANCE, 1f, -0.485f, 0.02f, turned).first
         assertEquals(0.6f, eyeFar / eyeNear, 0.08f)
+        // 콧볼도 같다
+        val wingNear = moved(FaceSlider.NOSE_WINGS, 1f, 0.3f, 0.68f, turned).first - 0.3f
+        val wingFar = -0.3f - moved(FaceSlider.NOSE_WINGS, 1f, -0.3f, 0.68f, turned).first
+        assertEquals(0.6f, wingFar / wingNear, 0.08f)
     }
 
     @Test
@@ -410,10 +659,16 @@ class FaceWarpsTest {
             listOf(FaceSlider.EYE_SIZE, FaceSlider.EYE_HEIGHT, FaceSlider.EYE_WIDTH, FaceSlider.EYE_TILT, FaceSlider.EYE_DISTANCE, FaceSlider.EYE_TAIL),
             FaceSlider.of(FacePart.EYES)
         )
-        assertEquals(listOf(FaceSlider.NOSE_HEIGHT, FaceSlider.NOSE_WIDTH, FaceSlider.BRIDGE_WIDTH), FaceSlider.of(FacePart.NOSE))
+        assertEquals(
+            listOf(FaceSlider.NOSE_HEIGHT, FaceSlider.NOSE_WIDTH, FaceSlider.NOSE_WINGS, FaceSlider.BRIDGE_WIDTH, FaceSlider.RIDGE_WIDTH),
+            FaceSlider.of(FacePart.NOSE)
+        )
         assertEquals(5, FaceSlider.of(FacePart.MOUTH).size)
-        assertEquals(listOf(FaceSlider.FOREHEAD, FaceSlider.CHIN_HEIGHT, FaceSlider.JAWLINE, FaceSlider.FACE_WIDTH), FaceSlider.of(FacePart.FACE_SHAPE))
-        assertEquals(18, FaceSlider.entries.size)
+        assertEquals(
+            listOf(FaceSlider.FOREHEAD, FaceSlider.MIDFACE, FaceSlider.CHIN_HEIGHT, FaceSlider.JAWLINE, FaceSlider.FACE_WIDTH, FaceSlider.HEAD_SIZE),
+            FaceSlider.of(FacePart.FACE_SHAPE)
+        )
+        assertEquals(22, FaceSlider.entries.size)
     }
 
     @Test
