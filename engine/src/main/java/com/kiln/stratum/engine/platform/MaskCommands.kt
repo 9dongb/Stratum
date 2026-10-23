@@ -10,6 +10,7 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TileGrid
@@ -41,7 +42,10 @@ data class DeleteLayerMask(val layerId: LayerId) : EditCommand {
     }
 }
 
-/** [layerId] 레이어의 마스크를 뒤집는다(보이던 곳은 가리고, 가린 곳은 보인다). 마스크가 없으면 그대로 둔다. */
+/**
+ * [layerId] 레이어의 마스크를 뒤집는다(보이던 곳은 가리고, 가린 곳은 보인다). 마스크가 없으면 그대로 둔다.
+ * 피부 보정 그룹의 피부 마스크면 함께 쓰는 짝 레이어의 마스크도 뒤집는다([SkinRecord.maskPartnerOf]).
+ */
 data class InvertLayerMask(val layerId: LayerId) : CancellableCommand {
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return document
@@ -51,7 +55,7 @@ data class InvertLayerMask(val layerId: LayerId) : CancellableCommand {
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
-        return document.withLayer(layer.copy(mask = inverted))
+        return document.withMask(layer, inverted)
     }
 
     /** 경계 타일(픽셀이 있는 마스크 타일)마다 새 타일 한 장 */
@@ -65,6 +69,7 @@ data class InvertLayerMask(val layerId: LayerId) : CancellableCommand {
  * [layerId] 레이어의 마스크에 브러시 획 하나를 그린다([reveal]이면 보이게, 아니면 가리게, 결정 기록 '피부 보정'의 1c).
  * 픽셀 브러시와 같은 자국·단단함·불투명도이고([MaskPainter]), 선택 영역이 있으면 고른 곳에만 칠한다.
  * 마스크가 없는 레이어거나 문서에 닿지 않는 획이면 그대로 둔다.
+ * 피부 보정 그룹의 피부 마스크면 함께 쓰는 짝 레이어(색 보정 ↔ 피부 정돈)의 마스크에도 같이 칠한다([SkinRecord.maskPartnerOf]).
  */
 data class PaintLayerMask(
     val layerId: LayerId,
@@ -83,7 +88,7 @@ data class PaintLayerMask(
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
-        return if (painted === mask) document else document.withLayer(layer.copy(mask = painted))
+        return if (painted === mask) document else document.withMask(layer, painted)
     }
 
     /** 획이 닿는 타일마다 새 마스크 타일 한 장(픽셀 하나에 1바이트) */
@@ -97,6 +102,15 @@ data class PaintLayerMask(
 /** [layer]를 같은 번호의 레이어 자리에 바꿔 넣은 문서 */
 private fun Document.withLayer(layer: Layer): Document =
     copy(layers = layers.map { if (it.id == layer.id) layer else it })
+
+/**
+ * [layer]의 마스크를 [mask]로 바꾼 문서. 피부 보정 그룹의 피부 마스크를 함께 쓰는 짝 레이어가 있으면 그 마스크도 같이 바꿔
+ * 계속 함께 쓴다(메모리도 한 벌, 결정 기록 '피부 보정'의 2c 화면).
+ */
+private fun Document.withMask(layer: Layer, mask: Selection): Document {
+    val partner = SkinRecord.maskPartnerOf(layers, layer)?.id
+    return copy(layers = layers.map { if (it.id == layer.id || it.id == partner) it.copy(mask = mask) else it })
+}
 
 /** 문서 [size] 전체에서 [mask]를 뒤집은 마스크(선택 영역 반전과 같다). 다 보이는 타일·빈 자리는 계산 없이 정한다. */
 internal fun MaskTiles.inverted(mask: Selection, size: PixelSize, checkCanceled: () -> Unit): Selection {

@@ -431,6 +431,22 @@
     <string name="layer_flip_vertical">레이어 상하 뒤집기</string>
     <string name="mosaic_cell">셀 크기</string>
 
+    <!-- 피부 보정(결정 기록 '피부 보정') -->
+    <string name="tool_skin">피부 보정</string>
+    <string name="tool_skin_short">피부</string>
+    <string name="skin_create">피부 보정 만들기</string>
+    <string name="skin_mask_view">마스크 보기</string>
+    <string name="skin_mask_view_description">피부 마스크 보기</string>
+    <string name="skin_mask_hint">피부가 아닌 곳은 빨갛게 보여요. 브러시로 피부를 더하고 지우개로 빼요.</string>
+    <string name="skin_group_name">피부 보정</string>
+    <string name="skin_color_name">색 보정</string>
+    <string name="skin_smooth_name">피부 정돈</string>
+    <string name="skin_spots_name">잡티 제거</string>
+    <string name="edit_skin_no_face">이 레이어에서 얼굴을 찾지 못했어요. 얼굴이 있는 사진 레이어를 골라 주세요.</string>
+    <string name="edit_skin_pick_photo">피부 보정은 사진 레이어를 골라 주세요.</string>
+    <string name="edit_skin_oval_only">이 기기에서는 피부 분할 모델을 쓸 수 없어 얼굴 윤곽으로만 피부를 골랐어요. 목·귀·이마 위는 빠져요.</string>
+    <string name="edit_skin_face_unavailable">이 기기에서는 얼굴을 찾을 수 없어 피부 보정을 쓸 수 없어요.</string>
+
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">명암(닷지·번)</string>
     <string name="tool_tone_short">명암</string>

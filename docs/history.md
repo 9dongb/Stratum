@@ -14,6 +14,24 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 2c(화면): 피부 도구·그룹 자동 만들기·마스크 보기
+
+- 요청: 승인된 피부 보정 계획의 2단계 셋째 작은 단계(피부 도구와 그룹 만들기)의 화면 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`("'피부 보정' 버튼을 누르면 아래 레이어 묶음을 자동으로 만들어줘").
+- 의도: 말하지 않음
+- 커밋:
+  - "피부 도구를 더하고, 고르면 피부 보정 그룹을 만들고 피부 마스크를 볼 수 있게 함"
+- 바꾼 것
+  - 도구: `EditTool.Skin`(도구 막대의 리터칭 다음, 커버 더보기 줄 맨 끝), 아이콘 `ic_face`·`ic_vignette`(Material Icons), 문구(두 언어).
+  - 화면: `SkinTool.kt`(새: `SkinSummary`·`SkinActions`·`SkinControls`·고칠 그룹 찾기·띠 `skinStrip`·막대 `skinBar`), `EditScreen`(피부 칸, 고르면 만들기, 마스크 안내 알림, 알림 넷), `StratumApp`.
+  - ViewModel: `pickSkinTool`·`createSkinRetouch`, `skinMasker`(내려놓기 포함), 알림 넷(`SkinNoFace`·`SkinPickPhoto`·`SkinOvalOnly`·`SkinFaceUnavailable`), 레이어 요약의 `skin`, 시험용 `recordedDocument`.
+  - 엔진: `SkinRecord.groupOf`·`maskPartnerOf`, 마스크 칠하기·뒤집기가 함께 쓰는 짝 마스크도 바꿈(`MaskCommands`), 피부 보정 만들기의 메모리 부족을 알림으로.
+  - 테스트: JVM `SkinRecordTest`(새, 3개), `ToolSelectionTest`(더보기 줄·도구 막대 자리). 에뮬레이터 `EditorSkinTest`(새, 7개: 만들기·다시 고르기·실행 취소·얼굴 없음·사진 아님·숨김·윤곽만·마스크 보기·함께 칠하기), `SkinToolTest`(새, 5개: 자리·띠·막대·마스크 칸).
+  - 기록: progress.md(진행 중 2c 화면, 결정 기록 '피부 보정'의 2c 화면, 진행표), CLAUDE.md 6장(더보기 줄의 피부), 이 항목.
+- 정한 것(Claude 판단, 2단계부터 묻지 않고 정함): 결정 기록 '피부 보정'의 2c 화면.
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 651개).
+  - 에뮬레이터(접은 상태) `EditorSkinTest` 7개, `SkinToolTest` 5개, `SkinRetouchTest` 4개, `LayerMaskTest` 10개, `EditorMaskTest` 5개, `EditorAdjustmentLayerTest` 6개, 도구가 늘어 다시 본 `EditScreenLayoutTest` 6개·`CoverLandscapeTest` 9개·`EditToolsTest` 16개·`CoverOptionsTest` 2개 통과.
+
 ## 2026-10-24 · 피부 보정 2c(엔진): [피부 보정] 그룹 만들기·기록·저장
 
 - 요청: 승인된 피부 보정 계획의 2단계 셋째 작은 단계(피부 도구와 그룹 만들기)의 엔진 쪽. 사용자 원문은 `docs/skin-retouch-plan.md`.

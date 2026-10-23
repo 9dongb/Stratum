@@ -45,6 +45,7 @@ import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
+import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.effect.EffectFill
 import com.kiln.stratum.engine.effect.EffectKind
@@ -92,6 +93,7 @@ import com.kiln.stratum.engine.platform.FaceFinder
 import com.kiln.stratum.engine.platform.LiteRtFaceModel
 import com.kiln.stratum.engine.platform.LiteRtInpaintModel
 import com.kiln.stratum.engine.platform.LiteRtSegmentModel
+import com.kiln.stratum.engine.platform.LiteRtSkinModel
 import com.kiln.stratum.engine.platform.LiveStroke
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
@@ -105,6 +107,9 @@ import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.RenderedImage
 import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.ScreenGainmap
+import com.kiln.stratum.engine.platform.CreateSkinRetouch
+import com.kiln.stratum.engine.platform.SkinLayerNames
+import com.kiln.stratum.engine.platform.SkinMasker
 import com.kiln.stratum.engine.platform.SelectAll
 import com.kiln.stratum.engine.platform.SelectObject
 import com.kiln.stratum.engine.platform.SelectShape
@@ -123,6 +128,7 @@ import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
+import com.kiln.stratum.engine.skin.NoFaceException
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.transform.Orientation
@@ -238,6 +244,18 @@ sealed interface EditorMessage {
      * 실행 취소하면 다시 고칠 수 있다(결정 기록 '얼굴 인식 보정' 3단계).
      */
     data object LiquifyBaked : EditorMessage
+
+    /** 피부 보정을 만들려던 레이어에서 얼굴을 찾지 못했다(결정 기록 '피부 보정'의 2c). 문서는 그대로다. */
+    data object SkinNoFace : EditorMessage
+
+    /** 피부 보정은 사진(픽셀) 레이어에 만든다. 조정·그룹·글자 레이어를 고른 채 피부 도구를 골랐다. */
+    data object SkinPickPhoto : EditorMessage
+
+    /** 이 기기에서는 피부 분할 모델을 쓸 수 없어 얼굴 윤곽으로만 피부를 골랐다(목·귀·이마 위가 빠짐). 그룹은 만들었다. */
+    data object SkinOvalOnly : EditorMessage
+
+    /** 이 기기에서는 얼굴 모델을 돌릴 수 없어 피부 보정을 만들지 못했다. 문서는 그대로다. */
+    data object SkinFaceUnavailable : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -253,6 +271,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * @property hasMask 레이어 마스크가 있는지(결정 기록 '피부 보정'의 1d). [mask]는 그 작은 그림(흰 곳은 보이고 검은 곳은 가림)이다.
  * @property adjustment 조정 레이어인지(결정 기록 '피부 보정'의 1f). 레이어 줄에 작은 그림 대신 조정 아이콘을 보인다.
  * @property group 그룹(통과)인지, [parent]는 감싼 그룹(결정 기록 '피부 보정'의 1h). 레이어 목록이 들여 쓰고 접고 펼친다.
+ * @property skin [피부 보정] 그룹이면 그 기록(결정 기록 '피부 보정'의 2c). 피부 도구가 고칠 그룹을 찾는다([skinGroupFor]).
  */
 data class LayerSummary(
     val id: LayerId,
@@ -268,7 +287,8 @@ data class LayerSummary(
     val hasMask: Boolean = false,
     val adjustment: Boolean = false,
     val group: Boolean = false,
-    val parent: LayerId? = null
+    val parent: LayerId? = null,
+    val skin: SkinSummary? = null
 )
 
 /**
@@ -413,6 +433,12 @@ class EditorViewModel internal constructor(
      */
     internal var faceFinder: FaceFinder = FaceFinder(LiteRtFaceModel(application.assets, application.cacheDir))
 
+    /**
+     * 피부 보정이 쓰는 피부 마스크 만들기(미디어파이프 셀피 멀티클래스 분할 모델, 결정 기록 '피부 보정'의 2a·2b). 그룹을 만들 때 불러오고,
+     * 홈으로 나가거나 앱이 화면에서 사라지면([releaseAiModels]) 모델을 내려놓는다. 테스트는 가짜 모델로 바꾼다.
+     */
+    internal var skinMasker: SkinMasker = SkinMasker(LiteRtSkinModel(application.assets, application.cacheDir))
+
     /** 앱 내부 저장소의 프로젝트들. 자동 저장은 여기서 끝까지 한다(편집 화면이 사라져도). */
     private val library = ProjectLibrary.get(application)
 
@@ -427,6 +453,10 @@ class EditorViewModel internal constructor(
     /** 열려 있는 프로젝트 번호(테스트용) */
     internal val projectId: String?
         get() = project?.id
+
+    /** 실행 취소 기록의 지금 문서(테스트용). 문서가 없으면 null. */
+    internal val recordedDocument: Document?
+        get() = history?.document
 
     /** 편집이 멈추면 저장하는 작업. 편집할 때마다 앞 계획을 취소하고 다시 잡는다. */
     private var autosaveJob: Job? = null
@@ -637,6 +667,13 @@ class EditorViewModel internal constructor(
         override fun end() = endMove()
         override fun cancel() = cancelMove()
         override fun orient(orientation: Orientation) = orientLayer(orientation)
+    }
+
+    /** 피부 도구가 보내는 일(결정 기록 '피부 보정'의 2c) */
+    val skinActions: SkinActions = object : SkinActions {
+        override fun picked() = pickSkinTool()
+        override fun create() = createSkinRetouch()
+        override fun toggleMask(colorLayer: LayerId) = editLayerMask(colorLayer)
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -1309,6 +1346,56 @@ class EditorViewModel internal constructor(
         if (activeLayer != id || !editingMask) return
         editingMask = false
         refreshMaskOverlay()
+    }
+
+    /**
+     * 피부 도구를 골랐다(결정 기록 '피부 보정'의 2c): 고른 레이어가 고칠 피부 보정 그룹이 없으면 만든다([createSkinRetouch]).
+     * 고른 레이어가 그 그룹이거나, 그 안의 레이어이거나, 그 원본이면 그대로 둔다(그 그룹을 고친다, [SkinRecord.groupOf]).
+     * 다른 편집을 처리하는 중이면 하지 않는다(띠·막대의 [피부 보정 만들기]로 만든다).
+     */
+    fun pickSkinTool() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        if (SkinRecord.groupOf(document.layers, activeLayerIn(document)) != null) return
+        createSkinRetouch()
+    }
+
+    /**
+     * 고른 사진 레이어 바로 위에 [피부 보정] 그룹(색 보정·피부 정돈·잡티 제거와 피부 마스크)을 만들고 그 그룹을 고른다
+     * (실행 취소 한 단계, [CreateSkinRetouch], 사용자 요청 "'피부 보정' 버튼을 누르면 아래 레이어 묶음을 자동으로 만들어줘").
+     * 이미 그룹이 있으면 하지 않는다. 사진(픽셀) 레이어가 아니거나(조정·그룹·글자) 숨긴 레이어면 알린다.
+     * 얼굴을 찾지 못하거나 얼굴 모델을 쓸 수 없으면 [runEdit]가 알리고, 분할 모델을 쓸 수 없어 얼굴 윤곽으로만 골랐으면 만든 뒤 알린다.
+     */
+    fun createSkinRetouch() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        val layer = document.layers[activeIndexIn(document)]
+        if (SkinRecord.groupOf(document.layers, layer.id) != null) return
+        if (layer.content !is RasterContent || layer.text != null) {
+            _messages.trySend(EditorMessage.SkinPickPhoto)
+            return
+        }
+        // 숨긴 레이어(감싼 그룹이 숨긴 것도)에는 만들지 않는다: 보정이 보이지 않는다(그리는 도구와 같은 알림)
+        if (!isShown(layer)) {
+            _messages.trySend(EditorMessage.HiddenLayer)
+            return
+        }
+        val app = getApplication<Application>()
+        val names = SkinLayerNames(
+            group = app.getString(R.string.skin_group_name),
+            color = app.getString(R.string.skin_color_name),
+            smooth = app.getString(R.string.skin_smooth_name),
+            spots = app.getString(R.string.skin_spots_name)
+        )
+        val group = LayerId(document.nextLayerId)
+        runEdit(
+            CreateSkinRetouch(layer.id, names, faceFinder, skinMasker),
+            select = group,
+            onCommitted = {
+                val created = history?.document?.let { it.layers.getOrNull(it.indexOfLayer(group)) }?.skin
+                if (created?.segmented == false) _messages.trySend(EditorMessage.SkinOvalOnly)
+            }
+        )
     }
 
     /** [layer]의 마스크를 칠하는지: 마스크가 있고, 마스크 칠하기를 골랐거나 조정 레이어다(픽셀이 없어 늘 마스크, 결정 기록 '피부 보정'의 1f) */
@@ -3217,6 +3304,18 @@ class EditorViewModel internal constructor(
                 onFinished()
                 finishEditing(EditorMessage.PhotoUnreadable)
                 return@launch
+            } catch (e: NoFaceException) {
+                // 피부 보정: 고른 레이어에서 얼굴을 찾지 못했다. 문서는 그대로다.
+                Log.i(TAG, "No face for $command")
+                onFinished()
+                finishEditing(EditorMessage.SkinNoFace)
+                return@launch
+            } catch (e: FaceUnavailableException) {
+                // 이 기기에서 얼굴 모델을 돌리지 못했다(피부 보정). 문서는 그대로다.
+                Log.w(TAG, "Face detection is unavailable for $command", e)
+                onFinished()
+                finishEditing(EditorMessage.SkinFaceUnavailable)
+                return@launch
             } catch (e: NothingToEnhanceException) {
                 // 질감 향상: 더할 결이 없다(작게 채운 곳, 둘레에 옮겨 올 결이 없음). 문서는 그대로다.
                 // 같은 채우기는 다시 눌러도 바로 알리게 까닭을 남긴다(둘레에 결이 없으면 모델을 다시 돌려도 같다).
@@ -3431,13 +3530,14 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * AI 모델(채우기·분할·얼굴)과 AI 선택이 읽어 둔 그림을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
+     * AI 모델(채우기·분할·얼굴·피부)과 AI 선택이 읽어 둔 그림을 내려놓아 메모리를 돌려준다. 홈으로 나갈 때와 앱이 화면에서 사라질 때(onTrimMemory) 부른다.
      * 다음에 AI 제거·AI 선택을 고르거나 쓰면 다시 불러온다. 계산하는 중이면 그 일이 끝난 뒤 내려놓는다(모델은 한 스레드에서만 다룬다).
      */
     fun releaseAiModels() {
         inpaintModel.release()
         objectSegmenter.release()
         faceFinder.release()
+        skinMasker.release()
     }
 
     override fun onCleared() {
@@ -3550,7 +3650,8 @@ class EditorViewModel internal constructor(
                 layers = document.layers.map {
                     LayerSummary(
                         it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null,
-                        maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent, it.content is GroupContent, it.parent
+                        maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent, it.content is GroupContent, it.parent,
+                        it.skin?.let(SkinSummary::of)
                     )
                 },
                 activeLayer = activeLayerIn(document),

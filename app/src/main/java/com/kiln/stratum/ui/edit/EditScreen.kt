@@ -239,6 +239,7 @@ fun EditScreen(
     eyedropper: () -> EyedropperState? = { null },
     eyedropperActions: EyedropperActions = EyedropperActions.None,
     moveActions: MoveActions = MoveActions.None,
+    skinActions: SkinActions = SkinActions.None,
     stripPosition: StripPosition? = null,
     onStripPosition: (StripPosition) -> Unit = {},
     toolHelpSeen: ToolHelpSeen = remember { ToolHelpSeen() },
@@ -675,6 +676,45 @@ fun EditScreen(
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
         val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
         val mosaicControls = MosaicControls(mosaicOptions, sizePreview = sizePreview, onChange = onMosaicOptions).takeIf { activeTool == EditTool.Mosaic }
+        // 피부 도구(결정 기록 '피부 보정'의 2c): 고른 레이어가 고칠 [피부 보정] 그룹과 그 피부 마스크 보기
+        val skinMaskHint = stringResource(R.string.skin_mask_hint)
+        var skinMaskHintShown by rememberSaveable { mutableStateOf(false) }
+        val skinControls = ready?.takeIf { activeTool == EditTool.Skin }?.let { shown ->
+            val group = skinGroupFor(shown.layers, shown.activeLayer)?.skin
+            val maskShown = group != null && shown.activeLayer == group.color && shown.maskOverlay != null
+            SkinControls(
+                group = group,
+                maskShown = maskShown,
+                maskAvailable = group != null && shown.layers.any { it.id == group.color && it.hasMask },
+                busy = shown.busy,
+                onCreate = skinActions::create,
+                onToggleMask = {
+                    group?.let {
+                        // 처음 켤 때는 마스크를 고치는 방법을 알린다(이 편집 화면에서 한 번)
+                        if (!maskShown && !skinMaskHintShown) {
+                            gestureToast.show(skinMaskHint, toolHelpToastMillis(skinMaskHint))
+                            skinMaskHintShown = true
+                        }
+                        skinActions.toggleMask(it.color)
+                    }
+                }
+            )
+        }
+        // 피부 도구를 고르면(다른 도구에서 바꾸거나 처음 고름) 고른 사진 레이어의 그룹을 만든다(이미 있으면 그 그룹을 고친다,
+        // 사용자 요청 "'피부 보정' 버튼을 누르면 아래 레이어 묶음을 자동으로 만들어줘"). 다른 편집을 처리하는 중이면 끝난 뒤 만든다.
+        // 화면이 다시 만들어질 때(접기·펼치기, 설정에서 돌아옴, 앱을 되살림)는 고른 채 다시 시작하므로 만들지 않는다.
+        val skinChosen = selection.active == EditTool.Skin
+        var skinWasChosen by rememberSaveable { mutableStateOf(skinChosen) }
+        val skinBusy by rememberUpdatedState(ready?.busy == true)
+        LaunchedEffect(skinChosen, toolsEnabled) {
+            if (!toolsEnabled) return@LaunchedEffect
+            val picked = skinChosen && !skinWasChosen
+            skinWasChosen = skinChosen
+            if (picked) {
+                snapshotFlow { skinBusy }.first { !it }
+                skinActions.picked()
+            }
+        }
         // 크기를 미리 볼 도구의 크기·단단함
         val sizedBrush = when (activeTool) {
             EditTool.Brush -> brush
@@ -720,6 +760,7 @@ fun EditScreen(
                 EditTool.Mosaic -> mosaicControls?.let { mosaicBar(it) }
                 // 이동 도구: 고른 레이어 돌리기·뒤집기(사용자 피드백 12차 2)
                 EditTool.Move -> ready?.let { moveBar(moveActions::orient, enabled = !it.busy) }
+                EditTool.Skin -> skinControls?.let { skinBar(it) }
                 else -> null
             }.orEmpty()
         }
@@ -766,6 +807,7 @@ fun EditScreen(
                 }
                 EditTool.Mosaic -> mosaicControls?.let { mosaicStrip(it) }
                 EditTool.Move -> ready?.let { moveStrip(moveActions::orient, enabled = !it.busy) }
+                EditTool.Skin -> skinControls?.let { skinStrip(it) }
                 else -> null
             }
         }
@@ -1657,6 +1699,10 @@ private fun EditCanvas(
     val liquifyBaked = stringResource(R.string.edit_liquify_baked)
     val textureNothing = stringResource(R.string.edit_texture_nothing)
     val textureNoSource = stringResource(R.string.edit_texture_no_source)
+    val skinNoFace = stringResource(R.string.edit_skin_no_face)
+    val skinPickPhoto = stringResource(R.string.edit_skin_pick_photo)
+    val skinOvalOnly = stringResource(R.string.edit_skin_oval_only)
+    val skinFaceUnavailable = stringResource(R.string.edit_skin_face_unavailable)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1703,6 +1749,10 @@ private fun EditCanvas(
                 EditorMessage.LiquifyBaked -> snackbarHostState.showSnackbar(liquifyBaked)
                 EditorMessage.TextureNothing -> snackbarHostState.showSnackbar(textureNothing, duration = SnackbarDuration.Long)
                 EditorMessage.TextureNoSource -> snackbarHostState.showSnackbar(textureNoSource, duration = SnackbarDuration.Long)
+                EditorMessage.SkinNoFace -> snackbarHostState.showSnackbar(skinNoFace, duration = SnackbarDuration.Long)
+                EditorMessage.SkinPickPhoto -> snackbarHostState.showSnackbar(skinPickPhoto)
+                EditorMessage.SkinOvalOnly -> snackbarHostState.showSnackbar(skinOvalOnly, duration = SnackbarDuration.Long)
+                EditorMessage.SkinFaceUnavailable -> snackbarHostState.showSnackbar(skinFaceUnavailable, duration = SnackbarDuration.Long)
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

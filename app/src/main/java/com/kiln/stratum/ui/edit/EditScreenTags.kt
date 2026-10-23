@@ -245,6 +245,12 @@ object EditScreenTags {
     const val RETOUCH_ENHANCE_TEXTURE = "retouchEnhanceTexture"
     const val RETOUCH_SOURCE_MARKER = "retouchSourceMarker"
 
+    /** 피부 도구의 [피부 보정 만들기](띠의 칸·막대의 칩, 결정 기록 '피부 보정'의 2c) */
+    const val SKIN_CREATE = "skinCreate"
+
+    /** 피부 도구의 [마스크 보기](켜고 끔) */
+    const val SKIN_MASK = "skinMask"
+
     const val TONE_OVERLAY = "toneOverlay"
     const val TONE_EXPOSURE = "toneExposure"
     const val TONE_SIZE = "toneSize"

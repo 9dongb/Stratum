@@ -76,7 +76,7 @@ enum class SubTool(
 }
 
 /**
- * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(이동·선택·리터칭·명암·흐림·모자이크·픽셀 유동화)가 켜져 있다.
+ * 편집 도구. 1단계 도구(CLAUDE.md 8장)와 사용자가 요청한 도구(이동·선택·리터칭·피부·명암·흐림·모자이크·픽셀 유동화)가 켜져 있다.
  * 개체 제거(3단계, AI)는 따로 '제거' 도구를 두지 않고 리터칭의 하위 도구 'AI 제거'로 넣었다(2026-10-20 사용자 결정).
  * 아직 만들지 않은 도구는 넣지 않는다(숨김).
  *
@@ -124,6 +124,12 @@ enum class EditTool(
         available = true
     ),
 
+    /**
+     * 피부 보정(사용자 요청, 결정 기록 '피부 보정'). 고르면 고른 사진 레이어 바로 위에 [피부 보정] 그룹(색 보정·피부 정돈·잡티 제거)을
+     * 만든다(이미 있으면 그 그룹을 고친다). 옵션은 다른 도구처럼 띠·막대다. 하위 도구가 없다.
+     */
+    Skin(R.drawable.ic_face, R.string.tool_skin, R.string.tool_skin_short, available = true),
+
     /** 명암(닷지·번). 칠한 곳을 밝게(닷지) 또는 어둡게(번) 한다. 고른 레이어에 한 손가락으로 칠한다. */
     Tone(
         R.drawable.ic_tonality,
@@ -154,8 +160,11 @@ enum class EditTool(
         get() = subTools.isNotEmpty()
 
     companion object {
-        /** 메인 화면 왼쪽 도구 막대의 도구(이동이 맨 위, 사용자 요청). 조정·레이어는 상단 바 버튼으로 여는 패널이다. */
-        val railTools: List<EditTool> = listOf(Move, Transform, Select, Brush, Eraser, Retouch, Tone, Blur, Mosaic, Text, Liquify)
+        /**
+         * 메인 화면 왼쪽 도구 막대의 도구(이동이 맨 위, 사용자 요청). 피부는 리터칭 다음이다(사용자 결정 "도구, 옵션은 띠·막대 (추천)").
+         * 조정·레이어는 상단 바 버튼으로 여는 패널이다.
+         */
+        val railTools: List<EditTool> = listOf(Move, Transform, Select, Brush, Eraser, Retouch, Skin, Tone, Blur, Mosaic, Text, Liquify)
 
         /**
          * 커버 화면 아래 탭 줄의 도구(사용자 지정: "기본 도구 목록은 자르기, 선택, 브러시, 리터칭, 유동화, 더보기 로 해주세요",
@@ -166,9 +175,9 @@ enum class EditTool(
 
         /**
          * 커버 화면 더보기 줄의 도구: 탭 줄에 없는 나머지 도구. 탭과 자리를 바꾼 자르기·브러시는 이동·흐림이 있던 자리다
-         * (자르기·지우개·텍스트·명암·브러시·모자이크).
+         * (자르기·지우개·텍스트·명암·브러시·모자이크). 피부는 맨 끝이다(결정 기록 '피부 보정'의 2c 화면: 사용자가 정한 차례를 지키려고).
          */
-        val coverMoreTools: List<EditTool> = listOf(Transform, Eraser, Text, Tone, Brush, Mosaic)
+        val coverMoreTools: List<EditTool> = listOf(Transform, Eraser, Text, Tone, Brush, Mosaic, Skin)
 
         /** [subTool]이 속한 도구 */
         fun of(subTool: SubTool): EditTool = entries.first { subTool in it.subTools }

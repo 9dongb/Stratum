@@ -182,6 +182,7 @@ fun StratumApp(editor: EditorViewModel) {
                     onChooseColor = editor::chooseColor,
                     onSwapColors = editor::swapColors,
                     moveActions = editor.moveActions,
+                    skinActions = editor.skinActions,
                     onAddPhoto = { insertPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     // 편집 화면에 끌어다 놓은 사진은 사진 넣기와 같이 새 레이어로 넣는다(사용자 피드백 12차 4)
                     onDropPhoto = editor::insertDropped,

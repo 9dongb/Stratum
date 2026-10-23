@@ -433,6 +433,22 @@
     <string name="layer_flip_vertical">Flip layer vertically</string>
     <string name="mosaic_cell">Cell size</string>
 
+    <!-- 피부 보정(결정 기록 '피부 보정') -->
+    <string name="tool_skin">Skin retouch</string>
+    <string name="tool_skin_short">Skin</string>
+    <string name="skin_create">Create skin retouch</string>
+    <string name="skin_mask_view">Mask</string>
+    <string name="skin_mask_view_description">Show the skin mask</string>
+    <string name="skin_mask_hint">Red shows what isn\'t skin. Add skin with the brush and remove it with the eraser.</string>
+    <string name="skin_group_name">Skin retouch</string>
+    <string name="skin_color_name">Skin color</string>
+    <string name="skin_smooth_name">Skin smoothing</string>
+    <string name="skin_spots_name">Blemish removal</string>
+    <string name="edit_skin_no_face">No face was found on this layer. Pick a photo layer with a face.</string>
+    <string name="edit_skin_pick_photo">Pick a photo layer for skin retouch.</string>
+    <string name="edit_skin_oval_only">The skin model can\'t run on this device, so only the face outline was used. The neck, ears and upper forehead are left out.</string>
+    <string name="edit_skin_face_unavailable">Skin retouch can\'t run on this device because it can\'t find faces.</string>
+
     <!-- 명암(닷지·번) -->
     <string name="tool_tone">Dodge &amp; burn</string>
     <string name="tool_tone_short">Tone</string>

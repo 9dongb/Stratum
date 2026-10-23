@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.platform
 
 import com.kiln.stratum.engine.command.CancellableCommand
+import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.GroupContent
@@ -49,17 +50,21 @@ data class CreateSkinRetouch(
         require(index >= 0) { "No layer $source" }
         val layer = document.layers[index]
         require(layer.content is RasterContent) { "Skin retouch needs a pixel layer" }
-        val picture = finder.render(document, layer, checkCanceled)
         val faces: List<FaceLandmarks>
         val masks: SkinMasker.FaceMasks
-        try {
-            faces = finder.search(picture, checkCanceled)
-            if (faces.isEmpty()) throw NoFaceException()
-            masks = masker.masks(picture, faces, checkCanceled)
-        } finally {
-            picture.close()
+        val mask = try {
+            val picture = finder.render(document, layer, checkCanceled)
+            try {
+                faces = finder.search(picture, checkCanceled)
+                if (faces.isEmpty()) throw NoFaceException()
+                masks = masker.masks(picture, faces, checkCanceled)
+            } finally {
+                picture.close()
+            }
+            Selection.of(masker.tiles(masks.masks, PixelSize(document.width, document.height), checkCanceled))
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
         }
-        val mask = Selection.of(masker.tiles(masks.masks, PixelSize(document.width, document.height), checkCanceled))
         var next = document.nextLayerId
         val groupId = LayerId(next++)
         val colorId = LayerId(next++)

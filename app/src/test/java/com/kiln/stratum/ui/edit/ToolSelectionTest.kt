@@ -15,8 +15,13 @@ class ToolSelectionTest {
     fun coverTabs_followTheUserOrder_andTheMoreRowHasTheRest() {
         // 사용자 지정(2026-10-23): "자르기 도구 위치에 이동 도구를, 브러시 위치에 흐림 도구를 위치해주세요"
         assertEquals(listOf(EditTool.Move, EditTool.Select, EditTool.Blur, EditTool.Retouch, EditTool.Liquify), EditTool.coverTabs)
-        // 더보기 줄의 자르기·브러시는 이동·흐림이 있던 자리다
-        assertEquals(listOf(EditTool.Transform, EditTool.Eraser, EditTool.Text, EditTool.Tone, EditTool.Brush, EditTool.Mosaic), EditTool.coverMoreTools)
+        // 더보기 줄의 자르기·브러시는 이동·흐림이 있던 자리다. 피부(2026-10-23 사용자 요청)는 맨 끝이다.
+        assertEquals(
+            listOf(EditTool.Transform, EditTool.Eraser, EditTool.Text, EditTool.Tone, EditTool.Brush, EditTool.Mosaic, EditTool.Skin),
+            EditTool.coverMoreTools
+        )
+        // 펼친 화면 도구 막대의 피부는 리터칭 다음이다(사용자 결정)
+        assertEquals(EditTool.railTools.indexOf(EditTool.Retouch) + 1, EditTool.railTools.indexOf(EditTool.Skin))
         // 메인 도구 막대의 도구는 탭 줄과 더보기 줄에 한 번씩 다 있다
         assertEquals(EditTool.railTools.size, EditTool.coverTabs.size + EditTool.coverMoreTools.size)
         assertEquals(EditTool.railTools.toSet(), (EditTool.coverTabs + EditTool.coverMoreTools).toSet())
