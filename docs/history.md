@@ -14,6 +14,26 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-23 · 피부 보정 1c: 레이어 마스크 엔진
+
+- 요청: 승인된 피부 보정 계획의 1단계 셋째 작은 단계(레이어 마스크는 피부 마스크를 담는 그릇이다). 사용자 원문은 `docs/skin-retouch-plan.md`.
+- 의도: 말하지 않음
+- 커밋:
+  - "레이어 마스크 엔진(그리기·명령·변형·병합·저장)을 더함"
+- 바꾼 것
+  - 문서: `Layer.mask`, 합성 계획 `CompositeStep.Draw.mask`(마스크가 있으면 '그대로 보임'이 아님).
+  - 그리기: `PreviewRenderer`(타일마다 마스크 알파를 곱함, 가린 타일은 건너뜀), `LayerPreviewCache`(마스크 그림을 기억해 곱함, 옮기는 동안 함께 옮김, 화면용 게인맵 열쇠), `GainmapComposer`(가린 곳은 덮지 않음), `ObjectSegmenter`(기억 열쇠에 마스크).
+  - 명령(새 MaskCommands.kt): `AddLayerMask`·`DeleteLayerMask`·`InvertLayerMask`·`PaintLayerMask`. 칠하기 `MaskPainter`, 뒤집기 도우미 `MaskTiles.inverted`(선택 영역 반전도 이것을 씀).
+  - 변형: `MaskTransform`(순수 Kotlin)과 `TileComposer.composeMask`(플랫폼은 `CanvasTileComposer`, 테스트는 `HeapTileComposer`). `RasterTransform.apply`(자르기·회전·뒤집기)·`TranslateLayer`·`OrientLayer`가 마스크를 옮기고, `ResizeImage`는 `MaskResizer`로 바꾼다.
+  - 병합은 마스크를 굳히고(결과 마스크 없음), 선택 복사·잘라내기는 새 레이어에 같은 마스크를 준다.
+  - 저장: 판 2(`PROJECT_FORMAT_VERSION` 2, 마스크가 있을 때만), 꼬리표 7, 마스크 타일 파일 `MaskTileFiles`(.mask), `ProjectFolder` 쓰기·읽기·메모리 어림. 실행 취소 메모리(`EditHistory`)가 마스크 타일을 센다.
+  - 테스트: JVM `MaskTransformTest`(5개), `ProjectManifestTest`(마스크 왕복·판), `EditHistoryTest`(마스크 메모리), `CompositePlanTest`(마스크 단계). 에뮬레이터 `LayerMaskTest`(그리기·아래 레이어와 섞임·레이어 축소본과 내보내기·병합·명령·칠하기·변형·저장, 8개).
+- 정한 것(Claude 판단, 계획 승인): 결정 기록 '피부 보정'의 1c.
+- 확인한 것
+  - `./gradlew assembleDebug test` 통과.
+  - 에뮬레이터 테스트 38개 클래스 316개 통과(새 LayerMaskTest 8개와 1a의 그리기 테스트 전체, 저장·레이어 돌리기·옮기기·사진 넣기·글자)(접은 상태). 화면 변화는 없다(마스크를 만드는 화면은 1d).
+  - 에뮬레이터를 오래 켜 두어 GPU가 멈춘 것을 찾아 다시 켰다(기술 주의점).
+
 ## 2026-10-23 · 피부 보정 1b: 기본 보정에 틴트
 
 - 요청: 승인된 피부 보정 계획의 1단계 둘째 작은 단계. 사용자 결정(그대로): 틴트 "틴트 더하기 (추천)". 계획을 세울 때 붉은 조명의 분홍·자주 틀어짐은 색온도(파랑↔노랑)만으로 고칠 수 없다고 알리고 물었다.

@@ -161,7 +161,7 @@ class EditHistory(
 
     /**
      * 문서들이 쓰는 메모리 셈. 같은 타일·마스크 타일·격자 객체는 한 번만 센다(바뀌지 않은 부분은 단계끼리 함께 쓴다).
-     * 레이어 픽셀·게인맵과, 유동화 기록의 원래 픽셀·게인맵·격자를 센다(원래 픽셀은 결과와 바뀌지 않은 타일을 함께 쓴다).
+     * 레이어 픽셀·게인맵·마스크와, 유동화 기록의 원래 픽셀·게인맵·격자를 센다(원래 픽셀은 결과와 바뀌지 않은 타일을 함께 쓴다).
      */
     private class Usage {
         private val tiles = HashSet<Tile>()
@@ -175,6 +175,7 @@ class EditHistory(
                     is RasterContent -> tiles.addAll(content.raster.tiles.values)
                 }
                 layer.gainmap?.let { tiles.addAll(it.raster.tiles.values) }
+                layer.mask?.let { masks.addAll(it.tiles.values) }
                 layer.liquify?.let { record ->
                     tiles.addAll(record.base.tiles.values)
                     record.baseGainmap?.let { tiles.addAll(it.raster.tiles.values) }

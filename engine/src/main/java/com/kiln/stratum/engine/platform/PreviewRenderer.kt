@@ -2,7 +2,9 @@ package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
+import android.graphics.BlendMode
 import android.graphics.Canvas
+import android.graphics.ComposeShader
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
@@ -31,6 +33,7 @@ import kotlin.math.ceil
  * 반씩 줄이면 GPU의 1/2 축소가 정확히 2×2 평균이라 화질이 고르고, 타일·묶음 경계가 정수 픽셀에 맞아 이음매가 없다.
  * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
  * 레이어는 합성 계획([CompositePlan])의 차례대로 기본 보정을 걸어 그리고, 불투명도·혼합 모드(표준·곱하기·스크린·오버레이)로 아래에 얹는다.
+ * 레이어 마스크가 있으면 타일마다 같은 자리의 마스크 타일 알파를 곱하고, 마스크 타일이 없는(가린) 자리는 그리지 않는다.
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
@@ -115,11 +118,15 @@ object PreviewRenderer {
                         for (row in block.firstRow until block.firstRow + block.rows) {
                             for (column in block.firstColumn until block.firstColumn + block.columns) {
                                 // 없는 타일은 투명이라 그리지 않는다
-                                val tile = step.raster.tiles[TileKey(column, row)] ?: continue
+                                val key = TileKey(column, row)
+                                val tile = step.raster.tiles[key] ?: continue
+                                // 마스크가 가린 자리(마스크 타일 없음)도 그리지 않는다. 다 보이는 마스크 타일은 곱할 것이 없다.
+                                val mask = step.mask
+                                val maskTile = if (mask == null) null else (mask.tiles[key] ?: continue)
                                 val bitmap = bitmapOf(tile.pixels, temporary)
                                 val left = (column - block.firstColumn) * TILE_SIZE * scale
                                 val top = (row - block.firstRow) * TILE_SIZE * scale
-                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust)
+                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust, maskTile?.let { MaskTiles.bitmapOf(it, temporary) })
                             }
                         }
                         if (saved != null) canvas.restoreToCount(saved)
@@ -169,7 +176,10 @@ object PreviewRenderer {
     private fun drawScaled(canvas: Canvas, bitmap: Bitmap, left: Float, top: Float, scale: Float) =
         drawScaled(canvas, bitmap, left, top, scale, scale)
 
-    /** [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. [adjust]가 있으면 보정해서 그린다. */
+    /**
+     * [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. [adjust]가 있으면 보정해서 그린다.
+     * [mask](같은 자리의 마스크 타일 알파 그림)가 있으면 보정한 색에 그 알파를 곱한다(레이어 마스크, 결정 기록 '피부 보정'의 1c).
+     */
     private fun drawScaled(
         canvas: Canvas,
         bitmap: Bitmap,
@@ -177,18 +187,30 @@ object PreviewRenderer {
         top: Float,
         scaleX: Float,
         scaleY: Float,
-        adjust: AdjustShader? = null
+        adjust: AdjustShader? = null,
+        mask: Bitmap? = null
     ) {
+        val matrix = Matrix().apply {
+            setScale(scaleX, scaleY)
+            postTranslate(left, top)
+        }
         val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
             filterMode = BitmapShader.FILTER_MODE_LINEAR
-            setLocalMatrix(Matrix().apply {
-                setScale(scaleX, scaleY)
-                postTranslate(left, top)
-            })
+            setLocalMatrix(matrix)
+        }
+        val adjusted = adjust?.wrap(shader) ?: shader
+        val drawn = if (mask == null) {
+            adjusted
+        } else {
+            val alpha = BitmapShader(mask, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                filterMode = BitmapShader.FILTER_MODE_LINEAR
+                setLocalMatrix(matrix)
+            }
+            ComposeShader(adjusted, alpha, BlendMode.DST_IN)
         }
         val right = left + ceil(bitmap.width * scaleX)
         val bottom = top + ceil(bitmap.height * scaleY)
-        canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = adjust?.wrap(shader) ?: shader })
+        canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = drawn })
     }
 
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */

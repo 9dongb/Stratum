@@ -2,6 +2,7 @@ package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.Selection
 
 /**
  * 문서를 그리는 차례(합성 계획, 결정 기록 '피부 보정'의 1단계). 레이어를 합치는 모든 곳(축소본·레이어 축소본 합치기·HDR 게인맵·병합·
@@ -18,7 +19,7 @@ object CompositePlan {
         layers.mapNotNull { layer ->
             if (!layer.isShown) return@mapNotNull null
             when (val content = layer.content) {
-                is RasterContent -> CompositeStep.Draw(layer, content.raster, layer.opacity)
+                is RasterContent -> CompositeStep.Draw(layer, content.raster, layer.opacity, layer.mask)
             }
         }
 
@@ -35,8 +36,9 @@ sealed interface CompositeStep {
     /**
      * 픽셀 레이어 하나를 그 레이어의 보정을 건 채 [opacity]와 혼합 모드로 아래에 얹는다.
      * [opacity]는 얹을 때 쓰는 불투명도다(지금은 레이어 불투명도, 그룹이 생기면 그룹 불투명도를 곱한 값).
+     * [mask]가 있으면 보정을 건 색에 그 알파를 곱한다(레이어 마스크, 결정 기록 '피부 보정'의 1c). 마스크 타일이 없는 자리는 그리지 않는다.
      */
-    class Draw(override val layer: Layer, val raster: Raster, val opacity: Float) : CompositeStep {
+    class Draw(override val layer: Layer, val raster: Raster, val opacity: Float, val mask: Selection? = null) : CompositeStep {
 
         val blendMode: BlendMode
             get() = layer.blendMode
@@ -48,8 +50,8 @@ sealed interface CompositeStep {
         val needsOwnLayer: Boolean
             get() = opacity < 1f || blendMode != BlendMode.NORMAL
 
-        /** 그대로 보이는지(불투명도 1, 보정 없음). 투명한 바탕 위에서는 혼합 모드와 상관없이 픽셀 그대로다. */
+        /** 그대로 보이는지(불투명도 1, 보정·마스크 없음). 투명한 바탕 위에서는 혼합 모드와 상관없이 픽셀 그대로다. */
         val isPlain: Boolean
-            get() = opacity == 1f && adjustments.isIdentity
+            get() = opacity == 1f && adjustments.isIdentity && mask == null
     }
 }

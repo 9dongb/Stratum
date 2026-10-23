@@ -25,6 +25,7 @@ import com.kiln.stratum.engine.raster.TileKey
  * 결과는 아래 레이어의 번호·이름·불투명도·혼합 모드를 지닌다. 아래 레이어의 보정과 위 레이어의 불투명도·혼합 모드·보정은
  * 픽셀에 굳힌다(결과의 보정은 없음). 없는 레이어이거나 맨 아래 레이어면 그대로 둔다.
  * 둘 중 하나라도 숨겼으면(눈을 끔) 그대로 둔다. 숨긴 내용을 모르고 합치거나 잃지 않게 한다(결정 기록 '레이어 보이기').
+ * 두 레이어의 마스크도 픽셀에 굳혀 합치고, 결과에는 마스크가 없다(결정 기록 '피부 보정'의 1c).
  */
 data class MergeDown(val layerId: LayerId) : CancellableCommand {
 
@@ -37,7 +38,7 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
         // 게인맵도 같은 알파로 겹쳐 합친다(결정 기록 'HDR')
         val gainmap = GainmapEdits.merge(document, merging, checkCanceled)
         val layers = document.layers.toMutableList().apply {
-            set(index - 1, lower.withPixels(merged, gainmap).copy(adjustments = Adjustments.NONE))
+            set(index - 1, lower.withPixels(merged, gainmap).copy(adjustments = Adjustments.NONE, mask = null))
             removeAt(index)
         }
         return document.copy(layers = layers)
@@ -60,7 +61,7 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
 /**
  * 보이는(숨기지 않았고 불투명도가 0보다 큰) 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다(포토샵 '보이는 레이어 병합').
  *
- * 결과는 그 레이어의 번호·이름을 지니고 표준·100%·보정 없음이라, 화면에 보이던 모습 그대로다.
+ * 결과는 그 레이어의 번호·이름을 지니고 표준·100%·보정·마스크 없음이라, 화면에 보이던 모습 그대로다.
  * 숨긴(눈을 끈·0%) 레이어는 제자리에 그대로 남는다. 보이는 레이어가 둘보다 적으면 그대로 둔다.
  */
 data object MergeVisible : CancellableCommand {
@@ -72,7 +73,7 @@ data object MergeVisible : CancellableCommand {
         val base = visible.first()
         val merged = LayerMerger.merge(document, visible, checkCanceled)
         val gainmap = GainmapEdits.merge(document, visible, checkCanceled)
-        val result = base.withPixels(merged, gainmap).copy(opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE)
+        val result = base.withPixels(merged, gainmap).copy(opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE, mask = null)
         val mergedIds = visible.mapTo(HashSet()) { it.id }
         val layers = document.layers.mapNotNull { layer ->
             when {

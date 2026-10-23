@@ -1,13 +1,18 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.BlendMode
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
+import android.graphics.Shader
 import com.kiln.stratum.engine.raster.HeapTilePixels
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
+import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.transform.MaskPiece
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.transform.TileComposer
 import com.kiln.stratum.engine.transform.TilePiece
@@ -46,6 +51,50 @@ internal object CanvasTileComposer : TileComposer {
             // GPU 전용 내용이 없으면 소프트웨어로 그리고, 바꿀 수 없는 비트맵 하나로 돌려준다(SDK 소스로 확인)
             val bitmap = Bitmap.createBitmap(picture, width, height, Bitmap.Config.ARGB_8888)
             return Tile.of(BitmapTilePixels(bitmap))
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
+        }
+    }
+
+    /**
+     * 마스크 조각들을 옮겨 마스크 타일 한 장을 만든다(레이어 마스크, 결정 기록 '피부 보정'의 1c). 픽셀 타일과 같은 정수 계수 행렬로 필터 없이 옮겨
+     * 알파 값이 그대로다. 알파 그림은 셰이더로 그린다: 그냥 그리면 소프트웨어 그리기는 알파를 덮는 정도로만 쓴다([MaskTiles.drawAlpha]).
+     */
+    override fun composeMask(width: Int, height: Int, pieces: List<MaskPiece>, orientation: Orientation): MaskTile? {
+        val temporary = ArrayList<Bitmap>()
+        try {
+            return MaskTiles.draw(width, height) { canvas ->
+                for (piece in pieces) {
+                    val target = piece.part.targetRect
+                    val source = MaskTiles.bitmapOf(piece.tile, temporary)
+                    if (source == null) {
+                        // 다 보이는 조각은 덮는 자리를 채운다
+                        canvas.drawRect(
+                            target.left.toFloat(), target.top.toFloat(), target.right.toFloat(), target.bottom.toFloat(),
+                            Paint().apply {
+                                color = Color.BLACK
+                                blendMode = BlendMode.SRC
+                            }
+                        )
+                        continue
+                    }
+                    val m = piece.part.affine(orientation)
+                    val shader = BitmapShader(source, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+                        filterMode = BitmapShader.FILTER_MODE_NEAREST
+                        setLocalMatrix(Matrix().apply {
+                            setValues(floatArrayOf(m[0].toFloat(), m[1].toFloat(), m[2].toFloat(), m[3].toFloat(), m[4].toFloat(), m[5].toFloat(), 0f, 0f, 1f))
+                        })
+                    }
+                    // 조각이 덮는 대상 사각형만 그린다
+                    canvas.drawRect(
+                        target.left.toFloat(), target.top.toFloat(), target.right.toFloat(), target.bottom.toFloat(),
+                        Paint().apply {
+                            this.shader = shader
+                            blendMode = BlendMode.SRC
+                        }
+                    )
+                }
+            }
         } finally {
             for (bitmap in temporary) bitmap.recycle()
         }

@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.document
 import com.kiln.stratum.engine.adjust.Adjustments
 
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.text.TextSpec
 
 /**
@@ -47,6 +48,9 @@ data class RasterContent(val raster: Raster) : LayerContent
  *   없으면 보통 픽셀 레이어다.
  * @property liquify 다시 고칠 수 있는 픽셀 유동화의 기록(결정 기록 '얼굴 인식 보정' 3단계). 픽셀은 그 기록을 원래 픽셀에 건 결과이고,
  *   픽셀을 바꾸면 지운다([withPixels], 사용자 결정 "묻지 않고 굳히기"). 없으면 null.
+ * @property mask 레이어 마스크(결정 기록 '피부 보정'의 1c): 문서 크기의 알파(255 보임, 0 가림). 선택 영역과 같은 알파 타일이고
+ *   없는 타일은 가리며, 다 보이는 타일([com.kiln.stratum.engine.selection.MaskTile.FULL])은 메모리를 쓰지 않는다. 그릴 때 보정을 건 레이어 색에 곱한다.
+ *   픽셀을 바꿔도 그대로 남는다(포토샵과 같다). 없으면 null(다 보임).
  */
 data class Layer(
     val id: LayerId,
@@ -58,7 +62,8 @@ data class Layer(
     val gainmap: HdrGainmap? = null,
     val visible: Boolean = true,
     val text: TextSpec? = null,
-    val liquify: LiquifyRecord? = null
+    val liquify: LiquifyRecord? = null,
+    val mask: Selection? = null
 ) {
     init {
         require(opacity in 0f..1f) { "Opacity must be within 0..1: $opacity" }

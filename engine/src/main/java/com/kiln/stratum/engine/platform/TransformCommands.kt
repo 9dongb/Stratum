@@ -10,6 +10,8 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.contentBounds
+import com.kiln.stratum.engine.selection.Selection
+import com.kiln.stratum.engine.transform.MaskTransform
 import com.kiln.stratum.engine.transform.Orientation
 import com.kiln.stratum.engine.transform.RasterTransform
 import com.kiln.stratum.engine.transform.TransformPlan
@@ -68,8 +70,8 @@ data class CropImage(
  * [layer] 레이어의 픽셀을 ([dx], [dy]) 문서 픽셀만큼 옮긴다(이동 도구, 결정 기록 '이동 도구'). 문서 크기는 그대로이고,
  * 캔버스 밖으로 나간 부분은 버리며(놓을 때 잘림, 사용자 결정) 옮겨서 빈 자리는 투명이다.
  * 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사, 결정 기록 '회전·뒤집기·자르기는 안드로이드 내부 복사'와 같다). 타일 크기의 배수만큼 옮기면 타일을 그대로 쓴다.
- * 게인맵(HDR)도 같은 비율만큼 옮긴다. 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없으면 그대로 둔다.
- * 글자 레이어(사용자 피드백 8차 1-6)는 픽셀을 옮기지 않고 글자를 새 자리에 다시 그린다. 그래서 고칠 수 있는 채로 남고,
+ * 게인맵(HDR)도 같은 비율만큼 옮기고, 레이어 마스크도 같이 옮긴다(결정 기록 '피부 보정'의 1c). 선택 영역·다른 레이어·레이어 속성은 그대로다.
+ * 그 레이어가 없으면 그대로 둔다. 글자 레이어(사용자 피드백 8차 1-6)는 픽셀을 옮기지 않고 글자를 새 자리에 다시 그린다. 그래서 고칠 수 있는 채로 남고,
  * 캔버스 밖으로 나갔다가 돌아와도 글자가 남는다.
  */
 data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : CancellableCommand {
@@ -80,18 +82,19 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         if (index < 0) return document
         val target = document.layers[index]
         val raster = (target.content as? RasterContent)?.raster ?: return document
+        val plan = TransformPlan.translate(document.size, dx, dy)
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())
             val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return document
             val layers = document.layers.toMutableList()
-            layers[index] = target.withText(drawn.raster, drawn.spec)
+            layers[index] = target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, checkCanceled))
             return document.copy(layers = layers)
         }
         return try {
-            val moved = RasterTransform.transform(raster, TransformPlan.translate(document.size, dx, dy), CanvasTileComposer, checkCanceled)
+            val moved = RasterTransform.transform(raster, plan, CanvasTileComposer, checkCanceled)
             val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
             val layers = document.layers.toMutableList()
-            layers[index] = target.withPixels(moved, gainmap)
+            layers[index] = target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
             document.copy(layers = layers)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
@@ -105,7 +108,8 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
  * [layer] 레이어만 [orientation] 방향으로 돌리거나 뒤집는다(이동 도구, 사용자 피드백 12차 2, 결정 기록 '레이어 돌리기·뒤집기').
  * 축은 레이어 내용(투명하지 않은 곳)을 담는 사각형의 가운데이고([Orientation.turnedOrigin]), 문서 크기는 그대로다.
  * 캔버스 밖으로 나간 부분은 버리고 빈 자리는 투명이다(옮기기와 같다). 픽셀 값은 그대로 옮긴다(안드로이드 내부 복사).
- * 게인맵(HDR)도 같은 비율로 돌린다. 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없거나 다 투명하면 그대로 둔다.
+ * 게인맵(HDR)도 같은 비율로 돌리고, 레이어 마스크도 같은 계획으로 돌린다(내용 사각형 밖의 마스크는 가림, 그 자리 픽셀은 투명).
+ * 선택 영역·다른 레이어·레이어 속성은 그대로다. 그 레이어가 없거나 다 투명하면 그대로 둔다.
  * 글자 레이어는 돌린 글자를 다시 그릴 수 없어 픽셀 레이어가 된다(화면이 먼저 '글자를 픽셀로 바꿀까요?'를 묻는다).
  */
 data class OrientLayer(val layer: LayerId, val orientation: Orientation) : CancellableCommand {
@@ -125,7 +129,7 @@ data class OrientLayer(val layer: LayerId, val orientation: Orientation) : Cance
                 RasterTransform.orientGainmap(it, document.size, bounds, orientation, origin, CanvasTileComposer, checkCanceled)
             }
             val layers = document.layers.toMutableList()
-            layers[index] = target.withPixels(turned, gainmap)
+            layers[index] = target.withPixels(turned, gainmap).copy(mask = movedMask(target.mask, plan, checkCanceled))
             document.copy(layers = layers)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
@@ -138,12 +142,21 @@ data class OrientLayer(val layer: LayerId, val orientation: Orientation) : Cance
 private val Document.size: PixelSize
     get() = PixelSize(width, height)
 
-/** 레이어 하나를 옮기거나 돌릴 때 새로 생길 수 있는 메모리: 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵 타일 */
+/** 레이어 마스크 [mask]를 픽셀과 같은 [plan]으로 옮긴 것(없으면 null). 메모리가 모자라면 [NotEnoughMemoryException]. */
+private fun movedMask(mask: Selection?, plan: TransformPlan, checkCanceled: () -> Unit) =
+    try {
+        mask?.let { MaskTransform.transform(it, plan, CanvasTileComposer, checkCanceled) }
+    } catch (e: OutOfMemoryError) {
+        throw NotEnoughMemoryException(e)
+    }
+
+/** 레이어 하나를 옮기거나 돌릴 때 새로 생길 수 있는 메모리: 그 레이어의 타일(한 가지 색 타일은 그대로 쓰므로 빼고)과 게인맵·마스크 타일 */
 private fun layerTileBytes(document: Document, layer: LayerId): Long {
     val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
     val raster = (target.content as? RasterContent)?.raster ?: return 0L
     val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
-    return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
+    return tiles + (target.gainmap?.raster?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L) +
+        (target.mask?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L)
 }
 
 /**
@@ -158,6 +171,8 @@ private fun newTileBytes(document: Document, area: PixelRect): Long {
             if (tile.solidColor == null && key.overlaps(area)) bytes += tile.byteCount
         }
         layer.gainmap?.let { gainmap -> bytes += gainmap.raster.tiles.values.sumOf { it.byteCount.toLong() } }
+        // 마스크 타일(픽셀 하나에 1바이트, 다 보이는 타일은 0)
+        layer.mask?.let { mask -> bytes += mask.tiles.entries.sumOf { (key, tile) -> if (key.overlaps(area)) tile.byteCount.toLong() else 0L } }
     }
     return bytes
 }

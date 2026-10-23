@@ -3,6 +3,7 @@ package com.kiln.stratum.engine.platform
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.BlendMode
+import android.graphics.ComposeShader
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
@@ -34,7 +35,7 @@ import kotlin.math.roundToInt
 
 /**
  * 문서 전체 축소본을 레이어별로 나눠 그린다. 레이어마다 픽셀만 그린 축소본(보정·불투명도 없이)을 기억해 두고,
- * 합칠 때 보정·불투명도·혼합 모드를 건다.
+ * 합칠 때 보정·불투명도·혼합 모드를 건다. 레이어 마스크도 마스크 객체마다 같은 단계의 알파 그림으로 기억해 두고 합칠 때 곱한다.
  *
  * 보정 슬라이더를 끄는 동안처럼 픽셀은 그대로이고 레이어 속성만 바뀌면, 레이어 축소본을 다시 그리지 않고
  * 화면 크기의 그림 몇 장만 합쳐서 빠르다(50MP 사진도 타일 800장을 다시 그리지 않는다).
@@ -55,6 +56,9 @@ class LayerPreviewCache {
 
     /** 래스터 객체마다의 작은 그림(레이어 패널) */
     private val thumbnails = IdentityHashMap<Raster, Thumbnail>()
+
+    /** 마스크 객체마다의 알파 그림(축소본과 같은 단계, 결정 기록 '피부 보정'의 1c) */
+    private val masks = IdentityHashMap<Selection, Entry>()
 
     /** 레이어 축소본을 새로 그린 횟수. 속성만 바뀌면 늘지 않는 것을 테스트로 확인한다. */
     var layerRenders = 0
@@ -129,23 +133,44 @@ class LayerPreviewCache {
         val picture = Picture()
         val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
         for ((step, bitmap) in previews) {
-            val shader = if (step.layer.id == moving?.layerId) {
-                // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL)
+            // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL). 마스크도 같이 옮긴다.
+            val offset = if (step.layer.id == moving?.layerId) {
                 val scale = 1f / (1 shl level)
-                BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
-                    setLocalMatrix(Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) })
-                }
+                Matrix().apply { setTranslate(moving.dx * scale, moving.dy * scale) }
             } else {
-                BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                null
             }
-            // 보정을 건 레이어를 불투명도·혼합 모드로 아래에 얹는다
+            val shader = shaderOf(bitmap, offset)
+            // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
+            val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
+            val mask = step.mask?.let { maskPreview(it, region) ?: return null }
             val paint = layerPaint(step).apply {
-                this.shader = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
+                this.shader = if (mask == null) adjusted else ComposeShader(adjusted, shaderOf(mask, offset), BlendMode.DST_IN)
             }
             canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
         }
         picture.endRecording()
         return PreviewRenderer.drawOnGpu(picture, region.previewWidth, region.previewHeight)
+    }
+
+    /** 축소본 [bitmap]을 그리는 셰이더. [offset]이 있으면 그만큼 옮기고 밖은 투명이다(DECAL), 없으면 가장자리를 늘인다. */
+    private fun shaderOf(bitmap: Bitmap, offset: Matrix?): Shader =
+        if (offset != null) {
+            BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply { setLocalMatrix(offset) }
+        } else {
+            BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
+
+    /** [mask]를 [region](문서 전체, 축소본 단계)으로 그린 알파 그림. 같은 마스크 객체·단계면 다시 그리지 않는다. 그리지 못하면 null. */
+    private fun maskPreview(mask: Selection, region: PreviewRegion): Bitmap? {
+        masks[mask]?.takeIf { it.level == region.level }?.let { return it.bitmap }
+        val bitmap = try {
+            SelectionPreview.maskAt(mask, 0f, 0f, 1f / (1 shl region.level), region.previewWidth, region.previewHeight)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
+        masks[mask] = Entry(region.level, bitmap)
+        return bitmap
     }
 
     /**
@@ -187,7 +212,8 @@ class LayerPreviewCache {
         val key: List<Any> = listOf(level, document.width, document.height, info) +
             CompositePlan.of(document).map { step ->
                 when (step) {
-                    is CompositeStep.Draw -> listOf(IdentityKey(step.raster), IdentityKey(step.layer.gainmap?.raster), step.opacity, step.blendMode)
+                    is CompositeStep.Draw ->
+                        listOf(IdentityKey(step.raster), IdentityKey(step.layer.gainmap?.raster), IdentityKey(step.mask), step.opacity, step.blendMode)
                 }
             }
         lastGainmap?.let { (lastKey, gainmap) -> if (lastKey == key) return gainmap }
@@ -214,6 +240,7 @@ class LayerPreviewCache {
     fun clear() {
         entries.clear()
         thumbnails.clear()
+        masks.clear()
         lastRasters.clear()
         lastGainmap = null
         lastEffect = null
@@ -225,6 +252,9 @@ class LayerPreviewCache {
         for (layer in document.layers) wanted[rasterOf(layer)] = Unit
         entries.entries.removeIf { (raster, entry) -> raster !in wanted || entry.level != level }
         thumbnails.keys.removeIf { it !in wanted }
+        val wantedMasks = IdentityHashMap<Selection, Unit>()
+        for (layer in document.layers) layer.mask?.let { wantedMasks[it] = Unit }
+        masks.entries.removeIf { (mask, entry) -> mask !in wantedMasks || entry.level != level }
     }
 
     /**

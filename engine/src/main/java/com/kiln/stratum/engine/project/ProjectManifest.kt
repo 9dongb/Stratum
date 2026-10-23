@@ -22,8 +22,12 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
-/** 프로젝트 파일 형식의 판. 이 앱이 쓰는 판이자 읽을 수 있는 가장 높은 판이다. */
-const val PROJECT_FORMAT_VERSION = 1
+/**
+ * 프로젝트 파일 형식의 판. 이 앱이 읽을 수 있는 가장 높은 판이다.
+ * 판 2는 레이어 마스크를 담는다(결정 기록 '피부 보정'의 1c). 앞 판 앱이 마스크를 빼고 열면 보이는 모습이 달라지므로,
+ * 마스크가 있는 프로젝트만 판 2로 쓰고 나머지는 판 1 그대로다([ProjectManifest.formatVersion]).
+ */
+const val PROJECT_FORMAT_VERSION = 2
 
 /**
  * 저장한 프로젝트의 목차(순수 데이터). 캔버스 크기, 레이어와 그 속성, 레이어마다 어느 자리에 어떤 타일이 있는지 적는다.
@@ -53,11 +57,16 @@ data class ProjectManifest(
     /** 목록에 보일 머리말 */
     val header: ProjectHeader
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
+
+    /** 이 목차를 쓸 판: 레이어 마스크가 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
+    val formatVersion: Int
+        get() = if (layers.any { it.mask != null }) 2 else 1
 }
 
 /**
  * 레이어 하나의 속성과 내용. 보정 값은 레이어 덧붙임(꼬리표 1)에, 게인맵은 덧붙임(꼬리표 2)에, 숨김은 덧붙임(꼬리표 3)에,
- * 다시 고칠 수 있는 글자는 덧붙임(꼬리표 4)에, 다시 고칠 수 있는 유동화 기록은 덧붙임(꼬리표 5)에 적고, 없으면(보이면) 적지 않는다.
+ * 다시 고칠 수 있는 글자는 덧붙임(꼬리표 4)에, 다시 고칠 수 있는 유동화 기록은 덧붙임(꼬리표 5)에, 틴트는 덧붙임(꼬리표 6)에,
+ * 레이어 마스크는 덧붙임(꼬리표 7, 판 2)에 적고, 없으면(보이면) 적지 않는다.
  * 그래서 숨김을 모르는 앞 판의 프로젝트는 모두 보이는 레이어로 열리고, 글자·유동화 기록을 모르는 앞 판 앱은 그 레이어를 픽셀 레이어로 연다
  * (픽셀은 늘 타일에 있다).
  */
@@ -71,8 +80,15 @@ data class LayerEntry(
     val gainmap: GainmapEntry? = null,
     val visible: Boolean = true,
     val text: TextSpec? = null,
-    val liquify: LiquifyEntry? = null
+    val liquify: LiquifyEntry? = null,
+    val mask: List<MaskTileEntry>? = null
 )
+
+/**
+ * 레이어 마스크 타일 한 장(결정 기록 '피부 보정'의 1c). [file]은 tiles 폴더의 마스크 타일 파일(픽셀 하나에 1바이트)이고,
+ * null이면 다 보이는 타일이다(파일 없음). 목록에 없는 자리는 가린 곳이다.
+ */
+data class MaskTileEntry(val column: Int, val row: Int, val file: String?)
 
 /**
  * 레이어의 다시 고칠 수 있는 유동화 기록(document.LiquifyRecord, 결정 기록 '얼굴 인식 보정' 3단계). 유동화 전 원래 픽셀·게인맵의 타일과
@@ -162,6 +178,9 @@ object ProjectManifestCodec {
      */
     private const val EXTRA_TINT = 6
 
+    /** 레이어 덧붙임 꼬리표: 레이어 마스크의 타일 목록(판 2, 결정 기록 '피부 보정'의 1c). 마스크가 없으면 적지 않는다. */
+    private const val EXTRA_MASK = 7
+
     /** 문서 덧붙임 꼬리표: 색 공간 코드(int). sRGB면 적지 않는다. */
     private const val EXTRA_COLOR_SPACE = 1
 
@@ -169,12 +188,14 @@ object ProjectManifestCodec {
     private const val EXTRA_HDR = 2
     private const val TILE_FILE: Byte = 0
     private const val TILE_SOLID: Byte = 1
+    private const val MASK_FULL: Byte = 0
+    private const val MASK_FILE: Byte = 1
 
     /** [manifest]를 [output]에 쓴다. [output]은 닫지 않는다. */
     fun write(manifest: ProjectManifest, output: OutputStream) {
         val out = DataOutputStream(output)
         out.writeInt(MAGIC)
-        out.writeInt(PROJECT_FORMAT_VERSION)
+        out.writeInt(manifest.formatVersion)
         out.writeInt(manifest.width)
         out.writeInt(manifest.height)
         out.writeLong(manifest.nextLayerId)
@@ -200,6 +221,7 @@ object ProjectManifestCodec {
             if (!layer.visible) extras += EXTRA_HIDDEN to ByteArray(0)
             layer.text?.let { extras += EXTRA_TEXT to textBytes(it) }
             layer.liquify?.let { extras += EXTRA_LIQUIFY to liquifyBytes(it) }
+            layer.mask?.let { extras += EXTRA_MASK to maskBytes(it) }
             writeExtras(out, extras)
         }
         // 문서 덧붙임: 색 공간(sRGB가 아닐 때만)·HDR 값(있을 때만)
@@ -233,6 +255,7 @@ object ProjectManifestCodec {
                 var visible = true
                 var text: TextSpec? = null
                 var liquify: LiquifyEntry? = null
+                var mask: List<MaskTileEntry>? = null
                 data.readExtras { tag, bytes ->
                     when (tag) {
                         EXTRA_ADJUSTMENTS -> adjustments = adjustmentsOf(bytes)
@@ -241,9 +264,10 @@ object ProjectManifestCodec {
                         EXTRA_TEXT -> text = textOf(bytes)
                         EXTRA_LIQUIFY -> liquify = liquifyOrNull(bytes)
                         EXTRA_TINT -> tint = DataInputStream(ByteArrayInputStream(bytes)).readFloat()
+                        EXTRA_MASK -> mask = maskOf(bytes)
                     }
                 }
-                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify)
+                LayerEntry(id, name, opacity, blendMode, content, adjustments.copy(tint = tint), gainmap, visible, text, liquify, mask)
             }
             var colorSpace = DocumentColorSpace.SRGB
             var hdr: HdrInfo? = null
@@ -486,6 +510,37 @@ object ProjectManifestCodec {
             2 -> HdrPrimaries.BT2020
             else -> throw UnreadableProjectException("Unknown HDR primaries $code")
         }
+
+    /** 마스크 타일 목록: 개수와 타일마다 자리, 종류(0 다 보임, 1 파일)와 파일 이름 */
+    private fun maskBytes(tiles: List<MaskTileEntry>): ByteArray =
+        ByteArrayOutputStream().also { buffer ->
+            val out = DataOutputStream(buffer)
+            out.writeInt(tiles.size)
+            for (tile in tiles) {
+                out.writeInt(tile.column)
+                out.writeInt(tile.row)
+                if (tile.file == null) {
+                    out.writeByte(MASK_FULL.toInt())
+                } else {
+                    out.writeByte(MASK_FILE.toInt())
+                    out.writeUTF(tile.file)
+                }
+            }
+            out.flush()
+        }.toByteArray()
+
+    private fun maskOf(bytes: ByteArray): List<MaskTileEntry> {
+        val data = DataInputStream(ByteArrayInputStream(bytes))
+        return List(data.readCount()) {
+            val column = data.readInt()
+            val row = data.readInt()
+            when (val kind = data.readByte()) {
+                MASK_FULL -> MaskTileEntry(column, row, null)
+                MASK_FILE -> MaskTileEntry(column, row, data.readUTF())
+                else -> throw UnreadableProjectException("Unknown mask tile kind $kind")
+            }
+        }
+    }
 
     /** 실수 하나 */
     private fun floatBytes(value: Float): ByteArray =

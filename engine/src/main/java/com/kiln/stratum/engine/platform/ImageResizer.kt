@@ -24,6 +24,7 @@ import com.kiln.stratum.engine.transform.ResizePlan
 
 /**
  * 문서 전체(모든 레이어)의 크기를 [width]×[height]로 바꾼다. 픽셀을 다시 계산하는 일이라 GPU로 한다([ImageResizer]).
+ * 레이어 마스크도 픽셀과 같은 방법으로 바꾼다([MaskResizer], 결정 기록 '피부 보정'의 1c).
  * 크기는 CanvasLimits.checkResize 안이어야 한다(크기 변경 창이 검사하고 넘긴다). 같은 크기면 그대로 둔다.
  */
 data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
@@ -40,20 +41,23 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
                 is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled))
+                    .copy(mask = layer.mask?.let { MaskResizer.resize(it, plan, checkCanceled) })
             }
         }
         // 선택 영역은 크기를 바꾸지 않고 푼다(결정 기록 '선택 도구')
         return document.copy(width = width, height = height, layers = layers, selection = null)
     }
 
-    /** 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다. */
+    /** 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다. 경계가 있는 마스크는 픽셀 하나에 1바이트를 더한다. */
     override fun estimateNewBytes(document: Document): Long {
         val source = PixelSize(document.width, document.height)
         val layerBytes = width.toLong() * height * Int.SIZE_BYTES
-        return document.layers.count { layer ->
+        val pixels = document.layers.count { layer ->
             val raster = (layer.content as? RasterContent)?.raster
             raster != null && raster.tiles.isNotEmpty() && ImageResizer.solidTile(raster, source) == null
         } * layerBytes
+        val masks = document.layers.count { layer -> layer.mask?.tiles?.values?.any { !it.isFull } == true } * width.toLong() * height
+        return pixels + masks
     }
 }
 

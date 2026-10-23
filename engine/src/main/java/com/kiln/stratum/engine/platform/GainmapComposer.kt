@@ -1,11 +1,13 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.BlendMode
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.Rect
+import android.graphics.Shader
 import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
@@ -18,7 +20,7 @@ import kotlin.math.roundToInt
  *
  * '밝히지 않음' 값으로 채운 뒤, 보이는 표준 레이어를 아래부터 그 레이어의 알파 × 불투명도만큼 그 레이어의 게인맵
  * (없으면 '밝히지 않음')으로 덮는다. 그래서 사진 위에 칠한 그림·글자는 HDR로 밝아지지 않는다.
- * 곱하기·스크린·오버레이 레이어는 아래 사진을 바꾸는 것이라 게인맵을 그대로 둔다.
+ * 곱하기·스크린·오버레이 레이어는 아래 사진을 바꾸는 것이라 게인맵을 그대로 둔다. 레이어 마스크가 가린 곳은 덮지 않는다(알파에 마스크를 곱함).
  * 게인맵 값은 로그 배율의 비례 값이라, 알파로 섞으면 배율을 로그로 섞은 것과 거의 같다.
  * GPU 작업을 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
@@ -60,7 +62,9 @@ internal object GainmapComposer {
                 val alpha = alphaOf(raster)?.also { if (it.owned) temporary += it.bitmap }?.bitmap ?: return null
                 val map = mapOf(step.layer)?.also { temporary += it }
                 if (step.layer.gainmap != null && map == null) return null
-                cover(canvas, width, height, step.opacity, alpha, map, neutral)
+                // 레이어 마스크는 게인맵 크기로 그려 알파에 곱한다(결정 기록 '피부 보정'의 1c)
+                val mask = step.mask?.let { SelectionPreview.maskAt(it, 0f, 0f, width.toFloat() / document.width, width, height).also { m -> temporary += m } }
+                cover(canvas, width, height, step.opacity, alpha, map, neutral, mask)
             }
             picture.endRecording()
             val drawn = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null
@@ -74,11 +78,18 @@ internal object GainmapComposer {
         }
     }
 
-    /** 레이어 하나의 몫: [alpha]의 알파 × [opacity]만큼 [map](없으면 [neutral])으로 덮는다 */
-    private fun cover(canvas: Canvas, width: Int, height: Int, opacity: Float, alpha: Bitmap, map: Bitmap?, neutral: Int) {
+    /** 레이어 하나의 몫: [alpha]의 알파 × [mask](레이어 마스크, 있으면) × [opacity]만큼 [map](없으면 [neutral])으로 덮는다 */
+    private fun cover(canvas: Canvas, width: Int, height: Int, opacity: Float, alpha: Bitmap, map: Bitmap?, neutral: Int, mask: Bitmap?) {
         val whole = Rect(0, 0, width, height)
         val saved = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply { this.alpha = (opacity * 255).roundToInt() })
         canvas.drawBitmap(alpha, null, whole, Paint(Paint.FILTER_BITMAP_FLAG))
+        // 마스크 알파를 곱한다. 알파 그림은 셰이더로 그려야 소스 알파로 쓰인다(MaskTiles.drawAlpha).
+        if (mask != null) {
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
+                shader = BitmapShader(mask, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                blendMode = BlendMode.DST_IN
+            })
+        }
         // 레이어 알파는 그대로 두고 색만 게인맵으로 바꾼다
         if (map != null) {
             canvas.drawBitmap(map, null, whole, Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.SRC_IN })

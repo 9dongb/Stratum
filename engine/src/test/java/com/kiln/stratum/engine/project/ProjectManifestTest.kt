@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.EOFException
+import java.nio.ByteBuffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -79,7 +80,7 @@ class ProjectManifestTest {
 
     @Test
     fun unknownExtras_areSkipped() {
-        // 같은 판에서 나중에 더할 덧붙임(꼬리표 7, 3바이트)을 레이어와 문서 끝에 직접 넣어 본다
+        // 같은 판에서 나중에 더할 덧붙임(꼬리표 99, 3바이트)을 레이어와 문서 끝에 직접 넣어 본다
         val single = manifest.copy(layers = listOf(LayerEntry(0, "A", 1f, BlendMode.NORMAL, RasterEntry(emptyList()))))
         val bytes = ByteArrayOutputStream().also { buffer ->
             val out = DataOutputStream(buffer)
@@ -98,7 +99,7 @@ class ProjectManifestTest {
             out.writeInt(1)
             out.writeInt(0)
             out.writeInt(1)
-            out.writeInt(7)
+            out.writeInt(99)
             out.writeInt(3)
             out.write(byteArrayOf(1, 2, 3))
             out.writeInt(1)
@@ -146,6 +147,21 @@ class ProjectManifestTest {
         assertEquals(bytesOf(manifest).size + 12, bytesOf(tinted).size)
         // 보정 값 덧붙임은 틴트가 없을 때와 같아, 틴트를 모르는 앞 판 앱도 나머지 보정을 그대로 읽는다
         assertEquals(bytesOf(exposureOnly).size + 12, bytesOf(both).size)
+    }
+
+    @Test
+    fun mask_roundTrips_andOnlyProjectsWithMasksUseVersion2() {
+        val tiles = listOf(MaskTileEntry(0, 0, null), MaskTileEntry(1, 0, "m.mask"), MaskTileEntry(15, 11, "m.mask"))
+        val masked = manifest.copy(layers = listOf(manifest.layers[0].copy(mask = tiles), manifest.layers[1]))
+        val bytes = bytesOf(masked)
+
+        assertEquals(masked, read(bytes))
+        // 판(머리말 둘째 int): 마스크가 있으면 2, 없으면 1이라 앞 판 앱도 마스크 없는 프로젝트를 그대로 연다
+        assertEquals(2, ByteBuffer.wrap(bytes, 4, 4).int)
+        assertEquals(1, ByteBuffer.wrap(bytesOf(manifest), 4, 4).int)
+        // 다 가린 마스크(타일 없음)도 마스크다
+        val hidden = manifest.copy(layers = listOf(manifest.layers[0].copy(mask = emptyList()), manifest.layers[1]))
+        assertEquals(hidden, read(bytesOf(hidden)))
     }
 
     @Test

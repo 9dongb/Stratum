@@ -243,6 +243,18 @@ class EditHistoryTest {
     }
 
     @Test
+    fun bytesInUse_countsLayerMaskTiles_sharedWithTheSelection() {
+        val partial = MaskTile.of(ByteArray(TILE_PIXEL_COUNT) { 60 })
+        val mask = Selection.of(mapOf(TileKey(0, 0) to partial, TileKey(1, 0) to MaskTile.FULL))
+        val masked = canvas.copy(layers = listOf(canvas.layers[0].copy(mask = mask)), selection = mask)
+
+        val history = EditHistory(masked)
+
+        // 마스크와 선택 영역이 함께 쓰는 알파 타일은 한 번만 센다(다 보이는 타일은 메모리를 쓰지 않음)
+        assertEquals(tileBytes + TILE_PIXEL_COUNT, history.bytesInUse)
+    }
+
+    @Test
     fun bytesInUse_countsGainmapTiles() {
         val gainmapTile = newTile()
         val photo = canvas.copy(layers = listOf(canvas.layers[0].copy(gainmap = HdrGainmap(64, 64, Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to gainmapTile))))))

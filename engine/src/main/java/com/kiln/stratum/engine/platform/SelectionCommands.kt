@@ -183,16 +183,7 @@ data object Deselect : EditCommand {
 data object InvertSelection : CancellableCommand {
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         val selection = document.selection ?: return document
-        val grid = TileGrid(document.width, document.height)
-        val tiles = HashMap<TileKey, MaskTile>()
-        for (key in grid.keys()) {
-            checkCanceled()
-            when (val tile = selection.tiles[key]) {
-                null -> tiles[key] = MaskTile.FULL
-                else -> if (!tile.isFull) MaskTiles.invert(tile)?.let { tiles[key] = it }
-            }
-        }
-        return document.withSelection(Selection.of(tiles))
+        return document.withSelection(MaskTiles.inverted(selection, PixelSize(document.width, document.height), checkCanceled))
     }
 
     override fun estimateNewBytes(document: Document): Long =
@@ -218,7 +209,7 @@ data class DeleteSelected(val layerId: LayerId) : CancellableCommand {
 
 /**
  * [layerId] 레이어에서 고른 곳의 픽셀을 복사해 바로 위의 새 레이어([name])로 만든다([cut]이면 원래 자리에서 지운다).
- * 새 레이어는 원래 레이어의 불투명도·혼합 모드·보정을 그대로 가져가 같아 보인다. 끝나면 선택을 푼다(포토샵과 같다).
+ * 새 레이어는 원래 레이어의 불투명도·혼합 모드·보정·마스크를 그대로 가져가 같아 보인다(마스크 타일은 함께 쓴다). 끝나면 선택을 푼다(포토샵과 같다).
  * 복사할 픽셀이 없으면 바뀌지 않는다.
  */
 data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: Boolean) : CancellableCommand {
@@ -239,7 +230,9 @@ data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: 
             blendMode = layer.blendMode,
             adjustments = layer.adjustments,
             // 게인맵은 함께 쓴다. 고르지 않은 곳은 알파가 0이라 상관없다(결정 기록 'HDR').
-            gainmap = layer.gainmap
+            gainmap = layer.gainmap,
+            // 마스크도 함께 써서 원래 레이어에서 보이던 그대로다(결정 기록 '피부 보정'의 1c)
+            mask = layer.mask
         )
         val layers = document.layers.toMutableList()
         if (cut) layers[index] = layer.withPixels(SelectedPixels.cut(raster, selection, size, checkCanceled))

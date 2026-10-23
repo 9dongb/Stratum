@@ -2,6 +2,7 @@ package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.selection.Selection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -45,6 +46,10 @@ class CompositePlanTest {
         assertTrue(multiplied.needsOwnLayer)
         assertTrue(multiplied.isPlain)
 
+        val masked = CompositePlan.of(document(layer(0).copy(mask = Selection.EMPTY))).single() as CompositeStep.Draw
+        assertSame(Selection.EMPTY, masked.mask)
+        assertFalse(masked.isPlain)
+        assertFalse(masked.needsOwnLayer)
         val adjusted = CompositePlan.of(document(layer(0, adjustments = Adjustments(brightness = 0.2f)))).single() as CompositeStep.Draw
         assertFalse(adjusted.needsOwnLayer)
         assertFalse(adjusted.isPlain)

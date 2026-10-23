@@ -12,7 +12,7 @@ import com.kiln.stratum.engine.raster.TileKey
 import kotlin.math.roundToInt
 
 /**
- * [TransformPlan]대로 문서의 모든 레이어를 돌리거나 뒤집거나 자르고, 레이어 하나를 옮기거나 돌린다.
+ * [TransformPlan]대로 문서의 모든 레이어를 돌리거나 뒤집거나 자르고, 레이어 하나를 옮기거나 돌린다. 레이어 마스크도 같은 계획으로 옮긴다([MaskTransform]).
  *
  * 타일을 새로 만들지 않아도 되는 자리는 원본 타일 객체를 그대로 쓴다.
  * - 한 가지 색 타일(새 캔버스) 하나가 대상 자리를 다 덮을 때. 그래서 빈 캔버스는 돌려도 타일 한 장이다.
@@ -44,7 +44,9 @@ object RasterTransform {
                     )
                     // 글자 레이어(사용자 피드백 8차 1-6): 자르기만 하면 글자 자리를 같이 옮겨 다시 고칠 수 있게 남기고, 돌리거나 뒤집으면 픽셀 레이어가 된다
                     val text = layer.text?.takeIf { plan.orientation == Orientation.IDENTITY }?.moved(-plan.crop.left.toFloat(), -plan.crop.top.toFloat())
-                    if (text != null) moved.copy(text = text) else moved
+                    // 레이어 마스크도 픽셀과 같은 계획으로 옮긴다(결정 기록 '피부 보정'의 1c)
+                    val masked = moved.copy(mask = layer.mask?.let { MaskTransform.transform(it, plan, composer, checkCanceled) })
+                    if (text != null) masked.copy(text = text) else masked
                 }
             }
         }
