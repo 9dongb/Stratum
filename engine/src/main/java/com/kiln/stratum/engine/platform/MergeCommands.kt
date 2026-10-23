@@ -6,10 +6,11 @@ import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.command.CancellableCommand
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
-import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.Raster
@@ -65,16 +66,18 @@ data class MergeDown(val layerId: LayerId) : CancellableCommand {
 data object MergeVisible : CancellableCommand {
 
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
-        val visible = document.layers.filter { it.isShown }
+        // 보이는 것은 합성 계획이 그리는 레이어다(결정 기록 '피부 보정'의 1단계)
+        val visible = CompositePlan.shownLayers(document)
         if (visible.size < 2) return document
         val base = visible.first()
         val merged = LayerMerger.merge(document, visible, checkCanceled)
         val gainmap = GainmapEdits.merge(document, visible, checkCanceled)
         val result = base.withPixels(merged, gainmap).copy(opacity = 1f, blendMode = BlendMode.NORMAL, adjustments = Adjustments.NONE)
+        val mergedIds = visible.mapTo(HashSet()) { it.id }
         val layers = document.layers.mapNotNull { layer ->
             when {
                 layer.id == base.id -> result
-                layer.isShown -> null
+                layer.id in mergedIds -> null
                 else -> layer
             }
         }
@@ -82,7 +85,7 @@ data object MergeVisible : CancellableCommand {
     }
 
     override fun estimateNewBytes(document: Document): Long {
-        val visible = document.layers.filter { it.isShown }
+        val visible = CompositePlan.shownLayers(document)
         return if (visible.size < 2) 0L else LayerMerger.estimateNewBytes(visible)
     }
 }
@@ -140,17 +143,17 @@ internal object LayerMerger {
 
     /** 그대로 쓸 타일(자리 → 타일)과 다시 그릴 자리 */
     private fun plan(layers: List<Layer>): Pair<Map<TileKey, Tile>, List<TileKey>> {
-        val shown = layers.filter { it.isShown }
-        val rasters = shown.map { (it.content as RasterContent).raster }
+        // 합성 계획의 그리는 단계(보이는 픽셀 레이어)만 본다
+        val steps = CompositePlan.of(layers).filterIsInstance<CompositeStep.Draw>()
         val kept = HashMap<TileKey, Tile>()
         val render = ArrayList<TileKey>()
         val keys = LinkedHashSet<TileKey>()
-        for (raster in rasters) keys += raster.tiles.keys
+        for (step in steps) keys += step.raster.tiles.keys
         for (key in keys) {
-            val present = shown.indices.filter { rasters[it].tiles[key] != null }
+            val present = steps.filter { it.raster.tiles[key] != null }
             val only = present.singleOrNull()
-            if (only != null && shown[only].opacity == 1f && shown[only].adjustments.isIdentity) {
-                kept[key] = checkNotNull(rasters[only].tiles[key])
+            if (only != null && only.isPlain) {
+                kept[key] = checkNotNull(only.raster.tiles[key])
             } else {
                 render += key
             }

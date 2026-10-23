@@ -32,6 +32,8 @@ import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
@@ -1900,7 +1902,7 @@ class EditorViewModel internal constructor(
     fun mergeVisibleLayers() {
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
-        val visible = document.layers.filter { it.isShown }
+        val visible = CompositePlan.shownLayers(document)
         if (visible.size < 2) return
         runEdit(MergeVisible, select = visible.first().id)
     }
@@ -2759,11 +2761,12 @@ class EditorViewModel internal constructor(
      * 지우개·복제(레이어 픽셀을 읽는 획)는 그 레이어가 보이는 유일한 레이어일 때다. 그러면 그 위에 아무것도 없어 합친 그림에 바로 그린 것과 같다.
      */
     private fun strokesFitDetail(document: Document): Boolean {
-        val visible = document.layers.filter { it.isShown }
-        val top = visible.lastOrNull() ?: return false
-        if (top.blendMode != BlendMode.NORMAL || top.opacity < 1f || !top.adjustments.isIdentity) return false
+        // 합성 계획의 맨 위 단계가 그대로 보이는 표준 픽셀 레이어여야 한다
+        val steps = CompositePlan.of(document)
+        val top = steps.lastOrNull() as? CompositeStep.Draw ?: return false
+        if (top.blendMode != BlendMode.NORMAL || !top.isPlain) return false
         // 스머지는 앞 자국의 결과에 기대어 축소본 사본에 이어서 그리므로 확대 그림에는 얹지 않는다(손을 떼면 다시 선명해진다)
-        return detailStrokes.all { it.smudge == null && it.layer == top.id && (!it.readsLayer || visible.size == 1) }
+        return detailStrokes.all { it.smudge == null && it.layer == top.layer.id && (!it.readsLayer || steps.size == 1) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */

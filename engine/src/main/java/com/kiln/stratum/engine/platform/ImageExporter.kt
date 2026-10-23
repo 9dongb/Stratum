@@ -4,8 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
-import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.export.ExportFormat
 import com.kiln.stratum.engine.export.ExportSettings
 import com.kiln.stratum.engine.raster.PixelSize
@@ -88,9 +89,9 @@ object ImageExporter {
      */
     private fun exactRaster(document: Document, settings: ExportSettings): Raster? {
         if (settings.size != PixelSize(document.width, document.height) || !settings.format.keepsTransparency) return null
-        val visible = document.layers.filter { it.isShown }
-        val layer = visible.singleOrNull()?.takeIf { it.opacity == 1f && it.adjustments.isIdentity } ?: return null
-        return (layer.content as? RasterContent)?.raster
+        // 합성 계획이 그리는 단계가 그대로 보이는 픽셀 레이어 하나뿐일 때다. 투명한 바탕 위라 혼합 모드와 상관없다.
+        val step = CompositePlan.of(document).singleOrNull() as? CompositeStep.Draw ?: return null
+        return step.raster.takeIf { step.isPlain }
     }
 
     /** [raster]의 타일을 [into]의 같은 자리에 그대로 베낀다. 끝 타일의 캔버스 밖 부분은 비트맵 밖이라 잘린다. */
@@ -125,9 +126,7 @@ object ImageExporter {
         checkCanceled: () -> Unit
     ) {
         val plan = ResizePlan(PixelSize(document.width, document.height), target)
-        val rasters = document.layers
-            .filter { it.isShown }
-            .mapNotNull { (it.content as? RasterContent)?.raster }
+        val rasters = CompositePlan.of(document).filterIsInstance<CompositeStep.Draw>().map { it.raster }
         val canvas = Canvas(into)
         for (block in plan.blocks()) {
             checkCanceled()

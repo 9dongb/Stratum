@@ -2,7 +2,7 @@ package com.kiln.stratum.engine.platform
 
 import android.graphics.Paint
 import com.kiln.stratum.engine.document.BlendMode
-import com.kiln.stratum.engine.document.Layer
+import com.kiln.stratum.engine.document.CompositeStep
 import kotlin.math.roundToInt
 import android.graphics.BlendMode as AndroidBlendMode
 
@@ -18,13 +18,12 @@ internal fun BlendMode.toAndroid(): AndroidBlendMode =
         BlendMode.OVERLAY -> AndroidBlendMode.OVERLAY
     }
 
-/** [layer]를 아래에 얹는 물감: 불투명도와 혼합 모드. 따로 그린 레이어(saveLayer)나 레이어 축소본을 얹을 때 쓴다. */
-internal fun layerPaint(layer: Layer): Paint =
+/**
+ * 합성 단계 [step]의 레이어를 아래에 얹는 물감: 얹는 불투명도와 혼합 모드. 따로 그린 레이어(saveLayer)나 레이어 축소본을 얹을 때 쓴다.
+ * 따로 그려야 하는지는 [CompositeStep.Draw.needsOwnLayer]다.
+ */
+internal fun layerPaint(step: CompositeStep.Draw): Paint =
     Paint().apply {
-        alpha = (layer.opacity * 255).roundToInt()
-        blendMode = layer.blendMode.toAndroid()
+        alpha = (step.opacity * 255).roundToInt()
+        blendMode = step.blendMode.toAndroid()
     }
-
-/** 타일을 바로 그리지 않고 따로 그린 뒤 얹어야 하는지(불투명도가 1보다 작거나 표준이 아니면) */
-internal val Layer.needsOwnLayer: Boolean
-    get() = opacity < 1f || blendMode != BlendMode.NORMAL

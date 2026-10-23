@@ -7,9 +7,9 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
-import com.kiln.stratum.engine.document.Layer
-import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.inpaint.InpaintArea
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
@@ -154,31 +154,31 @@ class ObjectSegmenter(private val model: SegmentModel) {
     /** 마스크와 같은 크기로 그린 보이는 그림(경계 다듬기의 길잡이, R·G·B·A 바이트) */
     private class Guide(val bytes: ByteArray, val rowBytes: Int, val width: Int, val height: Int)
 
-    /** 합친 그림을 정하는 것: 문서 크기와, 보이는 레이어마다 픽셀 객체·불투명도·혼합 모드·보정 */
-    private class CompositeKey(private val width: Int, private val height: Int, private val layers: List<LayerKey>) {
+    /** 합친 그림을 정하는 것: 문서 크기와, 합성 계획([CompositePlan])의 단계마다 픽셀 객체·불투명도·혼합 모드·보정 */
+    private class CompositeKey(private val width: Int, private val height: Int, private val steps: List<StepKey>) {
 
         fun matches(document: Document): Boolean {
             if (document.width != width || document.height != height) return false
-            val shown = document.layers.filter { it.isShown }
-            return shown.size == layers.size && shown.indices.all { layers[it].matches(shown[it]) }
+            val plan = CompositePlan.of(document)
+            return plan.size == steps.size && plan.indices.all { steps[it].matches(plan[it]) }
         }
 
         companion object {
-            fun of(document: Document) = CompositeKey(document.width, document.height, document.layers.filter { it.isShown }.map { LayerKey(it) })
+            fun of(document: Document) =
+                CompositeKey(document.width, document.height, CompositePlan.of(document).map { step -> when (step) { is CompositeStep.Draw -> StepKey(step) } })
         }
     }
 
-    /** 레이어 하나의 열쇠. 픽셀 객체는 같은 객체인지만 본다(약하게 붙잡음). */
-    private class LayerKey(layer: Layer) {
-        private val pixels = WeakReference(pixelsOf(layer))
-        private val opacity = layer.opacity
-        private val blendMode = layer.blendMode
-        private val adjustments = layer.adjustments
+    /** 그리는 단계 하나의 열쇠. 픽셀 객체는 같은 객체인지만 본다(약하게 붙잡음). */
+    private class StepKey(step: CompositeStep.Draw) {
+        private val pixels = WeakReference(step.raster)
+        private val opacity = step.opacity
+        private val blendMode = step.blendMode
+        private val adjustments = step.adjustments
 
-        fun matches(layer: Layer): Boolean =
-            pixels.get() === pixelsOf(layer) && layer.opacity == opacity && layer.blendMode == blendMode && layer.adjustments == adjustments
-
-        private fun pixelsOf(layer: Layer): Any = (layer.content as? RasterContent)?.raster ?: layer.content
+        fun matches(step: CompositeStep): Boolean =
+            step is CompositeStep.Draw && pixels.get() === step.raster && step.opacity == opacity &&
+                step.blendMode == blendMode && step.adjustments == adjustments
     }
 
     companion object {

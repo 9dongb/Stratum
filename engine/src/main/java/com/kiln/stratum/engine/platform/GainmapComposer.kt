@@ -6,9 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.Rect
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.Layer
-import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.Raster
 import kotlin.math.roundToInt
 
@@ -50,15 +51,16 @@ internal object GainmapComposer {
             val picture = Picture()
             val canvas = picture.beginRecording(width, height)
             canvas.drawColor(neutral, BlendMode.SRC)
-            for (layer in document.layers) {
-                if (!layer.isShown || layer.blendMode != com.kiln.stratum.engine.document.BlendMode.NORMAL) continue
-                val raster = (layer.content as RasterContent).raster
+            // 합성 계획의 차례대로 덮는다(보이는 표준 레이어만, 결정 기록 '피부 보정'의 1단계)
+            for (step in CompositePlan.of(document)) {
+                if (step !is CompositeStep.Draw || step.blendMode != com.kiln.stratum.engine.document.BlendMode.NORMAL) continue
+                val raster = step.raster
                 if (raster.tiles.isEmpty()) continue
                 checkCanceled()
                 val alpha = alphaOf(raster)?.also { if (it.owned) temporary += it.bitmap }?.bitmap ?: return null
-                val map = mapOf(layer)?.also { temporary += it }
-                if (layer.gainmap != null && map == null) return null
-                cover(canvas, width, height, layer.opacity, alpha, map, neutral)
+                val map = mapOf(step.layer)?.also { temporary += it }
+                if (step.layer.gainmap != null && map == null) return null
+                cover(canvas, width, height, step.opacity, alpha, map, neutral)
             }
             picture.endRecording()
             val drawn = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null

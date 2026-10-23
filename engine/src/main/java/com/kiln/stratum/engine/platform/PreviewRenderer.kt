@@ -7,8 +7,9 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.Shader
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
-import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.preview.PreviewBlock
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
@@ -29,7 +30,7 @@ import kotlin.math.ceil
  *
  * 반씩 줄이면 GPU의 1/2 축소가 정확히 2×2 평균이라 화질이 고르고, 타일·묶음 경계가 정수 픽셀에 맞아 이음매가 없다.
  * 홀수 크기를 반으로 줄이면 끝 픽셀이 반만 덮이는데, 그 픽셀은 가장자리 픽셀을 늘여 채운다([drawScaled]).
- * 레이어는 기본 보정을 걸어 그리고, 불투명도·혼합 모드(표준·곱하기·스크린·오버레이)로 아래에 얹는다.
+ * 레이어는 합성 계획([CompositePlan])의 차례대로 기본 보정을 걸어 그리고, 불투명도·혼합 모드(표준·곱하기·스크린·오버레이)로 아래에 얹는다.
  * GPU 작업이 끝날 때까지 기다리므로 메인 스레드가 아닌 곳에서 부른다.
  */
 object PreviewRenderer {
@@ -98,29 +99,32 @@ object PreviewRenderer {
         // 힙에 담긴 타일(테스트·작은 데이터)은 그리는 동안만 비트맵으로 바꿔 쓴다
         val temporary = ArrayList<Bitmap>()
         try {
-            for (layer in document.layers) {
-                val raster = (layer.content as? RasterContent)?.raster ?: continue
-                if (!layer.isShown) continue
-                // 보정 값이 있으면 타일마다 보정 셰이더를 건다(이웃 픽셀을 보지 않아 레이어 전체에 건 것과 같다)
-                val adjust = AdjustShader.of(layer.adjustments)
-                // 불투명도가 1보다 작거나 표준이 아니면 레이어를 따로 그린 뒤, 그 불투명도·혼합 모드로 아래에 얹는다.
-                // 타일은 서로 겹치지 않아 타일마다 섞어도 되지만, 불투명도는 레이어 전체에 한 번 걸어야 한다.
-                val saved = if (layer.needsOwnLayer) {
-                    canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), layerPaint(layer))
-                } else {
-                    null
-                }
-                for (row in block.firstRow until block.firstRow + block.rows) {
-                    for (column in block.firstColumn until block.firstColumn + block.columns) {
-                        // 없는 타일은 투명이라 그리지 않는다
-                        val tile = raster.tiles[TileKey(column, row)] ?: continue
-                        val bitmap = bitmapOf(tile.pixels, temporary)
-                        val left = (column - block.firstColumn) * TILE_SIZE * scale
-                        val top = (row - block.firstRow) * TILE_SIZE * scale
-                        drawScaled(canvas, bitmap, left, top, scale, scale, adjust)
+            // 합성 계획의 차례대로 그린다(보이는 레이어만, 결정 기록 '피부 보정'의 1단계)
+            for (step in CompositePlan.of(document)) {
+                when (step) {
+                    is CompositeStep.Draw -> {
+                        // 보정 값이 있으면 타일마다 보정 셰이더를 건다(이웃 픽셀을 보지 않아 레이어 전체에 건 것과 같다)
+                        val adjust = AdjustShader.of(step.adjustments)
+                        // 불투명도가 1보다 작거나 표준이 아니면 레이어를 따로 그린 뒤, 그 불투명도·혼합 모드로 아래에 얹는다.
+                        // 타일은 서로 겹치지 않아 타일마다 섞어도 되지만, 불투명도는 레이어 전체에 한 번 걸어야 한다.
+                        val saved = if (step.needsOwnLayer) {
+                            canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), layerPaint(step))
+                        } else {
+                            null
+                        }
+                        for (row in block.firstRow until block.firstRow + block.rows) {
+                            for (column in block.firstColumn until block.firstColumn + block.columns) {
+                                // 없는 타일은 투명이라 그리지 않는다
+                                val tile = step.raster.tiles[TileKey(column, row)] ?: continue
+                                val bitmap = bitmapOf(tile.pixels, temporary)
+                                val left = (column - block.firstColumn) * TILE_SIZE * scale
+                                val top = (row - block.firstRow) * TILE_SIZE * scale
+                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust)
+                            }
+                        }
+                        if (saved != null) canvas.restoreToCount(saved)
                     }
                 }
-                if (saved != null) canvas.restoreToCount(saved)
             }
             picture.endRecording()
             return drawOnGpu(picture, width, height)

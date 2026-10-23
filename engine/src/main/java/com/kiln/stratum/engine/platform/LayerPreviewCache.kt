@@ -10,6 +10,8 @@ import android.graphics.Shader
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
+import com.kiln.stratum.engine.document.CompositePlan
+import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
 import com.kiln.stratum.engine.document.Layer
@@ -83,7 +85,8 @@ class LayerPreviewCache {
     ): Bitmap? {
         val size = PixelSize(document.width, document.height)
         val region = PreviewLevels.wholeRegion(size, level)
-        val visible = document.layers.filter { it.isShown }
+        // 합성 계획의 차례대로 합친다(보이는 레이어만, 결정 기록 '피부 보정'의 1단계)
+        val steps = CompositePlan.of(document)
         // 앞 축소본을 고쳐 쓸 수 있게, 놓아 주기 전에 붙잡아 둔다
         val previous = HashMap<LayerId, Bitmap>()
         for (layer in document.layers) {
@@ -97,10 +100,12 @@ class LayerPreviewCache {
         lastRasters.clear()
         for (layer in document.layers) lastRasters[layer.id] = rasterOf(layer)
 
-        val previews = ArrayList<Pair<Layer, Bitmap>>()
-        for (layer in visible) {
+        val previews = ArrayList<Pair<CompositeStep.Draw, Bitmap>>()
+        for (step in steps) {
+            if (step !is CompositeStep.Draw) continue
             checkCanceled()
-            val raster = rasterOf(layer)
+            val layer = step.layer
+            val raster = step.raster
             val layerStrokes = strokes.filter { it.layerId == layer.id }
             val stroking = layerStrokes.isNotEmpty()
             // 빈 레이어는 그릴 것이 없다(끄는 획이 있으면 투명한 바탕에 그린다)
@@ -114,17 +119,17 @@ class LayerPreviewCache {
                     ?: return null
             }
             val bitmap = if (stroking) strokeOver(base, region, layerStrokes, document.colorSpace, size) ?: return null else checkNotNull(base)
-            previews += layer to bitmap
+            previews += step to bitmap
         }
         val moving = shift?.takeIf { it.dx != 0 || it.dy != 0 }
         // 그대로 보이는 레이어 하나면 합칠 필요가 없다(투명한 바탕 위에서는 혼합 모드와 상관없이 그 레이어 그대로다)
-        previews.singleOrNull()?.let { (layer, bitmap) ->
-            if (layer.opacity == 1f && layer.adjustments.isIdentity && layer.id != moving?.layerId) return bitmap
+        previews.singleOrNull()?.let { (step, bitmap) ->
+            if (step.isPlain && step.layer.id != moving?.layerId) return bitmap
         }
         val picture = Picture()
         val canvas = picture.beginRecording(region.previewWidth, region.previewHeight)
-        for ((layer, bitmap) in previews) {
-            val shader = if (layer.id == moving?.layerId) {
+        for ((step, bitmap) in previews) {
+            val shader = if (step.layer.id == moving?.layerId) {
                 // 옮기는 레이어: 축소본을 축소 단계만큼 줄인 거리로 옮겨 놓고, 축소본 밖은 투명이다(DECAL)
                 val scale = 1f / (1 shl level)
                 BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
@@ -134,8 +139,8 @@ class LayerPreviewCache {
                 BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             }
             // 보정을 건 레이어를 불투명도·혼합 모드로 아래에 얹는다
-            val paint = layerPaint(layer).apply {
-                this.shader = AdjustShader.of(layer.adjustments)?.wrap(shader) ?: shader
+            val paint = layerPaint(step).apply {
+                this.shader = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
             }
             canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
         }
@@ -178,8 +183,13 @@ class LayerPreviewCache {
     fun screenGainmap(document: Document, level: Int): ScreenGainmap? {
         val info = document.hdr ?: return null
         if (!document.hasHdr) return null
+        // 겹치는 것은 합성 계획의 그리는 단계다(숨긴 레이어는 빠짐). 그 래스터·게인맵·얹는 불투명도·혼합 모드가 같으면 다시 만들지 않는다.
         val key: List<Any> = listOf(level, document.width, document.height, info) +
-            document.layers.map { listOf(IdentityKey(rasterOf(it)), IdentityKey(it.gainmap?.raster), it.opacity, it.blendMode, it.visible) }
+            CompositePlan.of(document).map { step ->
+                when (step) {
+                    is CompositeStep.Draw -> listOf(IdentityKey(step.raster), IdentityKey(step.layer.gainmap?.raster), step.opacity, step.blendMode)
+                }
+            }
         lastGainmap?.let { (lastKey, gainmap) -> if (lastKey == key) return gainmap }
         val size = PixelSize(document.width, document.height)
         val region = PreviewLevels.wholeRegion(size, level)
