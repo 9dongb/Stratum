@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
@@ -35,6 +36,7 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
 import com.kiln.stratum.engine.adjust.CurvePoint
 import com.kiln.stratum.engine.adjust.ToneCurve
@@ -162,6 +164,10 @@ class AdjustPanelTest {
             assertEquals(0f, fake.committed.brightness, 0f)
         }
         composeRule.onNodeWithTag(EditScreenTags.adjustSlider(AdjustItem.BRIGHTNESS)).assertDoesNotExist()
+        // 0으로 되돌렸다고 캔버스 위쪽 알림 자리에 알린다
+        val name = composeRule.activity.getString(AdjustItem.BRIGHTNESS.label)
+        composeRule.onNodeWithTag(EditScreenTags.GESTURE_TOAST)
+            .assertTextEquals(composeRule.activity.getString(R.string.value_reset_to_zero, name))
     }
 
     @Test
