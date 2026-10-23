@@ -16,6 +16,7 @@ import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.skin.SkinFaceArea
 import com.kiln.stratum.engine.skin.SkinFaceTone
 import com.kiln.stratum.engine.skin.SkinReference
+import com.kiln.stratum.engine.skin.SkinSpot
 import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
@@ -103,7 +104,8 @@ data class SkinEntry(
     val spots: Long,
     val faces: List<SkinFaceArea>,
     val segmented: Boolean,
-    val texture: Float
+    val texture: Float,
+    val healed: List<SkinSpot> = emptyList()
 )
 
 /**
@@ -505,7 +507,10 @@ object ProjectManifestCodec {
             null
         }
 
-    /** 피부 기록: 판, 원본·색 보정·피부 정돈·잡티 제거 레이어 번호, 분할했는지, 질감 유지, 얼굴 수와 얼굴마다 자리(가운데 x·y, 반지름, 길이 단위) */
+    /**
+     * 피부 기록: 판, 원본·색 보정·피부 정돈·잡티 제거 레이어 번호, 분할했는지, 질감 유지, 얼굴 수와 얼굴마다 자리(가운데 x·y, 반지름, 길이 단위),
+     * 지운 잡티 수와 자리마다 x·y·반지름(5단계에서 끝에 더함: 그 앞 판의 파일은 여기서 끝나 지운 잡티가 없다)
+     */
     private fun skinBytes(skin: SkinEntry): ByteArray =
         ByteArrayOutputStream().also { buffer ->
             val out = DataOutputStream(buffer)
@@ -518,6 +523,12 @@ object ProjectManifestCodec {
             out.writeFloat(skin.texture)
             out.writeInt(skin.faces.size)
             for (face in skin.faces) writeFaceArea(out, face)
+            out.writeInt(skin.healed.size)
+            for (spot in skin.healed) {
+                out.writeFloat(spot.x)
+                out.writeFloat(spot.y)
+                out.writeFloat(spot.radius)
+            }
             out.flush()
         }.toByteArray()
 
@@ -533,8 +544,16 @@ object ProjectManifestCodec {
             val segmented = data.readBoolean()
             val texture = data.readFloat()
             if (!(texture in 0f..1f)) throw UnreadableProjectException("Broken texture $texture")
-            val faces = List(data.readCount()) { readFaceArea(data) }
-            SkinEntry(source, color, smooth, spots, faces, segmented, texture)
+            // 수는 남은 바이트로 거른다(망가진 큰 수로 큰 목록을 만들지 않게)
+            val faces = List(data.readCount().also { if (it > data.available() / 16) throw UnreadableProjectException("Broken face count $it") }) { readFaceArea(data) }
+            val healed = if (data.available() > 0) {
+                List(data.readCount().also { if (it > data.available() / 12) throw UnreadableProjectException("Broken spot count $it") }) {
+                    SkinSpot(data.readFloat(), data.readFloat(), data.readFloat())
+                }
+            } else {
+                emptyList()
+            }
+            SkinEntry(source, color, smooth, spots, faces, segmented, texture, healed)
         } catch (e: IOException) {
             null
         } catch (e: IllegalArgumentException) {

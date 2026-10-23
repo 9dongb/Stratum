@@ -99,6 +99,14 @@ internal fun skinBar(controls: SkinControls): List<BarItem> {
             )
         )
         addAll(valueChips(skinStrip(controls, close = {})))
+        // 잡티를 찾아 지운다(점은 남김, 결정 기록 '피부 보정'의 5단계)
+        add(
+            BarButton(
+                SKIN_HEAL_KEY, stringResource(R.string.skin_heal), R.drawable.ic_healing, controls.onHealSpots,
+                enabled = controls.spotsAvailable && !controls.busy, description = stringResource(R.string.skin_heal_description),
+                tag = EditScreenTags.SKIN_HEAL
+            )
+        )
         // 정돈이 낡았으면 파란 버튼으로 앞세운다(결정 기록 '피부 보정'의 4단계)
         add(
             BarButton(
@@ -230,6 +238,23 @@ internal fun moveBar(onOrient: (Orientation) -> Unit, enabled: Boolean): List<Ba
 /** 리터칭의 막대([mode]는 스팟 복구·복구·복제·AI 제거): (AI 제거) 고른 물체 지우기, 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도 */
 @Composable
 internal fun retouchBar(mode: SubTool, controls: RetouchControls): List<BarItem> = buildList {
+    // 가져올 그림(결정 기록 '피부 보정'의 5단계). AI 제거·잡티 제거 레이어에는 없다(띠와 같다).
+    if (mode != SubTool.RETOUCH_REMOVE && !controls.sampleFixed) {
+        add(
+            BarChoice(
+                key = "retouchSample",
+                caption = stringResource(R.string.retouch_sample),
+                options = RetouchSample.entries.map { choice ->
+                    BarOption(
+                        label = stringResource(choice.label),
+                        icon = choice.icon,
+                        selected = RetouchSample.of(controls.sampleBelow) == choice,
+                        tag = EditScreenTags.retouchSample(choice)
+                    ) { controls.onSampleBelow(choice == RetouchSample.BELOW) }
+                }
+            )
+        )
+    }
     if (mode == SubTool.RETOUCH_REMOVE) {
         // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만 켜지는 파란 버튼, 전 커버 옵션과 같은 이름표)
         add(

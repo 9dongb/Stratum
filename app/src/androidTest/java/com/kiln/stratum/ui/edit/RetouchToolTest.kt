@@ -160,19 +160,49 @@ class RetouchToolTest {
 
     private var settings by mutableStateOf(BrushSettings(size = 60f, hardness = 0.5f))
 
-    private fun controls(source: CloneSource?, objectPicked: Boolean = false, textureReady: Boolean = false) =
+    /** 가져오기: 아래 포함인지(결정 기록 '피부 보정'의 5단계) */
+    private var sampleBelow by mutableStateOf(false)
+
+    private fun controls(source: CloneSource?, objectPicked: Boolean = false, textureReady: Boolean = false, sampleFixed: Boolean = false) =
         RetouchControls(
             settings, onChange = { settings = it }, source = source, objectPicked = objectPicked, onRemovePicked = actions::removePicked,
-            textureReady = textureReady, onEnhanceTexture = actions::enhanceTexture
+            textureReady = textureReady, onEnhanceTexture = actions::enhanceTexture,
+            sampleBelow = sampleBelow, sampleFixed = sampleFixed, onSampleBelow = { sampleBelow = it }
         )
 
     /** 커버 한 줄 막대에 리터칭의 칸을 놓는다(결정 기록 '커버 화면 개편') */
-    private fun showOptions(mode: SubTool, source: CloneSource? = null, widthDp: Int = 411, objectPicked: Boolean = false) {
+    private fun showOptions(mode: SubTool, source: CloneSource? = null, widthDp: Int = 411, objectPicked: Boolean = false, sampleFixed: Boolean = false) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(widthDp.dp, 800.dp))) {
-                StratumTheme { CoverToolBar(retouchBar(mode, controls(source, objectPicked)), rememberCoverBarState()) }
+                StratumTheme { CoverToolBar(retouchBar(mode, controls(source, objectPicked, sampleFixed = sampleFixed)), rememberCoverBarState()) }
             }
         }
+    }
+
+    @Test
+    fun theSampleChip_choosesThisLayerOrWithBelow() {
+        showOptions(SubTool.RETOUCH_SPOT)
+
+        composeRule.onNodeWithTag(EditScreenTags.bar("retouchSample")).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.retouchSample(RetouchSample.BELOW)).performClick()
+        composeRule.runOnIdle { assertTrue(sampleBelow) }
+
+        composeRule.onNodeWithTag(EditScreenTags.bar("retouchSample")).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.retouchSample(RetouchSample.LAYER)).performClick()
+        composeRule.runOnIdle { assertTrue(!sampleBelow) }
+    }
+
+    @Test
+    fun theSpotsLayer_andAiRemove_haveNoSampleChip() {
+        // 잡티 제거 레이어에는 늘 아래 포함이고, AI 제거는 그 레이어를 채운다
+        showOptions(SubTool.RETOUCH_HEAL, sampleFixed = true)
+        assertTrue(!exists(EditScreenTags.bar("retouchSample")))
+    }
+
+    @Test
+    fun aiRemove_hasNoSampleChip() {
+        showOptions(SubTool.RETOUCH_REMOVE)
+        assertTrue(!exists(EditScreenTags.bar("retouchSample")))
     }
 
     private fun showOverlay(

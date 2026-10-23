@@ -15,6 +15,7 @@ import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.skin.SkinFaceArea
 import com.kiln.stratum.engine.skin.SkinFaceTone
 import com.kiln.stratum.engine.skin.SkinReference
+import com.kiln.stratum.engine.skin.SkinSpot
 import com.kiln.stratum.engine.skin.SkinTone
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
@@ -194,7 +195,9 @@ class ProjectManifestTest {
     @Test
     fun skinGroupRecord_andSkinColor_roundTrip_inVersion2() {
         val area = SkinFaceArea(120.5f, 340.25f, 90f, 41f)
-        val skin = SkinEntry(source = 0, color = 4, smooth = 5, spots = 6, faces = listOf(area), segmented = false, texture = 0.7f)
+        // 지운 잡티 둘(결정 기록 '피부 보정'의 5단계)
+        val healed = listOf(SkinSpot(130.5f, 300f, 4.5f), SkinSpot(90f, 410.75f, 2f))
+        val skin = SkinEntry(source = 0, color = 4, smooth = 5, spots = 6, faces = listOf(area), segmented = false, texture = 0.7f, healed = healed)
         // 얼굴 둘: 하나는 자동 기준, 하나는 스포이드로 고른 기준(결정 기록 '피부 보정'의 3단계)
         val tone = SkinTone(0.7f, 0.85f, 0.055f, 0.054f, 0.12f, 0.04f, 0.006f)
         val faces = listOf(SkinFaceTone(area, tone), SkinFaceTone(area.copy(centerX = 600f), tone.copy(hue = 0.7f), SkinReference(0.82f, 0.06f)))
@@ -208,6 +211,28 @@ class ProjectManifestTest {
         // 바꾸는 것이 없는 피부 색도 피부 색 종류로 남는다(기본 보정 조정 레이어와 구별)
         val zero = withSkin.copy(layers = listOf(manifest.layers[0], color.copy(skinColor = SkinColor()), group))
         assertEquals(SkinColor(), read(bytesOf(zero)).layers[1].skinColor)
+    }
+
+    @Test
+    fun aSkinRecordWrittenBeforeHealing_opensWithoutHealedSpots() {
+        // 5단계 전의 피부 기록은 얼굴 뒤에서 끝난다(지운 잡티가 없다)
+        val area = SkinFaceArea(120.5f, 340.25f, 90f, 41f)
+        val older = ByteArrayOutputStream().also {
+            DataOutputStream(it).apply {
+                writeInt(1)
+                for (id in listOf(0L, 4L, 5L, 6L)) writeLong(id)
+                writeBoolean(true)
+                writeFloat(0.5f)
+                writeInt(1)
+                for (value in listOf(area.centerX, area.centerY, area.radius, area.unit)) writeFloat(value)
+                flush()
+            }
+        }.toByteArray()
+
+        val skin = checkNotNull(read(withTopLayerExtra(9, older)).layers[1].skin)
+
+        assertEquals(SkinEntry(0, 4, 5, 6, listOf(area), segmented = true, texture = 0.5f), skin)
+        assertEquals(emptyList<SkinSpot>(), skin.healed)
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.platform.RotateImage
 import com.kiln.stratum.engine.raster.PixelSize
@@ -22,6 +23,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -185,6 +187,34 @@ class EditorRetouchTest {
         val healed = awaitReady { it.revision > before.revision }
         assertFalse(dark(shown(healed), 200, 200))
         assertTrue(healed.canUndo)
+    }
+
+    @Test
+    fun onANewEmptyLayer_spotHealTakesFromBelowOnlyWhenChosen() {
+        // 결정 기록 '피부 보정'의 5단계: 빈 레이어에서는 '이 레이어'면 가져올 것이 없고, '아래 포함'이면 아래 사진의 점을 지운 결과를 그 레이어에 그린다
+        openWithDot()
+        onMain {
+            viewModel.addLayer()
+            viewModel.setRetouch(BrushSettings(size = 50f, hardness = 0.8f))
+        }
+        val added = awaitReady { it.layers.size == 2 }
+        val layer = checkNotNull(added.activeLayer)
+        val photoPixels = checkNotNull(viewModel.recordedDocument).layers.first().content
+        assertEquals(false, viewModel.retouchSampleBelow.value)
+
+        stroke(RetouchMode.SPOT_HEAL, StrokePoint(200f, 200f))
+        val unchanged = awaitReady { true }
+        assertTrue(dark(shown(unchanged), 200, 200))
+
+        onMain { viewModel.retouchActions.setSampleBelow(true) }
+        assertEquals(true, viewModel.retouchSampleBelow.value)
+        stroke(RetouchMode.SPOT_HEAL, StrokePoint(200f, 200f))
+        val healed = awaitReady { it.revision > added.revision }
+        assertFalse(dark(shown(healed), 200, 200))
+        // 아래 사진은 그대로이고 새 레이어에 그렸다
+        val document = checkNotNull(viewModel.recordedDocument)
+        assertSame(photoPixels, document.layers.first().content)
+        assertTrue((document.layers.first { it.id == layer }.content as RasterContent).raster.tiles.isNotEmpty())
     }
 
     @Test

@@ -220,6 +220,7 @@ fun EditScreen(
     liquifyActions: LiquifyActions = LiquifyActions.None,
     onStartLiquify: () -> Unit = {},
     retouch: BrushSettings = BrushSettings(),
+    retouchSampleBelow: Boolean = false,
     onRetouch: (BrushSettings) -> Unit = {},
     cloneSource: CloneSource? = null,
     retouchActions: RetouchActions = RetouchActions.None,
@@ -678,7 +679,11 @@ fun EditScreen(
             busy = ready?.busy == true,
             onRemovePicked = retouchActions::removePicked,
             textureReady = textureReady,
-            onEnhanceTexture = retouchActions::enhanceTexture
+            onEnhanceTexture = retouchActions::enhanceTexture,
+            sampleBelow = retouchSampleBelow,
+            // 피부 보정 그룹의 잡티 제거 레이어에는 늘 아래 포함이다(결정 기록 '피부 보정'의 5단계)
+            sampleFixed = ready?.layers?.any { it.skin?.spots == ready.activeLayer } == true,
+            onSampleBelow = retouchActions::setSampleBelow
         ).takeIf { activeTool == EditTool.Retouch }
         val toneControls = ToneControls(toneOptions, sizePreview = sizePreview, onChange = onToneOptions).takeIf { activeTool == EditTool.Tone }
         val blurControls = BlurControls(blurOptions, sizePreview = sizePreview, onChange = onBlurOptions).takeIf { activeTool == EditTool.Blur }
@@ -743,7 +748,10 @@ fun EditScreen(
                     if (groupRow != null && texture != null) skinActions.setTexture(groupRow.id, texture)
                     skinTextureReleased = true
                 },
-                onRebuild = { groupRow?.let { skinActions.rebuild(it.id) } }
+                onRebuild = { groupRow?.let { skinActions.rebuild(it.id) } },
+                // 잡티 제거 레이어가 남아 있으면 잡티를 지울 수 있다(5단계)
+                spotsAvailable = group != null && shown.layers.any { it.id == group.spots },
+                onHealSpots = { groupRow?.let { skinActions.healSpots(it.id) } }
             )
         }
         // 피부 도구를 고르면(다른 도구에서 바꾸거나 처음 고름) 고른 사진 레이어의 그룹을 만든다(이미 있으면 그 그룹을 고친다,
@@ -843,7 +851,7 @@ fun EditScreen(
                     selectionStrip(checkNotNull(selection.modeOf(EditTool.Select)), it)
                 }
                 EditTool.Retouch -> retouchControls?.let {
-                    retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it)
+                    retouchStrip(checkNotNull(selection.modeOf(EditTool.Retouch)), it, floating::closeFlyout)
                 }
                 EditTool.Tone -> toneControls?.let {
                     toneStrip(checkNotNull(selection.modeOf(EditTool.Tone)), it, floating::closeFlyout)
@@ -1755,6 +1763,7 @@ private fun EditCanvas(
     val skinRedCast = stringResource(R.string.edit_skin_red_cast)
     val skinRedCastFix = stringResource(R.string.skin_red_cast_fix)
     val skinNotSkin = stringResource(R.string.edit_skin_not_skin)
+    val skinNoSpots = stringResource(R.string.skin_no_spots)
     // 보이는(돌린) 문서 크기. 배율 표시가 쓴다.
     val shownSize = (state as? EditorState.Ready)?.let { orientation.targetSize(it.documentSize) }
     // 처리 중 막대는 잠깐(0.2초) 넘게 걸릴 때만 보인다. 보정 슬라이더를 놓을 때처럼 짧은 편집마다 깜빡이지 않게 한다.
@@ -1811,6 +1820,17 @@ private fun EditCanvas(
                     if (result == SnackbarResult.ActionPerformed) currentOnSkinRedCast(message.source)
                 }
                 EditorMessage.SkinReferenceNotSkin -> snackbarHostState.showSnackbar(skinNotSkin)
+                // 잡티 자동 제거의 결과: 지운 수와 남긴 점 수(결정 기록 '피부 보정'의 5단계)
+                is EditorMessage.SkinSpotsHealed -> snackbarHostState.showSnackbar(
+                    listOfNotNull(
+                        context.resources.getQuantityString(R.plurals.skin_spots_healed, message.healed, message.healed),
+                        message.moles.takeIf { it > 0 }?.let { context.resources.getQuantityString(R.plurals.skin_moles_kept, it, it) }
+                    ).joinToString(" ")
+                )
+                is EditorMessage.SkinNoSpots -> snackbarHostState.showSnackbar(
+                    listOfNotNull(skinNoSpots, message.moles.takeIf { it > 0 }?.let { context.resources.getQuantityString(R.plurals.skin_moles_kept, it, it) })
+                        .joinToString(" ")
+                )
                 EditorMessage.SelectUnavailable -> {
                     // 색으로 고르는 자동 선택으로 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(selectUnavailable, actionLabel = magicWand, duration = SnackbarDuration.Long)

@@ -1,6 +1,8 @@
 package com.kiln.stratum.engine.document
 
 import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinHealReport
+import com.kiln.stratum.engine.skin.SkinSpot
 
 /**
  * [피부 보정] 그룹의 기록(결정 기록 '피부 보정'의 2c). 그룹 레이어([Layer.skin])에 붙고 프로젝트에 저장된다.
@@ -12,9 +14,11 @@ import com.kiln.stratum.engine.skin.SkinFaceArea
  *   자르기·회전·크기 변경·옮기기를 하면 함께 옮긴다([mapped]). 특징점은 남기지 않는다(마스크를 만든 뒤에는 자리와 크기만 쓴다).
  * @property segmented 분할 모델로 피부를 골랐는지. false면 얼굴 윤곽만으로 골랐다(목·귀·이마 위가 빠짐).
  * @property texture 질감 유지(0..1, 4단계): 피부 정돈이 고운 결을 얼마나 남기는지.
+ * @property healed 잡티 자동 제거가 지운 자리(문서 좌표, 5단계). [다시 만들기]가 지금 그림으로 다시 지운다(손으로 지운 것은 들어 있지 않다).
  * @property redCast 만들 때 사진 전체가 붉었는지(흰자·채도 낮은 곳이 붉음, 3단계). 화면이 만든 뒤 한 번 알리는 데만 쓰고 저장하지 않는다.
  * @property smoothBasis 피부 정돈을 만든 바탕(정돈 레이어 아래를 합친 그림)의 지문(4단계). 지금 바탕과 다르면 정돈이 낡았다([isStale]).
  *   저장하지 않고, 프로젝트를 열 때 그때의 바탕으로 다시 정한다(열기 전에 낡았던 것은 알 수 없다).
+ * @property healReport 마지막 잡티 자동 제거의 결과(지운 수·남긴 점 수, 5단계). 화면이 지운 뒤 한 번 알리는 데만 쓰고 저장하지 않는다.
  */
 data class SkinRecord(
     val source: LayerId,
@@ -24,8 +28,10 @@ data class SkinRecord(
     val faces: List<SkinFaceArea>,
     val segmented: Boolean,
     val texture: Float = DEFAULT_TEXTURE,
+    val healed: List<SkinSpot> = emptyList(),
     val redCast: Boolean = false,
-    val smoothBasis: CompositeKey? = null
+    val smoothBasis: CompositeKey? = null,
+    val healReport: SkinHealReport? = null
 ) {
     init {
         require(texture in 0f..1f) { "Texture must be within 0..1: $texture" }
@@ -41,8 +47,9 @@ data class SkinRecord(
         return !basis.matches(document.copy(layers = LayerTree.below(document.layers, smooth)))
     }
 
-    /** 얼굴 자리를 옮긴 기록(자르기·회전·크기 변경·옮기기, [SkinFaceArea.mapped]) */
-    fun mapped(scale: Float, map: (Float, Float) -> Pair<Float, Float>): SkinRecord = copy(faces = faces.map { it.mapped(scale, map) })
+    /** 얼굴 자리와 지운 잡티 자리를 옮긴 기록(자르기·회전·크기 변경·옮기기, [SkinFaceArea.mapped]) */
+    fun mapped(scale: Float, map: (Float, Float) -> Pair<Float, Float>): SkinRecord =
+        copy(faces = faces.map { it.mapped(scale, map) }, healed = healed.map { it.mapped(scale, map) })
 
     /** 그룹을 복제할 때: 안의 레이어 번호를 [ids](원래 → 복사본)대로 바꾼 기록. 원본 레이어는 그대로다. */
     fun remapped(ids: Map<LayerId, LayerId>): SkinRecord =

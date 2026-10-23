@@ -119,6 +119,7 @@ fun StratumApp(editor: EditorViewModel) {
             val selectionOptions by editor.selectionOptions.collectAsState()
             val liquify by editor.liquify.collectAsState()
             val retouch by editor.retouch.collectAsState()
+            val retouchSampleBelow by editor.retouchSampleBelow.collectAsState()
             val cloneSource by editor.cloneSource.collectAsState()
             val removePick by editor.removePick.collectAsState()
             val textureFill by editor.textureFill.collectAsState()
@@ -167,6 +168,7 @@ fun StratumApp(editor: EditorViewModel) {
                     liquifyActions = editor.liquifyActions,
                     onStartLiquify = editor::startLiquify,
                     retouch = retouch,
+                    retouchSampleBelow = retouchSampleBelow,
                     onRetouch = editor::setRetouch,
                     cloneSource = cloneSource,
                     retouchActions = editor.retouchActions,

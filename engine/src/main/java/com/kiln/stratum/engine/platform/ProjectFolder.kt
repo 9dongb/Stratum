@@ -135,7 +135,7 @@ class ProjectFolder(val directory: File) {
                     MaskTileEntry(key.column, key.row, if (tile.isFull) null else maskFileOf(tile, referenced))
                 }
             }
-            val skin = layer.skin?.let { SkinEntry(it.source.value, it.color.value, it.smooth.value, it.spots.value, it.faces, it.segmented, it.texture) }
+            val skin = layer.skin?.let { SkinEntry(it.source.value, it.color.value, it.smooth.value, it.spots.value, it.faces, it.segmented, it.texture, it.healed) }
             LayerEntry(
                 layer.id.value, layer.name, layer.opacity, layer.blendMode, content, layer.adjustments,
                 layer.gainmap?.let { entryOf(it) }, layer.visible, layer.text, liquify, mask, layer.parent?.value,
@@ -242,7 +242,7 @@ class ProjectFolder(val directory: File) {
                 val mask = entry.mask?.let { maskOf(it) }
                 // 피부 기록은 그룹에만 둔다(망가진 파일이 다른 레이어에 붙였으면 버린다)
                 val skin = entry.skin?.takeIf { content is GroupContent }?.let {
-                    SkinRecord(LayerId(it.source), LayerId(it.color), LayerId(it.smooth), LayerId(it.spots), it.faces, it.segmented, it.texture)
+                    SkinRecord(LayerId(it.source), LayerId(it.color), LayerId(it.smooth), LayerId(it.spots), it.faces, it.segmented, it.texture, it.healed)
                 }
                 Layer(
                     LayerId(entry.id), entry.name, content, entry.opacity, entry.blendMode, entry.adjustments, gainmap, entry.visible, entry.text,

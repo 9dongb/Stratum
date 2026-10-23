@@ -46,7 +46,9 @@ import kotlin.math.sin
  * - 스팟 복구 브러시([RetouchMode.SPOT_HEAL]): 가져올 곳을 칠한 곳 둘레에서 찾아([SpotSearch]) 복구 브러시처럼 그린다.
  *   [offset]은 쓰지 않는다. 가져올 곳을 찾지 못하면 그대로다.
  *
- * 가져오는 픽셀은 획을 그리기 전의 레이어다. 문서 밖에서 가져와야 하는 곳은 그대로 둔다. 선택 영역이 있으면 그 안에만 그린다.
+ * 가져오는 픽셀은 획을 그리기 전의 레이어다. [sampleBelow]면 그 레이어와 그 아래를 합친 그림이다(포토샵 '현재 및 아래 샘플링',
+ * 결정 기록 '피부 보정'의 5단계, [BelowSampler]): 빈 레이어(잡티 제거)에 아래 사진의 잡티를 지운 결과만 그린다.
+ * 문서 밖에서 가져와야 하는 곳은 그대로 둔다. 선택 영역이 있으면 그 안에만 그린다.
  * 획이 닿는 타일만 새로 만들고, 칠하지 않은 픽셀은 값이 그대로다. 복제 도장은 가져온 픽셀 값도 그대로다.
  * 얹기는 브러시처럼 소프트웨어 그리기이고, 복구의 합치기는 GPU다. 매끈하게 잇기와 가져올 곳 찾기는 줄인 그림에서 Kotlin으로 한다.
  * 없는 레이어거나 문서에 닿지 않는 획이면 문서를 그대로 돌려준다.
@@ -56,7 +58,8 @@ data class RetouchStroke(
     val dabs: List<StrokePoint>,
     val settings: BrushSettings,
     val mode: RetouchMode,
-    val offset: SourceOffset? = null
+    val offset: SourceOffset? = null,
+    val sampleBelow: Boolean = false
 ) : CancellableCommand {
 
     init {
@@ -70,16 +73,20 @@ data class RetouchStroke(
         val raster = (layer.content as? RasterContent)?.raster ?: return document
         val size = PixelSize(document.width, document.height)
         val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return document
-        // 빈 레이어에서는 가져올 픽셀이 없다
-        if (raster.tiles.isEmpty()) return document
         val from: SourceOffset
         val painted = try {
+            // 가져올 그림: 그 레이어, 또는 그 레이어와 그 아래를 합친 그림(필요한 곳만 그림)
+            val sampler = if (sampleBelow) BelowSampler(document, layerId) else null
+            val reach = Retouch.sampleReach(mode, dabs, settings, offset)
+            val sample = sampler?.sample(bounds.expanded(reach), checkCanceled) ?: raster
+            // 가져올 픽셀이 없다(빈 레이어)
+            if (sample.tiles.isEmpty()) return document
             from = when (mode) {
-                RetouchMode.SPOT_HEAL -> Retouch.spotOffset(raster, size, bounds, dabs, settings, checkCanceled) ?: return document
+                RetouchMode.SPOT_HEAL -> Retouch.spotOffset(sample, size, bounds, dabs, settings, checkCanceled) ?: return document
                 else -> checkNotNull(offset)
             }
             if (from.x == 0 && from.y == 0) return document
-            Retouch.paint(raster, size, bounds, dabs, settings, from, heal = mode != RetouchMode.CLONE, document.selection, checkCanceled)
+            Retouch.paintAll(listOf(raster), sample, size, bounds, dabs, settings, from, heal = mode != RetouchMode.CLONE, document.selection, checkCanceled).single()
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
@@ -102,6 +109,16 @@ data class RetouchStroke(
         val work = if (mode == RetouchMode.CLONE) 3 * tileBytes else 4 * tileBytes + Retouch.HEAL_WORK_BYTES
         return tiles + work
     }
+
+    /** '아래 포함'이면 가져올 곳까지 합친 그림(묶음마다 그림·복사본·타일) */
+    override fun estimateWorkBytes(document: Document): Long {
+        if (!sampleBelow) return 0L
+        val size = PixelSize(document.width, document.height)
+        val bounds = StrokeDabs.bounds(dabs, settings.radius, size) ?: return 0L
+        val area = bounds.expanded(Retouch.sampleReach(mode, dabs, settings, offset)).intersect(PixelRect.of(size)) ?: return 0L
+        val blocks = ((area.width + 2047L) / 1024) * ((area.height + 2047L) / 1024)
+        return blocks * BelowSampler.BLOCK_WORK_BYTES
+    }
 }
 
 /** 리터칭 획 그리기 */
@@ -112,6 +129,18 @@ internal object Retouch {
 
     /** 가져올 그림을 한 번에 만드는 묶음의 한 변(타일 수). 1024px이고, 묶음마다 GPU를 한 번만 쓴다. */
     private const val BLOCK_TILES = 4
+
+    /**
+     * 획 [dabs]을 그리는 데 가져올 그림이 있어야 하는 거리([bounds] 둘레, 문서 픽셀): 스팟 복구는 가져올 곳을 찾는 거리, 복구·복제는 옮긴 양,
+     * 그리고 맞추기 둘레·타일 맞춤(타일 하나)과 여유. '아래 포함'([BelowSampler])이 이만큼 그린다.
+     */
+    fun sampleReach(mode: RetouchMode, dabs: List<StrokePoint>, settings: BrushSettings, offset: SourceOffset?): Int {
+        val shift = when (mode) {
+            RetouchMode.SPOT_HEAL -> SpotSearch.maxReach(settings.radius, extentOf(dabs, settings.radius)) + settings.radius + 2f
+            else -> offset?.let { maxOf(kotlin.math.abs(it.x), kotlin.math.abs(it.y)).toFloat() } ?: 0f
+        }
+        return ceil(shift).toInt() + maxOf(8, ceil(settings.radius).toInt()) + TILE_SIZE + 16
+    }
 
     /**
      * [raster]의 [bounds] 안 타일에 획을 그린 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다.
@@ -128,8 +157,25 @@ internal object Retouch {
         heal: Boolean,
         selection: Selection?,
         checkCanceled: () -> Unit
-    ): Raster {
-        val membrane = if (heal) Membrane.of(raster, size, bounds, dabs, settings, offset, checkCanceled) ?: return raster else null
+    ): Raster = paintAll(listOf(raster), raster, size, bounds, dabs, settings, offset, heal, selection, checkCanceled).single()
+
+    /**
+     * [targets] 래스터마다 같은 획을 그린 새 래스터들(차례 그대로). 가져오는 픽셀과 밝기·색 맞추기는 [sample]에서 읽는다(그 레이어, 또는 '아래 포함' 그림).
+     * 채울 그림은 묶음마다 한 번만 만들고 대상마다 획 모양으로 얹는다(자동 잡티 제거가 잡티 제거 레이어와 가져올 그림을 함께 고친다).
+     */
+    fun paintAll(
+        targets: List<Raster>,
+        sample: Raster,
+        size: PixelSize,
+        bounds: PixelRect,
+        dabs: List<StrokePoint>,
+        settings: BrushSettings,
+        offset: SourceOffset,
+        heal: Boolean,
+        selection: Selection?,
+        checkCanceled: () -> Unit
+    ): List<Raster> {
+        val membrane = if (heal) Membrane.of(sample, size, bounds, dabs, settings, offset, checkCanceled) ?: return targets else null
         try {
             val grid = TileGrid(size.width, size.height)
             val whole = PixelRect.of(size)
@@ -144,14 +190,14 @@ internal object Retouch {
                         it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
                 }
             }
-            val changes = HashMap<TileKey, Tile?>()
+            val changes = targets.map { HashMap<TileKey, Tile?>() }
             val temporary = ArrayList<Bitmap>()
             try {
                 for (block in keys.groupBy { TileKey(it.column / BLOCK_TILES, it.row / BLOCK_TILES) }.values) {
                     checkCanceled()
                     val area = block.map { key -> grid.bounds(key).let { PixelRect(it.left, it.top, it.left + it.width, it.top + it.height) } }
                         .reduce { a, b -> PixelRect(minOf(a.left, b.left), minOf(a.top, b.top), maxOf(a.right, b.right), maxOf(a.bottom, b.bottom)) }
-                    val source = compose(raster, size, area.offset(-offset.x, -offset.y))
+                    val source = compose(sample, size, area.offset(-offset.x, -offset.y))
                     val fill = membrane?.heal(source, area) ?: source
                     try {
                         for (key in block) {
@@ -161,26 +207,28 @@ internal object Retouch {
                                 it.x + reach >= tile.left && it.x - reach <= tile.left + tile.width &&
                                     it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
                             }
-                            val picture = Picture()
-                            val canvas = picture.beginRecording(tile.width, tile.height)
-                            raster.tiles[key]?.let { canvas.drawBitmap(CanvasTileComposer.bitmapOf(it, temporary), 0f, 0f, CanvasTileComposer.CopyPaint) }
-                            // 타일 자리 q의 채울 색은 묶음 그림의 (q + 타일 - 묶음) 자리다
-                            val shader = BitmapShader(fill, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
-                                setLocalMatrix(Matrix().apply { setTranslate((area.left - tile.left).toFloat(), (area.top - tile.top).toFloat()) })
+                            for ((index, target) in targets.withIndex()) {
+                                val picture = Picture()
+                                val canvas = picture.beginRecording(tile.width, tile.height)
+                                target.tiles[key]?.let { canvas.drawBitmap(CanvasTileComposer.bitmapOf(it, temporary), 0f, 0f, CanvasTileComposer.CopyPaint) }
+                                // 타일 자리 q의 채울 색은 묶음 그림의 (q + 타일 - 묶음) 자리다
+                                val shader = BitmapShader(fill, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                                    setLocalMatrix(Matrix().apply { setTranslate((area.left - tile.left).toFloat(), (area.top - tile.top).toFloat()) })
+                                }
+                                BrushPainter.drawStroke(
+                                    canvas, near, settings, erase = false,
+                                    scale = 1f,
+                                    left = tile.left.toFloat(),
+                                    top = tile.top.toFloat(),
+                                    width = tile.width.toFloat(),
+                                    height = tile.height.toFloat(),
+                                    clip = selection?.tiles?.get(key)?.let { MaskTiles.bitmapOf(it, temporary) },
+                                    fill = shader
+                                )
+                                picture.endRecording()
+                                // 브러시 타일과 같이 소프트웨어로 그리고 바꿀 수 없는 비트맵 하나로 돌려준다
+                                changes[index][key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
                             }
-                            BrushPainter.drawStroke(
-                                canvas, near, settings, erase = false,
-                                scale = 1f,
-                                left = tile.left.toFloat(),
-                                top = tile.top.toFloat(),
-                                width = tile.width.toFloat(),
-                                height = tile.height.toFloat(),
-                                clip = selection?.tiles?.get(key)?.let { MaskTiles.bitmapOf(it, temporary) },
-                                fill = shader
-                            )
-                            picture.endRecording()
-                            // 브러시 타일과 같이 소프트웨어로 그리고 바꿀 수 없는 비트맵 하나로 돌려준다
-                            changes[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
                         }
                     } finally {
                         if (fill !== source) fill.recycle()
@@ -190,7 +238,7 @@ internal object Retouch {
             } finally {
                 for (bitmap in temporary) bitmap.recycle()
             }
-            return if (changes.isEmpty()) raster else raster.withTiles(changes)
+            return targets.mapIndexed { index, target -> if (changes[index].isEmpty()) target else target.withTiles(changes[index]) }
         } finally {
             membrane?.recycle()
         }
@@ -254,7 +302,7 @@ internal object Retouch {
     }
 
     /** 획의 가장 긴 폭(문서 픽셀): 8방향으로 자국 가운데를 비춘 길이 중 가장 긴 것 + 지름 */
-    private fun extentOf(dabs: List<StrokePoint>, radius: Float): Float {
+    fun extentOf(dabs: List<StrokePoint>, radius: Float): Float {
         var widest = 0f
         for (direction in 0 until 8) {
             val angle = direction * PI / 8

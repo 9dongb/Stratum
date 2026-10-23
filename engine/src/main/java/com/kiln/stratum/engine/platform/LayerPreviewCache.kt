@@ -517,8 +517,11 @@ class LayerPreviewCache {
             val tone = stroke.tone
             val effect = stroke.effect
             val smudge = stroke.smudge
+            // 복제가 베낄 그림: '아래 포함'이면 그 레이어와 그 아래를 합친 그림, 아니면 레이어 축소본
+            val copied = stroke.source ?: image
             // 읽을 그림이 없으면(빈 레이어) 복제하거나 바꿀 색이 없다
-            if ((clone != null || tone != null || effect != null || smudge != null) && image == null) continue
+            if ((tone != null || effect != null || smudge != null) && image == null) continue
+            if (clone != null && copied == null) continue
             if (smudge != null && image != null) {
                 // 스머지는 앞 자국의 결과에 기대므로 미리 보기가 사본에 이어서 그려 둔 것을 그대로 보인다
                 val smudged = smudge.render(image, region, stroke.dabs, stroke.selection?.let { selectionMask(it, region) }) ?: continue
@@ -541,7 +544,7 @@ class LayerPreviewCache {
             }
             val fill = when {
                 // 캔버스 자리 q는 그림의 q - 옮긴 양을 읽는다
-                clone != null && image != null -> BitmapShader(image, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+                clone != null && copied != null -> BitmapShader(copied, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
                     setLocalMatrix(Matrix().apply { setTranslate(clone.x * scale, clone.y * scale) })
                 }
                 tone != null && image != null -> ToneShader.of(BitmapShader(image, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP), tone)
@@ -612,6 +615,7 @@ class LayerPreviewCache {
  * [dabs]는 그리는 동안 바뀌지 않는 목록이어야 한다(끄는 쪽이 복사해 넘긴다).
  * [selection]은 획을 시작할 때의 선택 영역이다. 있으면 미리 보기도 그 안으로 자른다.
  * [clone]이 있으면 칠하는 대신 '획 자리 - 그 양'의 레이어 픽셀을 베껴 보인다(복제 도장·복구 브러시를 끄는 동안).
+ * [source]가 있으면 레이어 축소본 대신 그 그림(같은 축소본 단계로 그린 문서 전체)에서 베낀다('아래 포함' 가져오기, 결정 기록 '피부 보정'의 5단계).
  * [tone]이 있으면 칠하는 대신 레이어 픽셀을 닷지·번으로 바꾼 색을 보인다(명암 도구를 끄는 동안).
  * [effect]가 있으면 칠하는 대신 레이어 픽셀에 흐림·선명·모자이크를 건 색으로 바꿔 보인다(흐림·모자이크 도구를 끄는 동안).
  * [smudge]가 있으면 칠하는 대신 레이어 픽셀을 문질러 끈 모습을 보인다(스머지를 끄는 동안, 획마다 하나).
@@ -633,5 +637,6 @@ class LiveStroke(
     val tone: ToneFill? = null,
     val effect: EffectFill? = null,
     val smudge: SmudgePreview? = null,
-    val mask: Boolean = false
+    val mask: Boolean = false,
+    val source: Bitmap? = null
 )

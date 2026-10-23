@@ -1,6 +1,8 @@
 package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
+import androidx.annotation.StringRes
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -107,6 +109,9 @@ interface RetouchActions {
     /** 가장 마지막 AI 채우기에 둘레의 고운 결을 더한다(질감 향상) */
     fun enhanceTexture() {}
 
+    /** 가져올 그림을 고른다: 고른 레이어([below] false) 또는 고른 레이어와 그 아래를 합친 그림(true, 결정 기록 '피부 보정'의 5단계) */
+    fun setSampleBelow(below: Boolean) {}
+
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : RetouchActions {
         override fun setSource(x: Float, y: Float) = Unit
@@ -178,8 +183,24 @@ class RetouchControls(
     val busy: Boolean = false,
     val onRemovePicked: () -> Unit = {},
     val textureReady: Boolean = false,
-    val onEnhanceTexture: () -> Unit = {}
+    val onEnhanceTexture: () -> Unit = {},
+    val sampleBelow: Boolean = false,
+    val sampleFixed: Boolean = false,
+    val onSampleBelow: (Boolean) -> Unit = {}
 )
+
+/**
+ * 리터칭이 가져올 그림(결정 기록 '피부 보정'의 5단계, 포토샵의 '샘플링'): 고른 레이어(처음 값), 또는 고른 레이어와 그 아래를 합친 그림.
+ * 띠의 고르기 칸·커버 막대의 고르기 칩이다. 피부 보정 그룹의 잡티 제거 레이어에는 늘 아래 포함이라 칸이 없다([RetouchControls.sampleFixed]).
+ */
+enum class RetouchSample(@get:StringRes val label: Int, @get:DrawableRes val icon: Int) {
+    LAYER(R.string.retouch_sample_layer, R.drawable.ic_crop_square),
+    BELOW(R.string.retouch_sample_below, R.drawable.ic_layers);
+
+    companion object {
+        fun of(below: Boolean): RetouchSample = if (below) BELOW else LAYER
+    }
+}
 
 /**
  * 리터칭 도구를 고르면 캔버스 위에 겹치는 터치 자리.

@@ -5,6 +5,8 @@ import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.MaskTile
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.skin.SkinColor
+import com.kiln.stratum.engine.skin.SkinFaceArea
+import com.kiln.stratum.engine.skin.SkinSpot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -26,6 +28,20 @@ class SkinRecordTest {
             Layer(LayerId(1), "Skin", GroupContent, skin = record),
             Layer(LayerId(5), "Other", RasterContent(Raster.EMPTY))
         )
+    }
+
+    @Test
+    fun mapped_movesTheFaces_andTheHealedSpots() {
+        // 결정 기록 '피부 보정'의 5단계: 지운 잡티 자리도 자르기·회전·크기 변경·옮기기를 따라간다
+        val record = SkinRecord(
+            LayerId(0), color = LayerId(2), smooth = LayerId(3), spots = LayerId(4),
+            faces = listOf(SkinFaceArea(100f, 200f, 50f, 40f)), segmented = true, healed = listOf(SkinSpot(110f, 190f, 3f))
+        )
+
+        val moved = record.mapped(2f) { x, y -> (x - 10f) * 2f to (y - 20f) * 2f }
+
+        assertEquals(SkinFaceArea(180f, 360f, 100f, 80f), moved.faces.single())
+        assertEquals(SkinSpot(200f, 340f, 6f), moved.healed.single())
     }
 
     @Test

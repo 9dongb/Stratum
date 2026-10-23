@@ -190,12 +190,36 @@ internal fun selectionStrip(mode: SubTool, controls: SelectionControls): List<St
     return numbersLast(numbers, modes)
 }
 
+/** 리터칭의 가져오기 칸(결정 기록 '피부 보정'의 5단계): 누르면 '이 레이어'·'아래 포함' 목록 */
+@Composable
+private fun retouchSampleCell(controls: RetouchControls, close: () -> Unit): StripItem {
+    val caption = stringResource(R.string.retouch_sample)
+    val current = RetouchSample.of(controls.sampleBelow)
+    return ChoiceCell(
+        key = "retouchSample",
+        icon = current.icon,
+        caption = caption,
+        description = stringResource(R.string.strip_choice_description, caption, stringResource(current.label))
+    ) {
+        ChoiceList(
+            choices = RetouchSample.entries,
+            selected = current,
+            label = { stringResource(it.label) },
+            icon = { it.icon },
+            tag = { EditScreenTags.retouchSample(it) }
+        ) {
+            controls.onSampleBelow(it == RetouchSample.BELOW)
+            close()
+        }
+    }
+}
+
 /**
- * 리터칭의 띠: (AI 제거) 고른 물체 지우기, 구분선 아래 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
+ * 리터칭의 띠: (AI 제거가 아니면) 가져오기, (AI 제거) 고른 물체 지우기·질감 향상, 구분선 아래 크기, (AI 제거가 아니면) 경도, (복제만) 불투명도.
  * 복구·복제의 가져올 곳은 버튼 없이 캔버스의 표시를 끌어 옮긴다(사용자 피드백 10차 4).
  */
 @Composable
-internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripItem> {
+internal fun retouchStrip(mode: SubTool, controls: RetouchControls, close: () -> Unit = {}): List<StripItem> {
     val settings = controls.settings
     val numbers = buildList {
         add(sizeCell(settings.size, EditScreenTags.RETOUCH_SIZE, controls.sizePreview) { controls.onChange(settings.copy(size = it)) })
@@ -209,6 +233,8 @@ internal fun retouchStrip(mode: SubTool, controls: RetouchControls): List<StripI
         }
     }
     val rest = buildList {
+        // 가져올 그림(AI 제거는 그 레이어를 채우므로 없다, 잡티 제거 레이어는 늘 아래 포함이라 없다)
+        if (mode != SubTool.RETOUCH_REMOVE && !controls.sampleFixed) add(retouchSampleCell(controls, close))
         if (mode == SubTool.RETOUCH_REMOVE) {
             // 톡 눌러 고른 물체를 지운다(고른 것이 있을 때만)
             add(
@@ -306,6 +332,13 @@ internal fun skinStrip(controls: SkinControls, close: () -> Unit): List<StripIte
             IconCell(
                 SKIN_MASK_KEY, R.drawable.ic_vignette, stringResource(R.string.skin_mask_view_description), controls.onToggleMask,
                 enabled = controls.maskAvailable, checked = controls.maskShown, tag = EditScreenTags.SKIN_MASK
+            )
+        )
+        // 잡티를 찾아 지운다(점은 남김, 결정 기록 '피부 보정'의 5단계)
+        add(
+            IconCell(
+                SKIN_HEAL_KEY, R.drawable.ic_healing, stringResource(R.string.skin_heal_description), controls.onHealSpots,
+                enabled = controls.spotsAvailable && !controls.busy, tag = EditScreenTags.SKIN_HEAL
             )
         )
         add(

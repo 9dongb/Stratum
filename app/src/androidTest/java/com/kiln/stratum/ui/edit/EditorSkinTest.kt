@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kiln.stratum.FakeFaceModel
 import com.kiln.stratum.R
 import com.kiln.stratum.FakeSkinModel
+import com.kiln.stratum.SkinSpotPhoto
 import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokeDabs
 import com.kiln.stratum.engine.brush.StrokePoint
@@ -63,11 +64,13 @@ class EditorSkinTest {
 
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 
-    private fun awaitReady(predicate: (EditorState.Ready) -> Boolean): EditorState.Ready = runBlocking {
-        withTimeout(30_000) { viewModel.state.first { it is EditorState.Ready && !it.busy && predicate(it) } as EditorState.Ready }
+    /** [timeout]은 기다리는 한도(밀리초). 잡티 찾기처럼 에뮬레이터(소프트웨어 GPU)에서 오래 걸리는 편집은 늘린다. */
+    private fun awaitReady(timeout: Long = 30_000, predicate: (EditorState.Ready) -> Boolean): EditorState.Ready = runBlocking {
+        withTimeout(timeout) { viewModel.state.first { it is EditorState.Ready && !it.busy && predicate(it) } as EditorState.Ready }
     }
 
-    private fun awaitMessage(): EditorMessage = runBlocking { withTimeout(30_000) { viewModel.messages.first() } }
+    private fun awaitMessage(predicate: (EditorMessage) -> Boolean = { true }): EditorMessage =
+        runBlocking { withTimeout(180_000) { viewModel.messages.first(predicate) } }
 
     /** 흰 캔버스 1200×900. [withFace]면 빨간 덩어리(지름 200px 붓으로 위아래 40px 그음, 가운데 (400, 450))를 칠한다. */
     private fun openPhoto(withFace: Boolean = true): EditorState.Ready {
@@ -377,6 +380,42 @@ class EditorSkinTest {
 
         assertEquals(PixelSize(SIZE.height, SIZE.width), turned.documentSize)
         assertFalse(checkNotNull(turned.layers.last().skin).stale)
+    }
+
+    @Test
+    fun healingSpots_isOneStep_tellsHowMany_andThenThereIsNothingNew() {
+        // 잡음 있는 피부색 타원에 뾰루지 둘·점 하나(결정 기록 '피부 보정'의 5단계)를 사진으로 연다
+        val file = java.io.File(context.cacheDir, "skin-spots-test.png").apply { SkinSpotPhoto.writePng(this) }
+        onMain {
+            viewModel.onCanvasSize(1000, 800)
+            viewModel.openPhoto(android.net.Uri.fromFile(file))
+        }
+        val opened = awaitReady { it.documentSize == PixelSize(SkinSpotPhoto.WIDTH, SkinSpotPhoto.HEIGHT) }
+        onMain { viewModel.skinActions.picked() }
+        val ready = awaitReady { it.revision > opened.revision && it.layers.size == 5 }
+        val group = checkNotNull(ready.layers.last().skin)
+
+        onMain { viewModel.skinActions.healSpots(ready.layers.last().id) }
+        val healed = awaitReady(timeout = 180_000) { it.revision > ready.revision }
+        // 만들 때의 알림(붉은 사진 등)은 건너뛴다
+        val message = awaitMessage { it is EditorMessage.SkinSpotsHealed } as EditorMessage.SkinSpotsHealed
+        assertEquals(2, message.healed)
+        assertTrue(recordedLayer(group.spots.value).let { (it.content as RasterContent).raster.tiles.isNotEmpty() })
+        assertTrue(healed.canUndo)
+
+        // 다시 누르면 지울 것이 없다(문서 그대로)
+        onMain { viewModel.skinActions.healSpots(ready.layers.last().id) }
+        val nothing = awaitMessage { it is EditorMessage.SkinNoSpots } as EditorMessage.SkinNoSpots
+        assertEquals(message.moles, nothing.moles)
+        assertEquals(healed.revision, awaitReady(timeout = 180_000) { true }.revision)
+
+        // 실행 취소 한 단계로 잡티 제거 레이어가 비고 정돈도 돌아온다
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > healed.revision }
+        assertTrue((recordedLayer(group.spots.value).content as RasterContent).raster.tiles.isEmpty())
+        assertEquals(emptyList<Any>(), checkNotNull(viewModel.recordedDocument).layers.last().skin?.healed)
+        assertEquals(5, undone.layers.size)
+        file.delete()
     }
 
     private companion object {

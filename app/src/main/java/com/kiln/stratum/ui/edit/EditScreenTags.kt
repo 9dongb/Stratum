@@ -261,8 +261,14 @@ object EditScreenTags {
     const val SKIN_TEXTURE = "skinTexture"
     const val SKIN_REBUILD = "skinRebuild"
 
+    /** 피부 도구의 [잡티 자동 제거](결정 기록 '피부 보정'의 5단계) */
+    const val SKIN_HEAL = "skinHeal"
+
     /** 피부 색 기준 목록의 줄(자동·스포이드) */
     fun skinReference(choice: SkinReferenceChoice): String = "skinReference_${choice.name}"
+
+    /** 리터칭의 가져오기 고르기(결정 기록 '피부 보정'의 5단계) */
+    fun retouchSample(choice: RetouchSample): String = "retouchSample_${choice.name}"
 
     const val TONE_OVERLAY = "toneOverlay"
     const val TONE_EXPOSURE = "toneExposure"

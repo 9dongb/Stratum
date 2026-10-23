@@ -7,6 +7,7 @@ import com.kiln.stratum.engine.brush.BrushSettings
 import com.kiln.stratum.engine.brush.StrokeDabs
 import com.kiln.stratum.engine.brush.StrokePoint
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.platform.LayerPreviewCache
@@ -27,6 +28,7 @@ import com.kiln.stratum.engine.selection.SelectionShape
 import kotlin.math.abs
 import kotlin.math.hypot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -162,6 +164,70 @@ class RetouchStrokeTest {
         assertSame(document, RetouchStroke(LayerId(0), dot(300f, 300f), hard, RetouchMode.CLONE, SourceOffset(0, 0)).applyTo(document))
         val everywhere = StrokeDabs.place(listOf(StrokePoint(0f, 0f), StrokePoint(800f, 600f)), 50f)
         assertSame(document, RetouchStroke(LayerId(0), everywhere, BrushSettings(size = 1000f), RetouchMode.SPOT_HEAL).applyTo(document))
+    }
+
+    /** [document] 위에 빈 레이어(번호 1)를 더한 문서(잡티 제거 레이어처럼) */
+    private fun withEmptyLayerOnTop(document: Document): Document =
+        document.copy(layers = document.layers + Layer(LayerId(1), "Spots", RasterContent(Raster.EMPTY)), nextLayerId = 2)
+
+    private fun pixelOf(document: Document, layer: Int, x: Int, y: Int): Int =
+        (document.layers[layer].content as RasterContent).raster.tiles[TileKey(x / TILE_SIZE, y / TILE_SIZE)]?.pixelAt(x % TILE_SIZE, y % TILE_SIZE) ?: 0
+
+    @Test
+    fun spotHeal_fromBelow_paintsOnlyTheFixIntoAnEmptyLayer() {
+        // 결정 기록 '피부 보정'의 5단계: 빈 레이어에 아래 사진의 점을 지운 결과만 그린다(사진은 그대로)
+        val document = withEmptyLayerOnTop(documentOf(800, 600) { x, y ->
+            if (hypot(x + 0.5f - 420f, y + 0.5f - 300f) <= 8f) gray(0) else gray(40 + x * 160 / 800)
+        })
+
+        val healed = RetouchStroke(LayerId(1), dot(420f, 300f), BrushSettings(size = 30f, hardness = 0.8f), RetouchMode.SPOT_HEAL, sampleBelow = true)
+            .applyTo(document)
+
+        assertSame(document.layers[0], healed.layers[0])
+        // 점 자리는 둘레 밝기의 불투명한 픽셀, 획 밖은 비었다
+        val fixed = pixelOf(healed, 1, 420, 300)
+        assertEquals(255, Color.alpha(fixed))
+        assertTrue("fixed ${Color.red(fixed)}", abs(Color.red(fixed) - (40 + 420 * 160 / 800)) <= 6)
+        assertEquals(0, Color.alpha(pixelOf(healed, 1, 420, 340)))
+    }
+
+    @Test
+    fun onAnEmptyLayer_thisLayerOnly_hasNothingToTake() {
+        val document = withEmptyLayerOnTop(grayWithSpot(400f, 300f))
+
+        assertSame(document, RetouchStroke(LayerId(1), dot(400f, 300f), BrushSettings(size = 30f), RetouchMode.SPOT_HEAL).applyTo(document))
+        assertSame(document, RetouchStroke(LayerId(1), dot(500f, 300f), hard, RetouchMode.CLONE, SourceOffset(300, 0)).applyTo(document))
+    }
+
+    @Test
+    fun cloneFromBelow_copiesWhatIsSeenBelow() {
+        val photo = documentOf(800, 600) { x, y -> if (x < 400) (if ((x / 3 + y / 3) % 2 == 0) Color.RED else Color.GREEN) else gray(128) }
+        val document = withEmptyLayerOnTop(photo)
+
+        val cloned = RetouchStroke(LayerId(1), dot(500f, 200f), hard, RetouchMode.CLONE, SourceOffset(300, 0), sampleBelow = true).applyTo(document)
+
+        assertNotSame(document, cloned)
+        for (x in 490..510) assertEquals("x $x", pixel(photo, x - 300, 200), pixelOf(cloned, 1, x, 200))
+        assertEquals(0, Color.alpha(pixelOf(cloned, 1, 500, 240)))
+    }
+
+    @Test
+    fun clonePreview_fromBelow_readsTheGivenPicture() {
+        // 빈 레이어에 '아래 포함'으로 베끼는 동안은 그 레이어와 그 아래를 합친 그림(여기서는 사진 축소본)에서 읽는다
+        val photo = grayWithSpot(200f, 200f, radius = 15f)
+        val document = withEmptyLayerOnTop(photo)
+        val cache = LayerPreviewCache()
+        val below = checkNotNull(cache.render(photo, level = 1))
+
+        val preview = checkNotNull(
+            cache.render(
+                document, level = 1,
+                strokes = listOf(LiveStroke(LayerId(1), dot(500f, 200f), hard, erase = false, clone = SourceOffset(300, 0), source = below))
+            )
+        ).copy(Bitmap.Config.ARGB_8888, false)
+
+        assertTrue(Color.red(preview.getPixel(250, 100)) < 40)
+        assertTrue(abs(Color.red(preview.getPixel(250, 120)) - 128) <= 2)
     }
 
     @Test

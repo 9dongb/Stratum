@@ -132,6 +132,8 @@ import com.kiln.stratum.engine.selection.MaskContour
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.skin.NoFaceException
+import com.kiln.stratum.engine.skin.NoSpotsException
+import com.kiln.stratum.engine.platform.HealSkinSpots
 import com.kiln.stratum.engine.skin.OkLab
 import com.kiln.stratum.engine.skin.SkinColor
 import com.kiln.stratum.engine.skin.SkinColorMath
@@ -276,6 +278,12 @@ sealed interface EditorMessage {
 
     /** 피부 기준 스포이드로 고른 색이 피부 색이 아니다(색상·채도가 피부 범위 밖). 기준은 그대로다. */
     data object SkinReferenceNotSkin : EditorMessage
+
+    /** 잡티 자동 제거로 잡티 [healed]개를 지웠다. [moles]개의 점(모반)은 남겼다(결정 기록 '피부 보정'의 5단계). */
+    data class SkinSpotsHealed(val healed: Int, val moles: Int) : EditorMessage
+
+    /** 지울 잡티를 찾지 못했다(점 [moles]개는 남김). 문서는 그대로다. */
+    data class SkinNoSpots(val moles: Int) : EditorMessage
 }
 
 /** 공유 창으로 보낼 사진([uri])과 그 형식. 화면이 공유 창을 띄운다. */
@@ -573,6 +581,15 @@ class EditorViewModel internal constructor(
      */
     val retouch: StateFlow<BrushSettings> = _retouch.asStateFlow()
 
+    private val _retouchSampleBelow = MutableStateFlow(false)
+
+    /**
+     * 리터칭(복제 도장·복구·스팟 복구)이 가져올 그림: false면 고른 레이어(포토샵 '현재 레이어', 처음 값), true면 고른 레이어와 그 아래를
+     * 합친 그림('현재 및 아래', 결정 기록 '피부 보정'의 5단계). 피부 보정 그룹의 잡티 제거 레이어에는 늘 아래 포함이다([samplesBelow]).
+     * 앱을 끌 때까지 남는다(다른 리터칭 설정과 같다).
+     */
+    val retouchSampleBelow: StateFlow<Boolean> = _retouchSampleBelow.asStateFlow()
+
     private val _cloneSource = MutableStateFlow<CloneSource?>(null)
 
     /** 복제 도장·복구 브러시가 가져올 곳. 다른 문서를 열거나 문서 크기가 바뀌면(자르기·회전·크기 변경) 지운다. */
@@ -616,9 +633,17 @@ class EditorViewModel internal constructor(
         val effect: EffectFill? = null,
         val smudge: Float? = null,
         val inpaint: InpaintModel? = null,
-        val mask: Boolean = false
+        val mask: Boolean = false,
+        val sampleBelow: Boolean = false
     ) {
         val dabs = StrokeDabs(settings.spacing)
+
+        /**
+         * '아래 포함' 복제·복구 획이 끄는 동안 베낄 그림(그 레이어와 그 아래를 합친 문서 전체를 축소본 단계로 그린 것, [prepareSamplePreviews]).
+         * 그리기 전이거나 다른 단계면 쓰지 않는다(그동안은 그 레이어 축소본을 읽는다).
+         */
+        @Volatile
+        var samplePreview: PreviewImage? = null
 
         /** 스머지를 끄는 동안의 미리 보기(새 자국만 이어서 그린다). 스머지가 아니면 null. */
         private val smudgePreview: SmudgePreview? = smudge?.let { SmudgePreview(settings, it) }
@@ -632,7 +657,7 @@ class EditorViewModel internal constructor(
             inpaint != null || retouch == RetouchMode.SPOT_HEAL ->
                 LiveStroke(layer, ArrayList(dabs.dabs), settings.copy(color = SPOT_PREVIEW_COLOR, opacity = SPOT_PREVIEW_OPACITY), false, selection)
             retouch == null -> LiveStroke(layer, ArrayList(dabs.dabs), settings, erase, selection, tone = tone, effect = effect, smudge = smudgePreview)
-            else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset)
+            else -> LiveStroke(layer, ArrayList(dabs.dabs), settings, false, selection, clone = offset, source = samplePreview?.bitmap)
         }
 
         /** 손을 뗀 뒤 기록할 명령 */
@@ -644,7 +669,7 @@ class EditorViewModel internal constructor(
             effect != null -> EffectStroke(layer, ArrayList(dabs.dabs), settings, effect)
             smudge != null -> SmudgeStroke(layer, ArrayList(dabs.dabs), settings, smudge)
             retouch == null -> PaintStroke(layer, ArrayList(dabs.dabs), settings, erase)
-            else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset)
+            else -> RetouchStroke(layer, ArrayList(dabs.dabs), settings, retouch, offset, sampleBelow)
         }
 
         /** 이 획의 미리 보기가 레이어 픽셀을 읽는지(지우개·복제·명암·효과·스머지). 그러면 확대 그림에 바로 얹으려면 보이는 레이어가 하나여야 한다. */
@@ -654,6 +679,17 @@ class EditorViewModel internal constructor(
 
     /** 끄는 중인 획 */
     private var drawing: Stroke? = null
+
+    /**
+     * '아래 포함' 획 [stroke]가 끄는 동안 베낄 그림을 [level] 단계로 그려 둔다: 그 레이어와 그 아래를 합친 [document] 전체(결정 기록 '피부 보정'의 5단계).
+     * 그리기 잠금 안에서, 메인 스레드가 아닌 곳에서 부른다. 그리지 못하면 그대로 둔다(그동안은 레이어 축소본을 읽는다).
+     */
+    private fun prepareSamplePreview(stroke: Stroke, document: Document, level: Int) {
+        val below = document.copy(layers = LayerTree.below(document.layers, stroke.layer, including = true), selection = null)
+        val region = PreviewLevels.wholeRegion(PixelSize(document.width, document.height), level)
+        val bitmap = PreviewRenderer.renderRegion(below, region) ?: return
+        stroke.samplePreview = PreviewImage(bitmap, region)
+    }
 
     /** 손을 뗐지만 아직 기록하지 못한 획(앞에서부터 하나씩 기록한다). 미리 보기에는 그대로 보인다. */
     private val queuedStrokes = ArrayList<Stroke>()
@@ -715,6 +751,7 @@ class EditorViewModel internal constructor(
         override fun previewSmooth(smoothLayer: LayerId, strength: Float) = previewSkinSmooth(smoothLayer, strength)
         override fun setTexture(group: LayerId, texture: Float) = rebuildSkin(group, texture, remeasure = false)
         override fun rebuild(group: LayerId) = rebuildSkin(group, texture = null, remeasure = true)
+        override fun healSpots(group: LayerId) = healSkinSpots(group)
     }
 
     /** 스포이드(버튼을 켜고 누르기, 브러시로 꾹 누르기)가 보내는 일 */
@@ -766,6 +803,9 @@ class EditorViewModel internal constructor(
         override fun removePicked() = removePickedObject()
         override fun clearPicked() = clearRemovePick()
         override fun enhanceTexture() = enhanceLastFill()
+        override fun setSampleBelow(below: Boolean) {
+            _retouchSampleBelow.value = below
+        }
     }
 
     private val _rasterizeAsk = MutableStateFlow<LayerId?>(null)
@@ -2689,8 +2729,16 @@ class EditorViewModel internal constructor(
         }
         // 복구는 둘레에 맞춰 섞으므로 불투명도를 쓰지 않는다
         val settings = _retouch.value.let { if (mode == RetouchMode.CLONE) it else it.copy(opacity = 1f) }
-        startStroke(Stroke(layer.id, settings, erase = false, history?.document?.selection, mode, offset), point)
+        val document = history?.document ?: return
+        startStroke(Stroke(layer.id, settings, erase = false, document.selection, mode, offset, sampleBelow = samplesBelow(document, layer.id)), point)
     }
+
+    /**
+     * 리터칭이 [layer]에 그릴 때 그 레이어와 그 아래를 합친 그림에서 가져오는지(결정 기록 '피부 보정'의 5단계): 가져오기를 '아래 포함'으로 골랐거나,
+     * 그 레이어가 피부 보정 그룹의 잡티 제거 레이어다(그 레이어는 아래 사진의 잡티를 지운 결과만 담는다, 사용자 요청의 구조).
+     */
+    fun samplesBelow(document: Document, layer: LayerId): Boolean =
+        _retouchSampleBelow.value || document.layers.any { it.skin?.spots == layer }
 
     /**
      * 고른 레이어에 AI 제거 획을 시작한다(결정 기록 'AI 제거·AI 선택'). 끄는 동안 칠한 곳을 반투명 검정으로 보이고,
@@ -3086,6 +3134,26 @@ class EditorViewModel internal constructor(
     }
 
     /**
+     * [group] 피부 보정 그룹의 잡티를 자동으로 지운다(실행 취소 한 단계, [HealSkinSpots], 결정 기록 '피부 보정'의 5단계): 점(모반)은 남기고,
+     * 잡티 제거 레이어에 스팟 복구로 지운 뒤 피부 정돈을 다시 만든다. 지운 수·남긴 점 수를 알린다. 다른 편집을 처리하는 중이면 무시한다.
+     * 잡티 제거 레이어를 숨겼으면 숨긴 레이어 알림이다(그 레이어에 그리므로).
+     */
+    fun healSkinSpots(group: LayerId) {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
+        val record = document.layers.getOrNull(document.indexOfLayer(group))?.skin ?: return
+        val spots = document.layers.getOrNull(document.indexOfLayer(record.spots)) ?: return
+        if (!LayerTree.isVisible(document.layers, spots)) return tellHiddenLayer()
+        runEdit(
+            HealSkinSpots(group),
+            onCommitted = {
+                val report = history?.document?.let { it.layers.getOrNull(it.indexOfLayer(group)) }?.skin?.healReport
+                if (report != null) _messages.trySend(EditorMessage.SkinSpotsHealed(report.healed, report.moles))
+            }
+        )
+    }
+
+    /**
      * 피부 도구의 색 슬라이더를 끄는 동안 [colorLayer](그룹의 색 보정 레이어)의 피부 색을 미리 본다. 기록하지 않는다(보정 미리 보기와 같은 방식).
      * [change]는 지금 값(미리 보는 값, 없으면 기록된 값)을 받아 새 값을 돌려준다. 손을 떼면 [commitLive]로 실행 취소 한 단계다.
      */
@@ -3258,10 +3326,15 @@ class EditorViewModel internal constructor(
                 strokeDirty = false
                 val history = history ?: break
                 val document = history.document
+                val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
+                // '아래 포함' 복제·복구 획이 베낄 그림을 먼저 그려 둔다(획마다 한 번, 그 획을 시작할 때의 문서)
+                val sampling = (queuedStrokes + listOfNotNull(drawing)).filter { it.sampleBelow && it.offset != null && it.samplePreview?.region?.level != level }
+                if (sampling.isNotEmpty()) {
+                    renderMutex.withLock { withContext(Dispatchers.Default) { for (stroke in sampling) prepareSamplePreview(stroke, document, level) } }
+                }
                 val strokes = liveStrokes()
                 val detailBase = detailBeforeStroke?.takeIf { strokesFitDetail(document) }
                 val detailLive = detailStrokes.map { it.live() }
-                val level = previewLevel.takeIf { it >= 0 } ?: levelFor(document)
                 // 마스크를 칠하는 중이면 빨간 막에도 끄는 획을 얹는다(결정 기록 '피부 보정'의 1d)
                 val maskLayer = document.layers[document.indexOfLayer(activeLayerIn(document))].takeIf { showsMaskOverlay(it) }
                 val (base, detail, overlay) = renderMutex.withLock {
@@ -3298,7 +3371,8 @@ class EditorViewModel internal constructor(
         if (top.blendMode != BlendMode.NORMAL || !top.isPlain) return false
         // 스머지는 앞 자국의 결과에 기대어 축소본 사본에 이어서 그리므로 확대 그림에는 얹지 않는다(손을 떼면 다시 선명해진다)
         // 마스크 획은 픽셀이 아니라 마스크를 바꾸므로 확대 그림에 얹지 않는다
-        return detailStrokes.all { !it.mask && it.smudge == null && it.layer == top.layer.id && (!it.readsLayer || steps.size == 1) }
+        // '아래 포함' 복제는 맨 위 레이어와 그 아래를 합친 그림, 곧 확대 그림 그대로를 베낀다
+        return detailStrokes.all { !it.mask && it.smudge == null && it.layer == top.layer.id && (!it.readsLayer || steps.size == 1 || it.sampleBelow) }
     }
 
     /** 홈에서 [id] 프로젝트를 지운다(되돌릴 수 없다). 열려 있는 프로젝트는 지우지 않는다. */
@@ -3463,6 +3537,12 @@ class EditorViewModel internal constructor(
                 Log.w(TAG, "Could not read the photo for $command", e)
                 onFinished()
                 finishEditing(EditorMessage.PhotoUnreadable)
+                return@launch
+            } catch (e: NoSpotsException) {
+                // 잡티 자동 제거: 지울 잡티가 없다(점만 있거나 고른 피부). 문서는 그대로다.
+                Log.i(TAG, "No spots for $command")
+                onFinished()
+                finishEditing(EditorMessage.SkinNoSpots(e.moles))
                 return@launch
             } catch (e: NoFaceException) {
                 // 피부 보정: 고른 레이어에서 얼굴을 찾지 못했다. 문서는 그대로다.

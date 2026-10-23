@@ -278,8 +278,6 @@ internal object SkinSmoother {
     private fun PixelRect.union(other: PixelRect) =
         PixelRect(min(left, other.left), min(top, other.top), maxOf(right, other.right), maxOf(bottom, other.bottom))
 
-    private fun PixelRect.expanded(margin: Int) = PixelRect(left - margin, top - margin, right + margin, bottom + margin)
-
     /** 줄마다 적은 3×3 행렬을 셰이더 행렬의 차례(열마다)로 */
     private fun columns(rows: FloatArray): FloatArray = FloatArray(9) { rows[(it % 3) * 3 + it / 3] }
 

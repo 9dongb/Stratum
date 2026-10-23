@@ -29,6 +29,9 @@ data class PixelRect(val left: Int, val top: Int, val right: Int, val bottom: In
     /** 가로로 [dx], 세로로 [dy]만큼 옮긴 사각형. */
     fun offset(dx: Int, dy: Int): PixelRect = PixelRect(left + dx, top + dy, right + dx, bottom + dy)
 
+    /** 네 쪽으로 [margin]만큼 넓힌 사각형(문서 밖으로 나갈 수 있다). */
+    fun expanded(margin: Int): PixelRect = PixelRect(left - margin, top - margin, right + margin, bottom + margin)
+
     companion object {
         /** [size] 문서 전체. */
         fun of(size: PixelSize): PixelRect = PixelRect(0, 0, size.width, size.height)

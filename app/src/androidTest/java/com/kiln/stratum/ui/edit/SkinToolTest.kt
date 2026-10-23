@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -62,6 +64,14 @@ class SkinToolTest {
 
         override fun autoReference(colorLayer: LayerId) {
             calls += "auto ${colorLayer.value}"
+        }
+
+        override fun healSpots(group: LayerId) {
+            calls += "heal ${group.value}"
+        }
+
+        override fun rebuild(group: LayerId) {
+            calls += "rebuild ${group.value}"
         }
     }
 
@@ -176,6 +186,40 @@ class SkinToolTest {
         // 커버 막대의 켜고 끄는 칩은 고른 모양(선택)으로 켜짐을 알린다
         composeRule.onNodeWithTag(EditScreenTags.SKIN_MASK).assertIsDisplayed().assertIsNotSelected().performClick()
         composeRule.runOnIdle { assertEquals(listOf("picked", "create", "mask 2"), calls) }
+    }
+
+    @Test
+    fun main_theStripHealsSpots_andRebuilds_forTheGroup() {
+        // 결정 기록 '피부 보정'의 4·5단계: [잡티 자동 제거]·[다시 만들기]는 그룹에 한다
+        layers = withGroup
+        show(930, 700)
+
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Skin)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SKIN_HEAL).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag(EditScreenTags.SKIN_REBUILD).assertIsEnabled().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("picked", "heal 1", "rebuild 1"), calls) }
+    }
+
+    @Test
+    fun healingSpots_isOff_whenTheSpotsLayerIsGone() {
+        layers = withGroup.filterNot { it.id == LayerId(4) }
+        show(930, 700)
+
+        composeRule.onNodeWithTag(EditScreenTags.railTool(EditTool.Skin)).performClick()
+
+        composeRule.onNodeWithTag(EditScreenTags.SKIN_HEAL).assertIsNotEnabled()
+    }
+
+    @Test
+    fun cover_theBarHealsSpots() {
+        layers = withGroup
+        show(411, 800)
+
+        composeRule.chooseCoverTool(EditTool.Skin)
+        composeRule.onNodeWithTag(EditScreenTags.SKIN_HEAL).performScrollTo().assertIsDisplayed().performClick()
+
+        composeRule.runOnIdle { assertEquals(listOf("picked", "heal 1"), calls) }
     }
 
     @Test

@@ -20,6 +20,9 @@ internal const val SKIN_MASK_KEY = "skinMask"
 internal const val SKIN_REFERENCE_KEY = "skinReference"
 internal const val SKIN_REBUILD_KEY = "skinRebuild"
 
+/** [잡티 자동 제거] 칸·칩의 열쇠(결정 기록 '피부 보정'의 5단계) */
+internal const val SKIN_HEAL_KEY = "skinHeal"
+
 /** 피부 색 보정의 기준 고르기(결정 기록 '피부 보정'의 3단계): 자동(그 사람 피부의 가운데 색), 스포이드(누른 자리 피부색) */
 enum class SkinReferenceChoice(@get:StringRes val label: Int, @get:DrawableRes val icon: Int) {
     AUTO(R.string.skin_reference_auto, R.drawable.ic_face),
@@ -82,8 +85,11 @@ interface SkinActions {
     /** 질감 유지를 [texture]로 바꾸고 피부 정돈을 다시 만든다(손을 뗄 때, 실행 취소 한 단계) */
     fun setTexture(group: LayerId, texture: Float) {}
 
-    /** [다시 만들기]: 피부 정돈과 색 기준(얼굴마다 피부 색 통계)을 지금 사진으로 다시 만든다(실행 취소 한 단계) */
+    /** [다시 만들기]: 자동으로 지운 잡티, 피부 정돈과 색 기준(얼굴마다 피부 색 통계)을 지금 사진으로 다시 만든다(실행 취소 한 단계) */
     fun rebuild(group: LayerId) {}
+
+    /** [잡티 자동 제거]: 잡티를 찾아 지운다(점은 남김, 실행 취소 한 단계, 결정 기록 '피부 보정'의 5단계) */
+    fun healSpots(group: LayerId) {}
 
     /** 아무것도 하지 않는다(미리보기·화면 테스트) */
     object None : SkinActions {
@@ -106,6 +112,7 @@ interface SkinActions {
  * @property texture 질감 유지(끄는 중이면 그 값). 정돈 레이어가 없으면 null이다.
  * @property onSmooth 정돈 세기를 끄는 동안, [onTexture]는 질감 유지를 끄는 동안, [onTextureFinished]는 질감 유지를 놓을 때(다시 만듦)
  * @property onRebuild [다시 만들기]. [SkinSummary.stale]이면 앞세운다.
+ * @property spotsAvailable 잡티를 지울 수 있는지(잡티 제거 레이어가 남아 있다), [onHealSpots]는 [잡티 자동 제거](5단계)
  */
 data class SkinControls(
     val group: SkinSummary?,
@@ -125,7 +132,9 @@ data class SkinControls(
     val onSmooth: (Float) -> Unit = {},
     val onTexture: (Float) -> Unit = {},
     val onTextureFinished: () -> Unit = {},
-    val onRebuild: () -> Unit = {}
+    val onRebuild: () -> Unit = {},
+    val spotsAvailable: Boolean = false,
+    val onHealSpots: () -> Unit = {}
 )
 
 /**

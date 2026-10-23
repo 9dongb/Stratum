@@ -22,6 +22,7 @@ import com.kiln.stratum.engine.platform.LiteRtFaceModel
 import com.kiln.stratum.engine.platform.LiteRtSkinModel
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.CreateSkinRetouch
+import com.kiln.stratum.engine.platform.HealSkinSpots
 import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.SkinLayerNames
 import com.kiln.stratum.engine.platform.SkinMasker
@@ -30,6 +31,7 @@ import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.skin.NoFaceException
+import com.kiln.stratum.engine.skin.NoSpotsException
 import com.kiln.stratum.engine.skin.OkLab
 import java.io.File
 import java.io.FileOutputStream
@@ -185,6 +187,84 @@ class SkinPhotoTest {
             saveSideBySide(before, after, "${name.substringBeforeLast('.')}-smooth")
             before.recycle()
             after.recycle()
+            assertTrue("$name mean L ${sum0 / count} -> ${sum1 / count}", abs(sum1 / count - sum0 / count) < 0.01)
+        }
+    }
+
+    /**
+     * 잡티 자동 제거(결정 기록 '피부 보정'의 5단계)를 실제 피부 사진에 건다: 얼굴 둘레의 앞(지운 자리를 빨간 원으로 표시)·뒤 그림을
+     * skin-debug/[이름]-spots.png에 남기고(맥에서 보고 상수를 다듬는 데 쓴다), 피부 안의 밝기 평균이 거의 그대로인지 본다. 사진이 없으면 건너뛴다.
+     */
+    @Test
+    fun spots_onRealSkin_areHealed_andTheSkinStaysTheSame() {
+        val names = listOf("redhead_freckles.jpg" to 2, "flushed_hotwings.jpg" to 1, "teen_acne.jpg" to 1, "Buzz_Aldrin.jpg" to 1)
+            .filter { File(File(context.filesDir, "face"), it.first).isFile }
+        assumeTrue("No skin test photos in files/face", names.isNotEmpty())
+        for ((name, sample) in names) {
+            val document = (PhotoImporter.import(ImageDecoder.createSource(file(name)), "Photo", sample) as ImportResult.Success).document
+            val created = try {
+                CreateSkinRetouch(LayerId(0), SkinLayerNames("Skin", "Color", "Smooth", "Spots"), finder, masker).applyTo(document)
+            } catch (e: NoFaceException) {
+                Log.i("SkinPhoto", "$name: no face")
+                continue
+            }
+            val group = created.layers[4]
+            val started = SystemClock.elapsedRealtime()
+            val healed = try {
+                HealSkinSpots(group.id).applyTo(created)
+            } catch (e: NoSpotsException) {
+                Log.i("SkinPhoto", "$name: no spots (${e.moles} moles)")
+                continue
+            }
+            val record = checkNotNull(healed.layers[4].skin)
+            Log.i("SkinPhoto", "$name ${document.width}x${document.height}: healed ${record.healReport} in ${SystemClock.elapsedRealtime() - started} ms")
+            val face = record.faces[0]
+            val reach = (face.radius * 1.2f).toInt()
+            val rect = PixelRect((face.centerX - reach).toInt(), (face.centerY - reach).toInt(), (face.centerX + reach).toInt(), (face.centerY + reach).toInt())
+            val region = checkNotNull(PreviewLevels.region(PixelSize(document.width, document.height), 0, rect))
+            val before = checkNotNull(PreviewRenderer.renderRegion(created, region)).copy(Bitmap.Config.ARGB_8888, true)
+            val after = checkNotNull(PreviewRenderer.renderRegion(healed, region)).copy(Bitmap.Config.ARGB_8888, false)
+            val mask = checkNotNull(created.layers[3].mask)
+            val lab = FloatArray(3)
+            var sum0 = 0.0
+            var sum1 = 0.0
+            var count = 0
+            for (y in 0 until before.height step 2) {
+                for (x in 0 until before.width step 2) {
+                    if (mask.alphaAt(region.rect.left + x, region.rect.top + y) < 200) continue
+                    val p0 = before.getPixel(x, y)
+                    val p1 = after.getPixel(x, y)
+                    OkLab.fromRgb(Color.red(p0) / 255f, Color.green(p0) / 255f, Color.blue(p0) / 255f, lab)
+                    sum0 += lab[0]
+                    OkLab.fromRgb(Color.red(p1) / 255f, Color.green(p1) / 255f, Color.blue(p1) / 255f, lab)
+                    sum1 += lab[0]
+                    count++
+                }
+            }
+            // 앞 그림: 잡티를 찾지 않는 곳(피부 마스크 0.8 아래)은 어둡게, 지운 자리는 빨간 원
+            val row = IntArray(before.width)
+            for (y in 0 until before.height) {
+                before.getPixels(row, 0, before.width, 0, y, before.width, 1)
+                for (x in row.indices) {
+                    if (mask.alphaAt(region.rect.left + x, region.rect.top + y) < 205) {
+                        val p = row[x]
+                        row[x] = Color.rgb(Color.red(p) / 3, Color.green(p) / 3, Color.blue(p) / 3)
+                    }
+                }
+                before.setPixels(row, 0, before.width, 0, y, before.width, 1)
+            }
+            val canvas = android.graphics.Canvas(before)
+            val circle = android.graphics.Paint().apply {
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 2f
+                color = Color.RED
+                isAntiAlias = true
+            }
+            for (spot in record.healed) canvas.drawCircle(spot.x - region.rect.left, spot.y - region.rect.top, spot.radius + 1f, circle)
+            saveSideBySide(before, after, "${name.substringBeforeLast('.')}-spots")
+            before.recycle()
+            after.recycle()
+            Log.i("SkinPhoto", "$name: mean L ${sum0 / count} -> ${sum1 / count}")
             assertTrue("$name mean L ${sum0 / count} -> ${sum1 / count}", abs(sum1 / count - sum0 / count) < 0.01)
         }
     }

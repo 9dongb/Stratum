@@ -413,6 +413,10 @@
     <string name="retouch_hint_remove">Paint over what to remove, with a little margin for its shadow, and lift your finger to let AI fill it. Or tap an object to pick its shape, then tap Remove. If the fill looks blurry, tap Texture to bring in the fine texture around it.</string>
     <string name="retouch_remove_picked">Remove</string>
     <string name="retouch_remove_picked_description">Remove the picked object with AI</string>
+    <!-- 리터칭이 가져올 그림(결정 기록 '피부 보정'의 5단계) -->
+    <string name="retouch_sample">Sample</string>
+    <string name="retouch_sample_layer">This layer</string>
+    <string name="retouch_sample_below">Layer &amp; below</string>
     <string name="texture_enhance">Texture</string>
     <string name="texture_enhance_description">Add the fine texture around it to the AI fill</string>
     <string name="edit_remove_unavailable">AI remove can\'t run on this device. Try the spot healing brush.</string>
@@ -454,6 +458,9 @@
     <string name="skin_texture">Texture</string>
     <string name="skin_rebuild">Rebuild</string>
     <string name="skin_rebuild_description">Rebuild smoothing and the skin color reference from the photo now</string>
+    <string name="skin_heal">Remove blemishes</string>
+    <string name="skin_heal_description">Find and remove blemishes (moles stay)</string>
+    <string name="skin_no_spots">No blemishes to remove.</string>
     <string name="skin_group_name">Skin retouch</string>
     <string name="skin_color_name">Skin color</string>
     <string name="skin_smooth_name">Skin smoothing</string>
@@ -481,5 +488,14 @@
     <plurals name="home_delete_projects_title">
         <item quantity="one">Delete %d project?</item>
         <item quantity="other">Delete %d projects?</item>
+    </plurals>
+    <!-- 잡티 자동 제거의 결과(결정 기록 '피부 보정'의 5단계) -->
+    <plurals name="skin_spots_healed">
+        <item quantity="one">Removed %d blemish.</item>
+        <item quantity="other">Removed %d blemishes.</item>
+    </plurals>
+    <plurals name="skin_moles_kept">
+        <item quantity="one">Kept %d mole.</item>
+        <item quantity="other">Kept %d moles.</item>
     </plurals>
 </resources>

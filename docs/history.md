@@ -14,6 +14,24 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 피부 보정 5: 잡티 자동 제거·리터칭 아래 포함
+
+- 요청: 승인된 피부 보정 계획의 5단계(잡티 제거). 사용자 원문은 `docs/skin-retouch-plan.md`("잡티 제거: 작은 점·뾰루지를 자동으로 찾아 기존 스팟 복구로 지우기", 질문에 "바로 지우기, 점은 남김").
+- 의도: 말하지 않음
+- 커밋:
+  - "잡티 자동 제거와 리터칭 '아래 포함' 가져오기를 더함"
+- 바꾼 것
+  - 엔진 순수 Kotlin: `SkinSpots`(새: 잡티 찾기·점 가르기, 지운 자리 `SkinSpot`, 결과 `SkinHealReport`, `NoSpotsException`), `SkinRecord`(지운 자리·결과, 옮기기), `LayerTree.below`(그 레이어 포함), `PixelRect.expanded`, 저장(`ProjectManifest`: 피부 기록 끝에 지운 자리, 수는 남은 바이트로 거름).
+  - 엔진 플랫폼: `BelowSampler`(새: 그 레이어와 그 아래를 필요한 곳만 그림), `Retouch.paintAll`(가져올 그림과 그릴 레이어를 나눔, 여러 레이어에 같은 획), `RetouchStroke.sampleBelow`, `SkinSpotHealer`(새: 얼굴마다 찾기·지우기), `HealSkinSpots`(새), `RebuildSkinRetouch`(지운 잡티 다시 지우기), `LayerPreviewCache`(복제 미리 보기가 읽을 그림), 프로젝트 저장·열기.
+  - 화면: 리터칭의 '가져오기' 칸·칩(`RetouchSample`), 피부 도구의 [잡티 자동 제거] 칸·칩, 알림 둘(`SkinSpotsHealed`·`SkinNoSpots`, 영어는 plurals), 끄는 동안 '아래 포함' 복제의 미리 보기, 문구(두 언어).
+  - 테스트: JVM `SkinSpotsTest`(새, 6개), `SkinRecordTest`(옮기기), `ProjectManifestTest`(지운 자리 왕복, 앞 판 기록). 에뮬레이터 `HealSkinSpotsTest`(새, 4개: 마스크 안, 뾰루지만 지우고 점은 남김·정돈 다시 만듦, 다시 누르면 없음, 다시 만들기·되살린 자리), `RetouchStrokeTest`(4개 더: 빈 레이어에 아래 포함 스팟 복구·복제, 이 레이어면 없음, 미리 보기), `EditorRetouchTest`(1개 더), `RetouchToolTest`(3개 더: 가져오기 칩), `EditorSkinTest`(1개 더: 버튼·알림·한 단계·다시 누름), `SkinToolTest`(3개 더), `SkinPhotoTest`(1개 더: 실제 사진, 지운 자리 그림), 시험 사진 `SkinSpotPhoto`(새).
+  - 기록: progress.md(진행 중 5, 결정 기록 '피부 보정'의 5 둘, 진행표의 피부 보정·리터칭), 이 항목.
+- 정한 것(Claude 판단, 2단계부터 묻지 않고 정함): 결정 기록 '피부 보정'의 5. 맥 시험과 다르게 한 것은 점 가르기의 평균(한 픽셀 대신 점의 원 안), 겹침 거르기(두 반지름의 합), 선 모양 빼기, 지우는 붓 자리가 피부 안쪽일 때만이다(시험 사진에서 뾰루지를 점으로 보거나 점 가장자리를 지우던 것, 실제 사진에서 눈가 주름·콧방울·눈 밑 그늘을 지우던 것을 고침).
+- 확인한 것
+  - `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 683개).
+  - 에뮬레이터(접은 상태): `HealSkinSpotsTest` 4개, `EditorSkinTest` 16개, `SkinToolTest` 9개, `SkinPhotoTest` 5개(진짜 모델·실제 사진), `RetouchStrokeTest` 13개, `EditorRetouchTest` 9개, `RetouchToolTest` 34개, 그리고 바뀐 곳을 다시 본 `OptionStripTest` 25개·`StrokePreviewTest` 4개·`ToneStrokeTest` 5개·`EffectStrokeTest` 8개·`SmudgeStrokeTest` 5개·`SkinRetouchTest` 4개·`ProjectFolderTest` 10개·`TransformCommandsTest` 9개·`ImageResizerTest` 8개 통과. 처음에는 시험 사진의 뾰루지 하나를 점으로 보아 `HealSkinSpotsTest`·`EditorSkinTest`가 실패했고(점 가르기를 원 안 평균으로 고침), 에뮬레이터가 느려 화면 흐름 시험의 기다림(30초)을 늘렸다.
+  - 실제 사진(에뮬레이터, 진짜 모델): 주근깨 얼굴 5개, 달아오른 얼굴 31개, 우주인 12개를 지웠다. 처음(맥 시험 그대로)에는 눈가 주름·귀 안쪽·콧방울·눈 밑 그늘까지 15·85·31개를 지워, 선 모양 빼기와 피부 안쪽 붓 자리를 더했다. 귀 안쪽의 작은 둥근 그늘 몇 개는 남는다(결정 기록의 한계).
+
 ## 2026-10-24 · 피부 보정 4: 피부 정돈·질감 유지·다시 만들기
 
 - 요청: 승인된 피부 보정 계획의 4단계(피부 정돈·질감 유지). 사용자 원문은 `docs/skin-retouch-plan.md`.
