@@ -1,6 +1,7 @@
 package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.view.WindowInsets
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -8,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -169,8 +172,8 @@ class LiquifyModeTest {
 
     private val actions = FakeLiquify()
 
-    /** 문서 (500, 450)이 두 눈 가운데인 시험 얼굴: 윤곽은 가운데 (500, 500), 반폭 150·반높이 200인 타원, 나머지 점은 그 안 */
-    private fun testFace(): FaceLandmarks {
+    /** 문서 (500, 450)이 두 눈 가운데인 시험 얼굴: 윤곽은 가운데 (500, 500), 반폭 150·반높이 200인 타원, 나머지 점은 그 안. [dx]만큼 옆으로 옮긴다. */
+    private fun testFace(dx: Float = 0f): FaceLandmarks {
         val points = FloatArray(FaceModel.LANDMARK_COUNT * 2)
         for (i in 0 until FaceModel.LANDMARK_COUNT) {
             val t = 2 * Math.PI * i / FaceModel.LANDMARK_COUNT
@@ -188,6 +191,7 @@ class LiquifyModeTest {
         }
         points[2 * FaceMeshIndex.CHIN] = 500f
         points[2 * FaceMeshIndex.CHIN + 1] = 700f
+        for (i in 0 until FaceModel.LANDMARK_COUNT) points[2 * i] += dx
         return FaceLandmarks(points, 15f)
     }
 
@@ -293,6 +297,68 @@ class LiquifyModeTest {
         composeRule.runOnIdle { assertTrue("${actions.calls}", "begin" !in actions.calls && "pickFace" !in actions.calls) }
     }
 
+    /** 얼굴 칸에 보이는 윤곽 픽셀 수: 파란 선(고른 얼굴)과 검은 테두리(모든 윤곽). 바탕(체크 무늬·작업 공간 색)에는 둘 다 없다. */
+    private fun outlinePixels(): Pair<Int, Int> {
+        val image = composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).captureToImage().asAndroidBitmap()
+        val pixels = IntArray(image.width * image.height)
+        image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+        var blue = 0
+        var black = 0
+        for (pixel in pixels) {
+            val r = AndroidColor.red(pixel)
+            val g = AndroidColor.green(pixel)
+            val b = AndroidColor.blue(pixel)
+            if (r < 40 && g in 90..150 && b > 220) blue++
+            if (r < 10 && g < 10 && b < 10) black++
+        }
+        return blue to black
+    }
+
+    @Test
+    fun faceOutlines_showBrieflyWhenPickedOrTapped_andHideAtOnceWhileTheFaceMoves() {
+        selectFace()
+        // 시계를 멈춘 채 연다(화면을 그리는 동안 윤곽이 보이는 시간이 흐르지 않게)
+        composeRule.mainClock.autoAdvance = false
+        show(411, 800)
+        composeRule.mainClock.advanceTimeBy(100)
+        assertTrue("${outlinePixels()}", outlinePixels().first > 100)
+
+        // 1.5초 동안은 그대로 있다가 0.5초 동안 사라진다
+        composeRule.mainClock.advanceTimeBy(FACE_OUTLINE_HOLD_MILLIS - 300)
+        assertTrue("${outlinePixels()}", outlinePixels().first > 100)
+        composeRule.mainClock.advanceTimeBy(200L + FACE_OUTLINE_FADE_MILLIS + 200)
+        assertEquals(0 to 0, outlinePixels())
+
+        // 톡하면(고른 얼굴을 다시 눌러도) 다시 보인다
+        composeRule.onNodeWithTag(EditScreenTags.LIQUIFY_FACE_OVERLAY).performTouchInput { click(center) }
+        composeRule.mainClock.advanceTimeBy(100)
+        assertTrue("${outlinePixels()}", outlinePixels().first > 100)
+
+        // 슬라이더로 고쳐 얼굴이 움직이면(같은 얼굴, 같은 고른 얼굴) 바로 숨는다
+        composeRule.runOnIdle { state = state.copy(faces = listOf(testFace(dx = 4f))) }
+        composeRule.mainClock.advanceTimeBy(100)
+        assertEquals(0 to 0, outlinePixels())
+        composeRule.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun faceOutlines_stayUntilOneOfSeveralFacesIsPicked() {
+        state = state.copy(faceMode = true, faces = listOf(testFace(dx = -260f), testFace(dx = 260f)), selectedFace = -1)
+        composeRule.mainClock.autoAdvance = false
+        show(411, 800)
+        composeRule.mainClock.advanceTimeBy(FACE_OUTLINE_HOLD_MILLIS + FACE_OUTLINE_FADE_MILLIS + 500)
+        val (blue, black) = outlinePixels()
+        assertEquals(0, blue)
+        assertTrue("black $black", black > 100)
+
+        composeRule.runOnIdle { state = state.copy(selectedFace = 1) }
+        composeRule.mainClock.advanceTimeBy(100)
+        assertTrue("${outlinePixels()}", outlinePixels().first > 100)
+        composeRule.mainClock.advanceTimeBy(FACE_OUTLINE_HOLD_MILLIS + FACE_OUTLINE_FADE_MILLIS + 200)
+        assertEquals(0 to 0, outlinePixels())
+        composeRule.mainClock.autoAdvance = true
+    }
+
     @Test
     fun faceNotice_isShownAsAToast() {
         state = state.copy(faceMode = true, faces = emptyList(), faceNotice = FaceNotice(FaceNotice.Kind.NOT_FOUND, serial = 1))
@@ -351,12 +417,14 @@ class LiquifyModeTest {
             assertEquals(FaceSlider.EYE_SIZE to 1f, actions.faceValues.last())
         }
 
-        // 부위 칸에서 코를 고르면 코 슬라이더 셋(코 높이·코 너비·콧등 너비)만 보인다
+        // 부위 칸에서 코를 고르면 코 슬라이더 다섯(코 높이·코 너비·콧볼·콧대 너비·콧등 너비)만 보인다
         composeRule.onNodeWithTag(EditScreenTags.strip("face_part")).performScrollTo().performClick()
         composeRule.onNodeWithTag(EditScreenTags.facePart(FacePart.NOSE)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.strip("face_nose_width")).performScrollTo().assertIsDisplayed()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "-20"))
-        composeRule.onNodeWithTag(EditScreenTags.strip("face_bridge_width")).performScrollTo().assertIsDisplayed()
+        for (key in listOf("face_nose_height", "face_nose_wings", "face_bridge_width", "face_ridge_width")) {
+            composeRule.onNodeWithTag(EditScreenTags.strip(key)).performScrollTo().assertIsDisplayed()
+        }
         composeRule.onNodeWithTag(EditScreenTags.strip("face_eye_size")).assertDoesNotExist()
     }
 

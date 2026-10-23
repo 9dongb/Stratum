@@ -1,11 +1,18 @@
 package com.kiln.stratum.ui.edit
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -24,11 +31,14 @@ import com.kiln.stratum.engine.face.FaceMeshIndex
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.theme.CanvasOverlayColors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
  * 얼굴 모드(얼굴 인식 보정)의 캔버스: 찾은 얼굴([faces], 화면에 보이는 자리의 문서 좌표)의 윤곽을 그리고, 톡하면 그 자리를 [onPick]으로 알린다(칠하지 않는다).
  * 고른 얼굴([selected])은 파란 윤곽, 나머지 얼굴은 흰 윤곽이다(2단계부터 특징점·좌표축·번호는 그리지 않는다, 계획 '화면').
  * 윤곽은 얼굴 보정과 손으로 민 만큼 따라 움직인다(앱이 보이는 자리로 넘김).
+ * 윤곽은 잠깐만 보인다(2026-10-23 사용자 결정 '잠깐만 보이기'): 얼굴을 찾거나 고르거나 캔버스를 톡하면 [FACE_OUTLINE_HOLD_MILLIS] 동안 보였다가
+ * [FACE_OUTLINE_FADE_MILLIS] 동안 사라지고, 같은 얼굴이 움직이면(슬라이더로 고치는 동안) 바로 숨는다. 여럿을 찾고 아직 고르지 않았으면 고를 때까지 보인다.
  * 손가락이 움직이지 않은 톡만 알린다. 두 손가락 조작(확대·이동·톡)은 부모([CanvasViewport])가 먼저 읽고 소비한다(소비된 손 떼기는 톡이 아니다).
  */
 @Composable
@@ -44,6 +54,25 @@ fun FaceOverlay(
     val currentPick by rememberUpdatedState(onPick)
     val currentEnabled by rememberUpdatedState(enabled)
     val description = faces.getOrNull(selected)?.let { stringResource(R.string.liquify_face_selected, selected + 1, faces.size) }
+    val outline = remember { Animatable(1f) }
+    var taps by remember { mutableIntStateOf(0) }
+    val seen = remember { OutlineKeys() }
+    LaunchedEffect(faces, selected, taps) {
+        // 얼굴 수·고른 얼굴·톡이 그대로인데 얼굴 목록만 바뀌었으면 얼굴이 움직인 것이다(앱은 격자·얼굴 값이 바뀔 때만 새 목록을 넘긴다)
+        val moved = seen.count == faces.size && seen.selected == selected && seen.taps == taps
+        seen.count = faces.size
+        seen.selected = selected
+        seen.taps = taps
+        when {
+            faces.size > 1 && selected !in faces.indices -> outline.snapTo(1f)
+            moved -> outline.snapTo(0f)
+            else -> {
+                outline.snapTo(1f)
+                delay(FACE_OUTLINE_HOLD_MILLIS)
+                outline.animateTo(0f, tween(FACE_OUTLINE_FADE_MILLIS, easing = LinearEasing))
+            }
+        }
+    }
     Canvas(
         modifier
             .testTag(EditScreenTags.LIQUIFY_FACE_OVERLAY)
@@ -60,6 +89,8 @@ fun FaceOverlay(
                         if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
                         if (!change.pressed) {
                             change.consume()
+                            // 톡하면 윤곽을 다시 잠깐 보인다(얼굴 밖을 눌러도)
+                            taps++
                             val transform = view().transform(PixelSize(size.width, size.height), document)
                             currentPick(transform.toDocumentX(change.position.x.toDouble()).toFloat(), transform.toDocumentY(change.position.y.toDouble()).toFloat())
                             return@awaitEachGesture
@@ -68,25 +99,41 @@ fun FaceOverlay(
                 }
             }
     ) {
+        // 사라지는 동안은 그릴 때만 옅어진다(다시 짜지 않음)
+        val alpha = outline.value
+        if (alpha <= 0f) return@Canvas
         val transform = view().transform(PixelSize(size.width.roundToInt(), size.height.roundToInt()), document)
         val screen = { face: FaceLandmarks, index: Int ->
             Offset(transform.toScreenX(face.x(index).toDouble()).toFloat(), transform.toScreenY(face.y(index).toDouble()).toFloat())
         }
-        faces.forEachIndexed { i, face -> if (i != selected) drawFaceOutline(face, screen, CanvasOverlayColors.Light) }
-        faces.getOrNull(selected)?.let { drawFaceOutline(it, screen, CanvasOverlayColors.FaceSelected) }
+        faces.forEachIndexed { i, face -> if (i != selected) drawFaceOutline(face, screen, CanvasOverlayColors.Light, alpha) }
+        faces.getOrNull(selected)?.let { drawFaceOutline(it, screen, CanvasOverlayColors.FaceSelected, alpha) }
     }
 }
 
-/** 얼굴 윤곽([FaceMeshIndex.FACE_OVAL])을 [color] 선(어두운 테두리 위)으로 */
-private fun DrawScope.drawFaceOutline(face: FaceLandmarks, screen: (FaceLandmarks, Int) -> Offset, color: Color) {
+/** 얼굴 윤곽이 그대로 보이는 시간(밀리초). 폴드8에서 써 보고 고칠 수 있게 한곳에 둔다. */
+const val FACE_OUTLINE_HOLD_MILLIS = 1_500L
+
+/** 얼굴 윤곽이 서서히 사라지는 시간(밀리초) */
+const val FACE_OUTLINE_FADE_MILLIS = 500
+
+/** 윤곽을 마지막으로 보일 때의 얼굴 수·고른 얼굴·톡 횟수(얼굴이 움직였는지 가르는 데 씀) */
+private class OutlineKeys {
+    var count = -1
+    var selected = Int.MIN_VALUE
+    var taps = -1
+}
+
+/** 얼굴 윤곽([FaceMeshIndex.FACE_OVAL])을 [color] 선(어두운 테두리 위)으로, [alpha]만큼 옅게 */
+private fun DrawScope.drawFaceOutline(face: FaceLandmarks, screen: (FaceLandmarks, Int) -> Offset, color: Color, alpha: Float) {
     val path = Path()
     FaceMeshIndex.FACE_OVAL.forEachIndexed { k, index ->
         val point = screen(face, index)
         if (k == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
     }
     path.close()
-    drawPath(path, CanvasOverlayColors.Dark, style = Stroke(width = 4.dp.toPx()))
-    drawPath(path, color, style = Stroke(width = 2.dp.toPx()))
+    drawPath(path, CanvasOverlayColors.Dark, alpha = alpha, style = Stroke(width = 4.dp.toPx()))
+    drawPath(path, color, alpha = alpha, style = Stroke(width = 2.dp.toPx()))
 }
 
 /** 얼굴 모드의 막대 안내(닫힌 화면): 찾는 중, 못 찾음, 여럿이라 고르기, 고른 얼굴 */

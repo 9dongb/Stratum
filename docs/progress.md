@@ -64,9 +64,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 0: 기록(이 항목, 계획 문서의 '다듬기').
     - 1~3: 콧대 너비(전 '콧등 너비'의 이름만)·콧등 너비·콧볼, 뒷트임은 눈동자를 움직이지 않음(계산식 판 2), 중안부·머리 크기를 더했다(슬라이더 22개). 머리 크기는 같은 사진의 옆 얼굴을 피한다(결정 기록 '얼굴 인식 보정'의 다듬기). 빌드를 다른 세션의 에뮬레이터 테스트 뒤로 미루느라 세 단계를 한 커밋으로 넣었다.
     - 스스로 검토(하위 에이전트, 규칙 위반 없음)에서 찾은 것을 고쳤다: 위(뒷줄) 얼굴은 머리 영역 위 끝을 낮춰 피함, 눈을 키운 채 뒷트임해도 눈동자를 지킴, 판 1 기록의 뒷트임은 다시 열면 바로 적용할 수 있음(결정 기록 '얼굴 인식 보정'의 다듬기).
+    - 4: 얼굴 윤곽은 얼굴을 찾거나 고르거나 캔버스를 톡하면 1.5초 보였다가 사라지고, 슬라이더로 얼굴이 움직이면 바로 숨는다(결정 기록 '얼굴 인식 보정'의 다듬기 화면).
+    - 5: 에뮬레이터 화면 테스트 77개(유동화 화면·얼굴 찾기·다시 고치기·프로젝트 저장) 통과, 실제 앱(커버)에서 얼굴 찾기·윤곽·코 5칸·얼굴형 6칸·머리 크기 칩 끌기를 확인했다. APK는 이 커밋의 코드로 만들어 구글 드라이브에 올렸다(파일 이름은 최종 보고).
   - 남은 일
-    - 4: 얼굴 윤곽 잠깐만 보이기(코드·화면 테스트는 끝, 다음 커밋).
-    - 5: APK, 최종 보고.
+    - 사용자 확인(폴드8): 콧대·콧등·콧볼의 차이, 뒷트임 때 검은 눈동자, 중안부·머리 크기의 자연스러움과 머리 둘레·턱 옆·목의 배경 휨, 단체 사진에서 한 사람 머리 크기를 바꿀 때 옆·뒷줄 얼굴, 얼굴 윤곽이 잠깐 보였다 사라지는지(톡하면 다시).
   - 같은 폴더에서 커버 막대 세션(local_5c830daa)과 질감 향상 세션(local_6bd3c28e)도 일한다. 겹치는 파일(ToolStrips.kt·strings.xml·progress.md·history.md)은 서로 제 줄만 골라 커밋하고, 에뮬레이터는 번갈아 쓴다(서로 알림).
 
 - **얼굴 인식 보정(픽셀 유동화, 사용자 요청)** (시작: 2026-10-22)
@@ -297,7 +298,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
 | 하위 도구 메뉴·꾹 누르기(사용자 피드백 7차) | 완료 | 하위 도구가 있는 도구를 꾹 누르거나(0.3초) 고른 도구를 다시 누르면 메뉴(메인은 도구 오른쪽, 커버는 탭 위). 꾹 누른 채 끌면 손가락 밑 항목이 하이라이트되고 떼면 고름. 메인 띠의 하위 도구 칸은 뺌(대신 도구 막대·탭 줄 아이콘이 고른 하위 도구, 2026-10-22). 꾹 누르기 시간은 두 묶음(메뉴·레이어·홈 카드 0.3초, 캔버스 안 편집은 휴대폰 설정) |
 | 제스처 알림 가운데(사용자 피드백 5차·7차) | 완료 | 가로는 화면 정중앙(도구 막대·띠·옵션 칸과 상관없이, 2026-10-20), 세로는 캔버스 위쪽(접히는 선을 보지 않음, 11차). 알림은 터치를 막지 않고 떠 있는 띠·패널 위에 그림 |
 | AI 제거·AI 선택(사용자 요청) | 10단계(품질) 진행 중 | LiteRT 2.2.0·MI-GAN 모델을 넣음(에뮬레이터 CPU에서 돎). 엔진 명령 `InpaintRegion`(512px로 채워 원본 타일에는 채울 곳 안만 바꿈, 선택 영역·게인맵·P3). 리터칭 넷째 하위 도구 'AI 제거'(칠하고 떼면 지움, 옵션은 크기만, 쓸 수 없는 기기는 알림과 스팟 복구 버튼). 선택 도구 'AI 채우기'(고른 곳을 채우고 선택은 남김). 채운 곳의 밝기·색은 채운 색을 늘여 경계 바깥과 맞춘다(폴드8 피드백으로 고침). 폰 안 AI만 쓴다(인터넷 권한 없음). 채우기는 MI-GAN(MIT, 16MB, LiteRT GPU). 리터칭 넷째 하위 도구 'AI 제거'(칠하기, 톡 눌러 고른 뒤 지우기), 선택 도구 'AI 선택'(탭)·'AI 채우기'. 분할 모델은 SAM 2.1 Tiny(97MB, Apache-2.0, 폴드8 GPU에서 사진 0.21초·탭 19ms)로 정해 파일을 넣었고, 선택 도구 'AI 선택'(물체를 톡 누르면 모양대로 고름)과 AI 제거의 톡 고르기(모양을 보이고 [지우기]로 지움)를 더했다. 채운 곳에 둘레만큼의 고운 잡음을 더한다(10단계). 계획은 `docs/ai-remove-plan.md` |
-| 얼굴 인식 보정(사용자 요청) | 다듬기(2026-10-23) 진행 중 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음, CPU). 유동화의 다섯째 도구 '얼굴'로 얼굴을 찾고 톡해서 고른다. 고른 얼굴의 부위(눈·코·입·얼굴형)를 골라 슬라이더 22개(가운데 0인 ±100, 다듬기에서 콧등 너비·콧볼·중안부·머리 크기를 더하고 뒷트임은 눈동자를 움직이지 않음)를 같은 유동화 격자에 합쳐 미리 보고 적용한다(돌린 얼굴은 먼 쪽을 덜, 머리 크기는 옆 얼굴을 피함). 적용한 유동화는 레이어 기록으로 남아 다시 열어 고치고(프로젝트에 저장), 다른 편집이 그 픽셀을 바꾸면 묻지 않고 굳힌다. 계획 `docs/face-liquify-plan.md` |
+| 얼굴 인식 보정(사용자 요청) | 다듬기(2026-10-23)까지 끝, 사용자 확인 기다림 | 픽셀 유동화 안의 얼굴 슬라이더(포토샵 Face-Aware Liquify처럼). 미디어파이프 얼굴 모델 두 파일(얼굴 찾기·478점)을 지금의 LiteRT로 돌린다(인터넷 없음, CPU). 유동화의 다섯째 도구 '얼굴'로 얼굴을 찾고 톡해서 고른다. 고른 얼굴의 부위(눈·코·입·얼굴형)를 골라 슬라이더 22개(가운데 0인 ±100, 다듬기에서 콧등 너비·콧볼·중안부·머리 크기를 더하고 뒷트임은 눈동자를 움직이지 않음)를 같은 유동화 격자에 합쳐 미리 보고 적용한다(돌린 얼굴은 먼 쪽을 덜, 머리 크기는 옆 얼굴을 피함). 적용한 유동화는 레이어 기록으로 남아 다시 열어 고치고(프로젝트에 저장), 다른 편집이 그 픽셀을 바꾸면 묻지 않고 굳힌다. 얼굴 윤곽은 잠깐만 보인다(다듬기). 계획 `docs/face-liquify-plan.md` |
 
 ## 결정 기록
 
@@ -726,6 +727,10 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
     - 거꾸로 따라가는 차례: 머리 크기 → 중안부 → 얼굴 너비 → 턱선 → 턱 높이 → 이마 → 눈 → 코(높이 → 콧볼 → 콧대 → 콧등 → 코 너비) → 입. 머리 크기가 가장 바깥이라 고친 얼굴 전체를 함께 키우고 줄인다.
     - 접힘: 슬라이더 하나씩 ±100%면 야코비안 0.3 넘게, 22개를 모두 켜도 0.2 넘게(단위 테스트, 머리 크기의 바깥 띠까지 보도록 넓혀 잼).
     - 시험 사진(NASA 퍼블릭 도메인 사진, 사용자가 보낸 사진 부스 사진, 저장소 밖)에 새 슬라이더 ±100%와 전·후 뒷트임을 건 그림을 맥에서 만들어 보았다: 뒷트임은 전에는 눈동자가 가로로 늘어났는데 이제 둥근 채이고, 콧등·콧볼·중안부·머리 크기는 찢어짐 없이 자연스럽다. 머리 크기·중안부는 머리 둘레·턱선 옆·목의 배경이 조금 휜다(사진 틀의 곧은 선이 머리 옆에서 굽음).
+  - 다듬기 화면(Claude 판단, 2026-10-23)
+    - 얼굴 윤곽은 잠깐만 보인다(사용자 결정 "잠깐만 보이기 (추천)"): 얼굴을 찾거나 고르거나 캔버스를 톡하면 1.5초 보였다가 0.5초 동안 사라지고(`FACE_OUTLINE_HOLD_MILLIS`·`FACE_OUTLINE_FADE_MILLIS`, 폴드8에서 써 보고 고칠 수 있게 한곳에 둠), 같은 얼굴이 움직이면(슬라이더·되돌리기) 바로 숨는다. 여럿을 찾고 아직 고르지 않았으면 고를 때까지 보인다.
+    - 톡하면 다시 보이는 것은 Claude 판단이다(사라진 뒤 어느 얼굴을 골랐는지 다시 보려고). 고른 얼굴을 다시 톡하거나 얼굴 밖을 톡해도 보인다.
+    - 새 슬라이더 칸·칩은 `FaceSlider.of(부위)`로 저절로 생긴다(코 5칸, 얼굴형 6칸, 넘치면 지금처럼 밀어 봄).
 - **이동 도구(사용자 요청, 놓을 때 잘림은 사용자 결정, 나머지 Claude 판단, 2026-10-20):** 고른 레이어를 끌어 옮긴다(포토샵의 이동 도구).
   - 사용자: "좌측 도구 최상단에 커서 도구(이렇게 부르는 거 맞나요?) 해당 레이어 개체를 이동 시킬 수 있는 도구 추가해주세요." '커서 도구'는 포토샵에서 '이동 도구'라고 부른다고 답했고, 질문에서 "놓을 때 밖은 잘림 (추천)"을 골랐다(프로크리에이트와 같다).
   - 자리: 도구 막대 맨 위, 커버 탭 줄 맨 앞(막대 11개·탭 13개). 아이콘 Material Icons open_with(네 방향 화살표), 탭 이름 '이동', 화면 읽기 이름 '이동 도구'.
@@ -1470,7 +1475,7 @@ CLAUDE.md가 이 파일을 불러오므로, Claude Code는 세션을 시작할 �
   - 슬라이더 → 변형: 슬라이더 `FaceSlider`(저장 번호 `code`, 부위 `part`, `FaceSlider.of(부위)`는 화면 차례), 얼굴 하나의 값 `FaceValues`(바꾸지 않는 값), 값 → 변형 `FaceWarps.of`(부위별 `eyes`·`nose`·`mouth`·`jaw`·`forehead`·`chinHeight`, 상수는 모두 `FaceWarps`). 틀은 FaceWarpShapes.kt: 얼굴 좌표계 `FaceFrame`, 감쇠 `falloff`(부위 전체)·`peak`(한 점), 부위 타원 `PartEllipse`, 늘이기 `EllipseScale`(축마다 배율·반쪽 `half`·감쇠 시작 `plateau`), 옮기기 `EllipseMove`, 돌리기 `EllipseRotate`, 윤곽 `FaceOutline`(먼 쪽 비율 `factor`), 얼굴 너비 `FaceWidthWarp`, 얼굴 세로 띠 `BandMove`(1로 머무는 구간 `holdV`), 거의 고른 0..1 `eased`, 움직이지 않는 원 `KeepOut`(`EllipseMove(keep)`, 뒷트임의 눈동자), 한 점 기준 늘이기 `AnchoredScale`(쪽마다 가로 반지름·옆 띠, 머리 크기). 새 슬라이더는 `FaceSlider`에 새 번호로 더하고 `FaceWarps.of`의 부위 함수에서 변형을 만든다. 차례는 거꾸로 따라갈 때의 차례다(얼굴형 → 눈 → 코 → 입, 부위 안에서는 옮기기 → 늘이기). `FaceWarps.of(faces, values)`는 얼굴마다 다른 얼굴을 넘긴다(`others`, 머리 크기가 피함). 계산식을 바꿔 같은 값의 모양이 달라지면 `LiquifyRecord.VERSION`을 올린다(지금 2).
   - 격자에 합치기: 변형 틀 `MeshWarp`(liquify, 상자 밖은 0), `LiquifyMesh.compose`(꼭짓점 변위 배열에 합침, 다른 스레드 가능)·`composedWith`(적용할 새 격자)·`sourceOf`(한 점이 읽는 곳)·`forward`(원래 점이 보이는 곳, 변형까지).
   - 엔진 플랫폼: `LiteRtFaceModel`(두 모델, AI 스레드), `FaceFinder`(`render`는 그리기 잠금 안, `search`는 밖, `workBytes`, `release`)와 그림 `FacePicture`(반씩 줄인 단계, `read`가 안드로이드 그리기로 자름).
-  - 앱: `EditorViewModel.faceFinder`(internal var, 테스트는 가짜 모델로 바꿈), 유동화 작업 `LiquifySession.faces`·`faceValues`·`selectedFace`·`faceJob`·`faceNotice`, `openFaceMode`·`findFaces`·`pickLiquifyFace`·`shownFaces`(합친 변형을 앞으로 따라감, `fieldVersion`이 그대로면 앞의 것). 화면은 `LiquifyState`의 얼굴 칸(`faceMode`·`faces`·`selectedFace`·`findingFaces`·`faceNotice`·`faceValues`)과 `LiquifyActions.setFaceMode`·`pickFace`·`setFaceValue`·`finishFaceValue`·`resetFaceValue`·`resetFace`, 그림은 `FaceOverlay`(LiquifyFaces.kt).
+  - 앱: `EditorViewModel.faceFinder`(internal var, 테스트는 가짜 모델로 바꿈), 유동화 작업 `LiquifySession.faces`·`faceValues`·`selectedFace`·`faceJob`·`faceNotice`, `openFaceMode`·`findFaces`·`pickLiquifyFace`·`shownFaces`(합친 변형을 앞으로 따라감, `fieldVersion`이 그대로면 앞의 것). 화면은 `LiquifyState`의 얼굴 칸(`faceMode`·`faces`·`selectedFace`·`findingFaces`·`faceNotice`·`faceValues`)과 `LiquifyActions.setFaceMode`·`pickFace`·`setFaceValue`·`finishFaceValue`·`resetFaceValue`·`resetFace`, 그림은 `FaceOverlay`(LiquifyFaces.kt, 윤곽은 잠깐만: 얼굴 수·고른 얼굴·톡이 그대로인데 얼굴 목록만 바뀌면 움직인 것으로 보고 숨김, `OutlineKeys`).
     - 되돌리기 단계는 `LiquifyStep`(격자 사본·얼굴 값)이다. 격자를 바꾸면 `meshChanged`, 얼굴 값을 바꾸면 `facesChanged`를 부른다(사본 함께 쓰기와 보이는 얼굴 자리의 열쇠). 남긴 격자 사본은 바꾸지 않는다(`restore`가 새 사본을 만듦).
     - 미리 보기는 `requestLiquifyRender`(→ `drawLiquify`)가 격자 사본에 `warps()`를 백그라운드에서 합친 뒤 그리고, 적용(`applyLiquify`)은 손으로 민 격자 사본과 `warps()`를 메인 스레드에서 떼어 백그라운드에서 `composedWith`로 합친 뒤 얼굴·값과 함께 `LiquifyLayer`로 보낸다.
   - 다시 고치기(3단계): 기록 `LiquifyRecord`(document/LiquifyRecord.kt)·`Layer.liquify`, 유동화를 시작할 레이어 `Layer.liquifySource`(원래 픽셀, `LiquifyRenderer.layerPreview`·얼굴 찾기가 씀), 기록을 남기는 `Layer.withLiquify`(`LiquifyLayer`만 씀). 픽셀을 바꾸는 새 명령은 `withPixels`를 써서 기록을 지운다(`LayerPixelsGuardTest`).
