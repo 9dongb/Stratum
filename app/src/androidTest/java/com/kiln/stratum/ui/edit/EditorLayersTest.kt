@@ -93,7 +93,7 @@ class EditorLayersTest {
         val top = withTwo.layers.last().id
 
         onMain {
-            viewModel.moveLayer(top, 0)
+            viewModel.moveLayer(top, 0, null)
             // 기록을 기다리지 않고 목록이 바로 새 순서다
             assertEquals(top, (viewModel.state.value as EditorState.Ready).layers.first().id)
         }

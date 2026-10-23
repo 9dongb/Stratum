@@ -162,6 +162,8 @@ object EditScreenTags {
     const val LAYER_MENU_MASK_INVERT = "layerMenuMaskInvert"
     const val LAYER_MENU_MASK_DELETE = "layerMenuMaskDelete"
     const val LAYER_MENU_ADJUSTMENT_ADD = "layerMenuAdjustmentAdd"
+    const val LAYER_MENU_GROUP = "layerMenuGroup"
+    const val LAYER_MENU_UNGROUP = "layerMenuUngroup"
 
     /** 레이어 이름 바꾸기 창의 이름 칸과 확인 버튼 */
     const val LAYER_RENAME_FIELD = "layerRenameField"
@@ -290,6 +292,9 @@ object EditScreenTags {
 
     /** 레이어 줄의 마스크 작은 그림(누르면 마스크를 고친다, 결정 기록 '피부 보정'의 1d) */
     fun layerMask(id: com.kiln.stratum.engine.document.LayerId): String = "layerMask_${id.value}"
+
+    /** 그룹 줄의 폴더 아이콘(누르면 접고 펼친다, 결정 기록 '피부 보정'의 1h) */
+    fun layerGroupToggle(id: com.kiln.stratum.engine.document.LayerId): String = "layerGroupToggle_${id.value}"
 
     /** 색 줄의 전경색·배경색 칸 */
     fun colorSlot(slot: com.kiln.stratum.settings.ColorSlot): String = "colorSlot_${slot.name}"

@@ -24,6 +24,7 @@ import com.kiln.stratum.engine.command.DeleteLayer
 import com.kiln.stratum.engine.command.DuplicateLayer
 import com.kiln.stratum.engine.command.EditCommand
 import com.kiln.stratum.engine.command.EditSequence
+import com.kiln.stratum.engine.command.GroupLayer
 import com.kiln.stratum.engine.command.MoveLayer
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.command.RasterizeLayer
@@ -32,14 +33,17 @@ import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.command.SetLayerVisible
+import com.kiln.stratum.engine.command.UngroupLayer
 import com.kiln.stratum.engine.document.AdjustmentContent
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.CompositePlan
 import com.kiln.stratum.engine.document.CompositeStep
 import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.DocumentColorSpace
+import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.effect.EffectFill
@@ -208,6 +212,9 @@ sealed interface EditorMessage {
     /** 조정 레이어에 픽셀을 바꾸는 도구를 썼다(결정 기록 '피부 보정'의 1f). 조정 레이어에는 픽셀이 없고 브러시·지우개는 마스크를 칠한다. */
     data object AdjustmentNoPixels : EditorMessage
 
+    /** 그룹에 픽셀을 바꾸는 도구(칠하기·레이어 돌리기 등)를 썼다(결정 기록 '피부 보정'의 1h). 그룹에는 픽셀이 없어 안의 레이어를 골라야 한다. */
+    data object GroupNoPixels : EditorMessage
+
     /** 이 기기에서는 AI 제거(채우기 모델)를 돌릴 수 없다. 문서는 그대로다. 화면은 스팟 복구 브러시로 바꾸는 버튼을 둔다. */
     data object RemoveUnavailable : EditorMessage
 
@@ -245,6 +252,7 @@ data class ShareRequest(val uri: Uri, val mimeType: String)
  * @property liquify 다시 고칠 수 있는 유동화 기록이 있는지(결정 기록 '얼굴 인식 보정' 3단계). 레이어 줄에 유동화 표시를 단다.
  * @property hasMask 레이어 마스크가 있는지(결정 기록 '피부 보정'의 1d). [mask]는 그 작은 그림(흰 곳은 보이고 검은 곳은 가림)이다.
  * @property adjustment 조정 레이어인지(결정 기록 '피부 보정'의 1f). 레이어 줄에 작은 그림 대신 조정 아이콘을 보인다.
+ * @property group 그룹(통과)인지, [parent]는 감싼 그룹(결정 기록 '피부 보정'의 1h). 레이어 목록이 들여 쓰고 접고 펼친다.
  */
 data class LayerSummary(
     val id: LayerId,
@@ -258,7 +266,9 @@ data class LayerSummary(
     val liquify: Boolean = false,
     val mask: Bitmap? = null,
     val hasMask: Boolean = false,
-    val adjustment: Boolean = false
+    val adjustment: Boolean = false,
+    val group: Boolean = false,
+    val parent: LayerId? = null
 )
 
 /**
@@ -941,7 +951,7 @@ class EditorViewModel internal constructor(
         override fun duplicate() = duplicateLayer()
         override fun mergeDown() = mergeLayerDown()
         override fun mergeVisible() = mergeVisibleLayers()
-        override fun move(id: LayerId, toIndex: Int) = moveLayer(id, toIndex)
+        override fun move(id: LayerId, toIndex: Int, parent: LayerId?) = moveLayer(id, toIndex, parent)
         override fun previewOpacity(opacity: Float) = this@EditorViewModel.previewOpacity(opacity)
         override fun commitOpacity() = commitLive()
         override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
@@ -950,6 +960,8 @@ class EditorViewModel internal constructor(
         override fun rename(id: LayerId, name: String) = renameLayer(id, name)
         override fun addMask() = addLayerMask()
         override fun addAdjustment() = addAdjustmentLayer()
+        override fun group() = groupLayer()
+        override fun ungroup() = ungroupLayer()
         override fun invertMask() = invertLayerMask()
         override fun deleteMask() = deleteLayerMask()
         override fun editMask(id: LayerId) = editLayerMask(id)
@@ -1205,7 +1217,8 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
         val layer = activeLayerIn(document)
-        if (document.layers[document.indexOfLayer(layer)].mask != null) return
+        // 그룹에는 마스크를 두지 않는다(결정 기록 '피부 보정'의 1h)
+        if (document.layers[document.indexOfLayer(layer)].let { it.mask != null || it.content is GroupContent }) return
         // 포토샵처럼 더한 마스크를 바로 칠한다
         editingMask = true
         edit(AddLayerMask(layer))
@@ -1220,7 +1233,34 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues) return
         val name = getApplication<Application>().getString(R.string.layer_adjustment_name, document.nextLayerId)
         editingMask = false
-        runEdit(AddAdjustmentLayer(name, document.indexOfLayer(activeLayerIn(document)) + 1), select = LayerId(document.nextLayerId))
+        val (index, parent) = insertionIn(document)
+        runEdit(AddAdjustmentLayer(name, index, parent), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * 고른 레이어(그룹이면 자손과 함께)를 새 그룹으로 묶고 그 그룹을 고른다(실행 취소 한 단계, 레이어 메뉴 '그룹으로 묶기', 결정 기록 '피부 보정'의 1h).
+     * 그룹은 통과 그룹이고 이름은 '그룹 N'이다. 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun groupLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val name = getApplication<Application>().getString(R.string.layer_group_name, document.nextLayerId)
+        editingMask = false
+        runEdit(GroupLayer(activeLayerIn(document), name), select = LayerId(document.nextLayerId))
+    }
+
+    /**
+     * 고른 그룹을 풀고(실행 취소 한 단계, 레이어 메뉴 '그룹 풀기') 그 그룹의 맨 위 레이어를, 빈 그룹이었으면 그 아래(맨 아래였으면 위) 레이어를 고른다.
+     * 안의 레이어는 자리 그대로 그룹 밖으로 나오고, 보이던 모습 그대로다([UngroupLayer]). 그룹이 아니거나 다른 편집을 처리하는 중이면 무시한다.
+     */
+    fun ungroupLayer() {
+        val document = history?.document ?: return
+        if (editing || hasLiveValues) return
+        val index = activeIndexIn(document)
+        val group = document.layers.getOrNull(index)?.takeIf { it.content is GroupContent } ?: return
+        if (document.layers.size < 2) return
+        val next = document.layers.getOrNull(index - 1) ?: document.layers[index + 1]
+        runEdit(UngroupLayer(group.id), select = next.id)
     }
 
     /** 고른 레이어의 마스크를 뒤집는다(실행 취소 한 단계) */
@@ -1267,11 +1307,12 @@ class EditorViewModel internal constructor(
     private fun showsMaskOverlay(layer: Layer): Boolean = editingMask && layer.mask != null
 
     /**
-     * 픽셀을 바꾸는 도구를 [layer]에 쓸 수 없으면 알리고 true다. 조정 레이어에는 픽셀이 없고(결정 기록 '피부 보정'의 1f),
+     * 픽셀을 바꾸는 도구를 [layer]에 쓸 수 없으면 알리고 true다. 그룹(1h)과 조정 레이어에는 픽셀이 없고(결정 기록 '피부 보정'의 1f),
      * 마스크를 칠하는 중이면 마스크에는 브러시·지우개만 쓴다(1d).
      */
     private fun refusesPixelTool(layer: Layer): Boolean {
         val message = when {
+            layer.content is GroupContent -> EditorMessage.GroupNoPixels
             layer.content is AdjustmentContent -> EditorMessage.AdjustmentNoPixels
             paintsMask(layer) -> EditorMessage.MaskBrushOnly
             else -> return false
@@ -1313,7 +1354,7 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues || liquifySession != null || _state.value !is EditorState.Ready) return
         val layer = activeLayerIn(document)
-        if (!document.layers[document.indexOfLayer(layer)].visible) return tellHiddenLayer()
+        if (!isShown(document.layers[document.indexOfLayer(layer)])) return tellHiddenLayer()
         if (refusesPixelTool(document.layers[document.indexOfLayer(layer)])) return
         if (document.layers[document.indexOfLayer(layer)].text != null) return askRasterize(layer)
         // 다시 고칠 수 있는 유동화면 그 기록에서 이어서 고친다(결정 기록 '얼굴 인식 보정' 3단계)
@@ -1834,9 +1875,9 @@ class EditorViewModel internal constructor(
     fun copySelectionToLayer(cut: Boolean) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || document.selection == null) return
-        // 잘라내면 픽셀이 바뀌고(복사는 원래 레이어를 그대로 둔다), 조정 레이어에는 복사할 픽셀이 없다
+        // 잘라내면 픽셀이 바뀌고(복사는 원래 레이어를 그대로 둔다), 조정 레이어·그룹에는 복사할 픽셀이 없다
         val source = document.layers[document.indexOfLayer(activeLayerIn(document))]
-        if ((cut || source.content is AdjustmentContent) && refusesPixelTool(source)) return
+        if ((cut || source.content !is RasterContent) && refusesPixelTool(source)) return
         if (cut && document.layers.getOrNull(document.indexOfLayer(activeLayerIn(document)))?.text != null) return askRasterize(activeLayerIn(document))
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
         runEdit(CopySelectedToLayer(activeLayerIn(document), name, cut), select = LayerId(document.nextLayerId))
@@ -1851,7 +1892,7 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues || document.selection == null) return
         val layer = document.layers[document.indexOfLayer(activeLayerIn(document))]
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         runFill(InpaintRegion(layer.id, InpaintArea.Selected, inpaintModel))
@@ -1912,7 +1953,8 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
         val name = getApplication<Application>().getString(R.string.layer_new_name, document.nextLayerId)
-        runEdit(AddLayer(name, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId))
+        val (index, parent) = insertionIn(document)
+        runEdit(AddLayer(name, index, parent), select = LayerId(document.nextLayerId))
     }
 
     /**
@@ -1969,7 +2011,8 @@ class EditorViewModel internal constructor(
             return
         }
         val layerName = ProjectNames.photoLayerName(displayName) ?: getApplication<Application>().getString(R.string.layer_photo_name, document.nextLayerId)
-        runEdit(InsertImageLayer(source, info, layerName, activeIndexIn(document) + 1), select = LayerId(document.nextLayerId), onFinished = onDone)
+        val (index, parent) = insertionIn(document)
+        runEdit(InsertImageLayer(source, info, layerName, index, parent), select = LayerId(document.nextLayerId), onFinished = onDone)
     }
 
     /**
@@ -2014,14 +2057,16 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * 고른 레이어를 지우고(실행 취소 한 단계) 그 아래 레이어를, 맨 아래였으면 새 맨 아래 레이어를 고른다.
-     * 레이어가 하나뿐이면 지우지 않는다. 다른 편집을 처리하는 중이면 무시한다.
+     * 고른 레이어(그룹이면 자손과 함께)를 지우고(실행 취소 한 단계) 그 아래 레이어를, 맨 아래였으면 새 맨 아래 레이어를 고른다.
+     * 지우면 레이어가 남지 않으면 지우지 않는다. 다른 편집을 처리하는 중이면 무시한다.
      */
     fun deleteLayer() {
         val document = history?.document ?: return
-        if (editing || hasLiveValues || document.layers.size < 2) return
+        if (editing || hasLiveValues) return
         val index = activeIndexIn(document)
-        val next = document.layers[if (index > 0) index - 1 else 1].id
+        val block = LayerTree.blockOf(document.layers, index)
+        if (block.count() == document.layers.size) return
+        val next = (document.layers.getOrNull(block.first - 1) ?: document.layers[block.last + 1]).id
         runEdit(DeleteLayer(document.layers[index].id), select = next)
     }
 
@@ -2032,9 +2077,12 @@ class EditorViewModel internal constructor(
     fun duplicateLayer() {
         val document = history?.document ?: return
         if (editing || hasLiveValues) return
-        val layer = document.layers[activeIndexIn(document)]
+        val index = activeIndexIn(document)
+        val layer = document.layers[index]
         val name = getApplication<Application>().getString(R.string.layer_copy_name, layer.name)
-        runEdit(DuplicateLayer(layer.id, name), select = LayerId(document.nextLayerId))
+        // 그룹은 자손과 함께 복제하고 새 번호를 아래부터 매기므로, 복제한 그룹 줄은 마지막 번호다
+        val copies = LayerTree.blockOf(document.layers, index).count()
+        runEdit(DuplicateLayer(layer.id, name), select = LayerId(document.nextLayerId + copies - 1))
     }
 
     /**
@@ -2046,8 +2094,10 @@ class EditorViewModel internal constructor(
         if (editing || hasLiveValues) return
         val index = activeIndexIn(document)
         // 숨긴 레이어는 합치지 않는다(메뉴에서도 꺼 둔다, 결정 기록 '레이어 보이기'). 조정 레이어 위로도 합치지 않는다(1e).
+        // 그룹은 합치지 않고 같은 그룹 안의 이웃끼리만 합친다(엔진의 MergeDown과 같다, 1h)
         if (index <= 0 || !document.layers[index].visible || !document.layers[index - 1].visible) return
-        if (document.layers[index - 1].content !is RasterContent) return
+        if (document.layers[index - 1].content !is RasterContent || document.layers[index].content is GroupContent) return
+        if (document.layers[index].parent != document.layers[index - 1].parent) return
         runEdit(MergeDown(document.layers[index].id), select = document.layers[index - 1].id)
     }
 
@@ -2064,19 +2114,25 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * [id] 레이어를 [toIndex](0이 맨 아래) 자리로 옮긴다(실행 취소 한 단계). 고른 레이어는 그대로다.
-     * 화면의 레이어 목록은 바로 새 순서로 보인다(끌어서 놓은 줄이 앞 자리로 튀었다 돌아오지 않게).
+     * [id] 레이어(그룹이면 자손과 함께)를 [toIndex](0이 맨 아래) 자리, [parent] 그룹 안(null이면 그룹 밖)으로 옮긴다(실행 취소 한 단계).
+     * 고른 레이어는 그대로다. 그룹 규칙을 어기는 자리(다른 그룹 사이를 가름, 자기 안으로)면 옮기지 않는다([MoveLayer], 결정 기록 '피부 보정'의 1h).
+     * 화면의 레이어 목록은 바로 새 순서·그룹으로 보인다(끌어서 놓은 줄이 앞 자리로 튀었다 돌아오지 않게).
      * 기록하면 같은 순서로 다시 그려지고, 하지 못하면 [finishEditing]이 기록된 순서로 되돌린다.
      */
-    fun moveLayer(id: LayerId, toIndex: Int) {
+    fun moveLayer(id: LayerId, toIndex: Int, parent: LayerId?) {
         val document = history?.document ?: return
         // 다른 편집을 처리하는 중이면 옮기지 않는다(목록도 그대로 둔다)
         if (editing || hasLiveValues || toIndex !in document.layers.indices) return
-        edit(MoveLayer(id, toIndex))
+        val command = MoveLayer(id, toIndex, parent)
+        // 레이어 순서만 바꾸는 가벼운 계산이라 바로 해 본다. 그대로면(제자리·옮길 수 없는 자리) 기록하지 않는다.
+        val moved = command.applyTo(document)
+        if (moved === document) return
+        edit(command)
         val ready = _state.value as? EditorState.Ready ?: return
-        val from = ready.layers.indexOfFirst { it.id == id }
-        if (!editing || from < 0 || from == toIndex) return
-        _state.value = ready.copy(layers = ready.layers.toMutableList().apply { add(toIndex, removeAt(from)) })
+        if (!editing) return
+        val summaries = ready.layers.associateBy { it.id }
+        val reordered = moved.layers.map { layer -> summaries[layer.id]?.copy(parent = layer.parent) ?: return }
+        _state.value = ready.copy(layers = reordered)
     }
 
     /** 고른 레이어의 혼합 모드를 [mode]로 바꾼다(실행 취소 한 단계). */
@@ -2212,8 +2268,9 @@ class EditorViewModel internal constructor(
     fun addText(text: String, x: Float, y: Float, style: TextStyle = _textStyle.value) {
         val document = history?.document ?: return
         if (editing || hasLiveValues || drawing != null || text.isBlank()) return
+        val (index, parent) = insertionIn(document)
         runEdit(
-            AddTextLayer(text.take(TextStyle.MAX_LENGTH), x, y, style, textLayerName(text), activeIndexIn(document) + 1),
+            AddTextLayer(text.take(TextStyle.MAX_LENGTH), x, y, style, textLayerName(text), index, parent),
             select = LayerId(document.nextLayerId)
         )
     }
@@ -2267,7 +2324,7 @@ class EditorViewModel internal constructor(
     fun beginTone(point: StrokePoint, dodge: Boolean) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val options = _tone.value
@@ -2293,7 +2350,7 @@ class EditorViewModel internal constructor(
     fun beginEffect(point: StrokePoint, kind: EffectKind) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val (brush, fill) = if (kind == EffectKind.MOSAIC) {
@@ -2313,7 +2370,7 @@ class EditorViewModel internal constructor(
     fun beginSmudge(point: StrokePoint) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val options = _blur.value
@@ -2367,7 +2424,7 @@ class EditorViewModel internal constructor(
     fun beginStroke(point: StrokePoint, erase: Boolean) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         // 마스크를 칠하는 중이면 픽셀이 아니라 마스크를 칠한다(브러시는 보이게, 지우개는 가리게, 결정 기록 '피부 보정'의 1d).
         // 픽셀은 그대로라 글자 레이어도 묻지 않는다
         if (paintsMask(layer)) {
@@ -2387,7 +2444,7 @@ class EditorViewModel internal constructor(
     fun beginRetouch(point: StrokePoint, mode: RetouchMode) {
         if (!canBeginStroke()) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         retouchOffsetFixedByStroke = false
@@ -2425,7 +2482,7 @@ class EditorViewModel internal constructor(
         // 칠하기 시작하면 톡 눌러 고른 물체는 버린다
         _removePick.value = null
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return holdTextStroke(layer.id)
         val settings = _retouch.value.copy(hardness = 1f, opacity = 1f)
@@ -2443,7 +2500,7 @@ class EditorViewModel internal constructor(
         val history = history ?: return
         if (editing || hasLiveValues || _state.value !is EditorState.Ready) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         val document = history.document
@@ -2496,7 +2553,7 @@ class EditorViewModel internal constructor(
         val pick = _removePick.value ?: return
         if (editing || hasLiveValues || pick.revision != revision) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         if (refusesPixelTool(layer)) return
         if (layer.text != null) return askRasterize(layer.id)
         runFill(InpaintRegion(layer.id, pick.area, inpaintModel))
@@ -2631,7 +2688,7 @@ class EditorViewModel internal constructor(
     fun beginMove(x: Float, y: Float) {
         if (_state.value !is EditorState.Ready || editing || moving != null || drawing != null || queuedStrokes.isNotEmpty() || hasLiveValues) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
+        if (!isShown(layer)) return tellHiddenLayer()
         moving = Move(x, y, LayerShift(layer.id, 0, 0))
     }
 
@@ -2667,10 +2724,11 @@ class EditorViewModel internal constructor(
     fun orientLayer(orientation: Orientation) {
         if (editing || moving != null || drawing != null || queuedStrokes.isNotEmpty() || hasLiveValues) return
         val layer = currentLayer() ?: return
-        if (!layer.visible) return tellHiddenLayer()
-        // 조정 레이어는 돌릴 픽셀이 없다(다 보이는 마스크를 내용 가운데로 돌리면 일부가 가려져 마스크도 돌리지 않는다, 결정 기록 '피부 보정'의 1e)
-        if (layer.content is AdjustmentContent) {
-            _messages.trySend(EditorMessage.AdjustmentNoPixels)
+        if (!isShown(layer)) return tellHiddenLayer()
+        // 조정 레이어는 돌릴 픽셀이 없다(다 보이는 마스크를 내용 가운데로 돌리면 일부가 가려져 마스크도 돌리지 않는다, 결정 기록 '피부 보정'의 1e).
+        // 그룹도 돌리지 않는다(안의 레이어마다 축이 달라, 결정 기록 '피부 보정'의 1g)
+        if (layer.content is AdjustmentContent || layer.content is GroupContent) {
+            _messages.trySend(if (layer.content is GroupContent) EditorMessage.GroupNoPixels else EditorMessage.AdjustmentNoPixels)
             return
         }
         if (layer.text != null) return askRasterize(layer.id)
@@ -2809,6 +2867,19 @@ class EditorViewModel internal constructor(
     /** [document]에서 고른 레이어의 자리. 고른 레이어가 없으면 맨 위다. */
     private fun activeIndexIn(document: Document): Int =
         activeLayer?.let { document.indexOfLayer(it) }?.takeIf { it >= 0 } ?: document.layers.lastIndex
+
+    /**
+     * 새 레이어(더하기·조정 레이어·글자·사진 넣기)를 넣을 [document] 자리와 들어갈 그룹(결정 기록 '피부 보정'의 1h).
+     * 고른 레이어가 그룹이면 그 그룹 안 맨 위(그룹 줄 바로 아래), 아니면 고른 레이어 바로 위의 같은 그룹이다.
+     */
+    private fun insertionIn(document: Document): Pair<Int, LayerId?> {
+        val index = activeIndexIn(document)
+        val layer = document.layers.getOrNull(index) ?: return document.layers.size to null
+        return if (layer.content is GroupContent) index to layer.id else index + 1 to layer.parent
+    }
+
+    /** [layer]가 보이는지: 자기와 감싼 그룹이 모두 눈을 켰다(숨긴 그룹 안에도 그리지 않는다, 결정 기록 '피부 보정'의 1h) */
+    private fun isShown(layer: Layer): Boolean = history?.document?.let { LayerTree.isVisible(it.layers, layer) } ?: layer.visible
 
     /** 끄는 값을 [layer]에 거는 명령들(보정, 불투명도 순) */
     private fun liveCommands(layer: LayerId): List<EditCommand> =
@@ -3439,7 +3510,7 @@ class EditorViewModel internal constructor(
                 layers = document.layers.map {
                     LayerSummary(
                         it.id, it.name, it.opacity, it.blendMode, it.adjustments, thumbnails[it.id], it.visible, it.text, it.liquify != null,
-                        maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent
+                        maskThumbnails[it.id], it.mask != null, it.content is AdjustmentContent, it.content is GroupContent, it.parent
                     )
                 },
                 activeLayer = activeLayerIn(document),

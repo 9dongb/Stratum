@@ -99,10 +99,23 @@ class LayerPanelTest {
             calls += "mergeVisible"
         }
 
-        override fun move(id: LayerId, toIndex: Int) {
-            calls += "move ${id.value} to $toIndex"
+        override fun move(id: LayerId, toIndex: Int, parent: LayerId?) {
+            calls += "move ${id.value} to $toIndex" + (parent?.let { " in ${it.value}" } ?: "")
+            // 엔진의 MoveLayer처럼 덩어리(그룹이면 자손과 함께)째 옮기고 맨 위 줄의 그룹을 바꾼다
             val from = layers.indexOfFirst { it.id == id }
-            layers = layers.toMutableList().apply { add(toIndex, removeAt(from)) }
+            val size = LayerRows.blockSize(layers, from)
+            val moved = layers.subList(from - size + 1, from + 1).toMutableList()
+            moved[moved.lastIndex] = moved.last().copy(parent = parent)
+            val rest = layers.toMutableList().apply { subList(from - size + 1, from + 1).clear() }
+            layers = rest.apply { addAll(toIndex - (size - 1), moved) }
+        }
+
+        override fun group() {
+            calls += "group ${active.value}"
+        }
+
+        override fun ungroup() {
+            calls += "ungroup ${active.value}"
         }
 
         override fun previewOpacity(opacity: Float) {
@@ -680,6 +693,131 @@ class LayerPanelTest {
             assertEquals(1, photoRequests)
             // 레이어 일은 앱이 사진을 고른 뒤에 한다
             assertTrue(fake.calls.isEmpty())
+        }
+    }
+
+    /** 아래부터 0, [1] 그룹 2 — 그룹 2 안에 레이어 1(결정 기록 '피부 보정'의 1h). 그룹을 고른다. */
+    private fun groupedFake(): FakeLayers {
+        val fake = FakeLayers(3)
+        fake.layers = listOf(
+            FakeLayers.summary(0),
+            FakeLayers.summary(1).copy(parent = LayerId(2)),
+            FakeLayers.summary(2).copy(name = "Group 2", group = true)
+        )
+        return fake
+    }
+
+    private fun string(id: Int) = composeRule.activity.getString(id)
+
+    @Test
+    fun groupRows_indentTheirLayers_andTheFolderCollapsesAndExpands() {
+        val fake = groupedFake()
+        openCompactLayers(fake)
+        val inside = composeRule.onNodeWithTag(EditScreenTags.layerThumbnail(LayerId(1)), useUnmergedTree = true).fetchSemanticsNode().layoutBoundsInWindow()
+        val outside = composeRule.onNodeWithTag(EditScreenTags.layerThumbnail(LayerId(0)), useUnmergedTree = true).fetchSemanticsNode().layoutBoundsInWindow()
+
+        // 그룹 안의 줄은 들여 쓴다
+        assertTrue("$inside should be indented from $outside", inside.left > outside.left + 4f)
+        // 폴더 아이콘을 누르면 접혀 안의 줄이 빠지고, 다시 누르면 펼친다(문서는 그대로)
+        composeRule.onNodeWithTag(EditScreenTags.layerGroupToggle(LayerId(2))).performClick()
+        row(1).assertDoesNotExist()
+        row(2).assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                listOf(string(R.string.layer_selected), string(R.string.layer_group_label), string(R.string.layer_group_collapsed)).joinToString(", ")
+            )
+        )
+        composeRule.onNodeWithTag(EditScreenTags.layerGroupToggle(LayerId(2))).performClick()
+        row(1).assertExists()
+        composeRule.runOnIdle { assertTrue(fake.calls.isEmpty()) }
+    }
+
+    @Test
+    fun groupMenu_ungroupsAGroup_groupsALayer_andTurnsOffWhatAGroupCannotDo() {
+        val fake = groupedFake()
+        openCompactLayers(fake)
+
+        // 그룹은 통과 그룹뿐이라 혼합 모드는 '통과'로 꺼져 있다
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_BLEND).assertIsNotEnabled().assertTextContains(string(R.string.blend_pass_through))
+        // 그룹 줄: 풀기가 있고, 마스크 더하기는 없고, 아래와 병합은 꺼진다
+        row(2).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MASK_ADD).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_UNGROUP).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("ungroup 2", fake.calls.last()) }
+
+        // 그룹 안의 레이어: 그룹 밖 아래 레이어와는 합치지 않는다. 풀기는 없고 묶기는 된다
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_UNGROUP).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_GROUP).assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("group 1", fake.calls.last()) }
+    }
+
+    @Test
+    fun deleting_isOffWhenTheChosenGroupHoldsEveryLayer() {
+        val fake = FakeLayers(2)
+        fake.layers = listOf(FakeLayers.summary(0).copy(parent = LayerId(1)), FakeLayers.summary(1).copy(group = true))
+        openCompactLayers(fake)
+
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsNotEnabled()
+        // 그룹 안의 레이어는 지울 수 있다
+        row(0).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsEnabled()
+    }
+
+    @Test
+    fun draggingBelowAGroup_putsTheLayerInside_andAGroupMovesWithItsLayers() {
+        // 아래부터 0, [1] 그룹 2, 3
+        val fake = groupedFake()
+        fake.layers = fake.layers + FakeLayers.summary(3)
+        fake.active = LayerId(3)
+        openCompactLayers(fake)
+        // 줄이 넷이라 반 높이 시트에서는 맨 아래 줄이 잘려 보인다. 줄 높이는 잘리지 않은 크기로 잰다.
+        val rowHeight = row(3).fetchSemanticsNode().size.height.toFloat()
+
+        // 맨 위 3을 한 줄 아래(펼친 그룹 2 바로 아래)로 끌면 그룹 2 안 맨 위로 들어간다
+        composeRule.onNodeWithTag(EditScreenTags.layerHandle(LayerId(3)), useUnmergedTree = true).performTouchInput {
+            swipe(start = center, end = center + Offset(0f, rowHeight), durationMillis = 500)
+        }
+        composeRule.runOnIdle {
+            assertEquals(listOf("move 3 to 2 in 2"), fake.calls)
+            assertEquals(listOf(0L to null, 1L to 2L, 3L to 2L, 2L to null), fake.layers.map { it.id.value to it.parent?.value })
+        }
+
+        // 맨 위가 된 그룹 2를 한 줄 아래로 끌면 안의 레이어와 함께 0 아래로 간다
+        composeRule.onNodeWithTag(EditScreenTags.layerHandle(LayerId(2)), useUnmergedTree = true).performTouchInput {
+            swipe(start = center, end = center + Offset(0f, rowHeight), durationMillis = 500)
+        }
+        composeRule.runOnIdle {
+            assertEquals("move 2 to 2", fake.calls.last())
+            assertEquals(listOf(1L, 3L, 2L, 0L), fake.layers.map { it.id.value })
+        }
+    }
+
+    @Test
+    fun accessibilityActions_stepOutOfAndIntoAGroup() {
+        val fake = groupedFake()
+        openCompactLayers(fake)
+        val up = string(R.string.layer_move_up)
+        val down = string(R.string.layer_move_down)
+        fun act(id: Long, label: String) {
+            composeRule.waitForIdle()
+            val action = row(id.toInt()).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == label }
+            composeRule.runOnIdle { action.action() }
+        }
+
+        // 그룹의 맨 아래 1의 '아래로': 그룹 밖(자리는 그대로)
+        act(1, down)
+        composeRule.runOnIdle { assertEquals("move 1 to 1", fake.calls.last()) }
+        // 빈 그룹 바로 아래 1의 '위로': 그 그룹 안으로
+        act(1, up)
+        composeRule.runOnIdle { assertEquals("move 1 to 1 in 2", fake.calls.last()) }
+        // 그룹 바로 아래 0의 '위로': 그룹 안 맨 아래
+        act(0, up)
+        composeRule.runOnIdle {
+            assertEquals("move 0 to 0 in 2", fake.calls.last())
+            assertEquals(listOf(0L to 2L, 1L to 2L, 2L to null), fake.layers.map { it.id.value to it.parent?.value })
         }
     }
 

@@ -197,6 +197,13 @@
     <string name="layer_adjustment_add">Add adjustment layer</string>
     <string name="layer_adjustment_name">Adjustment %1$d</string>
     <string name="layer_adjustment">Adjustment layer</string>
+    <string name="layer_group">Group</string>
+    <string name="layer_ungroup">Ungroup</string>
+    <string name="layer_group_name">Group %1$d</string>
+    <string name="layer_group_label">Group</string>
+    <string name="layer_group_expand">Expand group</string>
+    <string name="layer_group_collapse">Collapse group</string>
+    <string name="layer_group_collapsed">Collapsed</string>
     <string name="layer_move_up">Move layer up</string>
     <string name="layer_move_down">Move layer down</string>
     <string name="view_flip_horizontal">Flip view horizontally</string>
@@ -223,10 +230,12 @@
     <string name="edit_hidden_layer">Can\'t paint on a hidden layer. Turn on its eye in the layer list.</string>
     <string name="edit_mask_brush_only">Only the brush and eraser paint on a mask. Tap the layer thumbnail to paint its pixels.</string>
     <string name="edit_adjustment_no_pixels">An adjustment layer has no pixels. The brush and eraser paint its mask.</string>
+    <string name="edit_group_no_pixels">A group has no pixels. Pick a layer inside it.</string>
     <string name="blend_normal">Normal</string>
     <string name="blend_multiply">Multiply</string>
     <string name="blend_screen">Screen</string>
     <string name="blend_overlay">Overlay</string>
+    <string name="blend_pass_through">Pass through</string>
 
     <!-- 브러시·지우개 -->
     <string name="brush_size">Size</string>

@@ -195,6 +195,13 @@
     <string name="layer_adjustment_add">조정 레이어 더하기</string>
     <string name="layer_adjustment_name">조정 %1$d</string>
     <string name="layer_adjustment">조정 레이어</string>
+    <string name="layer_group">그룹으로 묶기</string>
+    <string name="layer_ungroup">그룹 풀기</string>
+    <string name="layer_group_name">그룹 %1$d</string>
+    <string name="layer_group_label">그룹</string>
+    <string name="layer_group_expand">그룹 펼치기</string>
+    <string name="layer_group_collapse">그룹 접기</string>
+    <string name="layer_group_collapsed">접힘</string>
     <string name="layer_move_up">레이어를 위로</string>
     <string name="layer_move_down">레이어를 아래로</string>
     <string name="view_flip_horizontal">화면 좌우 반전</string>
@@ -221,10 +228,12 @@
     <string name="edit_hidden_layer">숨긴 레이어에는 그릴 수 없어요. 레이어 목록에서 눈을 켜 주세요.</string>
     <string name="edit_mask_brush_only">마스크에는 브러시·지우개만 써요. 레이어 작은 그림을 누르면 픽셀을 칠해요.</string>
     <string name="edit_adjustment_no_pixels">조정 레이어에는 픽셀이 없어요. 브러시·지우개로 마스크를 칠해요.</string>
+    <string name="edit_group_no_pixels">그룹에는 픽셀이 없어요. 그룹 안의 레이어를 골라 주세요.</string>
     <string name="blend_normal">표준</string>
     <string name="blend_multiply">곱하기</string>
     <string name="blend_screen">스크린</string>
     <string name="blend_overlay">오버레이</string>
+    <string name="blend_pass_through">통과</string>
 
     <!-- 브러시·지우개 -->
     <string name="brush_size">크기</string>

@@ -94,7 +94,7 @@ class FloatingPanelTest {
             layerCalls += "delete"
         }
 
-        override fun move(id: LayerId, toIndex: Int) {
+        override fun move(id: LayerId, toIndex: Int, parent: LayerId?) {
             layerCalls += "move ${id.value} $toIndex"
         }
 

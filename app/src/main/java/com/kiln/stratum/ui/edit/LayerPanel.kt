@@ -105,8 +105,8 @@ interface LayerActions {
     /** 보이는 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다 */
     fun mergeVisible()
 
-    /** [id] 레이어를 [toIndex](0이 맨 아래) 자리로 옮긴다 */
-    fun move(id: LayerId, toIndex: Int)
+    /** [id] 레이어(그룹이면 자손과 함께)를 [toIndex](0이 맨 아래) 자리, [parent] 그룹 안(null이면 그룹 밖)으로 옮긴다 */
+    fun move(id: LayerId, toIndex: Int, parent: LayerId?)
 
     /** 불투명도 슬라이더를 끄는 동안 미리 본다(0..1) */
     fun previewOpacity(opacity: Float)
@@ -132,6 +132,12 @@ interface LayerActions {
     /** 고른 레이어 위에 조정 레이어를 더하고 고른다(선택 영역이 있으면 마스크가 그 모양, 결정 기록 '피부 보정'의 1f) */
     fun addAdjustment() {}
 
+    /** 고른 레이어(그룹이면 자손과 함께)를 새 그룹으로 묶는다(레이어 메뉴 '그룹으로 묶기', 결정 기록 '피부 보정'의 1h) */
+    fun group() {}
+
+    /** 고른 그룹을 푼다(레이어 메뉴 '그룹 풀기'). 안의 레이어는 자리 그대로 그룹 밖으로 나온다. */
+    fun ungroup() {}
+
     /** 고른 레이어의 마스크를 뒤집는다 */
     fun invertMask() {}
 
@@ -152,7 +158,7 @@ interface LayerActions {
         override fun duplicate() = Unit
         override fun mergeDown() = Unit
         override fun mergeVisible() = Unit
-        override fun move(id: LayerId, toIndex: Int) = Unit
+        override fun move(id: LayerId, toIndex: Int, parent: LayerId?) = Unit
         override fun previewOpacity(opacity: Float) = Unit
         override fun commitOpacity() = Unit
         override fun setBlendMode(mode: BlendMode) = Unit
@@ -170,6 +176,7 @@ interface LayerActions {
  * @property busy 편집을 처리하는 중이면 더하기·지우기·옮기기·혼합 모드를 막는다(다른 편집 버튼과 같다).
  * @property colorSpace 문서 색 공간. 작은 그림을 그 꼬리표로 보인다.
  * @property editingMask 고른 레이어의 마스크를 칠하는 중인지(결정 기록 '피부 보정'의 1d). 그 줄의 마스크 작은 그림에 테두리를 그린다.
+ * @property collapsed 접은 그룹(결정 기록 '피부 보정'의 1h). 그 자손 줄은 목록에서 뺀다. 문서가 아니라 화면 상태다.
  */
 @Stable
 class LayerControls(
@@ -189,7 +196,10 @@ class LayerControls(
     /** 사진 넣기 버튼(사용자 피드백 12차): 편집 화면이 사진 선택기를 띄우고, 고른 사진을 고른 레이어 위 새 레이어로 넣는다 */
     val onAddPhoto: () -> Unit = {},
     /** 레이어 메뉴의 '조정 레이어 더하기': 편집 화면은 더한 뒤 조정 패널을 연다(결정 기록 '피부 보정'의 1f) */
-    val onAddAdjustment: () -> Unit = { actions.addAdjustment() }
+    val onAddAdjustment: () -> Unit = { actions.addAdjustment() },
+    val collapsed: Set<LayerId> = emptySet(),
+    /** 그룹 줄의 폴더 아이콘을 누르면 접고 펼친다 */
+    val onToggleGroup: (LayerId) -> Unit = {}
 ) {
     /** 고른 레이어의 속성 */
     val activeLayer: LayerSummary?
@@ -206,6 +216,10 @@ class LayerControls(
     /** 버튼(더하기·지우기·옮기기·혼합 모드)을 누를 수 있는지 */
     val canEdit: Boolean
         get() = enabled && !busy
+
+    /** 고른 레이어를 지울 수 있는지: 지워도(그룹이면 자손과 함께) 레이어가 남는다 */
+    val canDeleteActive: Boolean
+        get() = activeIndex >= 0 && LayerRows.blockSize(layers, activeIndex) < layers.size
 }
 
 /** 레이어 줄 하나의 높이. 작은 그림(40dp)과 위아래 여백, 누르는 영역 48dp 이상. */
@@ -217,6 +231,10 @@ private val ThumbnailSize = 40.dp
 /** 마스크 작은 그림과 레이어 작은 그림 사이, 칠하는 쪽 작은 그림의 테두리(결정 기록 '피부 보정'의 1d) */
 private val MaskGap = 4.dp
 private val TargetBorder = 2.dp
+
+/** 그룹 안 줄을 들여 쓰는 한 단계와 들여 쓰는 깊이 한도(결정 기록 '피부 보정'의 1h). 깊이 둔 그룹도 이름 칸이 남게 4단계까지만 들여 쓴다. */
+private val IndentStep = 12.dp
+private const val MaxIndentLevels = 4
 
 /** 작은 그림 구석의 글자 레이어 표시 크기 */
 private val TextBadgeSize = 16.dp
@@ -252,7 +270,7 @@ fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
         ToolbarButton(R.drawable.ic_add_photo_alternate, R.string.layer_add_photo, controls.canEdit, EditScreenTags.LAYER_ADD_PHOTO) {
             controls.onAddPhoto()
         }
-        ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.layers.size > 1, EditScreenTags.LAYER_DELETE) {
+        ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.canDeleteActive, EditScreenTags.LAYER_DELETE) {
             actions.delete()
         }
         // 상하는 같은 아이콘을 90° 돌린다(자르기·변형의 상하 뒤집기와 같다)
@@ -296,33 +314,40 @@ private fun CommitOpacityOnDispose(actions: LayerActions) {
  * 오른쪽 손잡이를 위아래로 끌면 순서를 바꾼다(놓은 자리로 옮기기, 실행 취소 한 단계).
  * 끄는 동안 끄는 줄은 손가락을 따라가고, 사이의 줄은 한 칸씩 비켜 자리를 보인다.
  * 화면 읽기 기능에서는 줄마다 '위로'·'아래로' 동작으로 옮긴다.
+ * 그룹(결정 기록 '피부 보정'의 1h): 그룹 안의 줄은 들여 쓰고, 접은 그룹의 자손은 빼고 보인다. 그룹 줄을 끌면 보이는 자손과 함께 움직이고,
+ * 놓은 자리에 따라 그룹에 들어가거나 나온다(펼친 그룹 줄 바로 아래면 그 그룹 안 맨 위, [LayerRows.drop]).
  */
 @Composable
 private fun LayerList(controls: LayerControls, modifier: Modifier = Modifier) {
-    // 화면은 위 레이어부터 보인다. 문서 순서(아래부터)와 반대다.
-    val rows = controls.layers.asReversed()
+    // 화면은 위 레이어부터 보인다. 문서 순서(아래부터)와 반대이고, 접은 그룹의 자손은 빠진다(결정 기록 '피부 보정'의 1h)
+    val rows = LayerRows.of(controls.layers, controls.collapsed)
     val rowHeight = with(LocalDensity.current) { RowHeight.toPx() }
     var dragging by remember { mutableStateOf<LayerId?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    val from = rows.indexOfFirst { it.id == dragging }
-    val target = if (from < 0) -1 else (from + (dragOffset / rowHeight).roundToInt()).coerceIn(0, rows.lastIndex)
+    // 끄는 줄과 그 보이는 자손(펼친 그룹)이 함께 움직이고, 사이의 줄은 그만큼 비켜 자리를 보인다
+    val from = rows.indexOfFirst { it.layer.id == dragging }
+    val unit = if (from < 0) 0 else LayerRows.unitSize(rows, from)
+    val target = if (from < 0) -1 else (from + (dragOffset / rowHeight).roundToInt()).coerceIn(0, rows.size - unit)
     Column(modifier.verticalScroll(rememberScrollState()).testTag(EditScreenTags.LAYER_LIST)) {
-        rows.forEachIndexed { index, layer ->
+        rows.forEachIndexed { index, row ->
+            val layer = row.layer
             key(layer.id.value) {
                 val shift = when {
-                    layer.id == dragging -> dragOffset
                     from < 0 -> 0f
-                    index in (from + 1)..target -> -rowHeight
-                    index in target until from -> rowHeight
+                    index in from until from + unit -> dragOffset
+                    target > from && index in (from + unit) until (target + unit) -> -rowHeight * unit
+                    target < from && index in target until from -> rowHeight * unit
                     else -> 0f
                 }
                 LayerRow(
                     layer = layer,
                     selected = layer.id == controls.active,
                     controls = controls,
+                    row = row,
+                    rows = rows,
                     displayIndex = index,
                     modifier = Modifier
-                        .zIndex(if (layer.id == dragging) 1f else 0f)
+                        .zIndex(if (index in from until from + unit) 1f else 0f)
                         .graphicsLayer { translationY = shift },
                     onDragStart = {
                         dragging = layer.id
@@ -330,12 +355,14 @@ private fun LayerList(controls: LayerControls, modifier: Modifier = Modifier) {
                     },
                     onDrag = { delta -> dragOffset += delta },
                     onDragEnd = {
-                        val start = rows.indexOfFirst { it.id == layer.id }
-                        val end = (start + (dragOffset / rowHeight).roundToInt()).coerceIn(0, rows.lastIndex)
+                        val start = rows.indexOfFirst { it.layer.id == layer.id }
+                        val size = if (start < 0) 0 else LayerRows.unitSize(rows, start)
+                        val end = (start + (dragOffset / rowHeight).roundToInt()).coerceIn(0, rows.size - size)
                         dragging = null
                         dragOffset = 0f
-                        // 화면 자리(위부터)를 문서 자리(아래부터)로
-                        if (start >= 0 && end != start) controls.actions.move(layer.id, rows.lastIndex - end)
+                        // 놓은 틈을 문서 자리와 들어갈 그룹으로
+                        val move = if (start < 0) null else LayerRows.drop(controls.layers, rows, start, end, controls.collapsed)
+                        if (move != null) controls.actions.move(move.id, move.toIndex, move.parent)
                     },
                     onDragCancel = {
                         dragging = null
@@ -348,7 +375,8 @@ private fun LayerList(controls: LayerControls, modifier: Modifier = Modifier) {
 }
 
 /**
- * 레이어 줄 하나: 눈(보이기·숨기기), 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠하고, 숨긴 줄은 작은 그림·이름을 흐리게 보인다.
+ * 레이어 줄 하나: 눈(보이기·숨기기), 작은 그림, 이름, 혼합 모드·불투명도, 순서 손잡이. 고른 줄은 바탕을 칠하고, 숨긴 줄(숨긴 그룹 안 포함)은 작은 그림·이름을 흐리게 보인다.
+ * 그룹 줄은 작은 그림 대신 폴더 아이콘이고, 누르면 접고 펼친다. 혼합 모드 자리는 '통과'다.
  * 눈을 누르면 그 레이어를 보이거나 숨긴다(고르지는 않는다, 포토샵과 같다).
  * 작은 그림·이름 쪽을 길게 누르면 그 레이어를 고르고 메뉴([LayerMenu])를 띄운다. 손잡이는 끌기라 길게 누르기에서 뺀다.
  * 화면 읽기 기능에서는 '레이어 메뉴' 동작(길게 누르기)으로 연다.
@@ -358,6 +386,8 @@ private fun LayerRow(
     layer: LayerSummary,
     selected: Boolean,
     controls: LayerControls,
+    row: LayerRows.Row,
+    rows: List<LayerRows.Row>,
     displayIndex: Int,
     modifier: Modifier,
     onDragStart: () -> Unit,
@@ -367,9 +397,11 @@ private fun LayerRow(
 ) {
     val colors = StratumTheme.colors
     val actions = controls.actions
-    val documentIndex = controls.layers.lastIndex - displayIndex
+    val documentIndex = row.documentIndex
     val percent = (layer.opacity * 100).roundToInt()
-    val mode = stringResource(blendModeLabel(layer.blendMode))
+    // 그룹은 통과 그룹뿐이라 혼합 모드 대신 '통과'다(결정 기록 '피부 보정'의 1h)
+    val mode = stringResource(if (layer.group) R.string.blend_pass_through else blendModeLabel(layer.blendMode))
+    val expanded = layer.group && layer.id !in controls.collapsed
     val description = stringResource(R.string.layer_row_description, layer.name, mode, percent)
     val selectedLabel = stringResource(R.string.layer_selected)
     val hiddenLabel = stringResource(R.string.layer_hidden)
@@ -380,9 +412,14 @@ private fun LayerRow(
     val maskEditLabel = stringResource(R.string.layer_mask_edit)
     val pixelsLabel = stringResource(R.string.layer_pixels_edit)
     val adjustmentLabel = stringResource(R.string.layer_adjustment)
+    val groupLabel = stringResource(R.string.layer_group_label)
+    val collapsedLabel = stringResource(R.string.layer_group_collapsed)
+    val expandLabel = stringResource(if (expanded) R.string.layer_group_collapse else R.string.layer_group_expand)
     val rowState = listOfNotNull(
         selectedLabel.takeIf { selected },
-        hiddenLabel.takeIf { !layer.visible },
+        hiddenLabel.takeIf { !row.shown },
+        groupLabel.takeIf { layer.group },
+        collapsedLabel.takeIf { layer.group && !expanded },
         adjustmentLabel.takeIf { layer.adjustment },
         textLabel.takeIf { layer.text != null },
         liquifyLabel.takeIf { layer.liquify }
@@ -416,15 +453,22 @@ private fun LayerRow(
                     contentDescription = description
                     if (rowState.isNotEmpty()) stateDescription = rowState
                     if (canMove) {
+                        // 위로·아래로는 한 자리씩 옮긴다. 그룹의 처음·마지막 자리에서는 그룹 밖으로 나오고, 펼친 그룹 옆에서는 그 안으로 들어간다(LayerRows)
+                        val up = LayerRows.up(controls.layers, rows, displayIndex, controls.collapsed)
+                        val down = LayerRows.down(controls.layers, rows, displayIndex, controls.collapsed)
                         customActions = listOfNotNull(
-                            CustomAccessibilityAction(upLabel) {
-                                actions.move(layer.id, documentIndex + 1)
-                                true
-                            }.takeIf { documentIndex < controls.layers.lastIndex },
-                            CustomAccessibilityAction(downLabel) {
-                                actions.move(layer.id, documentIndex - 1)
-                                true
-                            }.takeIf { documentIndex > 0 }
+                            up?.let { move ->
+                                CustomAccessibilityAction(upLabel) {
+                                    actions.move(move.id, move.toIndex, move.parent)
+                                    true
+                                }
+                            },
+                            down?.let { move ->
+                                CustomAccessibilityAction(downLabel) {
+                                    actions.move(move.id, move.toIndex, move.parent)
+                                    true
+                                }
+                            }
                         )
                     }
                     if (controls.enabled) {
@@ -461,12 +505,15 @@ private fun LayerRow(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .alpha(if (layer.visible) 1f else HiddenContentAlpha)
+                        // 숨긴 그룹 안의 레이어도 흐리게 보인다(1h)
+                        .alpha(if (row.shown) 1f else HiddenContentAlpha)
                         // 마우스 오른쪽 버튼으로도 메뉴를 연다(사용자 피드백 12차 4)
                         .onSecondaryClick(openMenu)
                         .longPressFirst(openMenu),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 그룹 안의 줄은 깊이만큼 들여 쓴다(결정 기록 '피부 보정'의 1h)
+                    if (row.depth > 0) Spacer(Modifier.width(IndentStep * minOf(row.depth, MaxIndentLevels)))
                     // 글자 레이어(다시 고칠 수 있음, 사용자 피드백 8차 1-6)는 작은 그림 오른쪽 아래에 글자 표시를,
                     // 다시 고칠 수 있는 유동화가 있는 레이어(결정 기록 '얼굴 인식 보정' 3단계)는 유동화 표시(유동화 도구 아이콘)를 단다.
                     // 마스크가 있으면 작은 그림을 누르면 픽셀을, 마스크 작은 그림을 누르면 마스크를 칠하고, 칠하는 쪽에 테두리를 그린다
@@ -477,19 +524,29 @@ private fun LayerRow(
                             .size(ThumbnailSize)
                             .then(if (layer.hasMask && selected && !maskTarget) Modifier.border(TargetBorder, colors.selectedContent, StratumShapes.Thumbnail) else Modifier)
                             .then(
-                                // 조정 레이어는 픽셀이 없어 마스크만 칠한다(아이콘을 눌러도 고르기만, 결정 기록 '피부 보정'의 1f)
-                                if (layer.hasMask && !layer.adjustment) {
-                                    Modifier.clickable(enabled = controls.enabled, onClickLabel = pixelsLabel) { actions.editPixels(layer.id) }
-                                } else {
-                                    Modifier
+                                when {
+                                    // 그룹은 폴더 아이콘을 누르면 접고 펼친다(결정 기록 '피부 보정'의 1h)
+                                    layer.group ->
+                                        Modifier
+                                            .clickable(onClickLabel = expandLabel) { controls.onToggleGroup(layer.id) }
+                                            .semantics { contentDescription = expandLabel }
+                                    // 조정 레이어는 픽셀이 없어 마스크만 칠한다(아이콘을 눌러도 고르기만, 결정 기록 '피부 보정'의 1f)
+                                    layer.hasMask && !layer.adjustment ->
+                                        Modifier.clickable(enabled = controls.enabled, onClickLabel = pixelsLabel) { actions.editPixels(layer.id) }
+                                    else -> Modifier
                                 }
                             )
-                            .testTag(EditScreenTags.layerThumbnail(layer.id))
+                            .testTag(if (layer.group) EditScreenTags.layerGroupToggle(layer.id) else EditScreenTags.layerThumbnail(layer.id))
                     ) {
-                        if (layer.adjustment) {
-                            // 조정 레이어는 작은 그림 대신 조정 아이콘이다
+                        if (layer.adjustment || layer.group) {
+                            // 조정 레이어는 작은 그림 대신 조정 아이콘, 그룹은 폴더 아이콘(펼치면 열린 폴더)이다
+                            val icon = when {
+                                layer.adjustment -> R.drawable.ic_tune
+                                expanded -> R.drawable.ic_folder_open
+                                else -> R.drawable.ic_folder
+                            }
                             Box(Modifier.fillMaxSize().background(colors.fieldBackground, StratumShapes.Thumbnail), contentAlignment = Alignment.Center) {
-                                Icon(painterResource(R.drawable.ic_tune), contentDescription = null, tint = colors.textSecondary)
+                                Icon(painterResource(icon), contentDescription = null, tint = colors.textSecondary)
                             }
                         } else {
                             LayerThumbnail(layer.thumbnail, controls.colorSpace, Modifier.fillMaxSize())
@@ -578,8 +635,9 @@ private fun LayerRow(
 }
 
 /**
- * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 픽셀로 바꾸기(글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어에만 보임),
- * 마스크 더하기(마스크가 없을 때) 또는 마스크 반전·지우기(있을 때), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
+ * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 조정 레이어 더하기, 그룹으로 묶기, 그룹 풀기(그룹 줄에만 보임),
+ * 픽셀로 바꾸기(글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어에만 보임),
+ * 마스크 더하기(마스크가 없을 때, 그룹은 빼고) 또는 마스크 반전·지우기(있을 때), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
  * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다(이름 바꾸기는 창에서 이름을 받은 뒤). 할 수 없는 항목은 꺼 둔다
  * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
  */
@@ -594,6 +652,11 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
         // 조정 레이어(결정 기록 '피부 보정'의 1f): 고른 레이어 위에 더한다
         LayerMenuItem(R.string.layer_adjustment_add, canEdit, EditScreenTags.LAYER_MENU_ADJUSTMENT_ADD, onDismiss, controls.onAddAdjustment)
+        // 그룹(결정 기록 '피부 보정'의 1h): 묶기는 모든 줄(그룹이면 그 그룹째), 풀기는 그룹 줄만
+        LayerMenuItem(R.string.layer_group, canEdit, EditScreenTags.LAYER_MENU_GROUP, onDismiss, actions::group)
+        if (layers[documentIndex].group) {
+            LayerMenuItem(R.string.layer_ungroup, canEdit, EditScreenTags.LAYER_MENU_UNGROUP, onDismiss, actions::ungroup)
+        }
         // 픽셀로 바꾸기는 글자 레이어에만 보인다(그 뒤로는 칠할 수 있지만 글자를 다시 고칠 수 없다, 사용자 피드백 8차 1-6).
         // 다른 레이어에서는 꺼 두지 않고 뺀다(2026-10-22 사용자 요청: "글자 레이어 에서만 해당 옵션이 보이게 해주세요").
         // 다시 고칠 수 있는 유동화도 같은 항목으로 직접 굳힌다(결정 기록 '얼굴 인식 보정' 3단계)
@@ -601,28 +664,33 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
             LayerMenuItem(R.string.layer_rasterize, canEdit, EditScreenTags.LAYER_MENU_RASTERIZE, onDismiss, actions::rasterize)
         }
         // 레이어 마스크(결정 기록 '피부 보정'의 1d): 없으면 더하기, 있으면 반전·지우기. 조정 레이어는 늘 마스크를 칠해 지우지 않는다(1f).
+        // 그룹에는 마스크를 두지 않는다(1h)
         if (layers[documentIndex].hasMask) {
             LayerMenuItem(R.string.layer_mask_invert, canEdit, EditScreenTags.LAYER_MENU_MASK_INVERT, onDismiss, actions::invertMask)
             if (!layers[documentIndex].adjustment) {
                 LayerMenuItem(R.string.layer_mask_delete, canEdit, EditScreenTags.LAYER_MENU_MASK_DELETE, onDismiss, actions::deleteMask)
             }
-        } else {
+        } else if (!layers[documentIndex].group) {
             LayerMenuItem(R.string.layer_mask_add, canEdit, EditScreenTags.LAYER_MENU_MASK_ADD, onDismiss, actions::addMask)
         }
         // 숨긴 레이어는 아래와 합치지 않는다(숨긴 내용을 모르고 합치거나 잃지 않게)
-        // 조정 레이어 위로는 합치지 않는다(조정 레이어를 아래 픽셀 레이어에 굳히는 것은 된다)
-        val canMergeDown = documentIndex > 0 && layers[documentIndex].visible && layers[documentIndex - 1].visible && !layers[documentIndex - 1].adjustment
+        // 조정 레이어 위로는 합치지 않는다(조정 레이어를 아래 픽셀 레이어에 굳히는 것은 된다).
+        // 그룹은 합치지 않고, 같은 그룹 안의 이웃끼리만 합친다(엔진의 MergeDown과 같다, 1h)
+        val lower = layers.getOrNull(documentIndex - 1)
+        val upper = layers[documentIndex]
+        val canMergeDown = lower != null && upper.visible && lower.visible && !lower.adjustment && !lower.group && !upper.group &&
+            upper.parent == lower.parent
         LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
-        // 보이는 레이어 병합은 가장 아래 보이는 픽셀 레이어부터 위로 합친다(그 아래 조정 레이어는 그대로, 엔진의 MergeVisible.mergedLayers와 같다)
-        val mergingVisible = layers.filter { it.visible && it.opacity > 0f }.dropWhile { it.adjustment }
+        // 보이는 레이어 병합은 가장 아래 보이는 픽셀 레이어부터 위로 합친다(그 아래 조정 레이어는 그대로, 그룹이 물려준 보이기·불투명도까지,
+        // 엔진의 MergeVisible.mergedLayers와 같다)
         LayerMenuItem(
             R.string.layer_merge_visible,
-            canEdit && mergingVisible.size >= 2,
+            canEdit && LayerRows.mergeVisibleCount(layers) >= 2,
             EditScreenTags.LAYER_MENU_MERGE_VISIBLE,
             onDismiss,
             actions::mergeVisible
         )
-        LayerMenuItem(R.string.layer_delete, canEdit && controls.layers.size > 1, EditScreenTags.LAYER_MENU_DELETE, onDismiss, actions::delete)
+        LayerMenuItem(R.string.layer_delete, canEdit && LayerRows.blockSize(layers, documentIndex) < layers.size, EditScreenTags.LAYER_MENU_DELETE, onDismiss, actions::delete)
     }
 }
 
@@ -720,7 +788,9 @@ private fun LayerOpacityRow(controls: LayerControls) {
 private fun BlendModeRow(controls: LayerControls) {
     var open by remember { mutableStateOf(false) }
     val current = controls.activeLayer?.blendMode ?: BlendMode.NORMAL
-    val enabled = controls.canEdit && controls.activeLayer != null
+    // 그룹은 통과 그룹뿐이라 고를 혼합 모드가 없다(결정 기록 '피부 보정'의 1h)
+    val group = controls.activeLayer?.group == true
+    val enabled = controls.canEdit && controls.activeLayer != null && !group
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = stringResource(R.string.layer_blend_mode),
@@ -733,7 +803,7 @@ private fun BlendModeRow(controls: LayerControls) {
         Box {
             // 알약 버튼 대신 모서리 6dp의 작은 선택 상자(시안)
             SelectBox(
-                text = stringResource(blendModeLabel(current)),
+                text = stringResource(if (group) R.string.blend_pass_through else blendModeLabel(current)),
                 onClick = { open = true },
                 enabled = enabled,
                 modifier = Modifier.testTag(EditScreenTags.LAYER_BLEND)

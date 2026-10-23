@@ -341,6 +341,8 @@ fun EditScreen(
     var palette by rememberSaveable(stateSaver = PaletteDraft.Saver) { mutableStateOf<PaletteDraft?>(null) }
     // 이름을 바꾸는 레이어(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청). 접기·펼치기에도 창이 남는다.
     var renamingLayer by rememberSaveable { mutableStateOf<Long?>(null) }
+    // 레이어 목록에서 접은 그룹(결정 기록 '피부 보정'의 1h). 문서가 아니라 화면 상태라 접기·펼치기·설정에 다녀와도 남고, 홈으로 나가면 풀린다.
+    var collapsedGroups by rememberSaveable { mutableStateOf(LongArray(0)) }
     // 스포이드 버튼을 켠 곳(브러시·글자). 켜면 다음에 캔버스를 누른 자리의 색을 고르고 꺼진다. 도구를 바꾸면 꺼진다.
     var eyedropperTarget by rememberSaveable { mutableStateOf<ColorTarget?>(null) }
     LaunchedEffect(selection.active) { eyedropperTarget = null }
@@ -554,9 +556,21 @@ fun EditScreen(
             )
         }
         // 고른 레이어의 보정. 자르기 중에는 막는다(기록하면 문서가 바뀌어 자르기 테두리가 처음으로 돌아가므로).
+        // 그룹은 그리지 않아 보정할 것이 없다(결정 기록 '피부 보정'의 1h)
         val adjustControls = ready?.active?.let { layer ->
-            AdjustControls(committed = layer.adjustments, live = liveAdjustments, enabled = !cropMode, actions = adjust)
+            AdjustControls(committed = layer.adjustments, live = liveAdjustments, enabled = !cropMode && !layer.group, actions = adjust)
         }
+        // 고른 레이어가 접은 그룹 안이면(그룹 안에 새 레이어를 더함, 실행 취소 등) 그 그룹들을 펼쳐 고른 줄이 보이게 한다.
+        // 고른 레이어가 바뀔 때만 보아, 고른 레이어가 든 그룹을 직접 접는 것은 막지 않는다.
+        val activeId = ready?.activeLayer
+        val activeKnown = ready?.layers?.any { it.id == activeId } == true
+        LaunchedEffect(activeId, activeKnown) {
+            val layers = ready?.layers ?: return@LaunchedEffect
+            val byId = layers.associateBy { it.id }
+            val ancestors = generateSequence(activeId?.let(byId::get)?.parent) { byId[it]?.parent }.take(layers.size).mapTo(HashSet()) { it.value }
+            if (collapsedGroups.any { it in ancestors }) collapsedGroups = collapsedGroups.filterNot { it in ancestors }.toLongArray()
+        }
+        val collapsed = remember(collapsedGroups) { collapsedGroups.mapTo(HashSet()) { LayerId(it) } }
         // 레이어 목록과 고른 레이어. 자르기 중에는 막는다(보정과 같은 까닭).
         val layerControls = ready?.let {
             LayerControls(
@@ -568,6 +582,10 @@ fun EditScreen(
                 onAddAdjustment = {
                     layerActions.addAdjustment()
                     if (floating.panel != MainPanel.ADJUST) floating.togglePanel(MainPanel.ADJUST)
+                },
+                collapsed = collapsed,
+                onToggleGroup = { id ->
+                    collapsedGroups = if (id.value in collapsedGroups) collapsedGroups.filter { it != id.value }.toLongArray() else collapsedGroups + id.value
                 }
             )
         }
@@ -878,7 +896,8 @@ fun EditScreen(
                     // 보이는 것은 눈이 켜지고 불투명도가 0보다 큰 레이어다(엔진의 Layer.isShown과 같은 규칙).
                     // 그 밖을 누르면 그 자리에 새 글자를 넣는 창이다(글자 옵션의 크기·전경색으로 시작).
                     onTap = { x, y ->
-                        val hit = ready.layers.lastOrNull { it.visible && it.opacity > 0f && it.text?.contains(x, y) == true }
+                        // 숨기거나 0%인 그룹 안의 글자는 보이지 않아 고르지 않는다(결정 기록 '피부 보정'의 1h)
+                        val hit = ready.layers.lastOrNull { it.text?.contains(x, y) == true && LayerRows.isDrawn(ready.layers, it) }
                         val spec = hit?.text
                         textDraft = if (hit != null && spec != null) {
                             layerActions.select(hit.id)
@@ -1627,6 +1646,7 @@ private fun EditCanvas(
     val hiddenLayer = stringResource(R.string.edit_hidden_layer)
     val maskBrushOnly = stringResource(R.string.edit_mask_brush_only)
     val adjustmentNoPixels = stringResource(R.string.edit_adjustment_no_pixels)
+    val groupNoPixels = stringResource(R.string.edit_group_no_pixels)
     val removeUnavailable = stringResource(R.string.edit_remove_unavailable)
     val spotHeal = stringResource(R.string.subtool_spot_heal_short)
     val selectUnavailable = stringResource(R.string.edit_select_unavailable)
@@ -1671,6 +1691,7 @@ private fun EditCanvas(
                 EditorMessage.HiddenLayer -> snackbarHostState.showSnackbar(hiddenLayer)
                 EditorMessage.MaskBrushOnly -> snackbarHostState.showSnackbar(maskBrushOnly)
                 EditorMessage.AdjustmentNoPixels -> snackbarHostState.showSnackbar(adjustmentNoPixels)
+                EditorMessage.GroupNoPixels -> snackbarHostState.showSnackbar(groupNoPixels)
                 EditorMessage.RemoveUnavailable -> {
                     // 지우지 못한 곳은 스팟 복구 브러시로 고칠 수 있게 바로 바꾸는 버튼을 둔다
                     val result = snackbarHostState.showSnackbar(removeUnavailable, actionLabel = spotHeal, duration = SnackbarDuration.Long)
