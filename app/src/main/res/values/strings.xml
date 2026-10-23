@@ -103,9 +103,6 @@
     <string name="tool_more">More</string>
     <string name="tool_more_active">More: %1$s</string>
     <string name="more_tools_title">More tools</string>
-    <string name="bar_hint_choose_tool">Choose a tool below</string>
-    <string name="bar_hint_choose_tool_side">Choose a tool on the right</string>
-    <string name="bar_close_tool">Close tool</string>
     <string name="bar_selection_mode">Combine</string>
     <string name="bar_selection_actions">Actions</string>
     <string name="sheet_expand">Expand</string>

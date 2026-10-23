@@ -2,6 +2,7 @@ package com.kiln.stratum.ui.edit
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -483,7 +484,10 @@ class RetouchToolTest {
                 pick = null
             }
         }
+        var homeBacks = 0
         composeRule.setContent {
+            // StratumApp처럼 편집 화면보다 먼저 '뒤로 → 홈'을 둔다
+            BackHandler { homeBacks++ }
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 800.dp))) {
                 StratumTheme {
                     EditScreen(
@@ -507,9 +511,10 @@ class RetouchToolTest {
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
         composeRule.onNodeWithTag(EditScreenTags.RETOUCH_REMOVE_PICKED).performScrollTo().assertIsNotEnabled()
 
-        // 그다음 뒤로 가기는 도구를 닫는다
+        // 그다음 뒤로 가기는 홈으로 간다(커버는 도구를 닫는 단계가 없다, 2026-10-23 사용자 요청)
+        composeRule.runOnIdle { assertEquals(0, homeBacks) }
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
-        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(1, homeBacks) }
     }
 
     @Test

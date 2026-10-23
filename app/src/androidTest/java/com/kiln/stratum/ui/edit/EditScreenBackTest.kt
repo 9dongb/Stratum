@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -26,7 +28,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** 편집 화면에서 뒤로 가기가 고른 도구부터 닫는지(결정 기록 '뒤로 가기로 도구 닫기') 확인한다. */
+/**
+ * 편집 화면의 뒤로 가기. 메인 화면은 고른 도구부터 닫고(결정 기록 '뒤로 가기로 도구 닫기'), 커버는 떠 있는 것만 닫고 홈으로 간다
+ * (2026-10-23 사용자 요청: "도구에서 뒤로가기 시 … 홈으로 가게해주세요"). 커버에서 도구가 없으면 막대 자리는 더보기 줄이다.
+ */
 @RunWith(AndroidJUnit4::class)
 class EditScreenBackTest {
 
@@ -49,6 +54,9 @@ class EditScreenBackTest {
         )
     }
 
+    /** 유동화 작업 모드를 연 횟수 */
+    private var liquifyStarts = 0
+
     private fun show(screen: DpSize) {
         size.value = screen
         val state = ready()
@@ -63,7 +71,8 @@ class EditScreenBackTest {
                         onCanvasSize = { _, _ -> },
                         onViewport = {},
                         onChooseSize = {},
-                        onEdit = { edits += it }
+                        onEdit = { edits += it },
+                        onStartLiquify = { liquifyStarts++ }
                     )
                 }
             }
@@ -76,8 +85,8 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun cover_backFoldsAnOpenChip_thenClosesTheTool() {
-        // 커버 한 줄 막대(결정 기록 '커버 화면 개편'): 칩을 펼쳤으면 뒤로 가기는 칩 줄로 돌아가고, 다음 뒤로 가기가 도구를 닫는다
+    fun cover_backFoldsAnOpenChip_thenGoesHome() {
+        // 커버 한 줄 막대(결정 기록 '커버 화면 개편'): 칩을 펼쳤으면 뒤로 가기는 칩 줄로 돌아가고, 다음 뒤로 가기는 홈이다
         show(COVER)
         composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.expandBarChip("size")
@@ -86,23 +95,56 @@ class EditScreenBackTest {
         back()
         composeRule.onNodeWithTag(EditScreenTags.BRUSH_SIZE).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
-        back()
-        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(0, homeBacks) }
+        back()
+        composeRule.runOnIdle { assertEquals(1, homeBacks) }
     }
 
     @Test
-    fun cover_backClosesTheTool_thenGoesHome() {
+    fun cover_backWithAToolGoesHome() {
+        // 도구를 닫는 단계가 없다(사용자 요청: "도구에서 뒤로가기 시 지금은 "아래에서 도구를 골라요"가 뜨는데 … 홈으로 가게해주세요")
         show(COVER)
         composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertExists()
 
         back()
-        composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertDoesNotExist()
-        composeRule.runOnIdle { assertEquals(0, homeBacks) }
+        composeRule.runOnIdle { assertEquals(1, homeBacks) }
+    }
+
+    @Test
+    fun cover_aMoreRowOpenedOverATool_closesFirst() {
+        show(COVER)
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
 
         back()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.bar("mode")).assertExists()
+        composeRule.runOnIdle { assertEquals(0, homeBacks) }
+        back()
         composeRule.runOnIdle { assertEquals(1, homeBacks) }
+    }
+
+    @Test
+    fun cover_tappingTheChosenTabAgain_keepsTheTool() {
+        show(COVER)
+        composeRule.chooseCoverTool(EditTool.Move)
+        composeRule.chooseCoverTool(EditTool.Move)
+
+        composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Move)).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertExists()
+    }
+
+    @Test
+    fun cover_openingLiquify_comesBackToTheMoreRow() {
+        // 유동화는 새 창이라 고른 도구로 남지 않는다. 돌아오면 도구가 없는 기본(더보기 줄)이다(사용자: "기본 값이 첫번째 도구로 옵니다" → 더보기로 바꿈)
+        show(COVER)
+        composeRule.chooseCoverTool(EditTool.Select)
+        composeRule.chooseCoverTool(EditTool.Liquify)
+
+        composeRule.runOnIdle { assertEquals(1, liquifyStarts) }
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
     }
 
     @Test
@@ -147,13 +189,15 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun crop_backCancelsTheCrop() {
+    fun crop_backCancelsTheCrop_andTheMoreRowComesBack() {
         show(COVER)
         composeRule.chooseCoverTool(EditTool.Transform)
         composeRule.onNodeWithTag(EditScreenTags.CROP_OVERLAY).assertExists()
 
+        // 새 창의 뒤로 가기는 X와 같다(닫고, 도구가 없는 기본인 더보기 줄로 돌아온다)
         back()
         composeRule.onNodeWithTag(EditScreenTags.CROP_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
         composeRule.runOnIdle {
             assertEquals(0, homeBacks)
             assertTrue("$edits", edits.isEmpty())
@@ -179,8 +223,15 @@ class EditScreenBackTest {
     }
 
     @Test
-    fun noTool_goesHome() {
+    fun cover_noTool_showsTheMoreRow_andBackGoesHome() {
+        // 도구를 고르지 않았으면 막대 자리에 더보기 줄이 늘 보이고 더보기 칸이 켜진다(2026-10-23 사용자 요청: "늘 고른 도구를 … 더보기 도구로")
         show(COVER)
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
+        // 그때 더보기 칸을 눌러도 닫히지 않는다
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
 
         back()
 

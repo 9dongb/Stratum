@@ -51,7 +51,7 @@ import com.kiln.stratum.ui.theme.compactTextAutoSize
 /**
  * 커버를 가로로 돌렸을 때의 한 줄 막대(사용자 피드백 12차 3: "커버화면을 가로로 돌리면 펼친화면 배치가 아닌, 커버화면 배치가 돌아간형태로",
  * 질문에서 "막대를 오른쪽 세로로"). 가로 막대([CoverToolBar])를 돌려 캔버스 오른쪽에 세로로 세운 것이다.
- * 칩은 위에서 아래로 쌓이고(넘치면 위아래로 밀어 보고 더 있는 쪽 끝을 흐리게 그림), 맨 아래에 ✕가 있다. 칸은 펼친 화면 띠의 칸처럼
+ * 칩은 위에서 아래로 쌓인다(넘치면 위아래로 밀어 보고 더 있는 쪽 끝을 흐리게 그림, 도구를 닫는 ✕는 없다, 2026-10-23). 칸은 펼친 화면 띠의 칸처럼
  * 두 줄(이름·값)이고([CellBox]), 값·할 일·이름표([EditScreenTags.bar])는 가로 막대와 같다.
  * 칩을 누르면 같은 기둥이 그 칩의 내용(세로 슬라이더·고를 것·동작·조정 슬라이더)이 되고 맨 아래 ✓로 칩 기둥으로 돌아온다.
  * 펼친 칩과 밀어 본 자리는 가로 막대와 같은 [state]·[content]에 딸린다. 칩이 없으면 [empty]를 세로 글자로 쓴다.
@@ -63,8 +63,6 @@ fun CoverToolColumn(
     state: CoverBarState,
     modifier: Modifier = Modifier,
     content: String = "",
-    onClose: (() -> Unit)? = null,
-    closeDescription: String = stringResource(R.string.bar_close_tool),
     empty: String? = null
 ) {
     val colors = StratumTheme.colors
@@ -99,11 +97,6 @@ fun CoverToolColumn(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             for (item in items) BarCell(item, expand)
-                        }
-                    }
-                    if (onClose != null) {
-                        StratumIconButton(onClick = onClose, modifier = Modifier.testTag(EditScreenTags.BAR_CLOSE)) {
-                            Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
                         }
                     }
                 }

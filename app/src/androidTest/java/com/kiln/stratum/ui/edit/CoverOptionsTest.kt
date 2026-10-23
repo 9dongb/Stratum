@@ -71,10 +71,10 @@ class CoverOptionsTest {
         composeRule.waitForIdle()
         composeRule.runOnIdle { canvasSizes.clear() }
         val before = canvasBounds()
-        // 막대는 캔버스 바로 아래(겹치지 않음)이고, 도구가 없으면 안내 글이다
-        val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_TOOL_BAR).fetchSemanticsNode().layoutBoundsInWindow()
+        // 막대 자리는 캔버스 바로 아래(겹치지 않음)이고, 도구가 없으면 더보기 줄이다(2026-10-23, 전에는 안내 글)
+        val bar = composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).fetchSemanticsNode().layoutBoundsInWindow()
         assertEquals(before.bottom, bar.top, 1f)
-        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertDoesNotExist()
 
         // 도구는 막대만 바뀐다(이동은 옵션이 없다)
         for (tool in listOf(EditTool.Brush, EditTool.Select, EditTool.Retouch, EditTool.Tone, EditTool.Mosaic, EditTool.Text, EditTool.Move)) {
@@ -93,7 +93,7 @@ class CoverOptionsTest {
         assertEquals("layers canvas", before, canvasBounds())
         assertOverlapsTheCanvasBottom("layers", EditScreenTags.COVER_LAYER_SHEET, before)
         composeRule.togglePanel(MainPanel.LAYERS)
-        // 더보기 줄은 사진을 가리지 않고 막대 자리에 뜨고(막대가 잠깐 더보기 줄로 바뀜, 2026-10-22 사용자 요청), 더보기 칸을 다시 누르면 닫힌다
+        // 도구를 고른 채 연 더보기 줄은 사진을 가리지 않고 막대 자리에 뜨고(막대가 잠깐 더보기 줄로 바뀜, 2026-10-22 사용자 요청), 더보기 칸을 다시 누르면 닫힌다
         composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
         composeRule.waitForIdle()
         assertEquals(bar, composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).fetchSemanticsNode().layoutBoundsInWindow())

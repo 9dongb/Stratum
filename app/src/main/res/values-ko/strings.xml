@@ -103,9 +103,6 @@
     <string name="tool_more">더보기</string>
     <string name="tool_more_active">더보기: %1$s</string>
     <string name="more_tools_title">도구 더보기</string>
-    <string name="bar_hint_choose_tool">아래에서 도구를 골라요</string>
-    <string name="bar_hint_choose_tool_side">오른쪽에서 도구를 골라요</string>
-    <string name="bar_close_tool">도구 닫기</string>
     <string name="bar_selection_mode">합치는 방법</string>
     <string name="bar_selection_actions">동작</string>
     <string name="sheet_expand">펼치기</string>

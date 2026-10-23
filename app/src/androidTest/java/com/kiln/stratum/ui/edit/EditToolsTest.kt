@@ -83,16 +83,21 @@ class EditToolsTest {
     private val selectTab get() = composeRule.onNodeWithTag(EditScreenTags.tabTool(EditTool.Select))
 
     @Test
-    fun compact_tapShowsOptions_tapAgainHides() {
+    fun compact_tapShowsOptions_tapAgainKeepsTheTool() {
         show(411, 800)
+        // 도구가 없으면 막대 자리는 더보기 줄이다(2026-10-23 사용자 요청: "늘 고른 도구를 … 더보기 도구로")
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).assertIsSelected()
 
-        // 이동의 칩(레이어 돌리기·뒤집기)은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편'). 다시 누르면 내려놓고 막대는 안내 글이다.
+        // 이동의 칩(레이어 돌리기·뒤집기)은 한 줄 막대에 보인다(결정 기록 '커버 화면 개편').
+        // 다시 눌러도 내려놓지 않는다(커버는 도구를 닫는 단계가 없다, 2026-10-23 사용자 요청).
         moveTab.performClick()
         composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
 
         moveTab.performClick()
-        composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertDoesNotExist()
-        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
+        moveTab.assertIsSelected()
+        composeRule.onNodeWithTag(EditScreenTags.bar("layerRotateLeft")).assertIsDisplayed()
     }
 
     @Test

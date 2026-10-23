@@ -105,7 +105,6 @@ object EditScreenTags {
     const val BAR_HINT = "barHint"
 
     /** 한 줄 막대 오른쪽 끝의 ✕(도구 닫기) */
-    const val BAR_CLOSE = "barClose"
 
     /** 펼친 칩을 접는 ✓ */
     const val BAR_DONE = "barDone"

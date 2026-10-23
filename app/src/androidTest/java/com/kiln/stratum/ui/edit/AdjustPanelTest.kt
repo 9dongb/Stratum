@@ -161,13 +161,13 @@ class AdjustPanelTest {
     }
 
     @Test
-    fun compact_closeButton_turnsTheAdjustOff_andTheToolComesBack() {
+    fun compact_adjustButton_turnsTheAdjustOff_andTheBarComesBack() {
         openCompactAdjust()
-        // 조정을 끄면 막대는 고른 도구(없으면 안내 글)로 돌아온다
-        composeRule.onNodeWithTag(EditScreenTags.BAR_CLOSE).performClick()
+        // 막대에 ✕는 없다(2026-10-23 사용자 요청). 상단 바의 조정 버튼으로 끄면 막대는 고른 도구(없으면 더보기 줄)로 돌아온다.
+        composeRule.togglePanel(MainPanel.ADJUST)
         composeRule.onNodeWithTag(EditScreenTags.ADJUST_PANEL).assertDoesNotExist()
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.ADJUST)).assertIsOff()
-        composeRule.onNodeWithTag(EditScreenTags.BAR_HINT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertIsDisplayed()
 
         // 도구 탭을 누르면 조정이 꺼지고 그 도구의 칩이 보인다(같은 막대를 쓰므로)
         composeRule.togglePanel(MainPanel.ADJUST)

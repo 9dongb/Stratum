@@ -183,23 +183,19 @@ class LayerPanelTest {
     private fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutBoundsInWindow()
 
     @Test
-    fun compact_sheetCoversTheHintBar_risesAboveAToolsBar_andKeepsTheCanvas() {
+    fun compact_sheetRisesAboveTheMoreRowOrAToolsBar_andKeepsTheCanvas() {
         show(FakeLayers(2), 411, 800)
         val canvas = bounds(EditScreenTags.CANVAS)
-        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
+        // 도구가 없으면 막대 자리는 더보기 줄이다(2026-10-23, 전에는 안내 글 막대를 시트가 덮었다)
+        val bar = bounds(EditScreenTags.COVER_MORE_TOOLS)
         composeRule.togglePanel(MainPanel.LAYERS)
 
-        // 도구를 고르지 않아 막대가 안내 글뿐이면 시트가 막대 자리까지 덮는다(2026-10-22 사용자 요청). 캔버스 크기는 그대로다.
+        // 시트는 더보기 줄 위(캔버스 아래쪽 위)에 뜨고 둘 다 보인다. 캔버스 크기는 그대로다.
         var sheet = bounds(EditScreenTags.COVER_LAYER_SHEET)
-        assertEquals(bar.bottom, sheet.bottom, 1f)
+        assertEquals(canvas.bottom, sheet.bottom, 1f)
         assertTrue("$sheet should start inside $canvas", sheet.top > canvas.top)
         assertEquals(canvas, bounds(EditScreenTags.CANVAS))
-
-        // 더보기 줄을 열면 막대 자리가 더보기 줄이 되고, 시트는 그 위로 올라간다(둘 다 보인다)
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
-        composeRule.waitForIdle()
         assertEquals(bar, bounds(EditScreenTags.COVER_MORE_TOOLS))
-        assertEquals(canvas.bottom, bounds(EditScreenTags.COVER_LAYER_SHEET).bottom, 1f)
 
         // 도구를 고르면 시트는 막대 바로 위(캔버스 아래쪽 위)에 남고, 막대(고른 도구의 칩)는 그대로 쓸 수 있다
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Eraser)).performClick()
@@ -233,12 +229,12 @@ class LayerPanelTest {
     @Test
     fun compact_tappingTheTitle_letsTheSheetGrowToTheCanvasHeight() {
         // 레이어가 많으면 반 높이에서는 목록을 밀어 보고, 제목을 누르면 캔버스 높이까지 늘어난다.
-        // 도구가 없으면 시트가 안내 글 막대 자리까지 덮어 그만큼 더 길다(위 끝 자리는 막대 위에 뜰 때와 같다).
+        // 시트는 늘 막대 자리(도구가 없으면 더보기 줄) 위에 뜬다(2026-10-23, 전에는 안내 글 막대까지 덮어 그만큼 더 길었다).
         openCompactLayers(FakeLayers(12))
         val canvas = bounds(EditScreenTags.CANVAS)
-        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
         val half = bounds(EditScreenTags.COVER_LAYER_SHEET)
-        assertTrue("$half should be at most about half of $canvas (+ the bar $bar)", half.height <= canvas.height * 0.56f + bar.height)
+        assertTrue("$half should be at most about half of $canvas", half.height <= canvas.height * 0.56f)
+        assertEquals(canvas.bottom, half.bottom, 1f)
 
         composeRule.onNodeWithTag(EditScreenTags.COVER_LAYER_SHEET_HANDLE).performClick()
         val full = bounds(EditScreenTags.COVER_LAYER_SHEET)

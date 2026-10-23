@@ -216,8 +216,8 @@ class CoverBarState(expanded: String? = null, owner: String? = null) {
 fun rememberCoverBarState(): CoverBarState = rememberSaveable(saver = CoverBarState.Saver) { CoverBarState() }
 
 /**
- * 커버 화면의 한 줄 막대. 칩 줄은 [items]를 차례로 놓고(넘치면 칩만 옆으로 밀어 봄) 오른쪽 끝에 ✕([onClose], 없으면 없음, 화면 읽기 이름 [closeDescription])를 둔다.
- * 칩이 없으면 [empty](도구를 고르지 않았을 때의 안내, 이동 도구의 이름)를 흐린 글자로 보인다.
+ * 커버 화면의 한 줄 막대. 칩 줄은 [items]를 차례로 놓는다(넘치면 칩만 옆으로 밀어 봄). 도구를 닫는 ✕는 없다(2026-10-23 사용자 요청).
+ * 칩이 없으면 [empty](칩이 없는 도구의 이름, 유동화 얼굴 모드의 안내)를 흐린 글자로 보인다.
  * 펼친 칩([state])이 있으면 그 칩의 내용과 오른쪽 끝 ✓다. 옆쪽 시스템 바·카메라 구멍은 피한다.
  * [content]는 막대 내용의 이름(도구·하위 도구·조정)이다. 펼친 칩과 칩 줄의 밀어 본 자리는 이 내용에 딸린다(✓로 돌아와도 보던 칩 그대로).
  */
@@ -227,8 +227,6 @@ fun CoverToolBar(
     state: CoverBarState,
     modifier: Modifier = Modifier,
     content: String = "",
-    onClose: (() -> Unit)? = null,
-    closeDescription: String = stringResource(R.string.bar_close_tool),
     empty: String? = null
 ) {
     val colors = StratumTheme.colors
@@ -273,11 +271,6 @@ fun CoverToolBar(
                             Spacer(Modifier.width(2.dp))
                             for (item in items) BarChip(item, expand)
                             Spacer(Modifier.width(2.dp))
-                        }
-                    }
-                    if (onClose != null) {
-                        StratumIconButton(onClick = onClose, modifier = Modifier.testTag(EditScreenTags.BAR_CLOSE)) {
-                            Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
                         }
                     }
                 }

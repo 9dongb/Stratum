@@ -429,6 +429,7 @@ fun EditScreen(
         val toolsEnabled = ready != null
         val activeTool = selection.active.takeIf { toolsEnabled }
         // 뒤로 가기: 도구를 골랐으면 그 도구를 닫는다(결정 기록 '뒤로 가기로 도구 닫기'). 스포이드·자르기는 도구를 닫으면 함께 끝난다.
+        // 커버는 도구를 닫는 단계 없이 홈으로 간다(2026-10-23 사용자 요청: "도구에서 뒤로가기 시 … 홈으로 가게해주세요"). 자르기 새 창만 닫는다(X와 같다).
         // 늘 두고 켜고 끄기만 해서, 홈으로 가는 처리(StratumApp)보다 나중에·창과 유동화보다 먼저 등록된 순서를 지킨다.
         val density = LocalDensity.current
         // 자르기·회전을 시작할 때(그리고 돌릴 때) 보이는 사진([shown], 돌린 크기) 전체가 보이게 맞춘 보기.
@@ -464,7 +465,7 @@ fun EditScreen(
                 cropStartView = null
             }
         }
-        BackHandler(enabled = activeTool != null, onBack = selection::close)
+        BackHandler(enabled = activeTool != null && (widthClass != WidthClass.Compact || cropMode), onBack = selection::close)
         // 커버 화면에서 연 조정·레이어는 뒤로 가기로 닫는다(도구보다 먼저, 결정 기록 '커버 화면 개편' Q2 A: 아래 시트는 뒤로 가기로 닫히는 것이 보통).
         // 메인 화면 패널은 뒤로 가기로 닫지 않는다(사용자 결정). 자르기 중에는 패널을 숨기므로 보지 않는다.
         val coverPanel = floating.panel.takeIf { widthClass == WidthClass.Compact && !cropMode }
@@ -485,9 +486,12 @@ fun EditScreen(
         // (Scaffold 안에 두면 다시 만들어질 때 창보다 나중에 등록돼 창보다 먼저 받는다)
         // 레이어·조정 패널은 뒤로 가기로 닫지 않는다(사용자 결정: 상단 바 버튼으로만 닫음)
         BackHandler(enabled = floating.flyout != null, onBack = floating::closeFlyout)
-        // 커버 화면 더보기 줄이 떠 있으면 뒤로 가기는 그것부터 닫는다(고르는 메뉴라 가장 먼저)
-        val moreShown = coverMoreOpen && widthClass == WidthClass.Compact && !cropMode
-        BackHandler(enabled = moreShown) { coverMoreOpen = false }
+        // 커버 화면 더보기 줄: 더보기 칸으로 연 것, 그리고 도구를 고르지 않았을 때는 늘 보인다(안내 글 막대 대신, 2026-10-23 사용자 요청:
+        // "늘 고른 도구를 이동 도구가 아닌 더보기 도구로 변경해주세요"). 조정을 켜면 조정 막대가 먼저다.
+        val coverMoreDefault = widthClass == WidthClass.Compact && !cropMode && activeTool == null && coverPanel != MainPanel.ADJUST
+        val moreShown = coverMoreDefault || (coverMoreOpen && widthClass == WidthClass.Compact && !cropMode)
+        // 잠깐 연 더보기 줄이 떠 있으면 뒤로 가기는 그것부터 닫는다(고르는 메뉴라 가장 먼저). 도구가 없어 늘 보이는 줄은 닫지 않고 홈으로 간다.
+        BackHandler(enabled = moreShown && !coverMoreDefault) { coverMoreOpen = false }
         // 커버 화면 한 줄 막대(더보기 줄도 같은 자리)의 높이. 막대는 캔버스 영역 맨 아래에 이만큼 비워 둔 자리에 있다.
         val coverBarHeight = coverRowHeight()
         // 도구·하위 도구·배치가 바뀌거나, 자르기·유동화를 시작하거나, 다른 크기의 문서를 보면 옵션 창을 닫는다(칸이 바뀌거나 사라진다)
@@ -685,9 +689,6 @@ fun EditScreen(
             coverAdjust && adjustControls != null && coverBar.expandedFor(barContent) == CURVE_BAR_KEY -> CoverOverlay.CURVE
             else -> null
         }
-        // 도구를 고르지 않아 막대가 안내 글뿐이면 레이어 시트가 막대 자리까지 덮는다(사용자 요청, 2026-10-22).
-        // 도구를 골랐거나 더보기 줄이 떠 있으면 막대 위에 뜬다(막대를 그대로 쓴다).
-        val sheetCoversBar = coverOverlay == CoverOverlay.LAYERS && activeTool == null && !moreShown
         // 겹친 것이 캔버스를 가린 높이(커버를 가로로 돌렸으면 오른쪽 폭). 겹친 것의 크기는 막대 끝부터 재므로 막대 크기를 뺀다.
         // 캔버스 높이까지 펼쳐도(레이어 시트) 알림 막대·크기 원이 들어갈 자리는 남긴다.
         val coverSheetInset = if (coverOverlay != null) {
@@ -1019,11 +1020,12 @@ fun EditScreen(
                     Shortcut.Confirm -> if (crop != null && crop.canApply && ready?.busy != true) crop.onApply()
                     Shortcut.Pan -> Unit
                     // 하나씩 닫는다: 하위 도구 메뉴 → 띠의 옵션 창 → 자르기(취소) → 고른 도구. 편집 화면을 나가지는 않는다.
+                    // 커버는 도구를 내려놓지 않는다(뒤로 가기와 같다, 2026-10-23).
                     Shortcut.Cancel -> when {
                         subToolMenu.isOpen -> subToolMenu.close()
                         floating.flyout != null -> floating.closeFlyout()
                         crop != null -> crop.onCancel()
-                        selection.active != null -> selection.close()
+                        selection.active != null && widthClass != WidthClass.Compact -> selection.close()
                         else -> handled = false
                     }
                 }
@@ -1131,7 +1133,7 @@ fun EditScreen(
                 } else {
                     // 아래는 늘 한 줄 막대 + 탭 줄이고 캔버스는 그 위만 쓴다(결정 기록 '커버 화면 개편'). 그래서 도구를 바꾸거나 닫아도 사진 크기·자리가 그대로다.
                     // 막대는 캔버스 영역 맨 아래에 비워 둔 자리([coverBarHeight])에 그리고, 더보기를 열면 그 자리가 더보기 줄이 된다.
-                    // 잠깐 뜨는 것(레이어 시트, 곡선 편집기)만 캔버스 아래쪽 위에 겹쳐 뜬다. 막대가 안내 글뿐이면 레이어 시트가 막대 자리까지 덮는다.
+                    // 잠깐 뜨는 것(레이어 시트, 곡선 편집기)만 캔버스 아래쪽 위에 겹쳐 뜬다. 도구를 고르지 않았으면 막대 자리는 더보기 줄이다(2026-10-23).
                     // 커버를 가로로 돌렸으면(사용자 피드백 12차 3: "커버화면 배치가 돌아간형태") 같은 막대·더보기 줄·탭 줄이 캔버스 오른쪽에 세로로 서고
                     // (막대 자리는 캔버스 영역 오른쪽 끝), 레이어 시트·곡선 편집기는 캔버스 오른쪽(막대 왼쪽)에 붙는 패널이다.
                     val coverFloating: @Composable BoxScope.(WindowInsets) -> Unit = {
@@ -1156,34 +1158,15 @@ fun EditScreen(
                                     }
                                 )
                             } else {
-                                // 조정을 켜면 같은 막대가 조정 칩이 되고 ✕는 조정을 끈다(화면 테스트는 그때 막대를 조정 칸으로 본다)
-                                val onClose = if (coverAdjust) floating::closePanel else activeTool?.let { { selection.close() } }
-                                val closeDescription = if (coverAdjust) {
-                                    stringResource(R.string.floating_panel_close, stringResource(R.string.tool_adjust))
-                                } else {
-                                    stringResource(R.string.bar_close_tool)
-                                }
+                                // 조정을 켜면 같은 막대가 조정 칩이 된다(화면 테스트는 그때 막대를 조정 칸으로 본다). 막대에 ✕는 없다(2026-10-23 사용자 요청:
+                                // "도구에서 나가는 x 버튼 없애주세요"). 조정은 상단 바 조정 버튼·도구 탭·뒤로 가기로 끈다.
                                 Box(if (coverAdjust) Modifier.testTag(EditScreenTags.ADJUST_PANEL) else Modifier) {
+                                    // 칩이 없는 도구는 도구 이름을 흐린 글자로 보인다
+                                    val empty = activeTool?.let { stringResource(it.shortLabel) }
                                     if (coverLandscape) {
-                                        CoverToolColumn(
-                                            items = coverBarItems,
-                                            state = coverBar,
-                                            content = barContent,
-                                            onClose = onClose,
-                                            closeDescription = closeDescription,
-                                            // 도구가 없으면 안내 글(탭 줄은 오른쪽)
-                                            empty = activeTool?.let { stringResource(it.shortLabel) } ?: stringResource(R.string.bar_hint_choose_tool_side)
-                                        )
+                                        CoverToolColumn(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
                                     } else {
-                                        CoverToolBar(
-                                            items = coverBarItems,
-                                            state = coverBar,
-                                            content = barContent,
-                                            onClose = onClose,
-                                            closeDescription = closeDescription,
-                                            // 도구가 없으면 안내 글, 칩이 없는 도구는 도구 이름
-                                            empty = activeTool?.let { stringResource(it.shortLabel) } ?: stringResource(R.string.bar_hint_choose_tool)
-                                        )
+                                        CoverToolBar(items = coverBarItems, state = coverBar, content = barContent, empty = empty)
                                     }
                                 }
                             }
@@ -1193,16 +1176,15 @@ fun EditScreen(
                         if (coverLandscape) {
                             // 겹친 것의 폭은 이 영역 오른쪽 끝(막대 오른쪽 끝)부터 잰다. 캔버스를 가린 폭은 거기서 막대 폭을 뺀 것이다.
                             when (coverOverlay) {
-                                // 레이어 패널은 캔버스 높이까지 쓴다. 막대가 안내 글뿐이면 막대 자리까지 덮는다(시트와 같은 규칙).
+                                // 레이어 패널은 캔버스 높이까지 쓰고 막대 왼쪽에 붙는다
                                 CoverOverlay.LAYERS -> layerControls?.let { controls ->
                                     CoverLayerPanel(
                                         controls,
                                         onClose = floating::closePanel,
-                                        extra = if (sheetCoversBar) coverBarHeight else 0.dp,
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
                                             .onSizeChanged { coverSheetPx = it.width }
-                                            .padding(end = if (sheetCoversBar) 0.dp else coverBarHeight)
+                                            .padding(end = coverBarHeight)
                                     )
                                 }
                                 CoverOverlay.CURVE -> adjustControls?.let {
@@ -1218,15 +1200,14 @@ fun EditScreen(
                             // 겹친 것의 높이는 이 영역 아래 끝(막대 아래 끝)부터 잰다. 캔버스를 가린 높이는 거기서 막대 높이를 뺀 것이다.
                             val sheetModifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { coverSheetPx = it.height }
                             when (coverOverlay) {
-                                // 레이어 시트는 캔버스 높이까지 펼칠 수 있다(Q2 A). 막대가 안내 글뿐이면 막대 자리까지 덮는다(사용자 요청, 2026-10-22).
+                                // 레이어 시트는 캔버스 높이까지 펼칠 수 있고(Q2 A) 막대(도구가 없으면 더보기 줄) 위에 뜬다
                                 CoverOverlay.LAYERS -> layerControls?.let { controls ->
                                     BoxWithConstraints(Modifier.fillMaxSize()) {
                                         CoverLayerSheet(
                                             controls,
                                             onClose = floating::closePanel,
                                             maxHeight = (maxHeight - coverBarHeight).coerceAtLeast(0.dp),
-                                            extra = if (sheetCoversBar) coverBarHeight else 0.dp,
-                                            modifier = sheetModifier.padding(bottom = if (sheetCoversBar) 0.dp else coverBarHeight)
+                                            modifier = sheetModifier.padding(bottom = coverBarHeight)
                                         )
                                     }
                                 }
@@ -1241,7 +1222,8 @@ fun EditScreen(
                             enabled = toolsEnabled,
                             onChoose = chooseSubTool,
                             moreOpen = moreShown,
-                            onMore = { coverMoreOpen = !coverMoreOpen },
+                            // 도구가 없어 늘 보이는 더보기 줄은 더보기 칸으로 닫지 않는다
+                            onMore = { if (!coverMoreDefault) coverMoreOpen = !coverMoreOpen },
                             // 도구 탭을 누르면 더보기 줄을 닫고, 조정을 보던 중이면 끈다(조정은 고른 도구와 같은 막대를 쓴다, 결정 기록 '커버 화면 개편').
                             // 조정을 끈 것이면 알려, 탭이 이미 고른 도구를 내려놓지 않고 그 막대를 보이게 한다.
                             onTabTap = {

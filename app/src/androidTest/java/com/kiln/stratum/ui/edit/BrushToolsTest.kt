@@ -116,11 +116,10 @@ class BrushToolsTest {
     fun compactBrush_showsTheBar_andChangesTheSettings() {
         show(411, 800)
         composeRule.chooseCoverTool(EditTool.Brush)
-        // 한 줄 막대(결정 기록 '커버 화면 개편'): 색 버튼들, 크기·경도·불투명도 칩, 오른쪽 끝 ✕. 넘치는 칩은 옆으로 밀어 본다.
+        // 한 줄 막대(결정 기록 '커버 화면 개편'): 색 버튼들, 크기·경도·불투명도 칩(도구를 닫는 ✕는 없다, 2026-10-23). 넘치는 칩은 옆으로 밀어 본다.
         composeRule.onNodeWithTag(EditScreenTags.bar("colors")).assertIsDisplayed()
         val lefts = composeRule.barChipLefts(listOf("colors", "size", "hardness", "opacity"))
         assertTrue("$lefts should go right", lefts.zipWithNext().all { (a, b) -> a < b })
-        composeRule.onNodeWithTag(EditScreenTags.BAR_CLOSE).assertIsDisplayed()
 
         // 전경색·배경색과 바꾸기 버튼이 막대에 바로 있다(사용자 피드백 7차, 맞바꾸는 것은 ViewModel이 한다)
         composeRule.onNodeWithTag(EditScreenTags.colorSlot(ColorSlot.FOREGROUND)).assertIsDisplayed()

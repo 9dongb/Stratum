@@ -99,20 +99,20 @@ class CoverLandscapeTest {
 
     private fun dp(tag: String) = with(composeRule.onNodeWithTag(tag).fetchSemanticsNode().layoutInfo.density) { 1.dp.toPx() }
 
-    /** 탭 줄은 오른쪽 끝 세로, 막대는 그 왼쪽 세로, 캔버스는 막대 왼쪽이다 */
+    /** 탭 줄은 오른쪽 끝 세로, 막대 자리(도구가 없어 더보기 줄, 2026-10-23)는 그 왼쪽 세로, 캔버스는 막대 왼쪽이다 */
     private fun assertRotatedCoverLayout() {
         val tabs = bounds(EditScreenTags.TOOL_TAB_ROW)
-        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
+        val bar = bounds(EditScreenTags.COVER_MORE_TOOLS)
         val canvas = bounds(EditScreenTags.CANVAS)
         assertTrue("tabs $tabs should be a tall column", tabs.height > tabs.width * 2)
         assertTrue("bar $bar should be a tall column", bar.height > bar.width * 2)
         assertTrue("bar $bar should be left of the tabs $tabs", bar.right <= tabs.left + 1f)
         assertTrue("canvas $canvas should be left of the bar $bar", canvas.right <= bar.left + 1f)
-        // 탭은 위부터 자르기·선택·브러시·리터칭·유동화, 맨 아래 더보기
+        // 탭은 위부터 이동·선택·흐림·리터칭·유동화, 맨 아래 더보기
         val tops = EditTool.coverTabs.map { bounds(EditScreenTags.tabTool(it)).top } + bounds(EditScreenTags.MORE_TAB).top
         assertEquals(tops.sorted(), tops)
         // 막대와 탭 줄 폭은 가로 막대의 높이(56dp)와 같다
-        val dp = dp(EditScreenTags.COVER_TOOL_BAR)
+        val dp = dp(EditScreenTags.COVER_MORE_TOOLS)
         assertEquals(56 * dp, bar.width, 2 * dp)
     }
 
@@ -142,7 +142,6 @@ class CoverLandscapeTest {
             composeRule.onNodeWithTag(EditScreenTags.bar(it)).fetchSemanticsNode().positionInWindow.y
         }
         assertEquals(cells.sorted(), cells)
-        composeRule.onNodeWithTag(EditScreenTags.BAR_CLOSE).assertIsDisplayed()
         // 펼친 화면의 띠는 없다
         composeRule.onNodeWithTag(EditScreenTags.OPTION_STRIP).assertDoesNotExist()
     }
@@ -174,42 +173,43 @@ class CoverLandscapeTest {
     }
 
     @Test
-    fun more_opensAVerticalColumnInTheBarsPlace() {
+    fun more_isAVerticalColumnInTheBarsPlace_shownWhileNoToolIsChosen() {
         show()
-        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
-        composeRule.onNodeWithTag(EditScreenTags.MORE_TAB).performClick()
-
+        // 도구를 고르지 않았으면 막대 자리(탭 줄 바로 왼쪽)에 더보기 줄이 세로로 늘 보인다(2026-10-23 사용자 요청)
         val more = bounds(EditScreenTags.COVER_MORE_TOOLS)
-        assertEquals(bar.left, more.left, 2f)
-        assertEquals(bar.right, more.right, 2f)
+        val tabs = bounds(EditScreenTags.TOOL_TAB_ROW)
+        assertEquals(tabs.left, more.right, 2f)
         assertTrue("$more should be a tall column", more.height > more.width * 2)
         val tops = EditTool.coverMoreTools.map { bounds(EditScreenTags.moreTool(it)).top }
         assertEquals(tops.sorted(), tops)
         composeRule.onNodeWithTag(EditScreenTags.moreTool(EditTool.Eraser)).performClick()
         composeRule.onNodeWithTag(EditScreenTags.COVER_MORE_TOOLS).assertDoesNotExist()
+        // 도구를 고르면 같은 자리가 그 도구의 막대다
+        val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
+        assertEquals(more.left, bar.left, 2f)
+        assertEquals(more.right, bar.right, 2f)
         composeRule.onNodeWithTag(EditScreenTags.bar("size")).assertIsDisplayed()
     }
 
     @Test
-    fun layers_openAPanelLeftOfTheBar_andWithoutAToolItCoversTheBar() {
+    fun layers_openAPanelLeftOfTheBarOrTheMoreRow() {
         show()
         val canvas = bounds(EditScreenTags.CANVAS)
-        val tabs = bounds(EditScreenTags.TOOL_TAB_ROW)
         composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
         composeRule.waitForIdle()
 
-        // 도구를 고르지 않아 막대가 안내 글뿐이면 막대 자리까지 덮는다(탭 줄 바로 왼쪽까지)
-        val covering = bounds(EditScreenTags.COVER_LAYER_SHEET)
-        assertEquals(tabs.left, covering.right, 2f)
-        assertTrue("$covering should overlap the canvas $canvas", covering.left < canvas.right)
+        // 도구가 없으면 막대 자리는 더보기 줄이고(2026-10-23), 레이어 패널은 그 왼쪽에 붙는다(전에는 안내 글 막대까지 덮었다)
+        val besideMore = bounds(EditScreenTags.COVER_LAYER_SHEET)
+        assertEquals(bounds(EditScreenTags.COVER_MORE_TOOLS).left, besideMore.right, 2f)
+        assertTrue("$besideMore should overlap the canvas $canvas", besideMore.left < canvas.right)
 
-        // 도구를 고르면 막대 왼쪽에 붙고, 왼쪽 끝 자리는 그대로다
+        // 도구를 골라도 막대 왼쪽에 붙고, 자리는 그대로다
         composeRule.chooseCoverTool(EditTool.Brush)
         composeRule.waitForIdle()
         val beside = bounds(EditScreenTags.COVER_LAYER_SHEET)
         val bar = bounds(EditScreenTags.COVER_TOOL_BAR)
         assertEquals(bar.left, beside.right, 2f)
-        assertEquals(covering.left, beside.left, 2f)
+        assertEquals(besideMore.left, beside.left, 2f)
         // 캔버스 크기는 그대로다
         assertEquals(canvas, bounds(EditScreenTags.CANVAS))
     }
