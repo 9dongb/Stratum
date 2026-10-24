@@ -23,6 +23,8 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.effect.EffectFill
+import com.kiln.stratum.engine.preview.MAX_PREVIEW_EDGE
+import com.kiln.stratum.engine.preview.MAX_PREVIEW_LEVEL
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
@@ -68,6 +70,18 @@ class LayerPreviewCache {
     /** 마스크 객체마다의 작은 그림(레이어 패널, 결정 기록 '피부 보정'의 1d) */
     private val maskThumbnails = IdentityHashMap<Selection, Bitmap>()
 
+    /**
+     * 캔버스 밖까지 담은 그림 한 장: 문서의 [box](단계 격자에 맞춤)를 [level] 단계로 그린 [bitmap]. [forLevel]은 이것을 그려 넣는 축소본의 단계다.
+     * 캔버스 밖 픽셀이 있는 레이어를 이동 도구로 끄는 동안 쓴다(결정 기록 '캔버스 밖 픽셀').
+     */
+    private class Wide(val forLevel: Int, val level: Int, val box: PixelRect, val bitmap: Bitmap)
+
+    /** 래스터 객체마다의 캔버스 밖까지 담은 축소본(끄는 동안) */
+    private val wides = IdentityHashMap<Raster, Wide>()
+
+    /** 마스크 객체마다의 캔버스 밖까지 담은 알파 그림(끄는 동안, 그 레이어 [wides]와 같은 자리·단계) */
+    private val wideMasks = IdentityHashMap<Selection, Wide>()
+
     /** 레이어 축소본을 새로 그린 횟수. 속성만 바뀌면 늘지 않는 것을 테스트로 확인한다. */
     var layerRenders = 0
         private set
@@ -86,7 +100,8 @@ class LayerPreviewCache {
      *
      * [strokes]가 있으면 끄는 동안의(또는 기록을 기다리는) 브러시 획을 그 레이어 축소본 위에 차례로 그려 합친다(기록 전 미리 보기).
      * 레이어의 픽셀이 조금만 바뀌었으면(브러시 획을 기록한 뒤) 앞 축소본에서 바뀐 타일 자리만 다시 그린다.
-     * [shift]가 있으면 이동 도구로 끄는 중인 그 레이어의 축소본을 옮겨 합친다(타일을 다시 그리지 않음, 캔버스 밖은 보이지 않음).
+     * [shift]가 있으면 이동 도구로 끄는 중인 그 레이어의 축소본을 옮겨 합친다(타일을 다시 그리지 않음). 캔버스 밖 픽셀이 있는 레이어는
+     * 캔버스 밖까지 담은 축소본을 한 번 그려 옮겨, 캔버스 밖에서 들어오는 픽셀도 보인다(결정 기록 '캔버스 밖 픽셀').
      */
     fun render(
         document: Document,
@@ -163,10 +178,17 @@ class LayerPreviewCache {
                 when (step) {
                     is CompositeStep.Draw -> {
                         val bitmap = previews[step] ?: continue
-                        val shader = shaderOf(bitmap, offset)
+                        // 캔버스 밖 픽셀이 있는 레이어를 옮기는 중이면 캔버스 밖까지 담은 축소본을 옮겨 그린다(없거나 그리지 못하면 캔버스 안 축소본)
+                        val wide = if (offset != null && moving != null) wideOf(step.raster, size, level) else null
+                        val wideMatrix = wide?.let { wideMatrix(it, checkNotNull(moving), level) }
+                        val shader = if (wide != null && wideMatrix != null) wideShaderOf(wide.bitmap, wideMatrix, wide.level != level) else shaderOf(bitmap, offset)
                         // 보정을 건 레이어에 마스크 알파를 곱해(결정 기록 '피부 보정'의 1c) 불투명도·혼합 모드로 아래에 얹는다
                         val adjusted = AdjustShader.of(step.adjustments)?.wrap(shader) ?: shader
                         val mask = step.mask?.let { selection ->
+                            if (wide != null && wideMatrix != null) {
+                                val alpha = wideMaskOf(selection, wide) ?: return null.also { below?.recycle() }
+                                return@let movedMaskShaderOf(selection, alpha, wideMatrix, size, width, height, movedMasks) ?: return null.also { below?.recycle() }
+                            }
                             val alpha = liveMask(selection, region, maskStrokes) ?: return null.also { below?.recycle() }
                             maskShaderOf(selection, alpha, offset, size, movedMasks) ?: return null.also { below?.recycle() }
                         }
@@ -214,18 +236,77 @@ class LayerPreviewCache {
      * 빈 자리를 채워 다시 그린 그림은 [made]에 넣는다(다 그린 뒤 돌려줌). 그리지 못하면 null.
      */
     private fun maskShaderOf(selection: Selection, alpha: Bitmap, offset: Matrix?, size: PixelSize, made: MutableList<Bitmap>): Shader? {
-        if (offset == null || !MaskTransform.revealsOutside(selection, size)) return shaderOf(alpha, offset)
+        if (offset == null) return shaderOf(alpha, null)
+        return movedMaskShaderOf(selection, alpha, offset, size, alpha.width, alpha.height, made)
+    }
+
+    /**
+     * 알파 그림 [alpha]를 [matrix]로 옮겨 [width]×[height] 축소본 자리에 그리는 셰이더. 바깥이 보이는 마스크면 옮긴 그림 밖을 다 보이게 채우고
+     * (다시 그린 그림은 [made]에 넣음), 아니면 밖은 가림이다(DECAL). 그리지 못하면 null.
+     */
+    private fun movedMaskShaderOf(selection: Selection, alpha: Bitmap, matrix: Matrix, size: PixelSize, width: Int, height: Int, made: MutableList<Bitmap>): Shader? {
+        if (!MaskTransform.revealsOutside(selection, size)) {
+            return BitmapShader(alpha, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply { setLocalMatrix(matrix) }
+        }
         val picture = Picture()
-        picture.beginRecording(alpha.width, alpha.height).apply {
+        picture.beginRecording(width, height).apply {
             // 다 보이는 바탕에 옮긴 마스크를 그대로 놓는다(마스크 밖은 바탕이 남음)
             drawColor(Color.BLACK)
-            drawBitmap(alpha, offset, Paint().apply { blendMode = BlendMode.SRC })
+            drawBitmap(alpha, matrix, Paint().apply { blendMode = BlendMode.SRC })
         }
         picture.endRecording()
-        val moved = PreviewRenderer.drawOnGpu(picture, alpha.width, alpha.height) ?: return null
+        val moved = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null
         made += moved
         return BitmapShader(moved, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
     }
+
+    /**
+     * 캔버스 밖 픽셀이 있는 [raster]를 옮기는 동안 그릴, 캔버스 밖까지 담은 축소본(래스터마다 기억). 캔버스 밖 픽셀이 없으면 null(캔버스 안 축소본을 옮김).
+     * 레이어 내용과 캔버스를 담는 사각형을 캔버스에서 한 캔버스 크기 안까지만 담고, 긴 변이 [MAX_PREVIEW_EDGE]를 넘지 않게 [level]보다 거칠게 그릴 수 있다.
+     * 그리지 못하면 null이다.
+     */
+    private fun wideOf(raster: Raster, size: PixelSize, level: Int): Wide? {
+        if (!raster.hasOffCanvas(TileGrid(size.width, size.height))) return null
+        wides[raster]?.takeIf { it.forLevel == level }?.let { return it }
+        val canvas = PixelRect.of(size)
+        val reach = PixelRect(-size.width, -size.height, 2 * size.width, 2 * size.height)
+        val box = (raster.extent()?.union(canvas) ?: canvas).intersect(reach) ?: canvas
+        var wideLevel = level
+        while (wideLevel < MAX_PREVIEW_LEVEL && maxOf(box.width, box.height) shr wideLevel > MAX_PREVIEW_EDGE) wideLevel++
+        val region = PreviewLevels.area(wideLevel, box)
+        val bitmap = PreviewRenderer.renderLayerSpace(Document.create(size.width, size.height, "", raster), region) ?: return null
+        return Wide(level, wideLevel, region.rect, bitmap).also { wides[raster] = it }
+    }
+
+    /** [mask]를 [wide]와 같은 자리·단계로 그린 알파 그림(마스크마다 기억). 그리지 못하면 null. */
+    private fun wideMaskOf(mask: Selection, wide: Wide): Bitmap? {
+        wideMasks[mask]?.takeIf { it.level == wide.level && it.box == wide.box }?.let { return it.bitmap }
+        val scale = 1f / (1 shl wide.level)
+        val bitmap = try {
+            SelectionPreview.maskAt(mask, wide.box.left.toFloat(), wide.box.top.toFloat(), scale, wide.bitmap.width, wide.bitmap.height)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
+        wideMasks[mask] = Wide(wide.forLevel, wide.level, wide.box, bitmap)
+        return bitmap
+    }
+
+    /** [wide] 그림 픽셀을 [level] 단계 축소본 자리로 옮기는 행렬(끄는 만큼 [moving] 옮김) */
+    private fun wideMatrix(wide: Wide, moving: LayerShift, level: Int): Matrix {
+        val unit = (1 shl level).toFloat()
+        val scale = (1 shl wide.level) / unit
+        return Matrix().apply {
+            setScale(scale, scale)
+            postTranslate((wide.box.left + moving.dx) / unit, (wide.box.top + moving.dy) / unit)
+        }
+    }
+
+    /** 캔버스 밖까지 담은 축소본 [bitmap]을 [matrix]로 옮겨 그리는 셰이더(밖은 투명). 더 거친 단계면 쌍선형으로 늘인다. */
+    private fun wideShaderOf(bitmap: Bitmap, matrix: Matrix, scaled: Boolean): Shader =
+        BitmapShader(bitmap, Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+            setLocalMatrix(matrix)
+            if (scaled) filterMode = BitmapShader.FILTER_MODE_LINEAR
+        }
 
     /** 축소본 [bitmap]을 그리는 셰이더. [offset]이 있으면 그만큼 옮기고 밖은 투명이다(DECAL), 없으면 가장자리를 늘인다. */
     private fun shaderOf(bitmap: Bitmap, offset: Matrix?): Shader =
@@ -413,6 +494,9 @@ class LayerPreviewCache {
         val wantedMasks = IdentityHashMap<Selection, Unit>()
         for (layer in document.layers) layer.mask?.let { wantedMasks[it] = Unit }
         masks.entries.removeIf { (mask, entry) -> mask !in wantedMasks || entry.level != level }
+        // 캔버스 밖까지 담은 그림은 그 래스터·마스크가 남아 있는 동안만 둔다(화면이 아직 그리고 있을 수 있어 recycle하지 않는다)
+        wides.entries.removeIf { (raster, wide) -> raster !in wanted || wide.forLevel != level }
+        wideMasks.entries.removeIf { (mask, wide) -> mask !in wantedMasks || wide.forLevel != level }
     }
 
     /**

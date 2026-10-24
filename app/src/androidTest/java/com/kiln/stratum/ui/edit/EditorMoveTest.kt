@@ -15,6 +15,7 @@ import com.kiln.stratum.engine.platform.PaintStroke
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.text.TextStyle
 import com.kiln.stratum.engine.transform.Orientation
+import com.kiln.stratum.project.ProjectLibrary
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -177,6 +178,68 @@ class EditorMoveTest {
         onMain { assertEquals(withText.layers.last().id, viewModel.rasterizeAsk.value) }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         assertEquals(withText.revision, (viewModel.state.value as EditorState.Ready).revision)
+    }
+
+    @Test
+    fun aDotPushedPastTheEdge_staysThere_showsWhileDraggedBack_andSurvivesReopening() {
+        // 이동 도구(사용자 피드백 13차 1 "포토샵처럼"): 캔버스 밖으로 민 픽셀은 남고, 다시 끌어 들이면 끄는 동안에도 보인다(결정 기록 '캔버스 밖 픽셀')
+        val before = openWithDot()
+        onMain {
+            viewModel.moveActions.begin(200f, 200f)
+            viewModel.moveActions.move(-60f, 200f)
+            viewModel.moveActions.end()
+        }
+        // 점(가운데 -60, 지름 100: -110..-10)은 캔버스 밖이다
+        val out = awaitReady { it.revision > before.revision }
+        assertEquals(0, Color.alpha(shown(out).getPixel(5, 200)))
+
+        // 다시 오른쪽으로 끄는 동안(기록 전) 캔버스 밖에서 점이 들어와 보인다
+        onMain {
+            viewModel.moveActions.begin(500f, 400f)
+            viewModel.moveActions.move(760f, 400f)
+        }
+        val dragging = awaitReady { Color.alpha(shown(it).getPixel(200, 200)) == 255 }
+        assertEquals(out.revision, dragging.revision)
+        onMain { viewModel.moveActions.end() }
+        val back = awaitReady { it.revision > out.revision }
+        assertEquals(Color.BLACK, shown(back).getPixel(200, 200))
+
+        // 실행 취소하면 다시 캔버스 밖이고, 다시 실행하면 돌아온다
+        onMain { viewModel.undo() }
+        val undone = awaitReady { it.revision > back.revision }
+        assertEquals(0, Color.alpha(shown(undone).getPixel(200, 200)))
+        onMain { viewModel.redo() }
+        val redone = awaitReady { it.revision > undone.revision }
+        assertEquals(Color.BLACK, shown(redone).getPixel(200, 200))
+
+        // 캔버스 밖에 둔 채 저장하고 다시 열어도 남아, 끌어 들이면 돌아온다
+        onMain { viewModel.undo() }
+        awaitReady { it.revision > redone.revision }
+        val id = checkNotNull(viewModel.projectId)
+        onMain { viewModel.close() }
+        runBlocking { ProjectLibrary.get(context).awaitSaves() }
+        val reopened = EditorViewModel(context)
+        try {
+            onMain {
+                reopened.onCanvasSize(1000, 800)
+                reopened.openProject(id)
+            }
+            val opened = awaitReady(reopened) { it.documentSize == SIZE }
+            assertEquals(0, Color.alpha(shown(opened).getPixel(200, 200)))
+            onMain {
+                reopened.moveActions.begin(500f, 400f)
+                reopened.moveActions.move(760f, 400f)
+                reopened.moveActions.end()
+            }
+            val restored = awaitReady(reopened) { it.revision > opened.revision }
+            assertEquals(Color.BLACK, shown(restored).getPixel(200, 200))
+        } finally {
+            deleteTestProjects(context, reopened)
+        }
+    }
+
+    private fun awaitReady(model: EditorViewModel, predicate: (EditorState.Ready) -> Boolean): EditorState.Ready = runBlocking {
+        withTimeout(30_000) { model.state.first { it is EditorState.Ready && !it.busy && predicate(it) } as EditorState.Ready }
     }
 
     private companion object {
