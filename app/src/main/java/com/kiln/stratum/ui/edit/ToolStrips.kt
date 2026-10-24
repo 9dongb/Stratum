@@ -606,6 +606,7 @@ internal fun faceSliderLabel(slider: FaceSlider): Int = when (slider) {
     FaceSlider.MOUTH_HEIGHT -> R.string.liquify_face_mouth_height
     FaceSlider.FOREHEAD -> R.string.liquify_face_forehead
     FaceSlider.MIDFACE -> R.string.liquify_face_midface
+    FaceSlider.CHEEKBONES -> R.string.liquify_face_cheekbones
     FaceSlider.CHIN_HEIGHT -> R.string.liquify_face_chin_height
     FaceSlider.JAWLINE -> R.string.liquify_face_jawline
     FaceSlider.FACE_WIDTH -> R.string.liquify_face_width

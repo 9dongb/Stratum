@@ -379,6 +379,7 @@
     <string name="liquify_face_mouth_height">Mouth height</string>
     <string name="liquify_face_forehead">Forehead</string>
     <string name="liquify_face_midface">Midface</string>
+    <string name="liquify_face_cheekbones">Cheekbones</string>
     <string name="liquify_face_chin_height">Chin height</string>
     <string name="liquify_face_jawline">Jawline</string>
     <string name="liquify_face_head_size">Head size</string>

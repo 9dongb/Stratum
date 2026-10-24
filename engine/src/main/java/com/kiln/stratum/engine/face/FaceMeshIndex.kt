@@ -12,7 +12,7 @@ object FaceMeshIndex {
     /** 왼쪽 눈동자 가운데(473~477의 첫째) */
     const val LEFT_IRIS = 473
 
-    /** 오른쪽·왼쪽 눈동자 둘레 4점(가운데 다음 넷, 뒷트임이 눈동자를 움직이지 않게 반지름을 잰다) */
+    /** 오른쪽·왼쪽 눈동자 둘레 4점(가운데 다음 넷, 피부 보정이 눈동자를 뺀다) */
     val RIGHT_IRIS_RING = intArrayOf(469, 470, 471, 472)
     val LEFT_IRIS_RING = intArrayOf(474, 475, 476, 477)
 
@@ -39,9 +39,19 @@ object FaceMeshIndex {
     /** 코끝 */
     const val NOSE_TIP = 1
 
+    /** 코끝 바로 위(콧등 줄과 코끝 사이) */
+    const val NOSE_ABOVE_TIP = 4
+
+    /** 코밑(콧기둥 아래 끝, 윗입술과 만나는 곳) */
+    const val NOSE_BOTTOM = 2
+
     /** 콧방울(오른쪽·왼쪽) */
     const val NOSE_WING_RIGHT = 129
     const val NOSE_WING_LEFT = 358
+
+    /** 콧방울 한 덩어리를 둘러싼 점(오른쪽·왼쪽 10점, 콧볼이 이 덩어리를 함께 옮긴다, 시험 사진에서 확인 2026-10-24) */
+    val RIGHT_NOSE_LOBE = intArrayOf(129, 49, 48, 64, 219, 235, 98, 115, 220, 237)
+    val LEFT_NOSE_LOBE = intArrayOf(358, 279, 278, 294, 439, 455, 327, 344, 440, 457)
 
     /** 입꼬리(오른쪽·왼쪽) */
     const val MOUTH_RIGHT = 61
@@ -67,6 +77,16 @@ object FaceMeshIndex {
 
     /** 콧등 가운데 줄(위 → 아래) */
     val NOSE_BRIDGE = intArrayOf(168, 6, 197, 195, 5)
+
+    /** 콧등 아래 끝(코끝 위, [NOSE_BRIDGE]의 마지막) */
+    const val NOSE_BRIDGE_BOTTOM = 5
+
+    /** 콧등에서 코끝까지 코 가운데 줄(위 → 아래, 콧등 너비가 이 줄 둘레를 좁히고 넓힌다) */
+    val NOSE_LINE = intArrayOf(168, 6, 197, 195, 5, 4, 1)
+
+    /** 광대 높이를 어림하는 윤곽 점(귀 앞, 오른쪽·왼쪽 둘씩): 얼굴 인식 점에는 광대뼈 자리가 따로 없다 */
+    val RIGHT_CHEEK = intArrayOf(234, 93)
+    val LEFT_CHEEK = intArrayOf(454, 323)
 
     /** 얼굴 윤곽(이마 위 끝부터 사진에서 시계 방향으로 한 바퀴) */
     val FACE_OVAL = intArrayOf(

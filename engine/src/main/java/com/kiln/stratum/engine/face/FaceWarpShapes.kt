@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 
 /*
  * 얼굴 보정의 변형 틀(결정 기록 '얼굴 인식 보정', 계획 '부위 계산'): 얼굴 좌표계, 감쇠, 부위 타원과 그 안의 늘이기·옮기기·돌리기,
- * 얼굴 윤곽과 그 띠를 옮기는 변형. 슬라이더 값을 이것들로 바꾸는 것은 [FaceWarps]다. 모두 순수 계산이다.
+ * 얼굴 윤곽과 그 띠를 옮기는 변형, 곧은 줄 둘레 늘이기. 슬라이더 값을 이것들로 바꾸는 것은 [FaceWarps]다. 모두 순수 계산이다.
  *
  * 변형은 거꾸로 찾는 변위다([MeshWarp]): 결과 자리 p가 원래 그림의 어디를 읽을지. 부위를 앞으로 d만큼 옮기려면 p에서 −d를 읽는다.
  * 옮기기·돌리기의 무게는 결과 자리에서 한 번 구한 뒤, 그만큼 되돌린 자리에서 한 번 더 구해(한 번 다듬기) 옮긴 부위가 감쇠 가운데에 오게 한다.
@@ -95,14 +95,6 @@ internal fun eased(x: Float): Float {
 
 /** [eased]의 굽는 구간(양 끝 각각) */
 internal const val EASE = 0.15f
-
-/**
- * 움직이지 않는 원(뒷트임의 눈동자): 가운데 ([centerX], [centerY])에서 [inner] 안은 무게 0, [outer]에서 1이고 사이는 [eased]로 거의 고르게 오른다.
- * 결과 자리에서 잰다. [outer]를 옮긴 부위(눈꼬리)가 결과에서 보이는 거리로 두면, 눈동자 끝부터 옮긴 눈꼬리까지 고르게 늘어난다.
- */
-internal class KeepOut(private val centerX: Float, private val centerY: Float, private val inner: Float, private val outer: Float) {
-    fun weight(x: Float, y: Float): Float = eased((hypot(x - centerX, y - centerY) - inner) / (outer - inner))
-}
 
 /**
  * 부위 타원: 가운데 ([centerX], [centerY]), 가로축 ([axisX], [axisY])(단위 벡터) 쪽으로 뒤 [inner]·앞 [outer], 그에 수직인 쪽([perpX], [perpY], 턱 쪽이 +)으로
@@ -196,33 +188,57 @@ internal class EllipseScale(
     }
 }
 
+/** [EllipseMove]의 감쇠(타원 거리 t → 무게) */
+internal enum class MoveFalloff {
+    /** 부위 전체를 같이 옮긴다(눈 간격·코 높이·입 높이): [FaceWarps.PLATEAU]까지 다 걸리고 [smooth]로 줄어든다([falloff]) */
+    PART {
+        override fun weight(t: Float): Float = falloff(t)
+    },
+
+    /** 한 점 둘레만 옮긴다(미소·뒷트임·턱선·광대): 가운데에서만 다 걸린다([peak]) */
+    POINT {
+        override fun weight(t: Float): Float = peak(t)
+    },
+
+    /**
+     * 한 덩어리를 모양 그대로 옮긴다(콧볼): [FaceWarps.WING_PLATEAU]까지 다 걸리고 경계까지 거의 고르게([eased]) 줄어든다.
+     * 덩어리 둘레가 고르게 늘거나 줄어, 한곳이 몰려 구겨지지 않는다.
+     */
+    LUMP {
+        override fun weight(t: Float): Float {
+            val plateau = FaceWarps.WING_PLATEAU
+            return when {
+                t <= plateau -> 1f
+                t >= 1f -> 0f
+                else -> 1f - eased((t - plateau) / (1f - plateau))
+            }
+        }
+    };
+
+    abstract fun weight(t: Float): Float
+}
+
 /**
- * 타원 안을 앞으로 ([moveX], [moveY])(문서 픽셀)만큼 옮기는 변형(눈 간격·코 높이·입 높이는 [plateau] 감쇠로 부위 전체를, 미소·뒷트임·턱선·콧볼은
- * 점 감쇠 [peak]로 한 점 둘레를). 결과 자리에서 무게를 구한 뒤 그만큼 되돌린 자리에서 다시 구해 읽을 곳을 정한다.
- * [keep]이 있으면 그 원(뒷트임의 눈동자)은 움직이지 않는다: 원의 무게는 결과 자리에서 한 번 구해 두 번 모두 곱한다.
+ * 타원 안을 앞으로 ([moveX], [moveY])(문서 픽셀)만큼 옮기는 변형. 감쇠는 [falloff]다(부위 전체, 한 점 둘레, 한 덩어리).
+ * 결과 자리에서 무게를 구한 뒤 그만큼 되돌린 자리에서 다시 구해 읽을 곳을 정한다.
  */
 internal class EllipseMove(
     shape: PartEllipse,
     private val moveX: Float,
     private val moveY: Float,
-    private val plateau: Boolean,
-    private val keep: KeepOut? = null
+    private val falloff: MoveFalloff
 ) : EllipseWarp(shape) {
 
-    private fun weight(x: Float, y: Float): Float {
-        val t = shape.distance(x, y)
-        return if (plateau) falloff(t) else peak(t)
-    }
+    private fun weight(x: Float, y: Float): Float = falloff.weight(shape.distance(x, y))
 
     override fun displacement(x: Float, y: Float, out: FloatArray) {
-        val held = keep?.weight(x, y) ?: 1f
-        val first = weight(x, y) * held
+        val first = weight(x, y)
         if (first == 0f) {
             out[0] = 0f
             out[1] = 0f
             return
         }
-        val w = weight(x - moveX * first, y - moveY * first) * held
+        val w = weight(x - moveX * first, y - moveY * first)
         out[0] = -moveX * w
         out[1] = -moveY * w
     }
@@ -442,9 +458,9 @@ internal class FaceWidthWarp private constructor(
 }
 
 /**
- * 얼굴 세로 띠를 얼굴 세로축 쪽으로만 [move]U 옮기는 변형(이마·턱 높이·중안부, + = 턱 쪽). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth])이고
- * [holdV]까지 1로 머문 뒤 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 → 그 아래로 머무는 구간이 없고,
- * 중안부는 눈 밑 → 윗입술, 턱 끝까지 머묾 → 그 아래). 가로로는 가운데 줄에서 반폭 [half]U 안은 1,
+ * 얼굴 세로 띠를 얼굴 세로축 쪽으로만 [move]U 옮기는 변형(이마·턱 높이·중안부, + = 턱 쪽). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth],
+ * [easeRise]면 거의 고르게 [eased])이고 [holdV]까지 1로 머문 뒤 그 너머 [endV]까지 0으로 내려간다(이마는 눈썹 → 이마 끝 → 그 위, 턱은 아랫입술 → 턱 끝 →
+ * 그 아래로 머무는 구간이 없고, 중안부는 눈 밑 → 콧등 아래, 턱 끝까지 머묾 → 그 아래). 가로로는 가운데 줄에서 반폭 [half]U 안은 1,
  * 그 바깥 [FaceWidthWarp.BAND]U 띠에서 0이다. 가로로는 옮기지 않아 세로선은 곧게 남는다.
  * 반폭은 높이마다 같다: 윤곽을 따라 반폭이 급하게 바뀌면(턱 끝) 그 옆이 세로로 크게 눌려 접힐 수 있다.
  */
@@ -457,6 +473,7 @@ internal class BandMove private constructor(
     private val holdV: Float,
     private val endV: Float,
     private val half: Float,
+    private val easeRise: Boolean,
     box: FloatArray
 ) : MeshWarp {
 
@@ -470,7 +487,7 @@ internal class BandMove private constructor(
         val rise = (v - zeroV) / (fullV - zeroV)
         val vertical = when {
             rise <= 0f -> return 0f
-            rise < 1f -> smooth(rise)
+            rise < 1f -> if (easeRise) eased(rise) else smooth(rise)
             holdV != fullV && (v - fullV) / (holdV - fullV) < 1f -> 1f
             else -> {
                 val fall = (v - holdV) / (endV - holdV)
@@ -504,6 +521,7 @@ internal class BandMove private constructor(
     companion object {
         /**
          * 반폭은 [half]U이되 [minHalf]U보다 좁게 잡지 않는다. [holdV]를 주면 [fullV]부터 거기까지 1로 머문다(같으면 머무는 구간 없음).
+         * [easeRise]면 오르는 구간을 거의 고르게 늘이거나 줄인다(중안부: 그 안의 코가 한곳에 몰려 구겨지지 않게).
          * 상자는 무게가 0이 아닌 곳을 덮는다(가운데 줄은 높이에 따라 곧게 기운다).
          */
         fun of(
@@ -515,7 +533,8 @@ internal class BandMove private constructor(
             endV: Float,
             half: Float,
             minHalf: Float,
-            holdV: Float = fullV
+            holdV: Float = fullV,
+            easeRise: Boolean = false
         ): BandMove {
             val width = max(minHalf, half)
             val reach = width + FaceWidthWarp.BAND
@@ -530,7 +549,69 @@ internal class BandMove private constructor(
                     i++
                 }
             }
-            return BandMove(frame, outline, move, zeroV, fullV, holdV, endV, width, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
+            return BandMove(frame, outline, move, zeroV, fullV, holdV, endV, width, easeRise, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
+        }
+    }
+}
+
+/**
+ * 얼굴의 곧은 줄(u = [lineTop] + [lineSlope]·v, 콧등 너비는 콧등~코끝 가운데 줄) 둘레를 얼굴 가로축 쪽으로만 [scale]배 하는 변형
+ * (2026-10-24 사용자 요청: "콧등과 코끝까지 이어진채 조절"). 높이(v)로는 [zeroV]에서 0, [fullV]에서 1([smooth]), [holdV]까지 1, [endV]에서 0([smooth])이고,
+ * 가로로는 줄에서 [half]U까지 [falloff]([FaceWarps.PLATEAU]까지 다 걸림)다. 세로로는 옮기지 않는다.
+ * 거꾸로 찾는 변위 = (1/배율 − 1)·무게·(줄에서 가로 거리). 늘이면 줄 쪽을, 줄이면 바깥쪽을 읽는다.
+ */
+internal class BandScale private constructor(
+    private val frame: FaceFrame,
+    private val lineTop: Float,
+    private val lineSlope: Float,
+    scale: Float,
+    private val zeroV: Float,
+    private val fullV: Float,
+    private val holdV: Float,
+    private val endV: Float,
+    private val half: Float,
+    box: FloatArray
+) : MeshWarp {
+    private val gain = 1f / scale - 1f
+
+    override val left: Float = box[0]
+    override val top: Float = box[1]
+    override val right: Float = box[2]
+    override val bottom: Float = box[3]
+
+    override fun displacement(x: Float, y: Float, out: FloatArray) {
+        out[0] = 0f
+        out[1] = 0f
+        val v = frame.v(x, y)
+        val vertical = when {
+            v <= zeroV || v >= endV -> return
+            v < fullV -> smooth((v - zeroV) / (fullV - zeroV))
+            v <= holdV -> 1f
+            else -> 1f - smooth((v - holdV) / (endV - holdV))
+        }
+        val du = frame.u(x, y) - (lineTop + lineSlope * v)
+        val t = abs(du) / half
+        if (t >= 1f) return
+        val shift = gain * vertical * falloff(t) * du * frame.unit
+        out[0] = shift * frame.acrossX
+        out[1] = shift * frame.acrossY
+    }
+
+    companion object {
+        /** 높이 [zeroV] < [fullV] ≤ [holdV] < [endV]여야 한다. 상자는 무게가 0이 아닌 곳(줄 둘레 [half]U, [zeroV]~[endV])을 덮는다. */
+        fun of(frame: FaceFrame, lineTop: Float, lineSlope: Float, scale: Float, zeroV: Float, fullV: Float, holdV: Float, endV: Float, half: Float): BandScale {
+            val xs = FloatArray(4)
+            val ys = FloatArray(4)
+            var i = 0
+            for (v in floatArrayOf(zeroV, endV)) {
+                for (side in floatArrayOf(-1f, 1f)) {
+                    val u = lineTop + lineSlope * v + side * half
+                    xs[i] = frame.x(u, v)
+                    ys[i] = frame.y(u, v)
+                    i++
+                }
+            }
+            return BandScale(frame, lineTop, lineSlope, scale, zeroV, fullV, holdV, endV, half, floatArrayOf(xs.min(), ys.min(), xs.max(), ys.max()))
         }
     }
 }

@@ -34,17 +34,30 @@ class LiquifyRecord(
     }
 
     /**
-     * 지금 계산식으로 그리면 레이어 픽셀(기록할 때의 계산식으로 그림)과 모양이 다른지. 다시 연 유동화는 바꾼 것이 없어도 이때 적용할 수 있다
-     * (미리 보기가 지금 계산식이라). 판 2에서 뒷트임이 바뀌었다.
+     * 지금 계산식으로 그리면 레이어 픽셀(기록할 때의 계산식으로 그림)과 모양이 다른지: 기록의 판과 지금 판에서 계산식이 다른 슬라이더([changedSince])에
+     * 0이 아닌 값이 있다. 다시 연 유동화는 바꾼 것이 없어도 이때 적용할 수 있다(미리 보기가 지금 계산식이라).
      */
     val drawsDifferently: Boolean
-        get() = version < 2 && faceValues.any { it[FaceSlider.EYE_TAIL] != 0f }
+        get() {
+            val changed = changedSince(version)
+            return changed.isNotEmpty() && faceValues.any { values -> changed.any { values[it] != 0f } }
+        }
 
     companion object {
         /**
-         * 지금 얼굴 보정 계산식의 판. 2(2026-10-23): 뒷트임이 눈동자를 움직이지 않게 바뀌었다. 판 1 기록도 열고, 다시 적용하면 판 2 계산식으로 그린다.
+         * 지금 얼굴 보정 계산식의 판. 판 1·2 기록도 열고, 다시 적용하면 지금 계산식으로 그린다(앞 판 앱은 더 새 판의 기록을 버리고 결과 그림으로 연다).
+         * - 2(2026-10-23): 뒷트임이 눈동자를 움직이지 않게 바뀌었다. 콧등 너비·콧볼·중안부·머리 크기가 생겼다.
+         * - 3(2026-10-24): 뒷트임을 판 1 계산식으로 되돌리고, 콧볼(콧방울 덩어리)·콧등 너비(코끝까지)·중안부(콧등 아래부터 모양 그대로)를 바꿨다. 광대가 생겼다.
          */
-        const val VERSION = 2
+        const val VERSION = 3
+
+        /** 판 [version]의 계산식과 지금 계산식이 다른 슬라이더 */
+        fun changedSince(version: Int): Set<FaceSlider> = when {
+            version >= VERSION -> emptySet()
+            version == 2 -> setOf(FaceSlider.EYE_TAIL, FaceSlider.NOSE_WINGS, FaceSlider.RIDGE_WIDTH, FaceSlider.MIDFACE)
+            // 판 1: 뒷트임은 지금과 같고, 콧볼·콧등 너비·중안부는 판 2에서 생겨 판 1 기록에는 값이 없다
+            else -> emptySet()
+        }
     }
 }
 

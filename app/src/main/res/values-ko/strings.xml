@@ -377,6 +377,7 @@
     <string name="liquify_face_mouth_height">입 높이</string>
     <string name="liquify_face_forehead">이마</string>
     <string name="liquify_face_midface">중안부</string>
+    <string name="liquify_face_cheekbones">광대</string>
     <string name="liquify_face_chin_height">턱 높이</string>
     <string name="liquify_face_jawline">턱선</string>
     <string name="liquify_face_head_size">머리 크기</string>
