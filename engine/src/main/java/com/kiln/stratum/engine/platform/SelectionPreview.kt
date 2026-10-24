@@ -1,6 +1,7 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BlendMode
 import android.graphics.Paint
 import android.graphics.Picture
 import com.kiln.stratum.engine.preview.PreviewLevels
@@ -49,14 +50,16 @@ object SelectionPreview {
                 canvas.drawRect(visible.left.toFloat(), visible.top.toFloat(), visible.right.toFloat(), visible.bottom.toFloat(), paint)
                 canvas.restore()
             }
+            // 캔버스 밖을 칠했으면 타일은 그 위를 덮어쓴다(캔버스 밖 타일이 가린 곳은 가림)
+            val tilePaint = if (revealOutside == null) paint else Paint(paint).apply { blendMode = BlendMode.SRC }
             for ((key, tile) in selection.tiles) {
                 val rect = PixelRect(key.column * TILE_SIZE, key.row * TILE_SIZE, (key.column + 1) * TILE_SIZE, (key.row + 1) * TILE_SIZE)
                 if (rect.intersect(visible) == null) continue
                 val bitmap = MaskTiles.bitmapOf(tile, temporary)
                 if (bitmap == null) {
-                    canvas.drawRect(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat(), paint)
+                    canvas.drawRect(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat(), tilePaint)
                 } else {
-                    canvas.drawBitmap(bitmap, rect.left.toFloat(), rect.top.toFloat(), paint)
+                    canvas.drawBitmap(bitmap, rect.left.toFloat(), rect.top.toFloat(), tilePaint)
                 }
             }
             picture.endRecording()

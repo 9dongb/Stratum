@@ -14,6 +14,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileAt
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
 import com.kiln.stratum.engine.platform.AddTextLayer
@@ -50,8 +51,9 @@ class TranslateLayerTest {
         return Raster.EMPTY.withTiles(tiles)
     }
 
+    /** 문서 좌표([x], [y], 캔버스 밖 포함)의 픽셀. 타일이 없거나 담지 않은 곳은 투명 */
     private fun pixel(raster: Raster, x: Int, y: Int): Int =
-        raster.tiles[TileKey(x / TILE_SIZE, y / TILE_SIZE)]?.pixelAt(x % TILE_SIZE, y % TILE_SIZE) ?: 0
+        raster.tiles[tileAt(x, y)]?.pixelAt(Math.floorMod(x, TILE_SIZE), Math.floorMod(y, TILE_SIZE)) ?: 0
 
     private fun Document.raster(index: Int = 0): Raster = (layers[index].content as RasterContent).raster
 
@@ -64,22 +66,36 @@ class TranslateLayerTest {
         for ((x, y) in listOf(130 to 0, 300 to 100, 599 to 259, 131 to 259, 400 to 7)) {
             assertEquals("($x, $y)", colorAt(x - 130, y + 40), pixel(moved, x, y))
         }
-        // 옮겨서 빈 자리(왼쪽 130px, 아래 40px)는 투명이다. 오른쪽·위로 나간 픽셀은 잘렸다.
+        // 옮겨서 빈 자리(왼쪽 130px, 아래 40px)는 투명이다
         assertEquals(0, pixel(moved, 129, 10))
         assertEquals(0, pixel(moved, 300, 260))
         assertEquals(0, pixel(moved, 0, 299))
+        // 오른쪽·위로 나간 픽셀은 캔버스 밖에 남는다(포토샵처럼, 결정 기록 '캔버스 밖 픽셀')
+        assertEquals(colorAt(599, 100), pixel(moved, 729, 60))
+        assertEquals(colorAt(10, 20), pixel(moved, 140, -20))
+        assertEquals(colorAt(599, 0), pixel(moved, 729, -40))
+        // 되돌리면 원래 그림 그대로다
+        val back = TranslateLayer(LayerId(0), -130, 40).applyTo(document.copy(layers = listOf(document.layers[0].copy(content = RasterContent(moved))))).raster()
+        for (y in 0 until 300 step 7) {
+            for (x in 0 until 600 step 11) assertEquals("($x, $y)", colorAt(x, y), pixel(back, x, y))
+        }
+        assertTrue(back.tiles.keys.all { TileGrid(600, 300).contains(it) })
     }
 
     @Test
-    fun movingByWholeTiles_reusesTheTiles_andMovingAllTheWayOutLeavesItEmpty() {
+    fun movingByWholeTiles_reusesTheTiles_andWhatGoesAllTheWayOutComesBack() {
         val document = Document.create(1024, 512, "Background", photo(1024, 512))
 
         val moved = TranslateLayer(LayerId(0), 256, 0).applyTo(document).raster()
 
         assertSame(document.raster().tiles[TileKey(0, 0)], moved.tiles[TileKey(1, 0)])
         assertTrue(moved.tiles[TileKey(0, 0)] == null)
-        // 캔버스 밖으로 다 나가면 빈 레이어다
-        assertTrue(TranslateLayer(LayerId(0), 1024, 0).applyTo(document).raster().tiles.isEmpty())
+        // 캔버스 밖으로 다 나가도 타일은 캔버스 밖 자리에 그대로 남고, 되들이면 같은 타일로 돌아온다
+        val out = TranslateLayer(LayerId(0), 1024, 0).applyTo(document)
+        assertTrue(out.raster().tiles.keys.none { TileGrid(1024, 512).contains(it) })
+        val back = TranslateLayer(LayerId(0), -1024, 0).applyTo(out).raster()
+        for ((key, tile) in document.raster().tiles) assertSame("$key", tile, back.tiles[key])
+        assertEquals(document.raster().tiles.keys, back.tiles.keys)
     }
 
     @Test

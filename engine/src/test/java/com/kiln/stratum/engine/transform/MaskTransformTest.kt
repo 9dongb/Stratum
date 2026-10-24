@@ -80,14 +80,15 @@ class MaskTransformTest {
     }
 
     @Test
-    fun revealAllMask_turnsWithoutNewTiles_andEmptyStaysEmpty() {
+    fun revealAllMask_turnsToFullTilesOnTheCanvas_andEmptyStaysEmpty() {
         val all = Selection.all(size)
 
         val turned = MaskTransform.transform(all, TransformPlan.orient(size, Orientation.ROTATE_COUNTERCLOCKWISE), composer)
 
-        assertEquals(0, composer.composedMaskCount)
-        assertTrue(turned.tiles.values.all { it === MaskTile.FULL })
-        assertEquals(TileGrid(300, 600).keys().toSet(), turned.tiles.keys)
+        // 캔버스 자리는 모두 다 보이는 타일이다. 끝 자리의 다 보이는 타일이 캔버스 밖까지 담은 몫은 캔버스 밖 자리로 같이 돈다.
+        val grid = TileGrid(300, 600)
+        assertTrue(grid.keys().all { turned.tiles[it] === MaskTile.FULL })
+        assertAlphas(turned, PixelSize(300, 600)) { _, _ -> 255 }
         assertSame(Selection.EMPTY, MaskTransform.transform(Selection.EMPTY, TransformPlan.orient(size, Orientation.FLIP_VERTICAL), composer))
     }
 
@@ -106,13 +107,30 @@ class MaskTransformTest {
     }
 
     @Test
-    fun movedRevealAllMask_revealsTheEmptiedStrip_withoutNewTiles() {
+    fun movedRevealAllMask_revealsTheEmptiedStrip_andKeepsWhatLeavesTheCanvas() {
         // 다 보이는 마스크는 옮겨서 빈 자리도 보인다(포토샵 마스크의 기본색처럼, 결정 기록 '피부 보정'의 1i)
         val moved = MaskTransform.transform(Selection.all(size), TransformPlan.translate(size, 37, -20), composer)
 
-        assertEquals(0, composer.composedMaskCount)
-        assertEquals(TileGrid(size.width, size.height).keys().toSet(), moved.tiles.keys)
-        assertTrue(moved.tiles.values.all { it === MaskTile.FULL })
+        val grid = TileGrid(size.width, size.height)
+        assertTrue(grid.keys().all { moved.tiles[it] === MaskTile.FULL })
+        // 캔버스 밖으로 나간 몫(다 보이는 타일들이 담은 0..768 × 0..512를 옮긴 37..805 × -20..492)도 남고, 그 밖은 가린다(꽉 찬 타일이라 부풀지 않음)
+        assertEquals(255, moved.alphaAt(100, -1))
+        assertEquals(0, moved.alphaAt(100, -21))
+        assertEquals(255, moved.alphaAt(804, 100))
+        assertEquals(0, moved.alphaAt(805, 100))
+    }
+
+    @Test
+    fun adjustmentMask_revealsEverythingOutside_withoutTilesPastTheCanvas() {
+        // 조정 레이어의 바깥이 보이는 마스크는 끝이 없다: 캔버스 밖 빈 자리도 보이고, 다 보이는 캔버스 밖 타일은 두지 않는다
+        val moved = MaskTransform.transform(withHole, TransformPlan.translate(holeSize, 300, 0), composer, infinite = true)
+
+        assertTrue(moved.tiles.keys.all { TileGrid(holeSize.width, holeSize.height).contains(it) })
+        assertAlphas(moved, holeSize) { x, y -> if (inHole(x - 300, y)) 0 else 255 }
+        // 구멍을 캔버스 밖으로 밀면 그 자리 타일은 남는다(가린 곳이 있다)
+        val pushed = MaskTransform.transform(withHole, TransformPlan.translate(holeSize, -400, 0), composer, infinite = true)
+        assertEquals(0, pushed.alphaAt(-100, 300))
+        assertEquals(255, pushed.alphaAt(-200, 300))
     }
 
     @Test
@@ -123,8 +141,9 @@ class MaskTransformTest {
     }
 
     @Test
-    fun turnedLayerMask_revealsAroundThePlacedContent() {
-        // 레이어 돌리기처럼 내용 사각형만 돌려 놓으면, 그 밖(빈 자리)은 바깥이 보이는 마스크라 보인다
+    fun turnedLayerMask_turnsTheWholeMask_andRevealsTheEmptiedPlaces() {
+        // 레이어 돌리기: 내용 사각형을 돌려 놓는 옮김을 마스크 전체에 건다(사각형 밖 마스크도 같이 돈다, 결정 기록 '캔버스 밖 픽셀').
+        // 원본 값이 오지 않는 캔버스 안 빈 자리는 바깥이 보이는 마스크라 보인다. 그래서 가린 곳은 돌아간 구멍뿐이다.
         val rect = PixelRect(200, 200, 700, 450)
         val plan = TransformPlan.place(holeSize, rect, Orientation.ROTATE_CLOCKWISE, holeSize, 300, 150)
 
@@ -132,12 +151,8 @@ class MaskTransformTest {
 
         val placed = PixelRect(300, 150, 300 + rect.height, 150 + rect.width)
         assertAlphas(turned, holeSize) { x, y ->
-            if (x in placed.left until placed.right && y in placed.top until placed.bottom) {
-                val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x - placed.left, y - placed.top, placed.width, placed.height)
-                withHole.alphaAt(from.x + rect.left, from.y + rect.top)
-            } else {
-                255
-            }
+            val from = Orientation.ROTATE_CLOCKWISE.inverse.mapPixel(x - placed.left, y - placed.top, placed.width, placed.height)
+            if (inHole(from.x + rect.left, from.y + rect.top)) 0 else 255
         }
     }
 
@@ -150,5 +165,20 @@ class MaskTransformTest {
         assertEquals(0, composer.composedMaskCount)
         assertSame(mask.tiles[TileKey(0, 1)], moved.tiles[TileKey(1, 1)])
         assertEquals(null, moved.tiles[TileKey(0, 0)])
+    }
+
+    @Test
+    fun revealAllMask_staysRevealing_andAHiddenSpotComesBack_afterMovingOutAndBack() {
+        // 다 보이는 마스크의 안쪽 타일 (2, 1)에 가린 점(문서 562..572 × 356..366)이 있다. 캔버스 밖으로 밀었다가 되들인다(이동 도구, 결정 기록 '캔버스 밖 픽셀').
+        val spot = MaskTile.of(ByteArray(TILE_PIXEL_COUNT) { i -> if (i % TILE_SIZE in 50..60 && i / TILE_SIZE in 100..110) 0 else -1 })
+        var mask = Selection.of(Selection.all(holeSize).tiles + (TileKey(2, 1) to spot))
+
+        for ((dx, dy) in listOf(600 to 0, 0 to 300, -600 to -300)) {
+            mask = MaskTransform.transform(mask, TransformPlan.translate(holeSize, dx, dy), composer)
+            // 옮긴 뒤에도 가장자리가 다 보여, 다음에 옮겨 생기는 빈 자리도 보인다
+            assertTrue("($dx, $dy)", MaskTransform.revealsOutside(mask, holeSize))
+        }
+
+        assertAlphas(mask, holeSize) { x, y -> if (x in 562..572 && y in 356..366) 0 else 255 }
     }
 }

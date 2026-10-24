@@ -18,6 +18,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileAt
 import com.kiln.stratum.engine.raster.contentBounds
 import com.kiln.stratum.engine.selection.SelectionMode
 import com.kiln.stratum.engine.selection.SelectionShape
@@ -59,8 +60,9 @@ class OrientLayerTest {
         return Raster.EMPTY.withTiles(tiles)
     }
 
+    /** 문서 좌표([x], [y], 캔버스 밖 포함)의 픽셀. 타일이 없거나 담지 않은 곳은 투명 */
     private fun pixel(raster: Raster, x: Int, y: Int): Int =
-        raster.tiles[TileKey(x / TILE_SIZE, y / TILE_SIZE)]?.pixelAt(x % TILE_SIZE, y % TILE_SIZE) ?: 0
+        raster.tiles[tileAt(x, y)]?.pixelAt(Math.floorMod(x, TILE_SIZE), Math.floorMod(y, TILE_SIZE)) ?: 0
 
     private fun Document.raster(index: Int = 0): Raster = (layers[index].content as RasterContent).raster
 
@@ -120,18 +122,27 @@ class OrientLayerTest {
     }
 
     @Test
-    fun aFullPhotoOnAWideCanvas_isCutTopAndBottom_andTheSidesBecomeClear() {
+    fun aFullPhotoOnAWideCanvas_keepsTopAndBottomPastTheCanvas_andTurningBackBringsItBack() {
         val document = Document.create(600, 300, "Background", blockRaster(600, 300, PixelRect(0, 0, 600, 300)))
 
         val turned = OrientLayer(LayerId(0), Orientation.ROTATE_CLOCKWISE).applyTo(document).raster()
 
-        // 300×600이 되어 (150, -150)에 놓인다: 가운데 300×300만 남고 양옆은 투명하다
-        assertEquals(PixelRect(150, 0, 450, 300), turned.contentBounds())
+        // 300×600이 되어 (150, -150)에 놓인다: 위아래 150px은 캔버스 밖으로 나가 남고(결정 기록 '캔버스 밖 픽셀') 양옆은 투명하다
+        assertEquals(PixelRect(150, -150, 450, 450), turned.contentBounds())
         // 캔버스 (tx, ty) ← 내용 (ty + 150, 299 - (tx - 150))
         assertEquals(colorAt(150, 299), pixel(turned, 150, 0))
         assertEquals(colorAt(449, 0), pixel(turned, 449, 299))
+        assertEquals(colorAt(0, 299), pixel(turned, 150, -150))
+        assertEquals(colorAt(599, 0), pixel(turned, 449, 449))
         assertEquals(0, pixel(turned, 149, 10))
         assertEquals(0, pixel(turned, 450, 10))
+
+        // 다시 왼쪽으로 돌리면 원래 사진 그대로다(잘린 곳이 없다)
+        val back = OrientLayer(LayerId(0), Orientation.ROTATE_COUNTERCLOCKWISE).applyTo(document.copy(layers = listOf(document.layers[0].copy(content = RasterContent(turned))))).raster()
+        assertEquals(PixelRect(0, 0, 600, 300), back.contentBounds())
+        for (y in 0 until 300 step 7) {
+            for (x in 0 until 600 step 11) assertEquals("($x, $y)", colorAt(x, y), pixel(back, x, y))
+        }
     }
 
     @Test

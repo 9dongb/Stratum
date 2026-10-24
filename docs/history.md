@@ -14,6 +14,27 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 사용자 피드백 13차 6e단계: 이동 도구·레이어 돌리기·이미지 회전이 캔버스 밖 픽셀을 남김(포토샵처럼)
+
+- 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)" 질문에서 "포토샵처럼 (추천)"을 골랐다.
+- 의도: 말하지 않음
+- 커밋:
+  - "이동 도구·레이어 돌리기·이미지 회전이 캔버스 밖으로 나간 픽셀을 남기게(포토샵처럼)"
+- 바꾼 것
+  - `TransformPlan`: 평면 전체의 옮김(원본 사각형·방향·놓을 자리)이고, 자르기만 `discardsOutside`로 남길 사각형 밖을 버린다. 대상 타일은 레이어마다 원본 타일이 담은 사각형을 옮겨 정한다(`targets(sources, extra)`, 내림 나눗셈, 캔버스 안 자리는 캔버스 안쪽보다 작지 않음). `place`는 캔버스 밖 사각형도 받고(`clip`이면 사각형 밖을 버림), `mapPixel`·`mapRect`·`sourceRect`를 더했다.
+  - `RasterTransform`: 새 계획대로 옮기고, 256 배수 옮기기·같은 크기 한 가지 색은 타일을 그대로 쓴다. 캔버스 밖으로 담은 곳이 다 투명한 대상 타일은 잘라 낸다(`trimmed`, 옮겨서 빈 곳이 캔버스 밖에 쌓이지 않게). 게인맵: 돌리기·뒤집기만 하면 캔버스 밖 게인맵도 같이 돌리고, 옮기기는 남기고, 레이어 돌리기는 내용 사각형 안을 캔버스 밖까지 돌린다.
+  - `MaskTransform`: 마스크 타일(캔버스 밖도)을 같은 옮김으로 옮긴다. 타일이 없는 곳은 가림이고, 옮겨서 캔버스 자리 타일에 생긴 빈 곳(끝 자리는 캔버스 밖으로 담은 곳까지)만 바깥이 보이는 마스크면 채운다. 캔버스 밖 자리 마스크 타일은 꽉 찬 크기. 조정 레이어의 바깥이 보이는 마스크는 끝이 없다(`infinite`). 함께 쓰던 피부 마스크는 계속 함께 쓴다.
+  - 명령: `TranslateLayer`·`OrientLayer`(축은 캔버스 밖까지 포함한 내용 사각형 가운데)·`RotateImage`·`FlipImage`가 캔버스 밖을 남긴다. `CropImage`는 사각형이 캔버스 전체면 돌리기·뒤집기만(캔버스 밖 남김), 아니면 사각형 밖을 모두 버린다. 메모리 어림은 모든 타일과 경계에서 늘 수 있는 타일을 센다.
+  - 글자: `TextRenderer`가 글자 상자 전체를 그린다(캔버스 밖 글자도 타일에). 글자 넣기는 캔버스에 하나도 닿지 않으면 그대로 둔다.
+  - `SelectionPreview.maskAt`: 캔버스 밖을 보이게 칠한 뒤(조정 레이어) 타일이 덮어쓴다(캔버스 밖 타일이 가린 곳은 가림).
+  - 테스트: `TransformPlanTest`(모든 원본 픽셀을 꼭 한 번씩 옮김, 자르기는 밖을 버림, 대상 타일 크기), `RasterTransformTest`(밀었다 되돌리면 같고 캔버스 밖 타일이 남지 않음, 돌리면 캔버스 밖도 돌고 자르면 버림, 게인맵), `MaskTransformTest`(캔버스 밖으로 나간 몫이 남고 부풀지 않음, 조정 레이어 마스크, 여러 번 밀었다 되돌려도 가장자리가 다 보이고 가린 점이 돌아옴), 에뮬레이터 `TranslateLayerTest`·`OrientLayerTest`(캔버스 밖에 남고 되돌리면 그대로).
+- 정한 것(Claude 판단, 최종 보고에서 알림)
+  - 레이어 돌리기·뒤집기의 축은 캔버스 밖까지 포함한 레이어 내용의 가운데(포토샵의 레이어 경계).
+  - 마스크는 타일이 정한다(타일 없는 곳은 가림, 캔버스 밖도). 다 보이는 마스크로 옮겨서 생긴 캔버스 안 빈 곳만 바깥처럼 채운다(전과 같음). 그래서 저장·옮기기 뒤에도 마스크 값이 바뀌지 않는다.
+  - 옮겨서 캔버스 밖에 생긴 투명한 곳은 타일로 남기지 않는다(보이는 것은 같고 메모리·저장이 준다).
+  - 캔버스 밖 픽셀을 버리는 따로 된 기능은 만들지 않았다(자르면 버려진다).
+- 확인한 것: `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(엔진 JVM 543개). 에뮬레이터(접은 상태) `TranslateLayerTest` 5개, `OrientLayerTest` 7개, `TransformCommandsTest` 9개, `AddTextLayerTest` 7개, `LayerMaskTest` 10개, `AdjustmentLayerTest` 7개, `LayerGroupTest` 6개, `HdrTest` 18개, `HealSkinSpotsTest` 6개, `SkinColorTest` 4개, `InsertImageLayerTest` 5개, `SelectionCommandsTest` 16개, `ProjectFolderTest` 13개, `OffCanvasSurvivalTest` 7개, `MergeCommandsTest` 9개, `BlankCanvasTest` 4개, `ImageResizerTest` 9개, `SkinRetouchTest` 4개, 화면 흐름 `EditCropTest` 16개, `EditToolsTest` 16개, `EditorMoveTest` 5개, `EditorSkinTest` 17개, `EditorLayersTest` 11개, `TextEditTest` 8개 등 통과. 처음 돌릴 때 실패한 글자 창 시험(`TextEditTest` 하나)은 다시 돌리니 통과했다(이 변경과 상관없는 화면 시험).
+
 ## 2026-10-24 · 사용자 피드백 13차 6d단계: 병합·크기 변경이 캔버스 밖 픽셀도(레이어 공간 그리기)
 
 - 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)"

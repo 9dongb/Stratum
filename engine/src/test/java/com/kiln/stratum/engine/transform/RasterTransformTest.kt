@@ -16,6 +16,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileAt
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
 import org.junit.Assert.assertEquals
@@ -51,9 +52,12 @@ class RasterTransformTest {
 
     private fun Document.raster(index: Int = 0): Raster = (layers[index].content as RasterContent).raster
 
-    private fun Document.pixelAt(x: Int, y: Int): Int {
-        val tile = raster().tiles[TileKey(x / TILE_SIZE, y / TILE_SIZE)] ?: return 0
-        return tile.pixelAt(x % TILE_SIZE, y % TILE_SIZE)
+    private fun Document.pixelAt(x: Int, y: Int): Int = raster().pixelAt(x, y)
+
+    /** 문서 좌표([x], [y], 캔버스 밖 포함)의 픽셀. 타일이 없거나 담지 않은 곳은 투명 */
+    private fun Raster.pixelAt(x: Int, y: Int): Int {
+        val tile = tiles[tileAt(x, y)] ?: return 0
+        return tile.pixelAt(Math.floorMod(x, TILE_SIZE), Math.floorMod(y, TILE_SIZE))
     }
 
     /** [document]의 모든 픽셀이 [expected]와 같은지 본다. */
@@ -252,16 +256,55 @@ class RasterTransformTest {
     }
 
     @Test
-    fun translate_byWholeTiles_reusesTheTiles() {
+    fun translate_byWholeTiles_reusesTheTiles_evenPastTheCanvas() {
         val size = PixelSize(1024, 512)
         val source = photo(size)
 
         val raster = RasterTransform.transform(source.raster(), TransformPlan.translate(size, 256, 256), composer)
 
-        // 옮긴 자리마다 원본 타일 객체를 그대로 쓰고, 밖으로 나간 타일은 버리며, 빈 자리에는 타일이 없다
+        // 옮긴 자리마다 원본 타일 객체를 그대로 쓰고, 캔버스 밖으로 나간 타일도 남으며(결정 기록 '캔버스 밖 픽셀'), 빈 자리에는 타일이 없다
         assertEquals(0, composer.composedCount)
-        assertEquals(setOf(TileKey(1, 1), TileKey(2, 1), TileKey(3, 1)), raster.tiles.keys)
-        for (column in 1..3) assertSame(source.raster().tiles[TileKey(column - 1, 0)], raster.tiles[TileKey(column, 1)])
+        assertEquals(source.raster().tiles.keys.map { TileKey(it.column + 1, it.row + 1) }.toSet(), raster.tiles.keys)
+        for ((key, tile) in source.raster().tiles) assertSame(tile, raster.tiles[TileKey(key.column + 1, key.row + 1)])
+    }
+
+    @Test
+    fun translate_keepsWhatLeavesTheCanvas_andMovingBackBringsItAllBack() {
+        // 이동 도구(사용자 피드백 13차 1 "포토샵처럼"): 캔버스 밖으로 민 픽셀은 남고, 되들이면 원래대로다
+        val size = PixelSize(600, 300)
+        val source = photo(size)
+
+        val out = RasterTransform.transform(source.raster(), TransformPlan.translate(size, 130, -77), composer)
+        // 캔버스 밖 픽셀이 제자리에 있다(오른쪽 끝·위쪽)
+        assertEquals(colorAt(599, 100), out.pixelAt(729, 23))
+        assertEquals(colorAt(20, 50), out.pixelAt(150, -27))
+        assertEquals(colorAt(0, 0), out.pixelAt(130, -77))
+        assertEquals(0, out.pixelAt(129, -77))
+        val back = RasterTransform.transform(out, TransformPlan.translate(size, -130, 77), composer)
+
+        // 원래 그림 그대로이고, 캔버스 밖에 남는 타일 없이 캔버스 안쪽 크기 타일만 남는다(옮겨서 빈 투명한 곳은 버림)
+        val grid = TileGrid(size.width, size.height)
+        assertEquals(grid.keys().toSet(), back.tiles.keys)
+        for ((key, tile) in back.tiles) assertEquals("$key", grid.solidShape(key), PixelSize(tile.width, tile.height))
+        assertPixels(source.copy(layers = listOf(source.layers[0].copy(content = RasterContent(back))))) { x, y -> colorAt(x, y) }
+    }
+
+    @Test
+    fun orient_turnsPixelsPastTheCanvasToo_andCropDropsThem() {
+        val size = PixelSize(600, 300)
+        // 캔버스 왼쪽 밖(-256..0, 0..100)에 픽셀이 있는 레이어
+        val outside = Tile.of(IntArray(TILE_PIXEL_COUNT) { index -> colorAt(index % TILE_SIZE, index / TILE_SIZE) }, TILE_SIZE, 100)
+        val raster = photo(size).raster().let { Raster.EMPTY.withTiles(it.tiles + (TileKey(-1, 0) to outside)) }
+        val document = Document.create(size.width, size.height, "Background", raster)
+
+        val turned = RasterTransform.apply(document, TransformPlan.orient(size, Orientation.ROTATE_CLOCKWISE), composer).raster()
+
+        // 시계 방향 90°: 원본 (x, y) → (299 - y, x). 캔버스 밖 (-256 + i, j)는 (299 - j, -256 + i)로 간다(캔버스 위쪽 밖)
+        assertEquals(outside.pixelAt(10, 20), turned.pixelAt(299 - 20, -256 + 10))
+        assertEquals(colorAt(5, 7), turned.pixelAt(299 - 7, 5))
+        // 자르면 캔버스 밖 픽셀은 버린다
+        val cropped = RasterTransform.apply(document, TransformPlan.crop(size, PixelRect(0, 0, 600, 300)), composer).raster()
+        assertTrue(cropped.tiles.keys.all { TileGrid(600, 300).contains(it) })
     }
 
     @Test
@@ -291,6 +334,8 @@ class RasterTransformTest {
         assertEquals(gainmap.pixelAt(0, 10), moved.pixelAt(25, 0))
         assertEquals(gainmap.pixelAt(100, 100), moved.pixelAt(125, 90))
         assertEquals(0, moved.pixelAt(10, 50))
+        // 캔버스 밖으로 나간 게인맵도 남는다(결정 기록 '캔버스 밖 픽셀')
+        assertEquals(gainmap.pixelAt(100, 5), moved.raster.pixelAt(125, -5))
         // 비율로 줄여 0이면 그대로다
         assertSame(gainmap, RasterTransform.translateGainmap(gainmap, size, 1, 1, composer))
     }
