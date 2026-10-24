@@ -2,8 +2,10 @@ package com.kiln.stratum.engine.transform
 
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.selection.MaskTile
@@ -106,18 +108,118 @@ class MaskTransformTest {
         assertEquals(false, MaskTransform.revealsOutside(Selection.of(Selection.all(holeSize).tiles - TileKey(0, 2)), holeSize))
     }
 
+    /** 캔버스 [size]를 꼭 덮는 불투명한 사진 레이어(한 가지 색 타일, 끝 타일은 캔버스 안쪽 크기) */
+    private fun photo(size: PixelSize): Raster {
+        val grid = TileGrid(size.width, size.height)
+        return Raster.EMPTY.withTiles(grid.keys().associateWith { key -> grid.bounds(key).let { Tile.solid(0xFF808080.toInt(), it.width, it.height) } })
+    }
+
+    /** 픽셀 타일이 담은 크기(마스크를 쓰는 픽셀 레이어, [MaskTransform.MaskUsers]) */
+    private fun extents(raster: Raster): Map<TileKey, PixelSize> = raster.tiles.mapValues { (_, tile) -> PixelSize(tile.width, tile.height) }
+
+    /** 픽셀 레이어의 마스크 [mask]와 픽셀 [raster]를 [plan]대로 함께 옮긴다(이동 도구·이미지 회전과 같다) */
+    private fun movedWith(mask: Selection, raster: Raster, plan: TransformPlan): Pair<Selection, Raster> =
+        MaskTransform.transform(mask, plan, composer, users = MaskTransform.MaskUsers(extents(raster), adjustment = false)) to RasterTransform.transform(raster, plan, composer)
+
     @Test
-    fun movedRevealAllMask_revealsTheEmptiedStrip_andKeepsWhatLeavesTheCanvas() {
+    fun movedRevealAllMask_revealsTheEmptiedStrip_andCoversThePixelsThatLeaveTheCanvas() {
         // 다 보이는 마스크는 옮겨서 빈 자리도 보인다(포토샵 마스크의 기본색처럼, 결정 기록 '피부 보정'의 1i)
-        val moved = MaskTransform.transform(Selection.all(size), TransformPlan.translate(size, 37, -20), composer)
+        val (moved, pixels) = movedWith(Selection.all(size), photo(size), TransformPlan.translate(size, 37, -20))
 
         val grid = TileGrid(size.width, size.height)
         assertTrue(grid.keys().all { moved.tiles[it] === MaskTile.FULL })
-        // 캔버스 밖으로 나간 몫(다 보이는 타일들이 담은 0..768 × 0..512를 옮긴 37..805 × -20..492)도 남고, 그 밖은 가린다(꽉 찬 타일이라 부풀지 않음)
+        // 캔버스 밖으로 나간 픽셀(37..637 × -20..280)은 마스크도 따라가 보인다
         assertEquals(255, moved.alphaAt(100, -1))
-        assertEquals(0, moved.alphaAt(100, -21))
-        assertEquals(255, moved.alphaAt(804, 100))
-        assertEquals(0, moved.alphaAt(805, 100))
+        assertEquals(255, moved.alphaAt(100, -20))
+        assertEquals(255, moved.alphaAt(636, 100))
+        assertEquals(255, moved.alphaAt(636, -20))
+        // 캔버스 밖 마스크 타일은 픽셀이 있는 자리에만 둔다(픽셀이 없는 곳의 마스크는 보이는 것을 바꾸지 않는다)
+        assertTrue(moved.tiles.keys.filterNot { grid.contains(it) }.all { it in pixels.tiles })
+        assertEquals(0, moved.alphaAt(800, 100))
+    }
+
+    @Test
+    fun hiddenTile_staysHidden_afterMovingOffTheCanvasAndBack() {
+        // 다 보이는 마스크의 안쪽 타일 (1, 1)을 다 가렸다(타일 없음). 캔버스 밖으로 밀었다가 되들여도 가린 채다(검토에서 고침:
+        // 캔버스 밖에서 그 자리를 모르는 곳으로 보아, 되들일 때 빈 자리처럼 보이게 채웠다).
+        var mask = withHole
+        var pixels = photo(holeSize)
+        for (dx in listOf(-512, 512)) {
+            val (m, p) = movedWith(mask, pixels, TransformPlan.translate(holeSize, dx, 0))
+            mask = m
+            pixels = p
+            if (dx < 0) assertEquals(0, mask.alphaAt(-100, 300))
+        }
+
+        assertAlphas(mask, holeSize) { x, y -> if (inHole(x, y)) 0 else 255 }
+        assertTrue(MaskTransform.revealsOutside(mask, holeSize))
+    }
+
+    @Test
+    fun adjustmentMask_keepsAHiddenTileHidden_offTheCanvasAndBack() {
+        // 조정 레이어의 바깥이 보이는 마스크는 캔버스 밖에서 타일이 없으면 보임이라, 캔버스 밖으로 나간 가린 타일은 0인 타일로 적어 둔다
+        val pushed = MaskTransform.transform(withHole, TransformPlan.translate(holeSize, -512, 0), composer, infinite = true)
+
+        assertSame(composer.emptyMask(), pushed.tiles[TileKey(-1, 1)])
+        assertEquals(0, pushed.alphaAt(-100, 300))
+        // 다 보이는 캔버스 밖 타일은 두지 않는다(바깥과 같다)
+        assertEquals(null, pushed.tiles[TileKey(-2, 1)])
+        val back = MaskTransform.transform(pushed, TransformPlan.translate(holeSize, 512, 0), composer, infinite = true)
+        assertAlphas(back, holeSize) { x, y -> if (inHole(x, y)) 0 else 255 }
+        assertTrue(MaskTransform.revealsOutside(back, holeSize))
+    }
+
+    @Test
+    fun flippedRevealAllMask_leavesNoJunkPastTheCanvas_soALaterMoveRevealsTheEmptiedStrip() {
+        // 끝 자리 다 보이는 타일이 캔버스 밖까지 담은 몫(1000..1024)은 픽셀이 없으면 옮기지 않는다. 전에는 뒤집으면 왼쪽 캔버스 밖에 0이 섞인 타일이 생겨,
+        // 그 뒤 오른쪽으로 옮기면 캔버스 왼쪽 끝 띠가 가려졌다(검토에서 고침).
+        val (flipped, pixels) = movedWith(Selection.all(holeSize), photo(holeSize), TransformPlan.orient(holeSize, Orientation.FLIP_HORIZONTAL))
+
+        assertTrue(flipped.tiles.keys.all { TileGrid(holeSize.width, holeSize.height).contains(it) })
+        val (moved, _) = movedWith(flipped, pixels, TransformPlan.translate(holeSize, 100, 0))
+        assertAlphas(moved, holeSize) { _, _ -> 255 }
+    }
+
+    @Test
+    fun revealAllMask_movedOutThenFurther_writesNoZerosForTheUnknownPartOfAnOffCanvasTile() {
+        // 왼쪽으로 100 옮기면 캔버스 밖 타일 (-1, r)은 꽉 찬 크기로 만들어진다. 원본 값이 오지 않는 앞쪽(-256..-100)은 0이 아니라 바깥(보임)으로 채워,
+        // 다시 오른쪽으로 200 옮겨 캔버스에 들여도 빈 자리처럼 보인다(검토에서 고침)
+        var mask = Selection.all(holeSize)
+        var pixels = photo(holeSize)
+        for (dx in listOf(-100, 200)) {
+            val (m, p) = movedWith(mask, pixels, TransformPlan.translate(holeSize, dx, 0))
+            mask = m
+            pixels = p
+        }
+
+        assertAlphas(mask, holeSize) { _, _ -> 255 }
+    }
+
+    @Test
+    fun maskSharedWithAnAdjustmentLayer_keepsOffCanvasTilesWithoutPixels() {
+        // 선택 영역 모양 마스크(가장자리 가림, 안쪽 (1, 1)만 보임)를 왼쪽으로 512 밀면 보이는 타일은 캔버스 밖 (-1, 1)로 나간다
+        val inner = Selection.of(mapOf(TileKey(1, 1) to MaskTile.FULL))
+        val plan = TransformPlan.translate(holeSize, -512, 0)
+
+        // 조정 레이어도 쓰는 마스크(피부 마스크처럼)는 픽셀이 없어도 남긴다(조정은 끝이 없어 어디서나 쓰임). 픽셀 레이어만 쓰면 픽셀이 없는 곳이라 남기지 않는다.
+        val shared = MaskTransform.transform(inner, plan, composer, users = MaskTransform.MaskUsers(emptyMap(), adjustment = true))
+        assertSame(MaskTile.FULL, shared.tiles[TileKey(-1, 1)])
+        val pixelsOnly = MaskTransform.transform(inner, plan, composer, users = MaskTransform.MaskUsers(emptyMap(), adjustment = false))
+        assertTrue(pixelsOnly.isEmpty)
+    }
+
+    @Test
+    fun pixelLayerMask_keepsOffCanvasTilesOnlyWherePixelsGo() {
+        // 왼쪽 두 열에만 픽셀이 있는 레이어: 오른쪽으로 600 옮기면 픽셀이 없는 오른쪽 마스크는 캔버스 밖에 남기지 않는다
+        val half = Raster.EMPTY.withTiles(photo(holeSize).tiles.filterKeys { it.column < 2 })
+
+        val (moved, pixels) = movedWith(Selection.all(holeSize), half, TransformPlan.translate(holeSize, 600, 0))
+
+        val offCanvas = moved.tiles.keys.filterNot { TileGrid(holeSize.width, holeSize.height).contains(it) }
+        assertTrue(offCanvas.isNotEmpty())
+        assertTrue(offCanvas.all { it in pixels.tiles })
+        // 캔버스 안은 그대로 다 보인다(옮긴 왼쪽 마스크 + 빈 자리)
+        assertAlphas(moved, holeSize) { _, _ -> 255 }
     }
 
     @Test

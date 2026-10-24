@@ -82,13 +82,16 @@ class ResizePlan(val source: PixelSize, val target: PixelSize) {
         )
     }
 
-    /** 원본 [rect](원본 픽셀 좌표, 캔버스 밖 포함)를 바꾼 대상 사각형(바깥으로 반올림, 캔버스 (0, 0)이 기준이라 캔버스 안 계산과 같은 자리) */
+    /**
+     * 원본 [rect](원본 픽셀 좌표, 캔버스 밖 포함)를 바꾼 대상 사각형(바깥으로 반올림, 캔버스 (0, 0)이 기준이라 캔버스 안 계산과 같은 자리).
+     * 정수로 나눠 계산한다: 실수 배율을 곱하면 캔버스 끝(원본 폭)이 대상 폭보다 1 크게 올림될 수 있었다(3000 → 757 등, 검토에서 고침).
+     */
     fun targetArea(rect: PixelRect): PixelRect =
         PixelRect(
-            floor(rect.left * scaleX).toInt(),
-            floor(rect.top * scaleY).toInt(),
-            ceil(rect.right * scaleX).toInt(),
-            ceil(rect.bottom * scaleY).toInt()
+            scaledDown(rect.left, target.width, source.width),
+            scaledDown(rect.top, target.height, source.height),
+            scaledUp(rect.right, target.width, source.width),
+            scaledUp(rect.bottom, target.height, source.height)
         )
 
     companion object {
@@ -110,5 +113,11 @@ class ResizePlan(val source: PixelSize, val target: PixelSize) {
         }
 
         private fun ceilDiv(value: Int, divisor: Int): Int = ((value.toLong() + divisor - 1) / divisor).toInt()
+
+        /** [value] × [to] / [from]을 내림한 값(음수도 내림) */
+        private fun scaledDown(value: Int, to: Int, from: Int): Int = Math.floorDiv(value.toLong() * to, from.toLong()).toInt()
+
+        /** [value] × [to] / [from]을 올림한 값(음수도 올림) */
+        private fun scaledUp(value: Int, to: Int, from: Int): Int = (-Math.floorDiv(-value.toLong() * to, from.toLong())).toInt()
     }
 }

@@ -29,11 +29,87 @@ internal object MaskResizer {
     /**
      * [mask](문서 [plan].source 크기)를 [plan]대로 바꾼 새 마스크. 메모리가 모자라면 [NotEnoughMemoryException].
      * [pixels]는 마스크가 딸린 레이어의 픽셀이다: 캔버스 밖 픽셀이 있으면 다 보이는 타일이 그 픽셀 자리까지 덮게 바꾼다(결정 기록 '캔버스 밖 픽셀').
+     * [endless]면 조정 레이어의 바깥이 보이는 마스크다(캔버스 밖의 타일 없는 곳이 보임, [com.kiln.stratum.engine.transform.MaskTransform]).
+     * 그대로 바꾸면 캔버스 밖 마스크 타일 둘레의 빈 곳을 0(투명)으로 읽어 바이큐빅이 가장자리로 번지므로(가장자리가 다 보이지 않게 됨),
+     * 뒤집어(가린 곳이 흰색) 바꾼 뒤 다시 뒤집는다: 뒤집으면 빈 곳이 정말 0이다(검토에서 고침).
      */
-    fun resize(mask: Selection, plan: ResizePlan, checkCanceled: () -> Unit, pixels: Raster? = null): Selection {
+    fun resize(mask: Selection, plan: ResizePlan, checkCanceled: () -> Unit, pixels: Raster? = null, endless: Boolean = false): Selection {
         if (mask.isEmpty) return mask
+        if (endless) {
+            val resized = ImageResizer.resize(invertedRaster(mask, plan.source, checkCanceled), plan, checkCanceled)
+            return fromInverted(resized, plan.target, checkCanceled)
+        }
         val resized = ImageResizer.resize(toRaster(mask, plan.source, pixels, checkCanceled), plan, checkCanceled)
         return fromRaster(resized, checkCanceled)
+    }
+
+    /**
+     * 끝이 없는 마스크를 뒤집은 알파(255 - 알파)를 흰색 픽셀로 옮긴 래스터. 캔버스 안의 타일 없는 자리(가림)는 흰색(캔버스 안쪽 크기),
+     * 다 보이는 타일은 비우고(뒤집으면 0), 경계가 있는 타일은 담은 크기만큼 뒤집는다. 캔버스 밖의 타일 없는 곳(보임)은 뒤집으면 0이라 비운다.
+     */
+    private fun invertedRaster(mask: Selection, size: PixelSize, checkCanceled: () -> Unit): Raster {
+        val grid = TileGrid(size.width, size.height)
+        val tiles = HashMap<TileKey, Tile?>()
+        val whites = HashMap<PixelSize, Tile>()
+        val temporary = ArrayList<Bitmap>()
+        try {
+            for (key in grid.keys()) {
+                if (key in mask.tiles) continue
+                val shape = grid.bounds(key).let { PixelSize(it.width, it.height) }
+                tiles[key] = whites.getOrPut(shape) { WHITE.cropped(shape.width, shape.height) }
+            }
+            for ((key, tile) in mask.tiles) {
+                checkCanceled()
+                val alpha = MaskTiles.bitmapOf(tile, temporary) ?: continue
+                val picture = Picture()
+                val canvas = picture.beginRecording(alpha.width, alpha.height)
+                canvas.drawColor(Color.WHITE)
+                MaskTiles.drawAlpha(canvas, alpha, BlendMode.DST_OUT)
+                picture.endRecording()
+                tiles[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, alpha.width, alpha.height, Bitmap.Config.ARGB_8888)))
+            }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
+        }
+        return Raster.EMPTY.withTiles(tiles)
+    }
+
+    /**
+     * [invertedRaster]를 바꾼 [raster]를 다시 뒤집은 끝이 없는 마스크(문서 [size]). 타일이 없는 캔버스 자리는 다 보이고, 타일은 꽉 찬 크기로 뒤집는다
+     * (담지 않은 곳은 캔버스 밖이라 보임). 다 가린 타일은 캔버스 밖으로 담은 곳이 있으면(캔버스 밖·끝 자리) 0인 타일로 적어 두고,
+     * 캔버스 밖의 다 보이는 타일은 바깥과 같아 두지 않는다([com.kiln.stratum.engine.transform.MaskTransform]과 같은 규칙).
+     */
+    private fun fromInverted(raster: Raster, size: PixelSize, checkCanceled: () -> Unit): Selection {
+        val grid = TileGrid(size.width, size.height)
+        val tiles = HashMap<TileKey, MaskTile>()
+        val temporary = ArrayList<Bitmap>()
+        try {
+            for (key in grid.keys()) {
+                if (key !in raster.tiles) tiles[key] = MaskTile.FULL
+            }
+            for ((key, tile) in raster.tiles) {
+                checkCanceled()
+                val inside = grid.canvasRect(key)
+                val pixels = CanvasTileComposer.bitmapOf(tile, temporary)
+                val alpha = MaskTiles.draw(TILE_SIZE, TILE_SIZE) { canvas ->
+                    canvas.drawColor(Color.BLACK)
+                    MaskTiles.drawAlpha(canvas, pixels, BlendMode.DST_OUT)
+                }
+                val kept = when {
+                    alpha == null -> MaskTiles.empty.takeIf { inside == null || inside.width < TILE_SIZE || inside.height < TILE_SIZE }
+                    alpha.isFull -> alpha.takeIf { inside != null }
+                    else -> alpha
+                }
+                kept?.let { tiles[key] = it }
+            }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
+        }
+        return Selection.of(tiles)
     }
 
     /** 흰색 한 가지 색 타일(다 보이는 마스크 타일 자리가 함께 쓴다) */

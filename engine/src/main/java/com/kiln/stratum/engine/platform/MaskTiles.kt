@@ -87,8 +87,15 @@ internal object MaskTiles : MaskTileOps {
         }
     }
 
-    /** 크기마다 모두 0(또는 255)인 알파 비트맵. 그린 타일이 비었는지(꽉 찼는지) 견주는 데 쓴다. */
-    private val uniforms = HashMap<Triple<Int, Int, Boolean>, Bitmap>()
+    /**
+     * 크기마다 모두 0(또는 255)인 알파 비트맵. 그린 타일이 비었는지(꽉 찼는지) 견주는 데 쓴다. 크기가 옮기는 만큼마다 달라질 수 있어
+     * 최근에 쓴 [UNIFORM_LIMIT]개만 남긴다(검토에서 고침). 내보낸 비트맵은 다른 스레드가 견주는 중일 수 있어 recycle()하지 않고 GC에 맡긴다.
+     */
+    private val uniforms = object : LinkedHashMap<Triple<Int, Int, Boolean>, Bitmap>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Triple<Int, Int, Boolean>, Bitmap>?): Boolean = size > UNIFORM_LIMIT
+    }
+
+    private const val UNIFORM_LIMIT = 32
 
     @Synchronized
     private fun uniform(width: Int, height: Int, full: Boolean): Bitmap =
@@ -97,6 +104,20 @@ internal object MaskTiles : MaskTileOps {
             if (full) Canvas(drawn).drawColor(Color.BLACK)
             drawn.copy(Bitmap.Config.ALPHA_8, false).also { drawn.recycle() }
         }
+
+    /**
+     * 모두 0인 꽉 찬 마스크 타일 한 장([com.kiln.stratum.engine.transform.TileComposer.emptyMask]). 모든 자리·상태가 함께 쓰고 recycle()하지 않는다.
+     * 저장하면 보통 마스크 타일 파일(0뿐이라 아주 작음)로 쓰고 그대로 읽힌다.
+     */
+    val empty: MaskTile by lazy {
+        val drawn = try {
+            Bitmap.createBitmap(TILE_SIZE, TILE_SIZE, Bitmap.Config.ALPHA_8)
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        val bitmap = drawn.copy(Bitmap.Config.ALPHA_8, false).also { drawn.recycle() } ?: throw NotEnoughMemoryException()
+        MaskTile.of(AlphaMaskPixels(bitmap))
+    }
 
     /**
      * 알파 그림 [alpha]를 (0, 0)에 [mode]로 얹는다. 알파를 셰이더로 그려 소스 알파로 쓴다.

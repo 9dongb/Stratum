@@ -206,6 +206,11 @@ class LayerPreviewCache {
                         picture = Picture()
                         canvas = picture.beginRecording(width, height)
                         val mask = step.mask?.let { selection ->
+                            // 캔버스 밖 마스크 타일이 있는 조정 레이어(캔버스 밖으로 나간 가린 곳)를 옮기는 중이면 옮긴 자리를 레이어 공간에서 바로 그린다
+                            if (offset != null && moving != null && TileGrid(size.width, size.height).let { canvas -> selection.tiles.keys.any { !canvas.contains(it) } }) {
+                                return@let movedSpaceMaskShaderOf(selection, moving, level, size, width, height, movedMasks)
+                                    ?: return null.also { below?.recycle() }
+                            }
                             val alpha = liveMask(selection, region, maskStrokes) ?: return null.also { below?.recycle() }
                             maskShaderOf(selection, alpha, offset, size, movedMasks) ?: return null.also { below?.recycle() }
                         }
@@ -258,6 +263,22 @@ class LayerPreviewCache {
         val moved = PreviewRenderer.drawOnGpu(picture, width, height) ?: return null
         made += moved
         return BitmapShader(moved, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+    }
+
+    /**
+     * 마스크 [selection]을 [moving]만큼 옮긴 모습을 [level] 단계 축소본 자리([width]×[height])에 레이어 공간에서 바로 그린 셰이더(그린 그림은 [made]에 넣음).
+     * 캔버스 밖 마스크 타일이 있는 조정 레이어를 옮기는 동안 쓴다: 캔버스 안 마스크 그림만 옮기면 캔버스 밖의 가린 곳(0인 타일)이 들어올 때 보이게 그려졌다
+     * (놓은 뒤와 달랐음, 검토에서 고침). 바깥이 보이는 마스크는 캔버스 밖의 타일 없는 곳이 보인다(끝이 없는 마스크). 그리지 못하면 null.
+     */
+    private fun movedSpaceMaskShaderOf(selection: Selection, moving: LayerShift, level: Int, size: PixelSize, width: Int, height: Int, made: MutableList<Bitmap>): Shader? {
+        val reveal = if (MaskTransform.revealsOutside(selection, size)) PixelRect.of(size) else null
+        val bitmap = try {
+            SelectionPreview.maskAt(selection, -moving.dx.toFloat(), -moving.dy.toFloat(), 1f / (1 shl level), width, height, reveal)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
+        made += bitmap
+        return BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
     }
 
     /**
@@ -483,6 +504,9 @@ class LayerPreviewCache {
         lastRasters.clear()
         lastGainmap = null
         lastEffect = null
+        // 캔버스 밖까지 담은 그림(큰 하드웨어 비트맵)도 놓아 준다(검토에서 고침)
+        wides.clear()
+        wideMasks.clear()
     }
 
     /** [document]에 없는 래스터의 축소본·작은 그림과, [level]이 아닌 단계의 축소본을 놓아 준다. */

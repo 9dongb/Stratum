@@ -87,4 +87,18 @@ class ResizePlanTest {
         // 캔버스만 볼 때는 전처럼 캔버스 안으로 자른다
         assertEquals(0, plan.sourceRect(PixelRect(0, 0, 100, 100)).left)
     }
+
+    @Test
+    fun targetArea_ofTheCanvas_isExactlyTheTargetCanvas() {
+        // 실수 배율을 곱하면 3000 → 757처럼 캔버스 끝이 1 크게 올림됐다(캔버스 밖 픽셀이 있는 레이어에 가짜 한 줄, 검토에서 고침)
+        for (source in listOf(3000, 1000, 4096, 8160, 6120, 999)) {
+            for (target in listOf(757, 501, 1, 333, 1234, 2999, 8191, 12000)) {
+                val plan = ResizePlan(PixelSize(source, source / 2 + 1), PixelSize(target, target / 3 + 1))
+                assertEquals("$source -> $target", PixelRect(0, 0, target, target / 3 + 1), plan.targetArea(PixelRect(0, 0, source, source / 2 + 1)))
+            }
+        }
+        // 음수 자리는 내림·올림이 바깥쪽이다
+        val plan = ResizePlan(PixelSize(3000, 3000), PixelSize(757, 757))
+        assertEquals(PixelRect(-26, -26, 1, 1), plan.targetArea(PixelRect(-100, -100, 1, 1)))
+    }
 }

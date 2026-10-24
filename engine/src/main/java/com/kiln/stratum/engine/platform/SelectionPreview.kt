@@ -1,9 +1,12 @@
 package com.kiln.stratum.engine.platform
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.BlendMode
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Picture
+import android.graphics.Shader
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.preview.PreviewRegion
 import com.kiln.stratum.engine.raster.PixelRect
@@ -56,10 +59,19 @@ object SelectionPreview {
                 val rect = PixelRect(key.column * TILE_SIZE, key.row * TILE_SIZE, (key.column + 1) * TILE_SIZE, (key.row + 1) * TILE_SIZE)
                 if (rect.intersect(visible) == null) continue
                 val bitmap = MaskTiles.bitmapOf(tile, temporary)
-                if (bitmap == null) {
-                    canvas.drawRect(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat(), tilePaint)
-                } else {
-                    canvas.drawBitmap(bitmap, rect.left.toFloat(), rect.top.toFloat(), tilePaint)
+                when {
+                    bitmap == null -> canvas.drawRect(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat(), tilePaint)
+                    revealOutside == null -> canvas.drawBitmap(bitmap, rect.left.toFloat(), rect.top.toFloat(), tilePaint)
+                    // 덮어쓸 때는 알파를 셰이더로 그린다: 알파 비트맵을 그냥 그리면 소프트웨어 그리기는 알파를 덮는 정도로만 써서 0이 아래의 보임을 지우지 못한다
+                    // (MaskTiles.drawAlpha, 검토에서 고침). 타일 끝은 늘여 읽어(CLAMP) 이웃 타일과 이음매가 없고, 담은 크기만 그린다.
+                    else -> canvas.drawRect(
+                        rect.left.toFloat(), rect.top.toFloat(), (rect.left + bitmap.width).toFloat(), (rect.top + bitmap.height).toFloat(),
+                        Paint(tilePaint).apply {
+                            shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                                setLocalMatrix(Matrix().apply { setTranslate(rect.left.toFloat(), rect.top.toFloat()) })
+                            }
+                        }
+                    )
                 }
             }
             picture.endRecording()

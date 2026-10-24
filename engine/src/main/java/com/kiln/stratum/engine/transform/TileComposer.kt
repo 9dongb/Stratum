@@ -33,4 +33,10 @@ interface TileComposer {
      * 조각이 덮지 않은 곳은 0(가림)이다. 다 0이면 null, 다 255면 [MaskTile.FULL]이다. 메모리가 모자라면 예외를 던진다.
      */
     fun composeMask(width: Int, height: Int, pieces: List<MaskPiece>, orientation: Orientation): MaskTile?
+
+    /**
+     * 모두 0(가림)인 꽉 찬 마스크 타일. 조정 레이어의 바깥이 보이는 마스크에서 캔버스 밖으로 나간 다 가린 몫을 적어 둔다([MaskTransform]: 거기서는 타일이 없으면 보임이다).
+     * 모든 자리가 한 장을 함께 쓴다.
+     */
+    fun emptyMask(): MaskTile
 }

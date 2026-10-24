@@ -45,9 +45,11 @@ object RasterTransform {
         // 조정 레이어의 바깥이 보이는 마스크만 따로 옮긴다(끝이 없어 결과가 다름)
         val masks = IdentityHashMap<Selection, Selection>()
         val adjustmentMasks = IdentityHashMap<Selection, Selection>()
+        // 마스크마다 그것을 쓰는 레이어들(캔버스 밖 마스크가 뜻이 있는 곳, [MaskTransform.transform])
+        val users = MaskTransform.users(document.layers, plan.sourceSize)
         fun movedMask(mask: Selection?, infinite: Boolean = false) = mask?.let {
             val endless = infinite && MaskTransform.revealsOutside(it, plan.sourceSize)
-            (if (endless) adjustmentMasks else masks).getOrPut(it) { MaskTransform.transform(it, plan, composer, checkCanceled, endless) }
+            (if (endless) adjustmentMasks else masks).getOrPut(it) { MaskTransform.transform(it, plan, composer, checkCanceled, endless, users[it]) }
         }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
@@ -85,10 +87,11 @@ object RasterTransform {
             checkCanceled()
             val pieces = target.parts.map { part -> TilePiece(raster.tiles.getValue(part.source), part) }
             if (pieces.isEmpty()) continue
-            val tile = solidFor(target, pieces, composer, solids)
-                ?: reusable(target, pieces, plan)
-                ?: composer.compose(target.width, target.height, pieces, plan.orientation)
-            trimmed(tile, target.key, targetGrid)?.let { tiles[target.key] = it }
+            val solid = solidFor(target, pieces, composer, solids)
+            val reused = if (solid == null) reusable(target, pieces, plan) else null
+            // 그대로 쓰는 원본 타일은 다시 읽어 잘라 내지 않는다(잘라 내면 새 타일을 만들어 메모리만 는다, 검토에서 고침)
+            val tile = reused ?: trimmed(solid ?: composer.compose(target.width, target.height, pieces, plan.orientation), target.key, targetGrid)
+            tile?.let { tiles[target.key] = it }
         }
         return Raster.EMPTY.withTiles(tiles)
     }
@@ -97,6 +100,7 @@ object RasterTransform {
      * 캔버스 밖으로 담은 곳(캔버스 밖 자리면 전체)이 모두 투명하면 잘라 낸 [tile]: 캔버스 안 자리는 캔버스 안쪽과 투명하지 않은 픽셀이 닿는 곳까지,
      * 캔버스 밖 자리는 투명하지 않은 픽셀이 닿는 곳까지 남기고, 다 투명하면 null이다. 옮겨서 빈(투명한) 곳이 캔버스 밖에 타일로 쌓이지 않게 한다
      * (그대로 두어도 보이는 것은 같다). 캔버스 밖으로 담은 곳이 없는 타일은 읽지 않는다.
+     * 새로 만든 타일의 픽셀을 CPU로 읽는 일이다(CLAUDE.md 2장의 예외, [contentBounds]와 같은 방법: 바깥에서 안으로 읽다가 처음 보이는 픽셀에서 멈춤).
      */
     private fun trimmed(tile: Tile, key: TileKey, grid: TileGrid): Tile? {
         val inside = grid.canvasRect(key)

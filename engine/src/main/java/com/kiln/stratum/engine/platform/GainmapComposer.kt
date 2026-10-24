@@ -90,12 +90,10 @@ internal object GainmapComposer {
                 blendMode = BlendMode.DST_IN
             })
         }
-        // 레이어 알파는 그대로 두고 색만 게인맵으로 바꾼다
-        if (map != null) {
-            canvas.drawBitmap(map, null, whole, Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.SRC_IN })
-        } else {
-            canvas.drawColor(neutral, BlendMode.SRC_IN)
-        }
+        // 레이어 알파는 그대로 두고 색만 게인맵으로 바꾼다. 게인맵이 없는 곳(병합해 캔버스 밖 게인맵이 없어진 픽셀을 다시 들임 등)은 '밝히지 않음'이다:
+        // 먼저 '밝히지 않음'으로 바꾸고 게인맵을 그 위에 얹는다(그러지 않으면 그 픽셀이 아래 레이어의 HDR 밝기를 빌렸다, 검토에서 고침).
+        canvas.drawColor(neutral, BlendMode.SRC_IN)
+        if (map != null) canvas.drawBitmap(map, null, whole, Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.SRC_ATOP })
         canvas.restoreToCount(saved)
     }
 

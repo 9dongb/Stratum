@@ -11,6 +11,7 @@ import com.kiln.stratum.engine.document.LayerTree
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.contentBounds
@@ -94,8 +95,11 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         val layers = document.layers.toMutableList()
         val masks = IdentityHashMap<Selection, Selection>()
         val adjustmentMasks = IdentityHashMap<Selection, Selection>()
-        for (i in LayerTree.blockOf(document.layers, index)) {
-            layers[i] = moved(document, document.layers[i], plan, masks, adjustmentMasks, checkCanceled) ?: return document
+        val block = LayerTree.blockOf(document.layers, index)
+        // 마스크마다 그것을 쓰는(함께 옮기는) 레이어들(캔버스 밖 마스크가 뜻이 있는 곳, [MaskTransform.transform])
+        val users = MaskTransform.users(block.map { document.layers[it] }, document.size)
+        for (i in block) {
+            layers[i] = moved(document, document.layers[i], plan, masks, adjustmentMasks, users, checkCanceled) ?: return document
         }
         return document.copy(layers = layers)
     }
@@ -107,6 +111,7 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         plan: TransformPlan,
         masks: MutableMap<Selection, Selection>,
         adjustmentMasks: MutableMap<Selection, Selection>,
+        users: Map<Selection, MaskTransform.MaskUsers>,
         checkCanceled: () -> Unit
     ): Layer? {
         val raster = when (val content = target.content) {
@@ -115,7 +120,7 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
             is AdjustmentContent -> {
                 // 바깥이 보이는 마스크만 끝이 없어 따로 옮기고, 아니면 픽셀 레이어와 함께 쓰던 마스크를 그대로 함께 쓴다(피부 마스크)
                 val endless = target.mask?.let { MaskTransform.revealsOutside(it, plan.sourceSize) } == true
-                return target.copy(mask = movedMask(target.mask, plan, if (endless) adjustmentMasks else masks, checkCanceled, infinite = true))
+                return target.copy(mask = movedMask(target.mask, plan, if (endless) adjustmentMasks else masks, users, checkCanceled, infinite = true))
                     .withSkinMapped(1f, plan::mapPoint)
             }
             // 그룹은 그리는 것이 없다(안의 레이어를 따로 옮김). 피부 보정 그룹이면 기록의 얼굴 자리를 옮긴다.
@@ -124,12 +129,12 @@ data class TranslateLayer(val layer: LayerId, val dx: Int, val dy: Int) : Cancel
         target.text?.let { text ->
             val moved = text.moved(dx.toFloat(), dy.toFloat())
             val drawn = TextRenderer.draw(moved.text, moved.x, moved.y, moved.style, document, checkCanceled) ?: return null
-            return target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, masks, checkCanceled))
+            return target.withText(drawn.raster, drawn.spec).copy(mask = movedMask(target.mask, plan, masks, users, checkCanceled))
         }
         return try {
             val moved = RasterTransform.transform(raster, plan, CanvasTileComposer, checkCanceled)
             val gainmap = target.gainmap?.let { RasterTransform.translateGainmap(it, document.size, dx, dy, CanvasTileComposer, checkCanceled) }
-            target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, masks, checkCanceled))
+            target.withPixels(moved, gainmap).copy(mask = movedMask(target.mask, plan, masks, users, checkCanceled))
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
@@ -167,7 +172,8 @@ data class OrientLayer(val layer: LayerId, val orientation: Orientation) : Cance
                 RasterTransform.orientGainmap(it, document.size, bounds, orientation, origin, CanvasTileComposer, checkCanceled)
             }
             val layers = document.layers.toMutableList()
-            layers[index] = target.withPixels(turned, gainmap).copy(mask = movedMask(target.mask, plan, IdentityHashMap(), checkCanceled))
+            val mask = movedMask(target.mask, plan, IdentityHashMap(), MaskTransform.users(listOf(target), document.size), checkCanceled)
+            layers[index] = target.withPixels(turned, gainmap).copy(mask = mask)
             document.copy(layers = layers)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
@@ -182,11 +188,24 @@ private val Document.size: PixelSize
 
 /**
  * [mask]를 [plan]대로 옮긴 마스크(없으면 null). [masks]에 이미 옮긴 같은 마스크가 있으면 그것을 함께 쓴다(피부 보정의 색 보정·피부 정돈이 함께 쓰는 마스크).
- * [infinite]면 조정 레이어의 마스크다([MaskTransform.transform]). 메모리가 모자라면 [NotEnoughMemoryException].
+ * [users]는 마스크마다 그것을 쓰는 레이어들([MaskTransform.users]). [infinite]면 조정 레이어의 마스크다([MaskTransform.transform]).
+ * 메모리가 모자라면 [NotEnoughMemoryException].
  */
-private fun movedMask(mask: Selection?, plan: TransformPlan, masks: MutableMap<Selection, Selection>, checkCanceled: () -> Unit, infinite: Boolean = false) =
+private fun movedMask(
+    mask: Selection?,
+    plan: TransformPlan,
+    masks: MutableMap<Selection, Selection>,
+    users: Map<Selection, MaskTransform.MaskUsers>,
+    checkCanceled: () -> Unit,
+    infinite: Boolean = false
+) =
     try {
-        mask?.let { masks.getOrPut(it) { MaskTransform.transform(it, plan, CanvasTileComposer, checkCanceled, infinite && MaskTransform.revealsOutside(it, plan.sourceSize)) } }
+        mask?.let {
+            masks.getOrPut(it) {
+                val endless = infinite && MaskTransform.revealsOutside(it, plan.sourceSize)
+                MaskTransform.transform(it, plan, CanvasTileComposer, checkCanceled, endless, if (endless) null else users[it])
+            }
+        }
     } catch (e: OutOfMemoryError) {
         throw NotEnoughMemoryException(e)
     }
@@ -198,7 +217,7 @@ private fun movedMask(mask: Selection?, plan: TransformPlan, masks: MutableMap<S
 private fun layerTileBytes(document: Document, layer: LayerId): Long {
     val target = document.layers.getOrNull(document.indexOfLayer(layer)) ?: return 0L
     // 마스크는 픽셀이 없는 조정 레이어도 옮긴다(결정 기록 '피부 보정'의 1i)
-    val maskBytes = target.mask?.tiles?.values?.sumOf { it.byteCount.toLong() } ?: 0L
+    val maskBytes = target.mask?.let { mask -> mask.tiles.values.sumOf { it.byteCount.toLong() } + fullEdgeBytes(mask) } ?: 0L
     val raster = (target.content as? RasterContent)?.raster ?: return maskBytes
     val tiles = raster.tiles.values.sumOf { tile -> if (tile.solidColor == null) tile.byteCount.toLong() else 0L }
     val extent = raster.extent()
@@ -213,8 +232,8 @@ private fun layerTileBytes(document: Document, layer: LayerId): Long {
 private fun newTileBytes(document: Document, area: PixelRect?): Long {
     var bytes = 0L
     for (layer in document.layers) {
-        // 마스크 타일(픽셀 하나에 1바이트, 다 보이는 타일은 0). 픽셀이 없는 조정 레이어의 마스크도 센다.
-        layer.mask?.let { mask -> bytes += mask.tiles.entries.sumOf { (key, tile) -> if (key.overlaps(area)) tile.byteCount.toLong() else 0L } }
+        // 마스크 타일(픽셀 하나에 1바이트, 다 보이는 타일은 0)과 다 보이는 타일이 경계 타일이 되는 둘레. 픽셀이 없는 조정 레이어의 마스크도 센다.
+        layer.mask?.let { mask -> bytes += mask.tiles.entries.sumOf { (key, tile) -> if (key.overlaps(area)) tile.byteCount.toLong() else 0L } + fullEdgeBytes(mask) }
         val raster = (layer.content as? RasterContent)?.raster ?: continue
         for ((key, tile) in raster.tiles) {
             if (tile.solidColor == null && key.overlaps(area)) bytes += tile.byteCount
@@ -222,6 +241,18 @@ private fun newTileBytes(document: Document, area: PixelRect?): Long {
         layer.gainmap?.let { gainmap -> bytes += gainmap.raster.tiles.values.sumOf { it.byteCount.toLong() } }
     }
     return bytes
+}
+
+/**
+ * 마스크 [mask]의 다 보이는 타일들이 옮기거나 돌린 뒤 경계에 걸쳐 경계 타일(픽셀 하나에 1바이트)이 될 수 있는 메모리: 마스크 타일 자리 범위의 둘레 한 바퀴.
+ * 다 보이는 타일은 메모리를 쓰지 않지만 옮기면 둘레가 새 경계 타일이 된다(검토에서 고침). 다 보이는 타일이 없으면 0이다.
+ */
+private fun fullEdgeBytes(mask: Selection): Long {
+    if (mask.tiles.values.none { it.isFull }) return 0L
+    val keys = mask.tiles.keys
+    val columns = keys.maxOf { it.column } - keys.minOf { it.column } + 1
+    val rows = keys.maxOf { it.row } - keys.minOf { it.row } + 1
+    return (2L * (columns + rows) + 4) * TILE_PIXEL_COUNT
 }
 
 private fun TileKey.overlaps(area: PixelRect?): Boolean {

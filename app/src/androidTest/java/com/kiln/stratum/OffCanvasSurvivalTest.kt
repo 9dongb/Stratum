@@ -1,5 +1,6 @@
 package com.kiln.stratum
 
+import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.adjust.Adjustments
@@ -20,17 +21,22 @@ import com.kiln.stratum.engine.platform.AddLayerMask
 import com.kiln.stratum.engine.platform.CopySelectedToLayer
 import com.kiln.stratum.engine.platform.DeleteSelected
 import com.kiln.stratum.engine.platform.EffectStroke
+import com.kiln.stratum.engine.platform.FlipImage
 import com.kiln.stratum.engine.platform.InpaintRegion
 import com.kiln.stratum.engine.platform.InvertLayerMask
+import com.kiln.stratum.engine.platform.LayerPreviewCache
+import com.kiln.stratum.engine.platform.LayerShift
 import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.MergeDown
 import com.kiln.stratum.engine.platform.MergeVisible
 import com.kiln.stratum.engine.platform.PaintLayerMask
 import com.kiln.stratum.engine.platform.PaintStroke
+import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.platform.RetouchStroke
 import com.kiln.stratum.engine.platform.SmudgeStroke
 import com.kiln.stratum.engine.platform.ToneStroke
+import com.kiln.stratum.engine.platform.TranslateLayer
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
@@ -43,6 +49,7 @@ import com.kiln.stratum.engine.retouch.SourceOffset
 import com.kiln.stratum.engine.selection.MaskTile
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.tone.ToneFill
+import com.kiln.stratum.engine.transform.MaskTransform
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -301,5 +308,93 @@ class OffCanvasSurvivalTest {
         val mask = checkNotNull(resized.layers[0].mask)
         assertEquals(255, checkNotNull(mask.tiles[TileKey(-1, 0)]).alphaAt(200, 50))
         assertEquals(255, checkNotNull(mask.tiles[TileKey(1, 0)]).alphaAt(350 - 256, 20))
+    }
+    /** [size] 캔버스를 꼭 덮는 회색 사진 레이어(끝 타일은 캔버스 안쪽 크기) */
+    private fun photoOf(size: PixelSize): Raster {
+        val photoGrid = TileGrid(size.width, size.height)
+        return Raster.EMPTY.withTiles(photoGrid.keys().associateWith { key -> photoGrid.bounds(key).let { Tile.solid(gray, it.width, it.height) } })
+    }
+
+    /** 1000×800 다 보이는 마스크에서 안쪽 (1, 1) 타일만 다 가린 것(타일 없음, 문서 256..512 × 256..512) */
+    private val holeSize = PixelSize(1000, 800)
+    private val withHole: Selection by lazy { Selection.of(Selection.all(holeSize).tiles - TileKey(1, 1)) }
+
+    @Test
+    fun hiddenMaskArea_staysHidden_afterMovingTheLayerOffTheCanvasAndBack() {
+        // 검토에서 고침: 가린 곳을 캔버스 밖으로 밀었다 되들이면 다시 보였다(캔버스 밖에서 그 자리를 모르는 곳으로 봄)
+        val base = Document.create(holeSize.width, holeSize.height, "Photo", photoOf(holeSize))
+        val document = base.copy(layers = listOf(base.layers[0].copy(mask = withHole)))
+
+        val out = TranslateLayer(LayerId(0), -512, 0).applyTo(document)
+        assertEquals(0, checkNotNull(out.layers[0].mask).alphaAt(-100, 300))
+        val back = checkNotNull(TranslateLayer(LayerId(0), 512, 0).applyTo(out).layers[0].mask)
+
+        for ((x, y) in listOf(300 to 300, 500 to 500, 260 to 260)) assertEquals("($x, $y)", 0, back.alphaAt(x, y))
+        for ((x, y) in listOf(100 to 300, 600 to 300, 300 to 100, 990 to 790, 5 to 5)) assertEquals("($x, $y)", 255, back.alphaAt(x, y))
+    }
+
+    @Test
+    fun flippedRevealAllMask_thenMoved_revealsTheEmptiedStrip() {
+        // 검토에서 고침: 끝 자리 다 보이는 타일이 캔버스 밖까지 담은 몫이 뒤집기로 반대편 캔버스 밖에 0이 섞인 타일로 남아, 그 뒤 옮기면 빈 띠가 가려졌다
+        val base = Document.create(holeSize.width, holeSize.height, "Photo", photoOf(holeSize))
+        val document = AddLayerMask(LayerId(0)).applyTo(base)
+
+        val flipped = FlipImage(horizontal = true).applyTo(document)
+        assertTrue(checkNotNull(flipped.layers[0].mask).tiles.keys.all { TileGrid(holeSize.width, holeSize.height).contains(it) })
+        val moved = checkNotNull(TranslateLayer(LayerId(0), 100, 0).applyTo(flipped).layers[0].mask)
+
+        for ((x, y) in listOf(0 to 300, 50 to 10, 99 to 799, 500 to 400)) assertEquals("($x, $y)", 255, moved.alphaAt(x, y))
+    }
+
+    @Test
+    fun adjustmentMask_keepsAHiddenAreaHiddenPastTheCanvas_whenMovedMergedAndResized() {
+        // 조정 레이어의 다 보이는 마스크(가장자리가 다 보여 끝이 없음)에서 가린 곳을 캔버스 밖으로 밀면 0인 타일로 남는다(검토에서 고침)
+        val photo = Raster.EMPTY.withTiles(photoOf(holeSize).tiles + listOf(TileKey(-2, 1), TileKey(-1, 1)).associateWith { Tile.solid(gray) })
+        val adjustment = Layer(LayerId(1), "Adjust", AdjustmentContent.BASIC, adjustments = Adjustments(exposure = 1f), mask = withHole)
+        val document = Document(holeSize.width, holeSize.height, listOf(Layer(LayerId(0), "Photo", RasterContent(photo)), adjustment), nextLayerId = 2)
+
+        // 왼쪽으로 700 밀면 가린 곳(256..512)은 캔버스 밖 -444..-188로 나간다
+        val pushed = TranslateLayer(LayerId(1), -700, 0).applyTo(document)
+        val pushedMask = checkNotNull(pushed.layers[1].mask)
+        assertEquals(0, pushedMask.alphaAt(-300, 300))
+        assertEquals(255, pushedMask.alphaAt(-100, 300))
+        assertTrue(MaskTransform.revealsOutside(pushedMask, holeSize))
+
+        // 병합하면 캔버스 밖의 가린 곳에는 조정이 걸리지 않고, 그 밖의 캔버스 밖 픽셀에는 걸린다(그릴 때 0인 타일이 보임을 덮어씀)
+        val merged = MergeVisible.applyTo(pushed).raster()
+        val hidden = merged.tiles.getValue(TileKey(-2, 1)).pixelAt(212, 44)
+        val adjusted = merged.tiles.getValue(TileKey(-1, 1)).pixelAt(156, 44)
+        assertTrue(hex(hidden), near(gray, hidden, 1))
+        assertTrue(hex(adjusted), !near(gray, adjusted, 8))
+
+        // 크기를 반으로 바꿔도 끝이 없는 마스크 그대로(가장자리 다 보임)이고, 가린 곳도 반으로 줄어 남는다(-222..-94)
+        val resized = ResizeImage(500, 400).applyTo(pushed)
+        val half = checkNotNull(resized.layers[1].mask)
+        assertTrue(MaskTransform.revealsOutside(half, PixelSize(500, 400)))
+        assertEquals(0, half.alphaAt(-158, 192))
+        assertEquals(255, half.alphaAt(-40, 192))
+        // 되들이면 가린 곳이 캔버스 안(128..256)으로 돌아온다
+        val back = checkNotNull(TranslateLayer(LayerId(1), 350, 0).applyTo(resized).layers[1].mask)
+        assertEquals(0, back.alphaAt(192, 192))
+        for ((x, y) in listOf(50 to 192, 400 to 192, 192 to 50, 192 to 350)) assertEquals("($x, $y)", 255, back.alphaAt(x, y))
+    }
+    @Test
+    fun draggingAnAdjustmentBack_showsItsHiddenAreaFromPastTheCanvas_beforeLettingGo() {
+        // 조정 레이어의 끝이 없는 마스크에서 가린 곳(256..512)을 캔버스 밖으로 밀었다가 되들이는 동안의 미리 보기는 놓은 뒤와 같다(검토에서 고침:
+        // 캔버스 안 마스크 그림만 옮겨, 들어오는 가린 곳이 놓기 전까지 조정이 걸려 보였다)
+        val adjustment = Layer(LayerId(1), "Adjust", AdjustmentContent.BASIC, adjustments = Adjustments(exposure = 1f), mask = withHole)
+        val document = Document(holeSize.width, holeSize.height, listOf(Layer(LayerId(0), "Photo", RasterContent(photoOf(holeSize))), adjustment), nextLayerId = 2)
+        val pushed = TranslateLayer(LayerId(1), -512, 0).applyTo(document)
+
+        val preview = checkNotNull(LayerPreviewCache().render(pushed, level = 0, shift = LayerShift(LayerId(1), 512, 0))).copy(Bitmap.Config.ARGB_8888, false)
+        val back = TranslateLayer(LayerId(1), 512, 0).applyTo(pushed)
+        val committed = checkNotNull(PreviewRenderer.render(back, level = 0)).copy(Bitmap.Config.ARGB_8888, false)
+
+        for ((x, y) in listOf(300 to 300, 500 to 500, 100 to 300, 700 to 300, 300 to 100, 900 to 700)) {
+            assertTrue("($x, $y) ${hex(preview.getPixel(x, y))} vs ${hex(committed.getPixel(x, y))}", near(committed.getPixel(x, y), preview.getPixel(x, y), 2))
+        }
+        // 가린 곳은 조정이 걸리지 않은 회색이다
+        assertTrue(hex(preview.getPixel(300, 300)), near(gray, preview.getPixel(300, 300), 2))
+        assertTrue(hex(preview.getPixel(100, 300)), !near(gray, preview.getPixel(100, 300), 8))
     }
 }

@@ -63,4 +63,9 @@ class HeapTileComposer : TileComposer {
             else -> MaskTile.of(alphas)
         }
     }
+
+    /** 모두 0인 꽉 찬 마스크 타일(한 장을 함께 쓴다) */
+    private val empty by lazy { MaskTile.of(ByteArray(TILE_PIXEL_COUNT)) }
+
+    override fun emptyMask(): MaskTile = empty
 }

@@ -183,6 +183,27 @@ class HdrTest {
     }
 
     @Test
+    fun aLayersPixelsWithoutGainmap_areNotBrightenedByTheLayerBelow() {
+        // 게인맵이 픽셀 일부만 덮는 레이어(병합으로 캔버스 밖 게인맵이 없어진 픽셀을 다시 들인 것과 같다): 덮지 않은 픽셀은 '밝히지 않음'이다.
+        // 전에는 아래 사진의 HDR 밝기를 빌렸다(검토에서 고침).
+        val photo = import(ultraHdrJpeg())
+        val gain = Tile.of(IntArray(TILE_SIZE * TILE_SIZE) { i -> if (i % TILE_SIZE < 200 && i / TILE_SIZE < 75) Color.rgb(100, 100, 100) else Color.TRANSPARENT })
+        val top = Layer(
+            LayerId(photo.nextLayerId), "Top",
+            RasterContent(Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to Tile.solid(Color.RED), TileKey(0, 1) to Tile.solid(Color.RED)))),
+            gainmap = HdrGainmap(width / 4, height / 4, Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to gain)))
+        )
+
+        val exported = exportAndDecode(photo.copy(layers = photo.layers + top, nextLayerId = photo.nextLayerId + 1), ExportFormat.JPEG)
+
+        val contents = checkNotNull(exported.gainmap).gainmapContents
+        // 빨강 위 게인맵이 있는 곳은 그 값, 없는 곳은 '밝히지 않음'(0), 빨강 아래(문서 y 512 밖)는 사진의 게인맵
+        assertNear(100, contents.gainValue(30, 30))
+        assertNear(0, contents.gainValue(30, 100))
+        assertNear(200, contents.gainValue(30, 140))
+    }
+
+    @Test
     fun otherBlendModes_keepThePhotosGainmap() {
         val photo = import(ultraHdrJpeg())
         val tint = Layer(

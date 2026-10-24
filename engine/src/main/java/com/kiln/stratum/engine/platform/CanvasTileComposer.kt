@@ -104,6 +104,8 @@ internal object CanvasTileComposer : TileComposer {
         }
     }
 
+    override fun emptyMask(): MaskTile = MaskTiles.empty
+
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */
     internal fun bitmapOf(tile: Tile, temporary: MutableList<Bitmap>): Bitmap =
         when (val pixels = tile.pixels) {

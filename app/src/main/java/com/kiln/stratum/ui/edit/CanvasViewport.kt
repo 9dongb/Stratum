@@ -397,7 +397,9 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.dra
         return Offset(if (f.horizontal) size.width - local.x else local.x, if (f.vertical) size.height - local.y else local.y)
     }
     val start = screen(down.position)
-    actions()?.start(start)
+    // 누를 때 받은 쪽에 끝까지 알린다: 끄는 도중 받는 쪽이 바뀌거나 없어져도 크기 원·끌기 기준이 남지 않게(검토에서 고침)
+    val target = actions()
+    target?.start(start)
     var axis: SwipeAxis? = null
     var origin = start
     while (true) {
@@ -416,7 +418,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.dra
             continue
         }
         val pixels = if (chosen == SwipeAxis.HORIZONTAL) now.x - origin.x else origin.y - now.y
-        actions()?.drag(chosen, (pixels / density).dp)
+        target?.drag(chosen, (pixels / density).dp)
     }
-    actions()?.end()
+    target?.end()
 }

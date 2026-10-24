@@ -315,12 +315,19 @@ internal object SelectedPixels {
         return if (changes.isEmpty()) raster else raster.withTiles(changes)
     }
 
-    /** 고른 레이어에서 경계 타일(픽셀이 있는 알파 타일과 겹치는 레이어 타일) 수 */
+    /**
+     * 고른 레이어에서 새로 만들 수 있는 타일 수: 경계 타일(픽셀이 있는 알파 타일과 겹치는 레이어 타일)과, 다 고른 끝 타일 가운데 캔버스 밖까지 담은 타일
+     * (캔버스 밖은 남기고 다시 만들거나 캔버스 안만 가져간다, 결정 기록 '캔버스 밖 픽셀', 검토에서 고침)
+     */
     fun partialTiles(document: Document, layerId: LayerId): Long {
         val selection = document.selection ?: return 0L
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return 0L
         val raster = (layer.content as? RasterContent)?.raster ?: return 0L
-        return selection.tiles.count { (key, mask) -> !mask.isFull && key in raster.tiles }.toLong()
+        val grid = TileGrid(document.width, document.height)
+        return selection.tiles.count { (key, mask) ->
+            val tile = raster.tiles[key] ?: return@count false
+            !mask.isFull || grid.canvasRect(key)?.let { tile.width > it.width || tile.height > it.height } == true
+        }.toLong()
     }
 
     private fun masked(tile: Tile, mask: MaskTile, grid: TileGrid, key: TileKey, mode: AndroidBlendMode, temporary: MutableList<Bitmap>): Tile {
