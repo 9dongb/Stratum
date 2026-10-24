@@ -460,11 +460,12 @@ class LayerPreviewCache {
      * 영역은 단계 격자에 맞춰 그려 전체를 그린 것과 픽셀이 같다(PreviewRenderer.renderRegion).
      */
     private fun patch(size: PixelSize, previous: Raster, previousPreview: Bitmap?, raster: Raster, level: Int): Bitmap? {
-        val dirty = HashSet<TileKey>()
-        for ((key, tile) in raster.tiles) if (previous.tiles[key] !== tile) dirty += key
-        for (key in previous.tiles.keys) if (key !in raster.tiles) dirty += key
-        if (dirty.isEmpty()) return previousPreview
         val grid = TileGrid(size.width, size.height)
+        // 축소본은 캔버스 안만 그린다: 캔버스 밖 자리만 바뀌었으면 그대로다(결정 기록 '캔버스 밖 픽셀')
+        val dirty = HashSet<TileKey>()
+        for ((key, tile) in raster.tiles) if (previous.tiles[key] !== tile && grid.contains(key)) dirty += key
+        for (key in previous.tiles.keys) if (key !in raster.tiles && grid.contains(key)) dirty += key
+        if (dirty.isEmpty()) return previousPreview
         if (dirty.size * 2 > grid.columns * grid.rows) return null
         val rect = PixelRect(
             dirty.minOf { it.column } * TILE_SIZE,

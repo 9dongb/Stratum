@@ -28,6 +28,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileKeysIn
 import java.nio.ShortBuffer
 import kotlin.math.ceil
 
@@ -173,7 +174,7 @@ object LiquifyRenderer {
                         image.recycle()
                     }
                     try {
-                        split(drawn, block, grid, tiles)
+                        split(drawn, block, grid, raster, tiles)
                     } finally {
                         drawn.recycle()
                     }
@@ -212,7 +213,7 @@ object LiquifyRenderer {
             }
             val tiles = HashMap<TileKey, Tile?>()
             try {
-                split(drawn, whole, TileGrid(gainmap.width, gainmap.height), tiles)
+                split(drawn, whole, TileGrid(gainmap.width, gainmap.height), gainmap.raster, tiles)
             } finally {
                 drawn.recycle()
             }
@@ -242,18 +243,21 @@ object LiquifyRenderer {
         }
     }
 
-    /** 묶음 비트맵 [pixels]를 타일로 나눠 [into]에 넣는다. 끝 타일은 문서 안쪽 크기만 담는다. */
-    private fun split(pixels: Bitmap, block: PixelRect, grid: TileGrid, into: MutableMap<TileKey, Tile?>) {
-        for (row in block.top / TILE_SIZE until (block.bottom + TILE_SIZE - 1) / TILE_SIZE) {
-            for (column in block.left / TILE_SIZE until (block.right + TILE_SIZE - 1) / TILE_SIZE) {
-                val key = TileKey(column, row)
+    /**
+     * 묶음 비트맵 [pixels]를 타일로 나눠 [into]에 넣는다. 캔버스 안쪽만 바꾸고, 원래 래스터 [old]의 끝 타일이 담은 캔버스 밖 픽셀은 그대로 둔다
+     * ([TileRebuild], 결정 기록 '캔버스 밖 픽셀').
+     */
+    private fun split(pixels: Bitmap, block: PixelRect, grid: TileGrid, old: Raster, into: MutableMap<TileKey, Tile?>) {
+        val temporary = ArrayList<Bitmap>()
+        try {
+            for (key in tileKeysIn(block)) {
                 val bounds = grid.bounds(key)
-                val picture = Picture()
-                val canvas = picture.beginRecording(bounds.width, bounds.height)
-                canvas.drawBitmap(pixels, (block.left - bounds.left).toFloat(), (block.top - bounds.top).toFloat(), CanvasTileComposer.CopyPaint)
-                picture.endRecording()
-                into[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, bounds.width, bounds.height, Bitmap.Config.ARGB_8888)))
+                into[key] = TileRebuild.pixels(key, old.tiles[key], grid, temporary) { canvas ->
+                    canvas.drawBitmap(pixels, (block.left - bounds.left).toFloat(), (block.top - bounds.top).toFloat(), CanvasTileComposer.CopyPaint)
+                }
             }
+        } finally {
+            for (bitmap in temporary) bitmap.recycle()
         }
     }
 

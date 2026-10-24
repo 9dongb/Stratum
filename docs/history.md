@@ -14,6 +14,20 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 사용자 피드백 13차 6b단계: 편집이 캔버스 밖 픽셀을 지우지 않게, 읽기는 캔버스 안만
+
+- 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)"
+- 의도: 말하지 않음
+- 커밋:
+  - "끝 타일의 캔버스 밖 픽셀을 칠하기·효과·리터칭·유동화·AI 채우기·선택·마스크가 지우지 않게, 축소본·내보내기는 캔버스 안만"
+- 바꾼 것(화면 변화 없음)
+  - 새 `platform/TileRebuild.kt`와 `TileGrid.rebuildSize`: 편집이 타일을 다시 만들 때 옛 타일 크기만큼 만들고 옛 타일을 먼저 베낀 뒤 캔버스 안쪽만 고친다. `PaintStroke`(`BrushTiles`)·`EffectStroke`·`ToneStroke`·`RetouchStroke`·`Inpainter`(AI 채우기)·`LiquifyRenderer.split`(픽셀·게인맵)이 쓴다. 게인맵 편집(`GainmapEdits`)은 같은 길을 거친다.
+  - `SelectionCommands`: 지우기·잘라내기는 캔버스 안쪽만 지우고, 복사는 캔버스 안 픽셀만(끝 타일을 캔버스 안쪽으로 자름). `MaskPainter`는 옛 마스크 타일 크기로 다시 만든다. `AddLayerMask`의 다 보이는 마스크와 `InvertLayerMask`는 픽셀의 캔버스 밖 자리까지(`Selection.all(size, also)`, `MaskTiles.invert(tile, width, height)`).
+  - 캔버스 안만 읽기: `PreviewRenderer`(반으로 줄일 때 끝 타일을 캔버스 안쪽으로 잘라 그림), `ImageExporter.copyTiles`, `LayerPreviewCache.patch`, 스머지 집기(`TileSurface.copyInto`), 질감 향상 조각 판(`TextureTransfer.atlas`).
+  - 테스트: 새 `OffCanvasSurvivalTest`(끝 타일이 캔버스 밖까지 자홍을 담고 캔버스 밖 자리에도 타일이 있는 문서에 칠하기·지우기·흐림·선명·모자이크·스머지·닷지·복제·복구·AI 채우기·유동화·지우기·잘라내기·복사·마스크 더하기·칠하기·뒤집기를 걸어 캔버스 밖 픽셀·게인맵·마스크가 그대로인지, 복사는 캔버스 안만인지), `PreviewRendererTest`(캔버스 밖 픽셀이 축소본에 섞이지 않음).
+- 정한 것(Claude 판단, 설계 검토로 정함): 편집이 캔버스 밖을 읽거나 바꾸지 않는다(흐림도 캔버스 안 픽셀만 읽음). 복사는 캔버스 안만, 잘라내기·지우기는 캔버스 밖을 건드리지 않는다(포토샵과 같다).
+- 확인한 것: `./gradlew assembleDebug assembleDebugAndroidTest test` 통과. 에뮬레이터(접은 상태) 21개 클래스 모두 통과: `OffCanvasSurvivalTest`·`PaintStrokeTest`·`EffectStrokeTest`·`ToneStrokeTest`·`RetouchStrokeTest`·`InpaintRegionTest`·`EnhanceTextureTest`·`LiquifyLayerTest`·`SmudgeStrokeTest`·`SelectionCommandsTest`·`LayerMaskTest`·`AdjustmentLayerTest`·`PreviewRendererTest`(10)·`ImageExporterTest`·`StrokePreviewTest`·`HdrTest`·`HealSkinSpotsTest`·`SkinRetouchTest`·`LayerGroupTest`·`MergeCommandsTest`·`ProjectFolderTest`. 새 `OffCanvasSurvivalTest` 4개는 고치기 전 동작(타일을 캔버스 안쪽 크기로만 다시 만듦)에서 3개가, 새 축소본 테스트는 자르지 않으면(1단계 끝 줄에 자홍이 섞임) 실패하는 것을 확인했다.
+
 ## 2026-10-24 · 사용자 피드백 13차 6a단계: 캔버스 밖 픽셀의 바탕(타일 크기·음수 자리, 한 가지 색 끝 타일)
 
 - 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)" 질문에서 "포토샵처럼 (추천)"을 골랐다.

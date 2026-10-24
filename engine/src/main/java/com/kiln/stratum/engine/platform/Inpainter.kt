@@ -446,7 +446,7 @@ internal object Inpainter {
         val temporary = ArrayList<Bitmap>()
         try {
             colors.copyPixelsFromBuffer(ShortBuffer.wrap(ShortArray(fill.size) { Half.toHalf(fill[it]) }))
-            for (block in keys.groupBy { TileKey(it.column / BLOCK_TILES, it.row / BLOCK_TILES) }.values) {
+            for (block in keys.groupBy { TileKey(Math.floorDiv(it.column, BLOCK_TILES), Math.floorDiv(it.row, BLOCK_TILES)) }.values) {
                 checkCanceled()
                 val area = block.map { tileRect(grid, it) }
                     .reduce { a, b -> PixelRect(min(a.left, b.left), min(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom)) }
@@ -454,7 +454,7 @@ internal object Inpainter {
                 try {
                     for (key in block) {
                         checkCanceled()
-                        changes[key] = blendTile(raster.tiles[key], tileRect(grid, key), area, upscaled, shares, window, scale, selection?.tiles?.get(key), temporary)
+                        changes[key] = blendTile(key, grid, raster.tiles[key], tileRect(grid, key), area, upscaled, shares, window, scale, selection?.tiles?.get(key), temporary)
                     }
                 } finally {
                     upscaled.recycle()
@@ -501,8 +501,13 @@ internal object Inpainter {
         }
     }
 
-    /** 타일 하나: 원래 타일에서 몫만큼 덜어 내고, 채울 색 × 몫을 더한다. 선택 영역이 있으면 몫을 그 알파로 자른다. */
+    /**
+     * 타일 하나: 원래 타일에서 몫만큼 덜어 내고, 채울 색 × 몫을 더한다. 선택 영역이 있으면 몫을 그 알파로 자른다.
+     * 캔버스 안쪽만 바꾸고 끝 타일의 캔버스 밖 픽셀은 그대로 둔다([TileRebuild], 결정 기록 '캔버스 밖 픽셀').
+     */
     private fun blendTile(
+        key: TileKey,
+        grid: TileGrid,
         old: Tile?,
         tile: PixelRect,
         area: PixelRect,
@@ -515,9 +520,23 @@ internal object Inpainter {
     ): Tile {
         val width = tile.width.toFloat()
         val height = tile.height.toFloat()
-        val picture = Picture()
-        val canvas = picture.beginRecording(tile.width, tile.height)
-        old?.let { canvas.drawBitmap(CanvasTileComposer.bitmapOf(it, temporary), 0f, 0f, CanvasTileComposer.CopyPaint) }
+        return TileRebuild.pixels(key, old, grid, temporary) { canvas -> blendInto(canvas, tile, width, height, area, upscaled, shares, window, scale, chosen, temporary) }
+    }
+
+    /** [blendTile]의 그리기: [canvas](타일 왼쪽 위가 (0, 0))의 캔버스 안쪽 [width]×[height]를 바꾼다 */
+    private fun blendInto(
+        canvas: Canvas,
+        tile: PixelRect,
+        width: Float,
+        height: Float,
+        area: PixelRect,
+        upscaled: Bitmap,
+        shares: Bitmap,
+        window: CropWindow,
+        scale: Float,
+        chosen: MaskTile?,
+        temporary: MutableList<Bitmap>
+    ) {
         // 타일 픽셀의 몫은 몫 그림의 ((타일 자리 - 창 왼쪽) × scale) 자리다(쌍선형). 창 밖으로는 가장자리 몫을 늘인다(문서 끝에 붙은 구멍).
         val shareShader = BitmapShader(shares, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         shareShader.filterMode = BitmapShader.FILTER_MODE_LINEAR
@@ -546,9 +565,6 @@ internal object Inpainter {
         colorPaint.blendMode = BlendMode.SRC_IN
         canvas.drawRect(0f, 0f, width, height, colorPaint)
         canvas.restoreToCount(add)
-        picture.endRecording()
-        // 브러시 타일과 같이 소프트웨어로 그리고 바꿀 수 없는 비트맵 하나로 돌려준다
-        return Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
     }
 
     /** [area]를 문서 ([left], [top])부터 [scale]배로 그린 덮인 정도(0..255, 줄마다 이어 붙인 [width]×[height]) */

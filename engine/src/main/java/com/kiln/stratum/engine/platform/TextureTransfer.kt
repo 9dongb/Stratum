@@ -14,6 +14,7 @@ import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileKeysIn
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -146,7 +147,7 @@ internal object TextureTransfer {
         checkCanceled()
         val block = InpaintTexture.blockSize(scale)
         val columns = InpaintTexture.columns(match.sources.size)
-        val atlas = atlas(raster, window, match, scale, block, columns)
+        val atlas = atlas(raster, size, window, match, scale, block, columns)
         val table = try {
             table(match)
         } catch (e: Throwable) {
@@ -197,7 +198,7 @@ internal object TextureTransfer {
      * 조각 판: 조각 번호 i의 원본 픽셀(문서 [InpaintTexture.blockStart]부터 한 변 [block])을 ((i % [columns]) × block, (i / columns) × block)에 둔다.
      * 타일을 그대로 베낀다(소프트웨어, 값 그대로).
      */
-    private fun atlas(raster: Raster, window: CropWindow, match: TextureMatch, scale: Double, block: Int, columns: Int): Bitmap {
+    private fun atlas(raster: Raster, size: PixelSize, window: CropWindow, match: TextureMatch, scale: Double, block: Int, columns: Int): Bitmap {
         val count = match.sources.size
         val rows = (count + columns - 1) / columns
         val width = columns * block
@@ -214,13 +215,13 @@ internal object TextureTransfer {
                 val atY = (slot / columns) * block
                 canvas.save()
                 canvas.clipRect(atX.toFloat(), atY.toFloat(), (atX + block).toFloat(), (atY + block).toFloat())
-                for (row in startY / TILE_SIZE..(startY + block - 1) / TILE_SIZE) {
-                    for (column in startX / TILE_SIZE..(startX + block - 1) / TILE_SIZE) {
-                        val tile = raster.tiles[TileKey(column, row)] ?: continue
-                        val x = (atX + column * TILE_SIZE - startX).toFloat()
-                        val y = (atY + row * TILE_SIZE - startY).toFloat()
-                        canvas.drawBitmap(CanvasTileComposer.bitmapOf(tile, temporary), x, y, CanvasTileComposer.CopyPaint)
-                    }
+                // 캔버스 안 픽셀만 베낀다(끝 타일이 담은 캔버스 밖 픽셀은 읽지 않는다, 결정 기록 '캔버스 밖 픽셀')
+                canvas.clipRect((atX - startX).toFloat(), (atY - startY).toFloat(), (atX - startX + size.width).toFloat(), (atY - startY + size.height).toFloat())
+                for (key in tileKeysIn(PixelRect(startX, startY, startX + block, startY + block))) {
+                    val tile = raster.tiles[key] ?: continue
+                    val x = (atX + key.column * TILE_SIZE - startX).toFloat()
+                    val y = (atY + key.row * TILE_SIZE - startY).toFloat()
+                    canvas.drawBitmap(CanvasTileComposer.bitmapOf(tile, temporary), x, y, CanvasTileComposer.CopyPaint)
                 }
                 canvas.restore()
             }

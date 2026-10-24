@@ -10,8 +10,10 @@ import com.kiln.stratum.engine.document.Document
 import com.kiln.stratum.engine.document.GroupContent
 import com.kiln.stratum.engine.document.Layer
 import com.kiln.stratum.engine.document.LayerId
+import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.document.SkinRecord
 import com.kiln.stratum.engine.raster.PixelSize
+import com.kiln.stratum.engine.raster.Raster
 import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
@@ -21,14 +23,15 @@ import com.kiln.stratum.engine.selection.Selection
 /**
  * [layerId] 레이어에 레이어 마스크를 더한다(포토샵 '레이어 마스크 추가', 결정 기록 '피부 보정'의 1c).
  * 선택 영역이 있으면 그 모양(고른 곳만 보임)이고 선택을 푼다(포토샵과 같다). 없으면 다 보이는 마스크다(타일 한 장을 함께 써 메모리를 쓰지 않음).
- * 이미 마스크가 있거나 없는 레이어면 그대로 둔다.
+ * 다 보이는 마스크는 캔버스 밖 픽셀 자리도 덮는다(결정 기록 '캔버스 밖 픽셀'). 이미 마스크가 있거나 없는 레이어면 그대로 둔다.
  */
 data class AddLayerMask(val layerId: LayerId) : EditCommand {
     override fun applyTo(document: Document): Document {
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return document
         // 그룹에는 마스크를 두지 않는다(픽셀·조정 레이어만, 결정 기록 '피부 보정'의 1g)
         if (layer.mask != null || layer.content is GroupContent) return document
-        val mask = document.selection ?: Selection.all(PixelSize(document.width, document.height))
+        val outside = (layer.content as? RasterContent)?.raster?.tiles?.keys.orEmpty()
+        val mask = document.selection ?: Selection.all(PixelSize(document.width, document.height), outside)
         return document.withLayer(layer.copy(mask = mask)).copy(selection = null)
     }
 }
@@ -51,7 +54,7 @@ data class InvertLayerMask(val layerId: LayerId) : CancellableCommand {
         val layer = document.layers.getOrNull(document.indexOfLayer(layerId)) ?: return document
         val mask = layer.mask ?: return document
         val inverted = try {
-            MaskTiles.inverted(mask, PixelSize(document.width, document.height), checkCanceled)
+            MaskTiles.inverted(mask, PixelSize(document.width, document.height), (layer.content as? RasterContent)?.raster, checkCanceled)
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
         }
@@ -112,14 +115,28 @@ private fun Document.withMask(layer: Layer, mask: Selection): Document {
     return copy(layers = layers.map { if (it.id == layer.id || it.id == partner) it.copy(mask = mask) else it })
 }
 
-/** 문서 [size] 전체에서 [mask]를 뒤집은 마스크(선택 영역 반전과 같다). 다 보이는 타일·빈 자리는 계산 없이 정한다. */
-internal fun MaskTiles.inverted(mask: Selection, size: PixelSize, checkCanceled: () -> Unit): Selection {
+/**
+ * 문서 [size] 전체와 캔버스 밖 마스크·픽셀([pixels]) 자리에서 [mask]를 뒤집은 마스크(선택 영역 반전과 같다). 다 보이는 타일·빈 자리는 계산 없이 정한다.
+ * 경계 타일은 그 자리의 캔버스 안쪽·마스크 타일·픽셀 타일 크기 중 가장 큰 만큼 뒤집는다: 끝 자리에서 가렸던 캔버스 밖 픽셀도 보이게 된다
+ * (결정 기록 '캔버스 밖 픽셀').
+ */
+internal fun MaskTiles.inverted(mask: Selection, size: PixelSize, pixels: Raster?, checkCanceled: () -> Unit): Selection {
+    val grid = TileGrid(size.width, size.height)
+    val keys = LinkedHashSet<TileKey>(grid.keys())
+    keys += mask.tiles.keys
+    pixels?.let { keys += it.tiles.keys }
     val tiles = HashMap<TileKey, MaskTile>()
-    for (key in TileGrid(size.width, size.height).keys()) {
+    for (key in keys) {
         checkCanceled()
         when (val tile = mask.tiles[key]) {
             null -> tiles[key] = MaskTile.FULL
-            else -> if (!tile.isFull) invert(tile)?.let { tiles[key] = it }
+            else -> if (!tile.isFull) {
+                val inside = grid.canvasRect(key)
+                val pixel = pixels?.tiles?.get(key)
+                val width = maxOf(inside?.width ?: 0, tile.width, pixel?.width ?: 0)
+                val height = maxOf(inside?.height ?: 0, tile.height, pixel?.height ?: 0)
+                invert(tile, width, height)?.let { tiles[key] = it }
+            }
         }
     }
     return Selection.of(tiles)

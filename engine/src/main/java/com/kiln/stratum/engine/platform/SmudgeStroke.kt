@@ -24,6 +24,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileKeysIn
 import com.kiln.stratum.engine.selection.Selection
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -220,12 +221,18 @@ internal class TileSurface(private val raster: Raster, size: PixelSize, private 
         work[key] ?: originals[key] ?: raster.tiles[key]?.let { tile -> CanvasTileComposer.bitmapOf(tile, temporary).also { originals[key] = it } }
 
     override fun copyInto(canvas: Canvas, rect: PixelRect) {
-        for (row in rect.top / TILE_SIZE..(rect.bottom - 1) / TILE_SIZE) {
-            for (column in rect.left / TILE_SIZE..(rect.right - 1) / TILE_SIZE) {
-                val bitmap = bitmapAt(TileKey(column, row)) ?: continue
-                canvas.drawBitmap(bitmap, (column * TILE_SIZE - rect.left).toFloat(), (row * TILE_SIZE - rect.top).toFloat(), CanvasTileComposer.CopyPaint)
-            }
+        // 캔버스 안 픽셀만 집는다(끝 타일이 담은 캔버스 밖 픽셀은 읽지 않는다, 결정 기록 '캔버스 밖 픽셀')
+        val inside = rect.intersect(PixelRect(0, 0, width, height)) ?: return
+        canvas.save()
+        canvas.clipRect(
+            (inside.left - rect.left).toFloat(), (inside.top - rect.top).toFloat(),
+            (inside.right - rect.left).toFloat(), (inside.bottom - rect.top).toFloat()
+        )
+        for (key in tileKeysIn(inside)) {
+            val bitmap = bitmapAt(key) ?: continue
+            canvas.drawBitmap(bitmap, (key.column * TILE_SIZE - rect.left).toFloat(), (key.row * TILE_SIZE - rect.top).toFloat(), CanvasTileComposer.CopyPaint)
         }
+        canvas.restore()
     }
 
     override fun paint(rect: PixelRect, draw: (Canvas, Int, Int, Int, Int, Bitmap?, Float, Float) -> Unit) {

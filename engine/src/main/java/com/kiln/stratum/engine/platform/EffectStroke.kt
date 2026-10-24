@@ -126,7 +126,7 @@ internal object Effects {
         val changes = HashMap<TileKey, Tile?>()
         val temporary = ArrayList<Bitmap>()
         try {
-            for (block in keys.groupBy { TileKey(it.column / BLOCK_TILES, it.row / BLOCK_TILES) }.values) {
+            for (block in keys.groupBy { TileKey(Math.floorDiv(it.column, BLOCK_TILES), Math.floorDiv(it.row, BLOCK_TILES)) }.values) {
                 checkCanceled()
                 val area = block.map { key -> grid.bounds(key).let { PixelRect(it.left, it.top, it.left + it.width, it.top + it.height) } }
                     .reduce { a, b -> PixelRect(minOf(a.left, b.left), minOf(a.top, b.top), maxOf(a.right, b.right), maxOf(a.bottom, b.bottom)) }
@@ -145,26 +145,23 @@ internal object Effects {
                             it.x + reach >= tile.left && it.x - reach <= tile.left + tile.width &&
                                 it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
                         }
-                        val picture = Picture()
-                        val canvas = picture.beginRecording(tile.width, tile.height)
-                        raster.tiles[key]?.let { canvas.drawBitmap(CanvasTileComposer.bitmapOf(it, temporary), 0f, 0f, CanvasTileComposer.CopyPaint) }
                         // 타일 자리 q의 효과 색은 묶음 그림의 (q + 타일 - 묶음) 자리다
                         val shader = BitmapShader(effect, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
                             setLocalMatrix(Matrix().apply { setTranslate((area.left - tile.left).toFloat(), (area.top - tile.top).toFloat()) })
                         }
-                        BrushPainter.drawReplace(
-                            canvas, near, settings,
-                            scale = 1f,
-                            left = tile.left.toFloat(),
-                            top = tile.top.toFloat(),
-                            width = tile.width.toFloat(),
-                            height = tile.height.toFloat(),
-                            fill = shader,
-                            clip = selection?.tiles?.get(key)?.let { MaskTiles.bitmapOf(it, temporary) }
-                        )
-                        picture.endRecording()
-                        // 브러시 타일과 같이 소프트웨어로 그리고 바꿀 수 없는 비트맵 하나로 돌려준다
-                        changes[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
+                        // 브러시 타일과 같이 캔버스 안쪽만 바꾼다(끝 타일의 캔버스 밖 픽셀은 그대로, 결정 기록 '캔버스 밖 픽셀')
+                        changes[key] = TileRebuild.pixels(key, raster.tiles[key], grid, temporary) { canvas ->
+                            BrushPainter.drawReplace(
+                                canvas, near, settings,
+                                scale = 1f,
+                                left = tile.left.toFloat(),
+                                top = tile.top.toFloat(),
+                                width = tile.width.toFloat(),
+                                height = tile.height.toFloat(),
+                                fill = shader,
+                                clip = selection?.tiles?.get(key)?.let { MaskTiles.bitmapOf(it, temporary) }
+                            )
+                        }
                     }
                 } finally {
                     effect.recycle()

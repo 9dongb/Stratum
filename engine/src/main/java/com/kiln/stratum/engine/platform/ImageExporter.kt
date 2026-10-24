@@ -101,6 +101,8 @@ object ImageExporter {
         try {
             for ((key, tile) in raster.tiles) {
                 checkCanceled()
+                // 캔버스 안 자리만 그린다(캔버스 밖 자리의 픽셀은 내보내지 않고, 끝 타일의 캔버스 밖은 그림 끝에서 잘린다, 결정 기록 '캔버스 밖 픽셀')
+                if (key.column < 0 || key.row < 0 || key.column * TILE_SIZE >= into.width || key.row * TILE_SIZE >= into.height) continue
                 val source = CanvasTileComposer.bitmapOf(tile, temporary)
                 canvas.drawBitmap(
                     source,

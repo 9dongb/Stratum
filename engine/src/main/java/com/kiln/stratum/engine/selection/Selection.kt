@@ -128,8 +128,12 @@ class Selection private constructor(val tiles: Map<TileKey, MaskTile>) {
         /** 아무것도 고르지 않은 선택 영역 */
         val EMPTY = Selection(emptyMap())
 
-        /** 문서 [size] 전체를 고른 선택 영역(모두 선택) */
-        fun all(size: PixelSize): Selection = Selection(TileGrid(size.width, size.height).keys().associateWith { MaskTile.FULL })
+        /**
+         * 문서 [size] 전체를 고른 선택 영역(모두 선택). [also]가 있으면 그 자리(레이어의 캔버스 밖 픽셀 자리)도 다 고른다
+         * (다 보이는 레이어 마스크, 결정 기록 '캔버스 밖 픽셀').
+         */
+        fun all(size: PixelSize, also: Collection<TileKey> = emptyList()): Selection =
+            Selection((TileGrid(size.width, size.height).keys() + also).associateWith { MaskTile.FULL })
 
         /** [tiles]로 만든다. 문서 밖 자리는 넣지 않는다. */
         fun of(tiles: Map<TileKey, MaskTile>): Selection = if (tiles.isEmpty()) EMPTY else Selection(tiles.toMap())

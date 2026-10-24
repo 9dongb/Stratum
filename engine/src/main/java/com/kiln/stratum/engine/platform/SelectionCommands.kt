@@ -183,7 +183,7 @@ data object Deselect : EditCommand {
 data object InvertSelection : CancellableCommand {
     override fun applyTo(document: Document, checkCanceled: () -> Unit): Document {
         val selection = document.selection ?: return document
-        return document.withSelection(MaskTiles.inverted(selection, PixelSize(document.width, document.height), checkCanceled))
+        return document.withSelection(MaskTiles.inverted(selection, PixelSize(document.width, document.height), null, checkCanceled))
     }
 
     override fun estimateNewBytes(document: Document): Long =
@@ -249,7 +249,10 @@ data class CopySelectedToLayer(val layerId: LayerId, val name: String, val cut: 
 /** 레이어 픽셀을 선택 영역으로 자르거나 지운다(소프트웨어 그리기, 픽셀을 하나씩 돌지 않는다). */
 internal object SelectedPixels {
 
-    /** 고른 곳만 남긴 래스터. 다 고른 타일은 원래 타일을 그대로 쓴다. */
+    /**
+     * 고른 곳만 남긴 래스터(캔버스 안 픽셀만, 포토샵의 복사와 같다, 결정 기록 '캔버스 밖 픽셀'). 다 고른 타일은 원래 타일을 그대로 쓰고,
+     * 끝 타일이 캔버스 밖까지 담았으면 캔버스 안쪽으로 잘라 쓴다.
+     */
     fun keep(raster: Raster, selection: Selection, size: PixelSize, checkCanceled: () -> Unit): Raster {
         val grid = TileGrid(size.width, size.height)
         val tiles = HashMap<TileKey, Tile?>()
@@ -257,8 +260,18 @@ internal object SelectedPixels {
         try {
             for ((key, mask) in selection.tiles) {
                 checkCanceled()
+                if (!grid.contains(key)) continue
                 val tile = raster.tiles[key] ?: continue
-                tiles[key] = if (mask.isFull) tile else masked(tile, mask, grid, key, AndroidBlendMode.DST_IN, temporary)
+                val inside = grid.bounds(key)
+                tiles[key] = when {
+                    !mask.isFull -> masked(tile, mask, grid, key, AndroidBlendMode.DST_IN, temporary)
+                    tile.width <= inside.width && tile.height <= inside.height -> tile
+                    else -> try {
+                        tile.cropped(minOf(tile.width, inside.width), minOf(tile.height, inside.height))
+                    } catch (e: OutOfMemoryError) {
+                        throw NotEnoughMemoryException(e)
+                    }
+                }
             }
         } finally {
             for (bitmap in temporary) bitmap.recycle()
@@ -266,7 +279,10 @@ internal object SelectedPixels {
         return Raster.EMPTY.withTiles(tiles)
     }
 
-    /** 고른 곳을 지운 래스터. 다 고른 타일은 비운다. 바뀐 것이 없으면 [raster] 그대로다. */
+    /**
+     * 고른 곳을 지운 래스터. 캔버스 안 픽셀만 지운다(끝 타일이 담은 캔버스 밖 픽셀은 그대로, 결정 기록 '캔버스 밖 픽셀').
+     * 다 고른 타일이 캔버스 안쪽만 담았으면 비운다. 바뀐 것이 없으면 [raster] 그대로다.
+     */
     fun cut(raster: Raster, selection: Selection, size: PixelSize, checkCanceled: () -> Unit): Raster {
         val grid = TileGrid(size.width, size.height)
         val changes = HashMap<TileKey, Tile?>()
@@ -274,8 +290,24 @@ internal object SelectedPixels {
         try {
             for ((key, mask) in selection.tiles) {
                 checkCanceled()
+                if (!grid.contains(key)) continue
                 val tile = raster.tiles[key] ?: continue
-                changes[key] = if (mask.isFull) null else masked(tile, mask, grid, key, AndroidBlendMode.DST_OUT, temporary)
+                val inside = grid.bounds(key)
+                changes[key] = when {
+                    mask.isFull && tile.width <= inside.width && tile.height <= inside.height -> null
+                    else -> try {
+                        // 다 고른 타일은 캔버스 안쪽을 다 지우고(TileRebuild가 캔버스 안쪽으로 자름), 아니면 알파만큼 지운다
+                        TileRebuild.pixels(key, tile, grid, temporary) { canvas ->
+                            if (mask.isFull) {
+                                canvas.drawColor(android.graphics.Color.TRANSPARENT, AndroidBlendMode.CLEAR)
+                            } else {
+                                MaskTiles.drawAlpha(canvas, checkNotNull(MaskTiles.bitmapOf(mask, temporary)), AndroidBlendMode.DST_OUT)
+                            }
+                        }
+                    } catch (e: OutOfMemoryError) {
+                        throw NotEnoughMemoryException(e)
+                    }
+                }
             }
         } finally {
             for (bitmap in temporary) bitmap.recycle()

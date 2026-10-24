@@ -86,23 +86,19 @@ data class ToneStroke(
                 val source = CanvasTileComposer.bitmapOf(old, temporary)
                 val toned = ToneShader.render(source, tile.width, tile.height, fill) ?: throw NotEnoughMemoryException()
                 try {
-                    val picture = Picture()
-                    val canvas = picture.beginRecording(tile.width, tile.height)
-                    canvas.drawBitmap(source, 0f, 0f, CanvasTileComposer.CopyPaint)
-                    // 세기는 노출이 정하므로 브러시 불투명도는 쓰지 않는다
-                    BrushPainter.drawStroke(
-                        canvas, near, settings.copy(opacity = 1f), erase = false,
-                        scale = 1f,
-                        left = tile.left.toFloat(),
-                        top = tile.top.toFloat(),
-                        width = tile.width.toFloat(),
-                        height = tile.height.toFloat(),
-                        clip = mask?.let { MaskTiles.bitmapOf(it, temporary) },
-                        fill = BitmapShader(toned, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-                    )
-                    picture.endRecording()
-                    // 브러시 타일과 같이 소프트웨어로 그리고 바꿀 수 없는 비트맵 하나로 돌려준다
-                    changes[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
+                    // 세기는 노출이 정하므로 브러시 불투명도는 쓰지 않는다. 캔버스 안쪽만 바꾼다(결정 기록 '캔버스 밖 픽셀').
+                    changes[key] = TileRebuild.pixels(key, old, grid, temporary) { canvas ->
+                        BrushPainter.drawStroke(
+                            canvas, near, settings.copy(opacity = 1f), erase = false,
+                            scale = 1f,
+                            left = tile.left.toFloat(),
+                            top = tile.top.toFloat(),
+                            width = tile.width.toFloat(),
+                            height = tile.height.toFloat(),
+                            clip = mask?.let { MaskTiles.bitmapOf(it, temporary) },
+                            fill = BitmapShader(toned, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                        )
+                    }
                 } finally {
                     toned.recycle()
                 }

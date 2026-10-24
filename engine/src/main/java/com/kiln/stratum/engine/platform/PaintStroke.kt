@@ -17,6 +17,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileKeysIn
 import com.kiln.stratum.engine.selection.Selection
 
 /**
@@ -74,14 +75,8 @@ data class PaintStroke(
 /** 브러시 획을 타일에 그린다(소프트웨어). */
 internal object BrushTiles {
 
-    /** [bounds]에 닿는 타일 자리 */
-    fun keysIn(bounds: PixelRect): List<TileKey> {
-        val keys = ArrayList<TileKey>()
-        for (row in bounds.top / TILE_SIZE..(bounds.bottom - 1) / TILE_SIZE) {
-            for (column in bounds.left / TILE_SIZE..(bounds.right - 1) / TILE_SIZE) keys += TileKey(column, row)
-        }
-        return keys
-    }
+    /** [bounds](문서 안)에 닿는 타일 자리 */
+    fun keysIn(bounds: PixelRect): List<TileKey> = tileKeysIn(bounds)
 
     /**
      * [raster]의 [bounds] 안 타일에 획을 그린 새 래스터. 바뀐 것이 없으면 [raster]를 그대로 돌려준다.
@@ -116,21 +111,18 @@ internal object BrushTiles {
                         it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
                 }
                 if (near.isEmpty()) continue
-                val picture = Picture()
-                val canvas = picture.beginRecording(tile.width, tile.height)
-                if (old != null) canvas.drawBitmap(CanvasTileComposer.bitmapOf(old, temporary), 0f, 0f, CanvasTileComposer.CopyPaint)
-                BrushPainter.drawStroke(
-                    canvas, near, settings, erase,
-                    scale = 1f,
-                    left = tile.left.toFloat(),
-                    top = tile.top.toFloat(),
-                    width = tile.width.toFloat(),
-                    height = tile.height.toFloat(),
-                    clip = mask?.let { MaskTiles.bitmapOf(it, temporary) }
-                )
-                picture.endRecording()
-                // GPU 전용 내용이 없어 소프트웨어로 그리고, 바꿀 수 없는 비트맵 하나로 돌려준다(CanvasTileComposer와 같다)
-                changes[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, tile.width, tile.height, Bitmap.Config.ARGB_8888)))
+                // 끝 타일의 캔버스 밖 픽셀은 그대로 두고 캔버스 안쪽만 칠한다(결정 기록 '캔버스 밖 픽셀')
+                changes[key] = TileRebuild.pixels(key, old, grid, temporary) { canvas ->
+                    BrushPainter.drawStroke(
+                        canvas, near, settings, erase,
+                        scale = 1f,
+                        left = tile.left.toFloat(),
+                        top = tile.top.toFloat(),
+                        width = tile.width.toFloat(),
+                        height = tile.height.toFloat(),
+                        clip = mask?.let { MaskTiles.bitmapOf(it, temporary) }
+                    )
+                }
             }
         } finally {
             for (bitmap in temporary) bitmap.recycle()

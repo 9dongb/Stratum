@@ -19,6 +19,7 @@ import com.kiln.stratum.engine.raster.HeapTilePixels
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.TilePixels
 import kotlin.math.ceil
@@ -93,8 +94,12 @@ object PreviewRenderer {
         return current
     }
 
-    /** 묶음 안의 타일들을 레이어 아래부터 그린다. [halve]이면 반 크기로 그린다. */
+    /**
+     * 묶음 안의 타일들을 레이어 아래부터 그린다. [halve]이면 반 크기로 그린다. 캔버스 안만 그린다: 끝 타일이 캔버스 밖까지 담았으면
+     * 반 크기로 줄일 때 그 픽셀이 끝 줄에 섞이지 않게 캔버스 안쪽으로 잘라 그린다(결정 기록 '캔버스 밖 픽셀').
+     */
     private fun drawTiles(document: Document, block: PreviewBlock, halve: Boolean): Bitmap? {
+        val grid = TileGrid(document.width, document.height)
         val scale = if (halve) 0.5f else 1f
         val width = if (halve) (block.width + 1) / 2 else block.width
         val height = if (halve) (block.height + 1) / 2 else block.height
@@ -126,10 +131,12 @@ object PreviewRenderer {
                                 // 마스크가 가린 자리(마스크 타일 없음)도 그리지 않는다. 다 보이는 마스크 타일은 곱할 것이 없다.
                                 val mask = step.mask
                                 val maskTile = if (mask == null) null else (mask.tiles[key] ?: continue)
-                                val bitmap = bitmapOf(tile.pixels, temporary)
+                                val inside = grid.bounds(key)
+                                val bitmap = insideOf(bitmapOf(tile.pixels, temporary), inside.width, inside.height, halve, temporary)
                                 val left = (column - block.firstColumn) * TILE_SIZE * scale
                                 val top = (row - block.firstRow) * TILE_SIZE * scale
-                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust, maskTile?.let { MaskTiles.bitmapOf(it, temporary) })
+                                val maskBitmap = maskTile?.let { MaskTiles.bitmapOf(it, temporary) }?.let { insideOf(it, inside.width, inside.height, halve, temporary) }
+                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust, maskBitmap)
                             }
                         }
                         if (saved != null) canvas.restoreToCount(saved)
@@ -237,6 +244,15 @@ object PreviewRenderer {
         val right = left + ceil(bitmap.width * scaleX)
         val bottom = top + ceil(bitmap.height * scaleY)
         canvas.drawRect(left, top, right, bottom, Paint().apply { this.shader = drawn })
+    }
+
+    /**
+     * [bitmap]에서 캔버스 안쪽 [width]×[height]만 남긴 그림. 반 크기로 줄일 때([halve])만 자른다(끝 줄의 2×2 평균에 캔버스 밖 픽셀이 섞이지 않게,
+     * 원래 크기로 그릴 때는 묶음 그림이 캔버스 끝에서 잘린다). 자를 것이 없으면 [bitmap] 그대로이고, 자른 그림은 [temporary]에 넣는다.
+     */
+    private fun insideOf(bitmap: Bitmap, width: Int, height: Int, halve: Boolean, temporary: MutableList<Bitmap>): Bitmap {
+        if (!halve || (bitmap.width <= width && bitmap.height <= height)) return bitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, minOf(bitmap.width, width), minOf(bitmap.height, height)).also { temporary += it }
     }
 
     /** 타일 픽셀을 그릴 수 있는 비트맵으로. 힙 타일은 임시 비트맵을 만들어 [temporary]에 넣는다. */

@@ -52,7 +52,10 @@ internal object MaskPainter {
                         it.y + reach >= tile.top && it.y - reach <= tile.top + tile.height
                 }
                 if (near.isEmpty()) continue
-                changes[key] = MaskTiles.draw(tile.width, tile.height) { canvas ->
+                // 옛 마스크 타일 크기만큼 다시 만들고(다 보이는 타일은 꽉 찬 타일) 캔버스 안쪽만 칠한다: 끝 자리의 캔버스 밖 알파는 그대로다
+                // (결정 기록 '캔버스 밖 픽셀')
+                val built = grid.rebuildSize(key, old)
+                changes[key] = MaskTiles.draw(built.width, built.height) { canvas ->
                     when {
                         old == null -> Unit
                         old.isFull -> canvas.drawColor(Color.BLACK)

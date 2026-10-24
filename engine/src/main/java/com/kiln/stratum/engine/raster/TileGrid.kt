@@ -47,6 +47,29 @@ class TileGrid(val width: Int, val height: Int) {
      */
     fun solidShape(key: TileKey): PixelSize =
         if (contains(key)) bounds(key).let { PixelSize(it.width, it.height) } else PixelSize(TILE_SIZE, TILE_SIZE)
+
+    /**
+     * 편집이 [key] 자리 타일을 다시 만들 때의 크기: 캔버스 안 자리는 캔버스 안쪽 크기와 옛 타일([old]) 크기 중 큰 쪽, 캔버스 밖 자리는 옛 타일 크기.
+     * 편집은 캔버스 안쪽만 고치고 그 밖은 옛 타일 그대로 둔다(끝 타일이 담은 캔버스 밖 픽셀을 지우지 않게, 결정 기록 '캔버스 밖 픽셀').
+     */
+    fun rebuildSize(key: TileKey, old: Tile?): PixelSize {
+        if (!contains(key)) {
+            requireNotNull(old) { "Nothing to rebuild outside the grid: $key" }
+            return PixelSize(old.width, old.height)
+        }
+        val inside = bounds(key)
+        return PixelSize(maxOf(inside.width, old?.width ?: 0), maxOf(inside.height, old?.height ?: 0))
+    }
+
+    /** 마스크 타일 [old]를 [key] 자리에서 다시 만들 때의 크기([rebuildSize]와 같은 규칙, [MaskTile.FULL]은 꽉 찬 타일) */
+    fun rebuildSize(key: TileKey, old: com.kiln.stratum.engine.selection.MaskTile?): PixelSize {
+        if (!contains(key)) {
+            requireNotNull(old) { "Nothing to rebuild outside the grid: $key" }
+            return PixelSize(old.width, old.height)
+        }
+        val inside = bounds(key)
+        return PixelSize(maxOf(inside.width, old?.width ?: 0), maxOf(inside.height, old?.height ?: 0))
+    }
 }
 
 /** 문서 좌표 ([x], [y]) 픽셀이 있는 타일 자리(캔버스 밖 포함, 내림 나눗셈) */

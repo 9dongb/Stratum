@@ -130,11 +130,17 @@ internal object MaskTiles : MaskTileOps {
 
     override fun intersect(a: MaskTile, b: MaskTile): MaskTile? = combine(a, b, BlendMode.DST_IN)
 
-    override fun invert(a: MaskTile): MaskTile? {
+    override fun invert(a: MaskTile): MaskTile? = invert(a, a.width, a.height)
+
+    /**
+     * [a]를 뒤집은 [width]×[height] 마스크 타일(담은 크기 이상). [a]가 담지 않은 곳은 0이었으므로 뒤집으면 255다
+     * (레이어 마스크를 뒤집으면 끝 자리에서 가렸던 캔버스 밖 픽셀도 보이게, 결정 기록 '캔버스 밖 픽셀').
+     */
+    fun invert(a: MaskTile, width: Int, height: Int): MaskTile? {
         val temporary = ArrayList<Bitmap>()
         try {
             val source = checkNotNull(bitmapOf(a, temporary)) { "Full tiles are inverted without drawing" }
-            return draw(source.width, source.height) { canvas ->
+            return draw(width, height) { canvas ->
                 canvas.drawColor(Color.BLACK)
                 drawAlpha(canvas, source, BlendMode.DST_OUT)
             }

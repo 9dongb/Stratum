@@ -216,4 +216,33 @@ class PreviewRendererTest {
         assertEquals(100, preview.width)
         assertEquals(Color.GREEN, preview.getPixel(50, 50))
     }
+
+    @Test
+    fun pixelsPastTheCanvasEdge_neverShowInThePreview() {
+        // 홀수 폭(601×301) 캔버스의 끝 타일이 캔버스 밖까지 자홍을 담고(이동 도구가 밀어낸 픽셀, 결정 기록 '캔버스 밖 픽셀') 캔버스 밖 자리에도 자홍 타일이 있다.
+        // 축소본은 캔버스 안만 그려, 끝 타일을 캔버스 안쪽 크기로 담은 레이어와 같아야 한다(반으로 줄일 때 끝 줄에 자홍이 섞이지 않음).
+        val grid = TileGrid(601, 301)
+        val gray = Color.rgb(90, 90, 90)
+        val honest = HashMap<TileKey, Tile?>()
+        val spilled = HashMap<TileKey, Tile?>()
+        for (key in grid.keys()) {
+            val inside = grid.bounds(key)
+            honest[key] = Tile.solid(gray, inside.width, inside.height)
+            spilled[key] = Tile.of(IntArray(TILE_PIXEL_COUNT) { i -> if (i % TILE_SIZE < inside.width && i / TILE_SIZE < inside.height) gray else Color.MAGENTA })
+        }
+        spilled[TileKey(-1, 0)] = Tile.solid(Color.MAGENTA)
+        spilled[TileKey(3, 2)] = Tile.solid(Color.MAGENTA)
+        val expectedDocument = Document.create(601, 301, "Background", Raster.EMPTY.withTiles(honest))
+        val spilledDocument = Document.create(601, 301, "Background", Raster.EMPTY.withTiles(spilled))
+        for (level in 0..2) {
+            val expected = checkNotNull(PreviewRenderer.render(expectedDocument, level)).readable()
+            val actual = checkNotNull(PreviewRenderer.render(spilledDocument, level)).readable()
+            assertEquals(expected.width, actual.width)
+            for (y in 0 until actual.height) {
+                for (x in 0 until actual.width) {
+                    if (expected.getPixel(x, y) != actual.getPixel(x, y)) fail("level $level ($x, $y): ${Integer.toHexString(actual.getPixel(x, y))}")
+                }
+            }
+        }
+    }
 }
