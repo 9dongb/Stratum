@@ -32,8 +32,10 @@ import java.io.OutputStream
  * 프로젝트 파일 형식의 판. 이 앱이 읽을 수 있는 가장 높은 판이다.
  * 판 2는 레이어 마스크(결정 기록 '피부 보정'의 1c)·조정 레이어(1e)·레이어 그룹(1g)을 담는다. 앞 판 앱이 그것을 빼고 열면 보이는 모습이 달라지므로,
  * 그것이 있는 프로젝트만 판 2로 쓰고 나머지는 판 1 그대로다([ProjectManifest.formatVersion]).
+ * 판 3은 캔버스 밖 픽셀(캔버스 밖 자리의 타일, 끝 자리에서 캔버스 밖까지 담은 타일, 결정 기록 '캔버스 밖 픽셀')을 담는다. 앞 판 앱은 캔버스 밖 자리를
+ * 망가진 파일로 보고, 끝 타일을 캔버스 안쪽으로 잘라 읽어서 그 프로젝트만 판 3으로 쓴다.
  */
-const val PROJECT_FORMAT_VERSION = 2
+const val PROJECT_FORMAT_VERSION = 3
 
 /**
  * 저장한 프로젝트의 목차(순수 데이터). 캔버스 크기, 레이어와 그 속성, 레이어마다 어느 자리에 어떤 타일이 있는지 적는다.
@@ -44,6 +46,8 @@ const val PROJECT_FORMAT_VERSION = 2
  * @property modifiedMillis 마지막으로 저장한 시각(밀리초). 홈의 최근 프로젝트 순서다.
  * @property colorSpace 픽셀 값의 색 공간(Document.colorSpace). sRGB가 아니면 문서 덧붙임(꼬리표 1)에 적는다.
  * @property hdr 게인맵을 읽는 값(Document.hdr). 있으면 문서 덧붙임(꼬리표 2)에 적는다.
+ * @property offCanvas 캔버스 밖 픽셀이 있는지(판 3, 결정 기록 '캔버스 밖 픽셀'). 저장하는 쪽이 문서에서 정하고, 읽으면 판 3이었는지다
+ *   (판 3 전의 파일은 끝 타일을 캔버스 안쪽으로 잘라 연다).
  */
 data class ProjectManifest(
     val width: Int,
@@ -53,7 +57,8 @@ data class ProjectManifest(
     val modifiedMillis: Long,
     val layers: List<LayerEntry>,
     val colorSpace: DocumentColorSpace = DocumentColorSpace.SRGB,
-    val hdr: HdrInfo? = null
+    val hdr: HdrInfo? = null,
+    val offCanvas: Boolean = false
 ) {
     init {
         require(width > 0 && height > 0) { "Canvas size must be positive: ${width}x$height" }
@@ -64,9 +69,13 @@ data class ProjectManifest(
     val header: ProjectHeader
         get() = ProjectHeader(width, height, createdMillis, modifiedMillis)
 
-    /** 이 목차를 쓸 판: 레이어 마스크·조정 레이어·그룹이 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
+    /** 이 목차를 쓸 판: 캔버스 밖 픽셀이 있으면 3, 레이어 마스크·조정 레이어·그룹이 있으면 2, 없으면 1([PROJECT_FORMAT_VERSION]) */
     val formatVersion: Int
-        get() = if (layers.any { it.mask != null || it.content is AdjustmentEntry || it.content is GroupEntry || it.parent != null }) 2 else 1
+        get() = when {
+            offCanvas -> 3
+            layers.any { it.mask != null || it.content is AdjustmentEntry || it.content is GroupEntry || it.parent != null } -> 2
+            else -> 1
+        }
 }
 
 /**
@@ -338,7 +347,9 @@ object ProjectManifestCodec {
                     EXTRA_HDR -> hdr = hdrOf(bytes)
                 }
             }
-            return ProjectManifest(header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers, colorSpace, hdr)
+            return ProjectManifest(
+                header.width, header.height, nextLayerId, header.createdMillis, header.modifiedMillis, layers, colorSpace, hdr, offCanvas = header.version >= 3
+            )
         } catch (e: IllegalArgumentException) {
             throw UnreadableProjectException("Broken project: ${e.message}")
         }
@@ -350,7 +361,7 @@ object ProjectManifestCodec {
         return ProjectHeader(header.width, header.height, header.createdMillis, header.modifiedMillis)
     }
 
-    private class HeaderFields(val width: Int, val height: Int, val nextLayerId: Long, val createdMillis: Long, val modifiedMillis: Long)
+    private class HeaderFields(val version: Int, val width: Int, val height: Int, val nextLayerId: Long, val createdMillis: Long, val modifiedMillis: Long)
 
     private fun readHeaderFields(data: DataInputStream): HeaderFields {
         if (data.readInt() != MAGIC) throw UnreadableProjectException("Not a Stratum project")
@@ -359,7 +370,7 @@ object ProjectManifestCodec {
         val width = data.readInt()
         val height = data.readInt()
         if (width <= 0 || height <= 0) throw UnreadableProjectException("Broken canvas size ${width}x$height")
-        return HeaderFields(width, height, data.readLong(), data.readLong(), data.readLong())
+        return HeaderFields(version, width, height, data.readLong(), data.readLong(), data.readLong())
     }
 
     /** 개수. 음수면 망가진 파일이다. */

@@ -113,7 +113,8 @@ class ProjectManifestTest {
             out.writeInt(0)
         }.toByteArray()
 
-        assertEquals(single, ProjectManifestCodec.read(ByteArrayInputStream(bytes)))
+        // 가장 높은 판(3)으로 쓴 파일이라 캔버스 밖 픽셀이 있는 판으로 읽는다
+        assertEquals(single.copy(offCanvas = true), ProjectManifestCodec.read(ByteArrayInputStream(bytes)))
     }
 
     @Test
@@ -168,6 +169,27 @@ class ProjectManifestTest {
         // 다 가린 마스크(타일 없음)도 마스크다
         val hidden = manifest.copy(layers = listOf(manifest.layers[0].copy(mask = emptyList()), manifest.layers[1]))
         assertEquals(hidden, read(bytesOf(hidden)))
+    }
+
+    @Test
+    fun offCanvasTiles_roundTrip_andOnlyThoseProjectsUseVersion3() {
+        // 이동 도구가 캔버스 밖으로 밀어낸 픽셀(결정 기록 '캔버스 밖 픽셀'): 음수·열 수 이상의 자리, 마스크도
+        val pixels = RasterEntry(listOf(TileEntry(-2, 0, TileRef.File("a.tile")), TileEntry(16, -1, TileRef.Solid(0xFF00FF00.toInt())), TileEntry(3, 4, TileRef.File("b.tile"))))
+        val masked = listOf(MaskTileEntry(-2, 0, null), MaskTileEntry(16, -1, "m.mask"))
+        val outside = manifest.copy(
+            layers = listOf(manifest.layers[0].copy(content = pixels, mask = masked), manifest.layers[1]),
+            offCanvas = true
+        )
+        val bytes = bytesOf(outside)
+
+        assertEquals(outside, read(bytes))
+        // 판(머리말 둘째 int): 캔버스 밖 픽셀이 있으면 3, 읽으면 판 3이었다고 알린다
+        assertEquals(3, ByteBuffer.wrap(bytes, 4, 4).int)
+        assertTrue(read(bytes).offCanvas)
+        // 캔버스 밖 픽셀이 없으면 전처럼 1·2판이다(앞 판 앱도 연다)
+        assertEquals(1, ByteBuffer.wrap(bytesOf(manifest), 4, 4).int)
+        assertEquals(false, read(bytesOf(manifest)).offCanvas)
+        assertEquals(2, outside.copy(offCanvas = false).formatVersion)
     }
 
     @Test

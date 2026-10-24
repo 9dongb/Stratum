@@ -9,13 +9,15 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.engine.canvas.CanvasFill
 import com.kiln.stratum.engine.command.AddLayer
+import com.kiln.stratum.engine.command.RasterizeLayer
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
 import com.kiln.stratum.engine.command.SetLayerVisible
 import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.Document
+import com.kiln.stratum.engine.document.HdrGainmap
 import com.kiln.stratum.engine.document.LayerId
-import com.kiln.stratum.engine.command.RasterizeLayer
+import com.kiln.stratum.engine.document.LiquifyRecord
 import com.kiln.stratum.engine.document.RasterContent
 import com.kiln.stratum.engine.document.liquifySource
 import com.kiln.stratum.engine.face.FaceLandmarks
@@ -25,9 +27,9 @@ import com.kiln.stratum.engine.face.FaceValues
 import com.kiln.stratum.engine.importing.ImportResult
 import com.kiln.stratum.engine.liquify.LiquifyMesh
 import com.kiln.stratum.engine.liquify.LiquifyTool
-import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.BlankCanvas
 import com.kiln.stratum.engine.platform.CropImage
+import com.kiln.stratum.engine.platform.LiquifyLayer
 import com.kiln.stratum.engine.platform.PhotoImporter
 import com.kiln.stratum.engine.platform.ProjectFolder
 import com.kiln.stratum.engine.project.ProjectHeader
@@ -38,8 +40,13 @@ import com.kiln.stratum.engine.project.UnreadableProjectException
 import com.kiln.stratum.engine.raster.PixelRect
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
+import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.selection.MaskTile
+import com.kiln.stratum.engine.selection.Selection
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -48,6 +55,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -306,5 +314,84 @@ class ProjectFolderTest {
         val tileBytes = TILE_SIZE.toLong() * TILE_SIZE * 4
         assertEquals(plain + (tileFiles().size - 6) * tileBytes + LiquifyMesh.byteCountFor(PixelSize(700, 300)), folder.estimatedBytes())
         assertNotNull(document.layers[0].liquify)
+    }
+
+    /** 캔버스 안쪽 [width]×[height]는 [inside], 타일이 담은 나머지는 [outside]인 꽉 찬 타일 */
+    private fun spilledTile(width: Int, height: Int, inside: Int, outside: Int): Tile =
+        Tile.of(IntArray(TILE_PIXEL_COUNT) { i -> if (i % TILE_SIZE < width && i / TILE_SIZE < height) inside else outside })
+
+    @Test
+    fun offCanvasPixels_masksGainmapAndLiquifyBase_roundTripAsVersion3() {
+        // 이동 도구가 캔버스 밖으로 밀어낸 픽셀(결정 기록 '캔버스 밖 픽셀'): 600×300 캔버스, 끝 타일이 캔버스 밖까지 담고 캔버스 밖 자리에도 타일이 있다
+        val base = photo(600, 300) { x, y -> Color.rgb(x and 0xFF, y and 0xFF, 90) }
+        val tiles = base.raster().tiles.toMutableMap<TileKey, Tile?>()
+        tiles[TileKey(2, 0)] = spilledTile(88, 256, Color.GRAY, Color.MAGENTA)
+        tiles[TileKey(-1, 0)] = Tile.of(IntArray(TILE_PIXEL_COUNT) { Color.rgb(it and 0xFF, 40, 200) })
+        tiles[TileKey(3, -2)] = Tile.solid(Color.CYAN)
+        val raster = Raster.EMPTY.withTiles(tiles)
+        val mask = Selection.of(TileGrid(600, 300).keys().associateWith { MaskTile.FULL } + mapOf(TileKey(-1, 0) to MaskTile.FULL))
+        val gainmap = HdrGainmap(150, 75, Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to spilledTile(150, 75, Color.DKGRAY, Color.WHITE), TileKey(1, 0) to Tile.solid(Color.WHITE))))
+        val record = LiquifyRecord(raster, null, null, emptyList(), emptyList())
+        val document = base.copy(layers = listOf(base.layers[0].withPixels(raster, gainmap).copy(mask = mask, liquify = record)))
+
+        ProjectFolder(directory).save(document, 1, 1)
+        // 판(머리말 둘째 int)이 3이다
+        val version = ByteBuffer.wrap(File(directory, "project.bin").readBytes(), 4, 4).int
+        assertEquals(3, version)
+        val loaded = ProjectFolder(directory).load().document
+
+        assertSamePixels(document, loaded)
+        val layer = loaded.layers[0]
+        assertEquals(PixelSize(256, 256), loaded.raster().tiles.getValue(TileKey(2, 0)).let { PixelSize(it.width, it.height) })
+        assertEquals(Color.MAGENTA, loaded.raster().tiles.getValue(TileKey(2, 0)).pixelAt(200, 10))
+        assertEquals(Color.CYAN, loaded.raster().tiles.getValue(TileKey(3, -2)).pixelAt(0, 0))
+        assertSame(MaskTile.FULL, checkNotNull(layer.mask).tiles[TileKey(-1, 0)])
+        val loadedGainmap = checkNotNull(layer.gainmap).raster
+        assertEquals(Color.WHITE, loadedGainmap.tiles.getValue(TileKey(0, 0)).pixelAt(200, 200))
+        assertEquals(Color.WHITE, loadedGainmap.tiles.getValue(TileKey(1, 0)).pixelAt(0, 0))
+        val loadedBase = checkNotNull(layer.liquify).base
+        assertEquals(raster.tiles.keys, loadedBase.tiles.keys)
+        assertEquals(Color.MAGENTA, loadedBase.tiles.getValue(TileKey(2, 0)).pixelAt(200, 10))
+
+        // 캔버스 밖 픽셀이 없어지면(다시 저장) 전처럼 1판으로 쓴다
+        val plain = base
+        ProjectFolder(directory).save(plain, 1, 2)
+        assertEquals(1, ByteBuffer.wrap(File(directory, "project.bin").readBytes(), 4, 4).int)
+    }
+
+    @Test
+    fun anOlderFileWithAnOversizedEdgeTile_opensCroppedToTheCanvas() {
+        // 판 3 전에는 끝 타일의 캔버스 밖이 쓰지 않던 찌꺼기였다(예: 한 가지 색 캔버스를 스머지한 타일). 앞 판 파일로 읽으면 캔버스 안쪽으로 자른다.
+        val base = photo(600, 300) { _, _ -> Color.GRAY }
+        val tiles = base.raster().tiles.toMutableMap<TileKey, Tile?>()
+        tiles[TileKey(2, 1)] = spilledTile(88, 44, Color.GRAY, Color.MAGENTA)
+        val document = base.copy(layers = listOf(base.layers[0].withPixels(Raster.EMPTY.withTiles(tiles))))
+        ProjectFolder(directory).save(document, 1, 1)
+        // 판 번호를 1로 바꿔 앞 판 앱이 쓴 파일처럼 만든다
+        val manifest = File(directory, "project.bin")
+        val bytes = manifest.readBytes()
+        ByteBuffer.wrap(bytes).putInt(4, 1)
+        manifest.writeBytes(bytes)
+
+        val loaded = ProjectFolder(directory).load().document
+
+        val corner = loaded.raster().tiles.getValue(TileKey(2, 1))
+        assertEquals(PixelSize(88, 44), PixelSize(corner.width, corner.height))
+        assertEquals(Color.GRAY, corner.pixelAt(87, 43))
+        assertEquals(Color.TRANSPARENT, corner.pixelAt(100, 10))
+    }
+
+    @Test
+    fun tilesOutsideTheCanvas_inAnOlderFile_orTooFar_areBroken() {
+        val base = photo(600, 300) { _, _ -> Color.GRAY }
+        val tiles = base.raster().tiles.toMutableMap<TileKey, Tile?>()
+        tiles[TileKey(-1, 0)] = Tile.solid(Color.GRAY)
+        ProjectFolder(directory).save(base.copy(layers = listOf(base.layers[0].withPixels(Raster.EMPTY.withTiles(tiles)))), 1, 1)
+        val manifest = File(directory, "project.bin")
+        val bytes = manifest.readBytes()
+        ByteBuffer.wrap(bytes).putInt(4, 2)
+        manifest.writeBytes(bytes)
+
+        assertThrows(UnreadableProjectException::class.java) { ProjectFolder(directory).load() }
     }
 }

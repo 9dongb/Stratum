@@ -45,6 +45,7 @@ import java.io.IOException
 import java.io.OutputStream
 import java.util.IdentityHashMap
 import java.util.UUID
+import kotlin.math.abs
 
 /** 불러온 프로젝트: 문서와 처음 만든 시각 */
 class LoadedProject(val document: Document, val createdMillis: Long)
@@ -153,7 +154,8 @@ class ProjectFolder(val directory: File) {
             modifiedMillis = modifiedMillis,
             layers = layers,
             colorSpace = document.colorSpace,
-            hdr = document.hdr
+            hdr = document.hdr,
+            offCanvas = hasOffCanvas(document)
         )
         checkCanceled()
         writeAtomically(manifestFile) { ProjectManifestCodec.write(manifest, it) }
@@ -187,20 +189,20 @@ class ProjectFolder(val directory: File) {
             throw NotEnoughMemoryException(e)
         }
         // 같은 파일을 가리키는 자리는 같은 타일 객체를 함께 쓰고, 한 가지 색 타일은 색과 크기마다 한 장만 만든다.
-        // 한 가지 색 타일은 그 자리의 한 가지 색 크기(끝 자리는 캔버스 안쪽)로 되살리고, 앞 판(캔버스 밖 픽셀이 없던 때) 파일의 끝 타일이
-        // 캔버스 밖까지 담았으면 그 부분은 쓰지 않던 찌꺼기라 잘라 낸다(결정 기록 '캔버스 밖 픽셀').
+        // 한 가지 색 타일은 그 자리의 한 가지 색 크기(끝 자리는 캔버스 안쪽)로 되살린다. 판 3(캔버스 밖 픽셀)부터는 캔버스 밖 자리도 받고,
+        // 그 전 판 파일의 끝 타일이 캔버스 밖까지 담았으면 그 부분은 쓰지 않던 찌꺼기라 잘라 낸다(결정 기록 '캔버스 밖 픽셀').
         fun rasterOf(entries: List<TileEntry>, grid: TileGrid): Raster {
             val tiles = HashMap<TileKey, Tile?>()
             for (tileEntry in entries) {
                 checkCanceled()
-                val key = TileKey(tileEntry.column, tileEntry.row)
-                val inside = grid.canvasRect(key) ?: throw UnreadableProjectException("Tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
+                val key = keyOf(tileEntry.column, tileEntry.row, grid, manifest.offCanvas)
+                val inside = grid.canvasRect(key)
                 tiles[key] = when (val ref = tileEntry.ref) {
                     is TileRef.Solid -> solidOf(ref.argb, grid.solidShape(key))
                     is TileRef.File -> {
                         val tile = fileTiles.getOrPut(ref.name) { TileFiles.read(File(tilesDirectory, ref.name)).also { loaded[it] = ref.name } }
-                        val width = minOf(tile.width, inside.width)
-                        val height = minOf(tile.height, inside.height)
+                        val width = if (manifest.offCanvas || inside == null) tile.width else minOf(tile.width, inside.width)
+                        val height = if (manifest.offCanvas || inside == null) tile.height else minOf(tile.height, inside.height)
                         if (width == tile.width && height == tile.height) {
                             tile
                         } else {
@@ -222,11 +224,8 @@ class ProjectFolder(val directory: File) {
             val tiles = HashMap<TileKey, MaskTile>()
             for (tileEntry in entries) {
                 checkCanceled()
-                if (tileEntry.column !in 0 until grid.columns || tileEntry.row !in 0 until grid.rows) {
-                    throw UnreadableProjectException("Mask tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
-                }
                 val name = tileEntry.file
-                tiles[TileKey(tileEntry.column, tileEntry.row)] = if (name == null) {
+                tiles[keyOf(tileEntry.column, tileEntry.row, grid, manifest.offCanvas)] = if (name == null) {
                     MaskTile.FULL
                 } else {
                     maskTiles.getOrPut(name) { MaskTileFiles.read(File(tilesDirectory, name)).also { loadedMasks[it] = name } }
@@ -349,6 +348,40 @@ class ProjectFolder(val directory: File) {
     }
 
     /**
+     * 목차의 타일 자리. 판 3(캔버스 밖 픽셀, [offCanvas])이면 캔버스 밖 자리도 받되 터무니없이 먼 자리(절댓값 [MAX_TILE_INDEX] 넘게)는 망가진 파일로 보고,
+     * 그 전 판은 캔버스 밖 자리를 망가진 파일로 본다.
+     */
+    private fun keyOf(column: Int, row: Int, grid: TileGrid, offCanvas: Boolean): TileKey {
+        val key = TileKey(column, row)
+        if (offCanvas) {
+            if (abs(column) > MAX_TILE_INDEX || abs(row) > MAX_TILE_INDEX) throw UnreadableProjectException("Tile too far: ($column, $row)")
+        } else if (!grid.contains(key)) {
+            throw UnreadableProjectException("Tile outside canvas: ($column, $row)")
+        }
+        return key
+    }
+
+    /**
+     * [document]에 캔버스 밖 픽셀이 있는지(판 3으로 쓸지): 레이어 픽셀·게인맵·유동화 원래 픽셀에 캔버스 밖 자리의 타일이나 끝 자리에서 캔버스 밖까지 담은 타일이
+     * 있거나, 레이어 마스크에 캔버스 밖 자리나 캔버스 밖까지 담은 경계 타일이 있다(결정 기록 '캔버스 밖 픽셀').
+     */
+    private fun hasOffCanvas(document: Document): Boolean {
+        val grid = TileGrid(document.width, document.height)
+        return document.layers.any { layer ->
+            val pixels = (layer.content as? RasterContent)?.raster?.hasOffCanvas(grid) == true
+            val gainmap = layer.gainmap?.let { it.raster.hasOffCanvas(TileGrid(it.width, it.height)) } == true
+            val base = layer.liquify?.let { record ->
+                record.base.hasOffCanvas(grid) || record.baseGainmap?.let { it.raster.hasOffCanvas(TileGrid(it.width, it.height)) } == true
+            } == true
+            val mask = layer.mask?.tiles?.any { (key, tile) ->
+                val inside = grid.canvasRect(key) ?: return@any true
+                !tile.isFull && (tile.width > inside.width || tile.height > inside.height)
+            } == true
+            pixels || gainmap || base || mask
+        }
+    }
+
+    /**
      * [tile]이 있는 곳. 한 가지 색이고 그 자리의 한 가지 색 크기([shape])면 색만, 아니면 파일(처음 보는 타일 객체면 새로 쓴다).
      * 쓴 파일 이름은 [referenced]에 넣는다.
      */
@@ -419,6 +452,9 @@ class ProjectFolder(val directory: File) {
 
         /** 이름 파일에서 읽는 가장 긴 글자 수. 망가진 큰 파일을 다 읽지 않게 한다(앱이 쓰는 이름은 이보다 짧다). */
         private const val MAX_NAME_BYTES = 1024
+
+        /** 판 3에서 받는 타일 자리의 절댓값 한도(문서 좌표 약 ±2.7억 픽셀, 타일 자리 × 타일 크기가 Int를 넘지 않게) */
+        private const val MAX_TILE_INDEX = 1 shl 20
 
         /** [directory] 프로젝트의 이름. 이름 파일이 없거나 읽을 수 없으면 null(이름이 없는 것). */
         fun readName(directory: File): String? =
