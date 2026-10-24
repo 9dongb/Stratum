@@ -29,7 +29,6 @@ import com.kiln.stratum.engine.command.GroupLayer
 import com.kiln.stratum.engine.command.MoveLayer
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.command.RasterizeLayer
-import com.kiln.stratum.engine.command.RenameLayer
 import com.kiln.stratum.engine.command.SetLayerAdjustments
 import com.kiln.stratum.engine.command.SetLayerBlendMode
 import com.kiln.stratum.engine.command.SetLayerOpacity
@@ -1064,14 +1063,12 @@ class EditorViewModel internal constructor(
         override fun delete() = deleteLayer()
         override fun duplicate() = duplicateLayer()
         override fun mergeDown() = mergeLayerDown()
-        override fun mergeVisible() = mergeVisibleLayers()
         override fun move(id: LayerId, toIndex: Int, parent: LayerId?) = moveLayer(id, toIndex, parent)
         override fun previewOpacity(opacity: Float) = this@EditorViewModel.previewOpacity(opacity)
         override fun commitOpacity() = commitLive()
         override fun setBlendMode(mode: BlendMode) = this@EditorViewModel.setBlendMode(mode)
         override fun setVisible(id: LayerId, visible: Boolean) = setLayerVisible(id, visible)
         override fun rasterize() = rasterizeActiveLayer()
-        override fun rename(id: LayerId, name: String) = renameLayer(id, name)
         override fun addMask() = addLayerMask()
         override fun addAdjustment() = addAdjustmentLayer()
         override fun group() = groupLayer()
@@ -2295,18 +2292,6 @@ class EditorViewModel internal constructor(
     }
 
     /**
-     * 보이는 레이어를 모두 가장 아래 보이는 픽셀 레이어 하나로 합치고(실행 취소 한 단계) 그 레이어를 고른다.
-     * 합칠 레이어([MergeVisible.mergedLayers])가 둘보다 적으면 하지 않는다. 다른 편집을 처리하는 중이면 무시한다.
-     */
-    fun mergeVisibleLayers() {
-        val document = history?.document ?: return
-        if (editing || hasLiveValues) return
-        val visible = MergeVisible.mergedLayers(document)
-        if (visible.size < 2) return
-        runEdit(MergeVisible, select = visible.first().id)
-    }
-
-    /**
      * [id] 레이어(그룹이면 자손과 함께)를 [toIndex](0이 맨 아래) 자리, [parent] 그룹 안(null이면 그룹 밖)으로 옮긴다(실행 취소 한 단계).
      * 고른 레이어는 그대로다. 그룹 규칙을 어기는 자리(다른 그룹 사이를 가름, 자기 안으로)면 옮기지 않는다([MoveLayer], 결정 기록 '피부 보정'의 1h).
      * 화면의 레이어 목록은 바로 새 순서·그룹으로 보인다(끌어서 놓은 줄이 앞 자리로 튀었다 돌아오지 않게).
@@ -2344,20 +2329,6 @@ class EditorViewModel internal constructor(
         val document = history?.document ?: return
         if (hasLiveValues || document.indexOfLayer(id) < 0) return
         edit(SetLayerVisible(id, visible))
-    }
-
-    /**
-     * [id] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기', 실행 취소 한 단계, 2026-10-22 사용자 요청).
-     * 이름은 프로젝트 이름과 같은 규칙으로 다듬는다(줄바꿈·연속 공백은 공백 하나, 앞뒤 공백을 지우고 50자까지, [ProjectNames.clean]).
-     * 다듬은 이름이 비거나 지금 이름과 같으면 바꾸지 않는다. 다른 편집을 처리하는 중이거나 슬라이더를 끄는 중이면 무시한다.
-     */
-    fun renameLayer(id: LayerId, name: String) {
-        val document = history?.document ?: return
-        if (editing || hasLiveValues) return
-        val layer = document.layers.getOrNull(document.indexOfLayer(id)) ?: return
-        val cleaned = ProjectNames.clean(name)
-        if (cleaned.isEmpty() || cleaned == layer.name) return
-        edit(RenameLayer(id, cleaned))
     }
 
     /**

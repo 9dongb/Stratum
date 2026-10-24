@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -172,40 +173,20 @@ class EditorBrushTest {
     }
 
     @Test
-    fun renameLayer_cleansTheName_asOneStep_andIgnoresABlankName() {
-        // 2026-10-22 사용자 요청: 레이어 메뉴에 이름 바꾸기. 이름은 프로젝트 이름과 같은 규칙으로 다듬는다.
-        val opened = openWhite()
-        val layer = opened.layers.single()
-
-        onMain { viewModel.renameLayer(layer.id, "  Sky \n  blue  ") }
-
-        val renamed = awaitReady { !it.busy && it.revision > opened.revision }
-        assertEquals("Sky blue", renamed.layers.single().name)
-        // 빈 이름·같은 이름은 바꾸지 않는다(기록도 하지 않음)
-        onMain {
-            viewModel.renameLayer(layer.id, "   ")
-            viewModel.renameLayer(layer.id, "Sky blue")
-        }
-        val same = awaitReady { !it.busy }
-        assertEquals(renamed.revision, same.revision)
-        onMain { viewModel.undo() }
-        val undone = awaitReady { !it.busy && it.revision > renamed.revision }
-        assertEquals(layer.name, undone.layers.single().name)
-    }
-
-    @Test
-    fun editText_keepsANameTheUserChose() {
-        // 이름을 바꾼 글자 레이어는 글자를 고쳐도 그 이름을 지킨다(포토샵과 같다). 바꾸지 않았으면 새 첫 줄을 따른다(위 테스트).
+    fun editText_keepsANameThatIsNotTheFirstLine() {
+        // 이름이 글자의 첫 줄과 다른 글자 레이어(복제해 '… 복사'가 붙음)는 글자를 고쳐도 그 이름을 지킨다(포토샵과 같다).
+        // 다르지 않으면 새 첫 줄을 따른다(위 테스트). 레이어 이름 바꾸기는 2026-10-24 사용자 요청으로 뺐다.
         val added = withText()
-        val layer = added.layers.last()
-        onMain { viewModel.renameLayer(layer.id, "Title") }
-        val renamed = awaitReady { !it.busy && it.revision > added.revision }
+        onMain { viewModel.duplicateLayer() }
+        val copied = awaitReady { !it.busy && it.layers.size == added.layers.size + 1 }
+        val copy = copied.layers.last()
+        assertNotEquals(added.layers.last().name, copy.name)
 
-        onMain { viewModel.editText(layer.id, "Hello", TextStyle(size = 40f, color = Color.BLACK)) }
+        onMain { viewModel.editText(copy.id, "Hello", TextStyle(size = 40f, color = Color.BLACK)) }
 
-        val edited = awaitReady { !it.busy && it.revision > renamed.revision }
+        val edited = awaitReady { !it.busy && it.revision > copied.revision }
         assertEquals("Hello", edited.layers.last().text?.text)
-        assertEquals("Title", edited.layers.last().name)
+        assertEquals(copy.name, edited.layers.last().name)
     }
 
     @Test

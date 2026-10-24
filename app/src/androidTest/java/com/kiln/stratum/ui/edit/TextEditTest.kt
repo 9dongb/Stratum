@@ -85,7 +85,6 @@ class TextEditTest {
         override fun delete() = Unit
         override fun duplicate() = Unit
         override fun mergeDown() = Unit
-        override fun mergeVisible() = Unit
         override fun move(id: LayerId, toIndex: Int, parent: LayerId?) = Unit
         override fun previewOpacity(opacity: Float) = Unit
         override fun commitOpacity() = Unit

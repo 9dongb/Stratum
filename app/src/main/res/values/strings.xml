@@ -165,7 +165,9 @@
     <!-- 레이어 패널 -->
     <string name="layer_new_name">Layer %1$d</string>
     <string name="layer_add">Add layer</string>
-    <string name="layer_add_photo">Add photo</string>
+    <string name="layer_add_menu_layer">New layer</string>
+    <string name="layer_add_menu_adjustment">Adjustment layer</string>
+    <string name="layer_add_menu_photo">Photo</string>
     <string name="layer_photo_name">Photo %1$d</string>
     <string name="edit_photo_insert_failed">Couldn\'t add this photo.</string>
     <string name="edit_liquify_baked">Liquify is now part of the pixels. Undo to edit it again.</string>
@@ -195,7 +197,6 @@
     <string name="layer_mask_edit">Paint the mask</string>
     <string name="layer_mask_overlay_hide">Hide the mask overlay</string>
     <string name="layer_pixels_edit">Paint the pixels</string>
-    <string name="layer_adjustment_add">Add adjustment layer</string>
     <string name="layer_adjustment_name">Adjustment %1$d</string>
     <string name="layer_adjustment">Adjustment layer</string>
     <string name="layer_group">Group</string>
@@ -216,11 +217,8 @@
     <string name="layer_row_description">%1$s, %2$s, opacity %3$d%%</string>
     <string name="layer_selected">Selected</string>
     <string name="layer_menu">Layer menu</string>
-    <string name="layer_rename">Rename layer</string>
-    <string name="layer_rename_label">Name</string>
     <string name="layer_duplicate">Duplicate layer</string>
     <string name="layer_merge_down">Merge down</string>
-    <string name="layer_merge_visible">Merge visible</string>
     <string name="layer_copy_name">%1$s copy</string>
     <string name="layer_visibility">Show layer</string>
     <string name="layer_hidden">Hidden</string>

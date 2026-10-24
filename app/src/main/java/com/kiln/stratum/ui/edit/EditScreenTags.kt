@@ -143,8 +143,11 @@ object EditScreenTags {
     const val RASTERIZE_CONFIRM = "rasterizeConfirm"
     const val LAYER_LIST = "layerList"
     const val LAYER_ADD = "layerAdd"
-    const val LAYER_ADD_PHOTO = "layerAddPhoto"
-    const val LAYER_DELETE = "layerDelete"
+
+    /** + 메뉴의 항목(새 레이어·조정 레이어·사진, 사용자 피드백 13차) */
+    const val LAYER_ADD_MENU_LAYER = "layerAddMenuLayer"
+    const val LAYER_ADD_MENU_ADJUSTMENT = "layerAddMenuAdjustment"
+    const val LAYER_ADD_MENU_PHOTO = "layerAddMenuPhoto"
     /** 레이어 탭 버튼 줄의 화면 반전(보기만 뒤집음) */
     const val VIEW_FLIP_HORIZONTAL = "viewFlipHorizontal"
     const val VIEW_FLIP_VERTICAL = "viewFlipVertical"
@@ -152,22 +155,15 @@ object EditScreenTags {
     const val LAYER_BLEND = "layerBlend"
 
     /** 레이어 줄을 길게 누르면 뜨는 메뉴의 항목 */
-    const val LAYER_MENU_RENAME = "layerMenuRename"
     const val LAYER_MENU_DUPLICATE = "layerMenuDuplicate"
     const val LAYER_MENU_MERGE_DOWN = "layerMenuMergeDown"
-    const val LAYER_MENU_MERGE_VISIBLE = "layerMenuMergeVisible"
     const val LAYER_MENU_DELETE = "layerMenuDelete"
     const val LAYER_MENU_RASTERIZE = "layerMenuRasterize"
     const val LAYER_MENU_MASK_ADD = "layerMenuMaskAdd"
     const val LAYER_MENU_MASK_INVERT = "layerMenuMaskInvert"
     const val LAYER_MENU_MASK_DELETE = "layerMenuMaskDelete"
-    const val LAYER_MENU_ADJUSTMENT_ADD = "layerMenuAdjustmentAdd"
     const val LAYER_MENU_GROUP = "layerMenuGroup"
     const val LAYER_MENU_UNGROUP = "layerMenuUngroup"
-
-    /** 레이어 이름 바꾸기 창의 이름 칸과 확인 버튼 */
-    const val LAYER_RENAME_FIELD = "layerRenameField"
-    const val LAYER_RENAME_OK = "layerRenameOk"
 
     /** 왼쪽 도구 막대의 [tool] 버튼 */
     fun railTool(tool: EditTool): String = "railTool_${tool.name}"

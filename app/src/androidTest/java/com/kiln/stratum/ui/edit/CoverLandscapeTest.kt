@@ -62,7 +62,6 @@ class CoverLandscapeTest {
         override fun setBlendMode(mode: BlendMode) = Unit
         override fun duplicate() = Unit
         override fun mergeDown() = Unit
-        override fun mergeVisible() = Unit
         override fun setVisible(id: LayerId, visible: Boolean) = Unit
     }
 

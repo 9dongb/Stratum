@@ -119,22 +119,6 @@ class LayerRowsTest {
     }
 
     @Test
-    fun mergeVisibleCount_followsTheEnginesMergeVisible() {
-        val gray = Adjustments(saturation = -1f)
-
-        assertEquals(2, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1))))
-        // 가장 아래 픽셀 레이어보다 아래의 조정 레이어와 바꾸는 것이 없는 조정 레이어는 합치지 않는다
-        assertEquals(1, LayerRows.mergeVisibleCount(listOf(layer(0).copy(adjustment = true, adjustments = gray), layer(1))))
-        assertEquals(1, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1).copy(adjustment = true))))
-        assertEquals(2, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1).copy(adjustment = true, adjustments = gray))))
-        // 그룹 줄은 세지 않고, 숨기거나 0%인 그룹 안의 레이어도 세지 않는다
-        assertEquals(1, LayerRows.mergeVisibleCount(listOf(layer(0), group(1))))
-        assertEquals(1, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1, parent = 2), group(2, visible = false))))
-        assertEquals(1, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1, parent = 2), group(2, opacity = 0f))))
-        assertEquals(2, LayerRows.mergeVisibleCount(listOf(layer(0), layer(1, parent = 2), group(2, opacity = 0.5f))))
-    }
-
-    @Test
     fun isDrawn_looksAtTheEnclosingGroups() {
         val layers = listOf(layer(0, parent = 1), group(1, parent = 2), group(2, opacity = 0.5f), layer(3, opacity = 0f))
 

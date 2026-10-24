@@ -102,9 +102,6 @@ interface LayerActions {
     /** 고른 레이어를 바로 아래 레이어에 합친다 */
     fun mergeDown()
 
-    /** 보이는 레이어를 모두 가장 아래 보이는 레이어 하나로 합친다 */
-    fun mergeVisible()
-
     /** [id] 레이어(그룹이면 자손과 함께)를 [toIndex](0이 맨 아래) 자리, [parent] 그룹 안(null이면 그룹 밖)으로 옮긴다 */
     fun move(id: LayerId, toIndex: Int, parent: LayerId?)
 
@@ -122,9 +119,6 @@ interface LayerActions {
 
     /** 고른 글자 레이어를 픽셀 레이어로 바꾼다(레이어 메뉴의 '픽셀로 바꾸기', 사용자 피드백 8차 1-6) */
     fun rasterize() {}
-
-    /** [id] 레이어의 이름을 [name]으로 바꾼다(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청) */
-    fun rename(id: LayerId, name: String) {}
 
     /** 고른 레이어에 레이어 마스크를 더하고 그 마스크를 칠한다(선택 영역이 있으면 그 모양, 결정 기록 '피부 보정'의 1d) */
     fun addMask() {}
@@ -157,7 +151,6 @@ interface LayerActions {
         override fun delete() = Unit
         override fun duplicate() = Unit
         override fun mergeDown() = Unit
-        override fun mergeVisible() = Unit
         override fun move(id: LayerId, toIndex: Int, parent: LayerId?) = Unit
         override fun previewOpacity(opacity: Float) = Unit
         override fun commitOpacity() = Unit
@@ -192,11 +185,9 @@ class LayerControls(
     /** 화면 반전(보기). 레이어 탭 버튼 줄에 그 버튼이 있어 함께 넘긴다(사용자 피드백 7차, 결정 기록 '화면 반전'). */
     val viewFlip: ViewFlip = ViewFlip.None,
     val onViewFlip: (ViewFlip) -> Unit = {},
-    /** 레이어 메뉴의 '이름 바꾸기': 편집 화면이 그 레이어의 이름 바꾸기 창을 띄운다 */
-    val onRename: (LayerId) -> Unit = {},
-    /** 사진 넣기 버튼(사용자 피드백 12차): 편집 화면이 사진 선택기를 띄우고, 고른 사진을 고른 레이어 위 새 레이어로 넣는다 */
+    /** + 메뉴의 '사진'(사용자 피드백 12차·13차): 편집 화면이 사진 선택기를 띄우고, 고른 사진을 고른 레이어 위 새 레이어로 넣는다 */
     val onAddPhoto: () -> Unit = {},
-    /** 레이어 메뉴의 '조정 레이어 더하기': 편집 화면은 더한 뒤 조정 패널을 연다(결정 기록 '피부 보정'의 1f) */
+    /** + 메뉴의 '조정 레이어': 편집 화면은 더한 뒤 조정 패널을 연다(결정 기록 '피부 보정'의 1f) */
     val onAddAdjustment: () -> Unit = { actions.addAdjustment() },
     val collapsed: Set<LayerId> = emptySet(),
     /** 그룹 줄의 폴더 아이콘을 누르면 접고 펼친다 */
@@ -215,13 +206,9 @@ class LayerControls(
     val activeIndex: Int
         get() = layers.indexOfFirst { it.id == active }
 
-    /** 버튼(더하기·지우기·옮기기·혼합 모드)을 누를 수 있는지 */
+    /** 버튼(더하기·옮기기·혼합 모드)과 레이어 메뉴를 누를 수 있는지 */
     val canEdit: Boolean
         get() = enabled && !busy
-
-    /** 고른 레이어를 지울 수 있는지: 지워도(그룹이면 자손과 함께) 레이어가 남는다 */
-    val canDeleteActive: Boolean
-        get() = activeIndex >= 0 && LayerRows.blockSize(layers, activeIndex) < layers.size
 }
 
 /** 레이어 줄 하나의 높이. 작은 그림(40dp)과 위아래 여백, 누르는 영역 48dp 이상. */
@@ -243,8 +230,8 @@ private val TextBadgeSize = 16.dp
 private val ThumbnailChecker = 5.dp
 
 /**
- * 레이어 패널의 내용(메인 화면 떠 있는 패널, 커버 화면 레이어 시트): 레이어 목록, 그 아래 고른 레이어의 불투명도와 혼합 모드.
- * 목록은 줄이 적으면 그만큼만 차지하고(패널도 작아진다), 많으면 남는 높이에서 밀어 본다. 버튼 줄은 패널 제목 줄에 놓는다([LayerToolbar]).
+ * 레이어 패널의 내용(메인 화면 떠 있는 패널, 커버 화면 레이어 시트): 레이어 목록, 그 아래 고른 레이어의 불투명도.
+ * 목록은 줄이 적으면 그만큼만 차지하고(패널도 작아진다), 많으면 남는 높이에서 밀어 본다. 혼합 모드와 버튼은 패널 제목 줄에 놓는다([LayerToolbar]).
  */
 @Composable
 fun LayerColumn(controls: LayerControls, modifier: Modifier = Modifier) {
@@ -252,29 +239,24 @@ fun LayerColumn(controls: LayerControls, modifier: Modifier = Modifier) {
     Column(modifier.testTag(EditScreenTags.LAYER_PANEL)) {
         LayerList(controls, Modifier.fillMaxWidth().weight(1f, fill = false))
         LayerOpacityRow(controls)
-        BlendModeRow(controls)
     }
 }
 
 /**
- * 레이어 버튼 줄: 더하기, 지우기(고른 레이어에 한다), 화면 상하 반전, 화면 좌우 반전(켜고 끔, 좌우가 오른쪽 끝, 2026-10-20 사용자 요청).
- * 지우기는 레이어가 둘 이상일 때만 누를 수 있고, 실행 취소로 되돌릴 수 있어 따로 묻지 않는다.
+ * 레이어 제목 줄의 버튼 줄: 혼합 모드(이름표 없음), 더하기(누르면 새 레이어·조정 레이어·사진 메뉴), 화면 상하 반전, 화면 좌우 반전
+ * (켜고 끔, 좌우가 오른쪽 끝, 2026-10-20 사용자 요청).
+ * 2026-10-24 사용자 요청(사용자 피드백 13차 5·7): "더하기 버튼을 누르면 새 레이어, 조정 레이어, 사진 이렇게 선택할 수 있게", 사진·휴지통 버튼은 뺌
+ * (지우기는 레이어 메뉴의 '레이어 삭제'), 목록 아래의 혼합 모드 줄은 "모드 선택 옵션만 (라벨 없이) … + 버튼 왼쪽에".
+ * 혼합 모드 상자는 남는 폭만 쓴다: 좁은 패널(280dp)에서는 제목 '레이어' 자리를 대신하고, 이름이 길면 줄임표로 줄인다.
  * 반전은 레이어가 아니라 캔버스 보기를 뒤집는다(픽셀·기록은 그대로, 결정 기록 '화면 반전'). 처리 중에도 누를 수 있다.
  * 전에 있던 위로·아래로 버튼은 사용자 요청으로 뺐다(2026-10-20). 순서는 손잡이 끌기와 화면 읽기 기능의 '위로'·'아래로' 동작으로 바꾼다.
  */
 @Composable
 fun LayerToolbar(controls: LayerControls, modifier: Modifier = Modifier) {
-    val actions = controls.actions
     val flip = controls.viewFlip
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        ToolbarButton(R.drawable.ic_add, R.string.layer_add, controls.canEdit, EditScreenTags.LAYER_ADD) { actions.add() }
-        // + 오른쪽에 사진 넣기(사용자 요청: "레이어 패널의 + 오른쪽에 이미지 아이콘이나 카메라 아이콘으로 사진 추가 가능하도록 하세요.")
-        ToolbarButton(R.drawable.ic_add_photo_alternate, R.string.layer_add_photo, controls.canEdit, EditScreenTags.LAYER_ADD_PHOTO) {
-            controls.onAddPhoto()
-        }
-        ToolbarButton(R.drawable.ic_delete, R.string.layer_delete, controls.canEdit && controls.canDeleteActive, EditScreenTags.LAYER_DELETE) {
-            actions.delete()
-        }
+        BlendModeBox(controls, Modifier.weight(1f, fill = false))
+        AddLayerButton(controls)
         // 상하는 같은 아이콘을 90° 돌린다(자르기·변형의 상하 뒤집기와 같다)
         FlipToggle(R.string.view_flip_vertical, flip.vertical, controls.enabled, EditScreenTags.VIEW_FLIP_VERTICAL, iconRotation = 90f) {
             controls.onViewFlip(flip.copy(vertical = it))
@@ -297,6 +279,24 @@ private fun FlipToggle(@StringRes label: Int, checked: Boolean, enabled: Boolean
 private fun ToolbarButton(@DrawableRes icon: Int, @StringRes label: Int, enabled: Boolean, tag: String, onClick: () -> Unit) {
     StratumIconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) {
         Icon(painterResource(icon), contentDescription = stringResource(label))
+    }
+}
+
+/**
+ * 더하기 버튼: 누르면 더할 것을 고르는 메뉴(새 레이어 · 조정 레이어 · 사진, 2026-10-24 사용자 요청). 셋 다 고른 레이어 바로 위에 더한다.
+ * 조정 레이어는 더한 뒤 조정 패널을 열고, 사진은 사진 선택기를 띄운다(편집 화면이 정함). 처리 중·자르기 중에는 꺼진다.
+ */
+@Composable
+private fun AddLayerButton(controls: LayerControls) {
+    var open by remember { mutableStateOf(false) }
+    val close = { open = false }
+    Box {
+        ToolbarButton(R.drawable.ic_add, R.string.layer_add, controls.canEdit, EditScreenTags.LAYER_ADD) { open = true }
+        StratumDropdownMenu(expanded = open && controls.canEdit, onDismissRequest = close) {
+            LayerMenuItem(R.string.layer_add_menu_layer, true, EditScreenTags.LAYER_ADD_MENU_LAYER, close, controls.actions::add)
+            LayerMenuItem(R.string.layer_add_menu_adjustment, true, EditScreenTags.LAYER_ADD_MENU_ADJUSTMENT, close, controls.onAddAdjustment)
+            LayerMenuItem(R.string.layer_add_menu_photo, true, EditScreenTags.LAYER_ADD_MENU_PHOTO, close, controls.onAddPhoto)
+        }
     }
 }
 
@@ -638,11 +638,12 @@ private fun LayerRow(
 }
 
 /**
- * 레이어 줄을 길게 누르면 뜨는 메뉴: 이름 바꾸기, 복제, 조정 레이어 더하기, 그룹으로 묶기, 그룹 풀기(그룹 줄에만 보임),
+ * 레이어 줄을 길게 누르면 뜨는 메뉴: 복제, 그룹으로 묶기, 그룹 풀기(그룹 줄에만 보임),
  * 픽셀로 바꾸기(글자 레이어·다시 고칠 수 있는 유동화가 있는 레이어에만 보임),
- * 마스크 더하기(마스크가 없을 때, 그룹은 빼고) 또는 마스크 반전·지우기(있을 때), 아래 레이어와 병합, 보이는 레이어 병합, 삭제.
- * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다(이름 바꾸기는 창에서 이름을 받은 뒤). 할 수 없는 항목은 꺼 둔다
- * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 보이는 레이어가 하나뿐이면 보이는 레이어 병합, 한 장뿐이면 삭제).
+ * 마스크 더하기(마스크가 없을 때, 그룹은 빼고) 또는 마스크 반전·지우기(있을 때), 아래 레이어와 병합, 삭제.
+ * 모두 고른 레이어(길게 누른 레이어)에 하고 실행 취소 한 단계다. 할 수 없는 항목은 꺼 둔다
+ * (맨 아래 레이어나 둘 중 하나를 숨겼으면 아래와 병합, 한 장뿐이면 삭제).
+ * 이름 바꾸기·보이는 레이어 병합·조정 레이어 더하기는 2026-10-24 사용자 요청으로 뺐다(조정 레이어는 + 메뉴, 이름 바꾸기는 없음).
  */
 @Composable
 private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex: Int, onDismiss: () -> Unit) {
@@ -650,11 +651,7 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
     val canEdit = controls.canEdit
     StratumDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         val layers = controls.layers
-        // 이름 바꾸기: 창에서 새 이름을 받는다(2026-10-22 사용자 요청: "옵션에 레이어 이름 변경 옵션도 넣으려 합니다")
-        LayerMenuItem(R.string.layer_rename, canEdit, EditScreenTags.LAYER_MENU_RENAME, onDismiss) { controls.onRename(layers[documentIndex].id) }
         LayerMenuItem(R.string.layer_duplicate, canEdit, EditScreenTags.LAYER_MENU_DUPLICATE, onDismiss, actions::duplicate)
-        // 조정 레이어(결정 기록 '피부 보정'의 1f): 고른 레이어 위에 더한다
-        LayerMenuItem(R.string.layer_adjustment_add, canEdit, EditScreenTags.LAYER_MENU_ADJUSTMENT_ADD, onDismiss, controls.onAddAdjustment)
         // 그룹(결정 기록 '피부 보정'의 1h): 묶기는 모든 줄(그룹이면 그 그룹째), 풀기는 그룹 줄만
         LayerMenuItem(R.string.layer_group, canEdit, EditScreenTags.LAYER_MENU_GROUP, onDismiss, actions::group)
         if (layers[documentIndex].group) {
@@ -684,15 +681,6 @@ private fun LayerMenu(expanded: Boolean, controls: LayerControls, documentIndex:
         val canMergeDown = lower != null && upper.visible && lower.visible && !lower.adjustment && !lower.group && !upper.group &&
             upper.parent == lower.parent
         LayerMenuItem(R.string.layer_merge_down, canEdit && canMergeDown, EditScreenTags.LAYER_MENU_MERGE_DOWN, onDismiss, actions::mergeDown)
-        // 보이는 레이어 병합은 가장 아래 보이는 픽셀 레이어부터 위로 합친다(그 아래 조정 레이어는 그대로, 그룹이 물려준 보이기·불투명도까지,
-        // 엔진의 MergeVisible.mergedLayers와 같다)
-        LayerMenuItem(
-            R.string.layer_merge_visible,
-            canEdit && LayerRows.mergeVisibleCount(layers) >= 2,
-            EditScreenTags.LAYER_MENU_MERGE_VISIBLE,
-            onDismiss,
-            actions::mergeVisible
-        )
         LayerMenuItem(R.string.layer_delete, canEdit && LayerRows.blockSize(layers, documentIndex) < layers.size, EditScreenTags.LAYER_MENU_DELETE, onDismiss, actions::delete)
     }
 }
@@ -786,45 +774,39 @@ private fun LayerOpacityRow(controls: LayerControls) {
     }
 }
 
-/** 고른 레이어의 혼합 모드. 버튼을 누르면 네 가지 중에서 고른다. */
+/**
+ * 고른 레이어의 혼합 모드(제목 줄의 + 왼쪽, 이름표 없음, 2026-10-24 사용자 요청). 누르면 네 가지 중에서 고른다.
+ * 화면 읽기 기능은 '혼합 모드'와 지금 모드를 읽는다.
+ */
 @Composable
-private fun BlendModeRow(controls: LayerControls) {
+private fun BlendModeBox(controls: LayerControls, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val current = controls.activeLayer?.blendMode ?: BlendMode.NORMAL
     // 그룹은 통과 그룹뿐이라 고를 혼합 모드가 없다(결정 기록 '피부 보정'의 1h)
     val group = controls.activeLayer?.group == true
     val enabled = controls.canEdit && controls.activeLayer != null && !group
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.layer_blend_mode),
-            modifier = Modifier.width(88.dp),
-            color = if (enabled) StratumTheme.colors.textSecondary else StratumTheme.colors.textDisabled,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium
+    val label = stringResource(R.string.layer_blend_mode)
+    Box(modifier) {
+        // 알약 버튼 대신 모서리 6dp의 작은 선택 상자(시안)
+        SelectBox(
+            text = stringResource(if (group) R.string.blend_pass_through else blendModeLabel(current)),
+            onClick = { open = true },
+            enabled = enabled,
+            modifier = Modifier.testTag(EditScreenTags.LAYER_BLEND).semantics { contentDescription = label }
         )
-        Box {
-            // 알약 버튼 대신 모서리 6dp의 작은 선택 상자(시안)
-            SelectBox(
-                text = stringResource(if (group) R.string.blend_pass_through else blendModeLabel(current)),
-                onClick = { open = true },
-                enabled = enabled,
-                modifier = Modifier.testTag(EditScreenTags.LAYER_BLEND)
-            )
-            StratumDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                for (mode in BlendMode.entries) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(blendModeLabel(mode))) },
-                        onClick = {
-                            open = false
-                            if (mode != current) controls.actions.setBlendMode(mode)
-                        },
-                        leadingIcon = {
-                            if (mode == current) Icon(painterResource(R.drawable.ic_check), contentDescription = null) else Spacer(Modifier.size(24.dp))
-                        },
-                        modifier = Modifier.testTag(EditScreenTags.blendMode(mode))
-                    )
-                }
+        StratumDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (mode in BlendMode.entries) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(blendModeLabel(mode))) },
+                    onClick = {
+                        open = false
+                        if (mode != current) controls.actions.setBlendMode(mode)
+                    },
+                    leadingIcon = {
+                        if (mode == current) Icon(painterResource(R.drawable.ic_check), contentDescription = null) else Spacer(Modifier.size(24.dp))
+                    },
+                    modifier = Modifier.testTag(EditScreenTags.blendMode(mode))
+                )
             }
         }
     }

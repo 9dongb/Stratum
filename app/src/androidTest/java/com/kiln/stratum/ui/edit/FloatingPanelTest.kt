@@ -109,7 +109,6 @@ class FloatingPanelTest {
         override fun setBlendMode(mode: BlendMode) = Unit
         override fun duplicate() = Unit
         override fun mergeDown() = Unit
-        override fun mergeVisible() = Unit
         override fun setVisible(id: LayerId, visible: Boolean) = Unit
     }
 
@@ -236,7 +235,9 @@ class FloatingPanelTest {
         show(MAIN_PORTRAIT)
         toggle(MainPanel.LAYERS).performClick()
 
+        // + 를 누르면 메뉴(새 레이어·조정 레이어·사진, 사용자 피드백 13차)
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_LAYER).performClick()
         composeRule.onNodeWithTag(EditScreenTags.layerRow(LayerId(0))).performClick()
 
         composeRule.runOnIdle { assertEquals(listOf("add", "select 0"), layerCalls) }

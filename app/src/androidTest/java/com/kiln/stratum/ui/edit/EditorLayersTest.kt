@@ -161,19 +161,6 @@ class EditorLayersTest {
     }
 
     @Test
-    fun mergeVisible_mergesEveryVisibleLayerIntoTheLowest_inOneUndoStep() {
-        val withThree = addLayer(addLayer(openCanvas()))
-
-        onMain { viewModel.mergeVisibleLayers() }
-        val merged = awaitReady { !it.busy && it.layers.size == 1 }
-        assertEquals(LayerId(0), merged.activeLayer)
-
-        onMain { viewModel.undo() }
-        val undone = awaitReady { !it.busy && it.layers.size == 3 }
-        assertEquals(withThree.layers.map { it.id }, undone.layers.map { it.id })
-    }
-
-    @Test
     fun hiding_isOneUndoStep_andTheCanvasDrawsWithoutTheLayer() {
         val opened = openCanvas()
         val layer = opened.layers.single()
@@ -227,12 +214,6 @@ class EditorLayersTest {
         onMain { viewModel.mergeLayerDown() }
         Thread.sleep(300)
         assertEquals(hidden.revision, (viewModel.state.value as EditorState.Ready).revision)
-
-        // 보이는 레이어 병합은 숨긴 레이어를 제자리에 남긴다
-        onMain { viewModel.mergeVisibleLayers() }
-        val merged = awaitReady { !it.busy && it.layers.size == 2 }
-        assertEquals(listOf(LayerId(0), middle), merged.layers.map { it.id })
-        assertEquals(listOf(true, false), merged.layers.map { it.visible })
     }
 
     @Test

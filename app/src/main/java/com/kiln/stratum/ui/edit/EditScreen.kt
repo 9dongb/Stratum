@@ -348,8 +348,6 @@ fun EditScreen(
     var exportDraft by rememberSaveable(stateSaver = ExportDraftSaver) { mutableStateOf<ExportChoice?>(null) }
     // 색 팔레트에서 고르던 색. 닫혀 있으면 null이고, 열려 있으면 접기·펼치기에도 남는다.
     var palette by rememberSaveable(stateSaver = PaletteDraft.Saver) { mutableStateOf<PaletteDraft?>(null) }
-    // 이름을 바꾸는 레이어(레이어 메뉴의 '이름 바꾸기' 창, 2026-10-22 사용자 요청). 접기·펼치기에도 창이 남는다.
-    var renamingLayer by rememberSaveable { mutableStateOf<Long?>(null) }
     // 레이어 목록에서 접은 그룹(결정 기록 '피부 보정'의 1h). 문서가 아니라 화면 상태라 접기·펼치기·설정에 다녀와도 남고, 홈으로 나가면 풀린다.
     var collapsedGroups by rememberSaveable { mutableStateOf(LongArray(0)) }
     // 스포이드 버튼을 켠 곳(브러시·글자). 켜면 다음에 캔버스를 누른 자리의 색을 고르고 꺼진다. 도구를 바꾸면 꺼진다.
@@ -413,9 +411,9 @@ fun EditScreen(
     var canvasTop by remember { mutableFloatStateOf(0f) }
     val reportCanvasTop: (Float) -> Unit = remember { { top -> canvasTop = top } }
 
-    // 창(크기 변경·글자·내보내기·팔레트·레이어 이름·큰 사진)이나 유동화 작업 모드가 떠 있는지
+    // 창(크기 변경·글자·내보내기·팔레트·큰 사진)이나 유동화 작업 모드가 떠 있는지
     val dialogOpen = resizeInput != null || textDraft != null || rasterizeAsk != null || exportDraft != null || palette != null ||
-        renamingLayer != null || state is EditorState.AskSize || liquify != null
+        state is EditorState.AskSize || liquify != null
 
     // 다른 앱에서 사진을 끌어 오는 동안 받을 자리 위에 있는지(편집 화면 전체가 받는 자리, 사용자 피드백 12차 4)
     var dropHover by remember { mutableStateOf(false) }
@@ -585,7 +583,6 @@ fun EditScreen(
             LayerControls(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
                 editingMask = it.editingMask, viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
-                onRename = { id -> renamingLayer = id.value },
                 onAddPhoto = onAddPhoto,
                 // 조정 레이어를 더하면 그 값을 바로 고치게 조정 패널을 연다(포토샵의 속성 패널처럼, 결정 기록 '피부 보정'의 1f)
                 onAddAdjustment = {
@@ -1521,21 +1518,6 @@ fun EditScreen(
             ) {
                 Text(stringResource(R.string.rasterize_message), style = MaterialTheme.typography.bodyMedium, color = StratumTheme.colors.textSecondary)
             }
-        }
-        // 레이어 이름 바꾸기 창(레이어 메뉴, 2026-10-22 사용자 요청). 그 레이어가 없어지면(실행 취소 등) 창도 사라진다.
-        val renaming = renamingLayer?.let { id -> ready?.layers?.firstOrNull { it.id.value == id } }
-        if (renaming != null && ready != null) {
-            LayerNamePrompt(
-                layerId = renaming.id,
-                initial = renaming.name,
-                widthClass = widthClass,
-                busy = ready.busy,
-                onDismiss = { renamingLayer = null },
-                onRename = { name ->
-                    layerActions.rename(renaming.id, name)
-                    renamingLayer = null
-                }
-            )
         }
         val draft = exportDraft
         if (draft != null && ready != null) {

@@ -1,6 +1,5 @@
 package com.kiln.stratum.ui.edit
 
-import com.kiln.stratum.engine.document.BlendMode
 import com.kiln.stratum.engine.document.LayerId
 
 /**
@@ -120,26 +119,6 @@ internal object LayerRows {
                 Move(row.layer.id, nextBottom + block - 1, row.layer.parent)
             }
         }
-    }
-
-    /**
-     * 보이는 레이어 병합이 합칠 레이어 수. 엔진(`MergeVisible.mergedLayers`)과 같은 규칙이다: 합성 계획이 그리는 레이어(감싼 그룹까지 보이고
-     * 불투명도가 0보다 큼, 바꾸는 것이 없는 표준 조정 레이어와 그룹은 빠짐) 가운데 가장 아래 픽셀 레이어부터 위로 센다.
-     */
-    fun mergeVisibleCount(layers: List<LayerSummary>): Int {
-        val byId = layers.associateBy { it.id }
-        var count = 0
-        for (layer in layers) {
-            if (layer.group || !isDrawn(layer, byId)) continue
-            if (layer.adjustment) {
-                if (layer.adjustments.isIdentity && layer.blendMode == BlendMode.NORMAL) continue
-                // 가장 아래 픽셀 레이어보다 아래의 조정 레이어는 합치지 않는다
-                if (count > 0) count++
-            } else {
-                count++
-            }
-        }
-        return count
     }
 
     /**

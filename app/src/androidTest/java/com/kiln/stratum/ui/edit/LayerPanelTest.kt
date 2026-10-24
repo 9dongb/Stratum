@@ -25,15 +25,13 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kiln.stratum.R
 import com.kiln.stratum.engine.adjust.Adjustments
@@ -42,12 +40,10 @@ import com.kiln.stratum.engine.document.LayerId
 import com.kiln.stratum.engine.preview.PreviewLevels
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.ui.components.LongPressTimes
-import com.kiln.stratum.ui.layout.DIALOG_CARD
 import com.kiln.stratum.ui.layout.layoutBoundsInWindow
 import com.kiln.stratum.ui.theme.StratumTheme
 import com.kiln.stratum.engine.text.TextSpec
 import com.kiln.stratum.engine.text.TextStyle
-import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -95,10 +91,6 @@ class LayerPanelTest {
             calls += "mergeDown ${active.value}"
         }
 
-        override fun mergeVisible() {
-            calls += "mergeVisible"
-        }
-
         override fun move(id: LayerId, toIndex: Int, parent: LayerId?) {
             calls += "move ${id.value} to $toIndex" + (parent?.let { " in ${it.value}" } ?: "")
             // 엔진의 MoveLayer처럼 덩어리(그룹이면 자손과 함께)째 옮기고 맨 위 줄의 그룹을 바꾼다
@@ -142,11 +134,6 @@ class LayerPanelTest {
         override fun rasterize() {
             calls += "rasterize ${active.value}"
             layers = layers.map { if (it.id == active) it.copy(text = null, liquify = false) else it }
-        }
-
-        override fun rename(id: LayerId, name: String) {
-            calls += "rename ${id.value} $name"
-            layers = layers.map { if (it.id == id) it.copy(name = name) else it }
         }
 
         override fun addAdjustment() {
@@ -302,14 +289,16 @@ class LayerPanelTest {
     }
 
     @Test
-    fun toolbar_followsTheSelection_andHasTheViewFlipsInsteadOfUpDown() {
+    fun toolbar_addMenuOffersLayerAdjustmentAndPhoto_andHasTheViewFlipsInsteadOfUpDown() {
+        // 2026-10-24 사용자 요청: "더하기 버튼을 누르면 새 레이어, 조정 레이어, 사진 이렇게 선택할 수 있게", 사진·휴지통 버튼은 뺌
         val fake = FakeLayers(1)
         openCompactLayers(fake)
-        // 한 장뿐이면 지울 수 없다
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsNotEnabled()
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsEnabled()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_ADJUSTMENT).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_PHOTO).assertIsDisplayed()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_LAYER).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_LAYER).assertDoesNotExist()
         // 사용자 요청: 위로·아래로 버튼 자리에 화면 상하·좌우 반전(보기만 뒤집어 레이어 일을 보내지 않음). 좌우 반전이 오른쪽이다.
         val vertical = composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_VERTICAL).fetchSemanticsNode().layoutBoundsInWindow()
         val horizontal = composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).fetchSemanticsNode().layoutBoundsInWindow()
@@ -337,9 +326,18 @@ class LayerPanelTest {
     }
 
     @Test
-    fun blendMenu_setsTheMode() {
+    fun blendMenu_sitsLeftOfAddInTheHeader_andSetsTheMode() {
+        // 2026-10-24 사용자 요청: 혼합 모드는 목록 아래 줄에서 빼고 "모드 선택 옵션만 (라벨 없이) … + 버튼 왼쪽에"
         val fake = FakeLayers(2)
         openCompactLayers(fake)
+        val blend = bounds(EditScreenTags.LAYER_BLEND)
+        val add = bounds(EditScreenTags.LAYER_ADD)
+        assertEquals(add.center.y, blend.center.y, 2f)
+        assertTrue("$blend should be left of $add", blend.right <= add.left + 1f)
+        val list = bounds(EditScreenTags.LAYER_LIST)
+        assertTrue("$blend should be above the list $list", blend.bottom <= list.top + 1f)
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_BLEND)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(string(R.string.layer_blend_mode))))
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_BLEND).performClick()
         composeRule.onNodeWithTag(EditScreenTags.blendMode(BlendMode.OVERLAY)).performClick()
@@ -388,8 +386,10 @@ class LayerPanelTest {
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsEnabled()
         // 맨 아래 레이어는 아래와 합칠 수 없다
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsEnabled()
+        // 이름 바꾸기·보이는 레이어 병합·조정 레이어 더하기는 뺐다(2026-10-24 사용자 요청)
+        composeRule.onNode(hasText(string(R.string.layer_duplicate))).assertIsDisplayed()
+        composeRule.onNode(hasText(string(R.string.layer_add_menu_adjustment))).assertDoesNotExist()
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).performClick()
 
@@ -489,7 +489,10 @@ class LayerPanelTest {
 
         row(1).performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_ADJUSTMENT_ADD).assertIsEnabled().performClick()
+        Espresso.pressBack()
+        // 조정 레이어는 + 메뉴에서 더한다(2026-10-24 사용자 요청)
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_ADJUSTMENT).assertIsEnabled().performClick()
         composeRule.runOnIdle { assertEquals("addAdjustment 1", fake.calls.last()) }
         // 더하면 그 값을 고치게 레이어 시트 대신 조정이 열린다
         composeRule.onNodeWithTag(EditScreenTags.LAYER_PANEL).assertDoesNotExist()
@@ -505,47 +508,6 @@ class LayerPanelTest {
 
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsDisplayed()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RASTERIZE).assertDoesNotExist()
-    }
-
-    @Test
-    fun rename_opensAPromptWithTheName_andSendsTheCleanedName() {
-        // 2026-10-22 사용자 요청: "옵션에 레이어 이름 변경 옵션도 넣으려 합니다"(메뉴 맨 위, 커버는 아래 시트)
-        val fake = FakeLayers(2)
-        openCompactLayers(fake)
-
-        row(0).performTouchInput { longClick() }
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RENAME).assertIsEnabled().performClick()
-
-        val field = composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD)
-        field.assertTextContains("Layer 0")
-        field.performTextReplacement("  Sky \n  blue ")
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).performClick()
-
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).assertDoesNotExist()
-        composeRule.runOnIdle { assertEquals("rename 0 Sky blue", fake.calls.last()) }
-    }
-
-    @Test
-    fun rename_onTheMainScreen_isACenteredDialog_andABlankNameTurnsOffOk() {
-        val fake = FakeLayers(2)
-        show(fake, 930, 700)
-        composeRule.togglePanel(MainPanel.LAYERS)
-
-        row(1).performTouchInput { longClick() }
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_RENAME).performClick()
-
-        // 펼친 화면은 아래 시트가 아니라 화면 가운데의 창이다(키보드가 열리기 전에 잰다)
-        composeRule.waitForIdle()
-        val card = composeRule.onNodeWithTag(DIALOG_CARD).fetchSemanticsNode().layoutBoundsInWindow()
-        val screen = composeRule.onRoot().fetchSemanticsNode().layoutBoundsInWindow()
-        assertTrue("card $card not centered in $screen", abs(card.center.x - screen.center.x) <= 2f)
-
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).performTextReplacement("   ")
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_FIELD).performTextReplacement("Sky")
-        // 접은 에뮬레이터에 큰 화면을 줄여 넣으면 키보드가 창을 거의 덮어 누르는 자리가 빗나간다(기술 주의점). 누르기 동작을 바로 부른다
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_RENAME_OK).assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.runOnIdle { assertEquals("rename 1 Sky", fake.calls.last()) }
     }
 
     @Test
@@ -575,26 +537,25 @@ class LayerPanelTest {
         val fake = FakeLayers(3)
         openCompactLayers(fake)
 
-        for (item in listOf(EditScreenTags.LAYER_MENU_MERGE_DOWN, EditScreenTags.LAYER_MENU_MERGE_VISIBLE, EditScreenTags.LAYER_MENU_DELETE)) {
+        for (item in listOf(EditScreenTags.LAYER_MENU_MERGE_DOWN, EditScreenTags.LAYER_MENU_DELETE)) {
             row(1).performTouchInput { longClick() }
             composeRule.onNodeWithTag(item).performClick()
         }
 
         composeRule.runOnIdle {
-            assertEquals(listOf("select 1", "mergeDown 1", "select 1", "mergeVisible", "select 1", "delete 1"), fake.calls)
+            assertEquals(listOf("select 1", "mergeDown 1", "select 1", "delete 1"), fake.calls)
         }
     }
 
     @Test
-    fun oneVisibleLayer_turnsOffMerging_andOneLayerTurnsOffDeleting() {
+    fun zeroOpacityBelow_stillMerges_andOneLayerTurnsOffDeleting() {
         val fake = FakeLayers(2)
         fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 0) layer.copy(opacity = 0f) else layer }
         openCompactLayers(fake)
 
         row(1).performTouchInput { longClick() }
-        // 아래 레이어가 0%여도(눈은 켜짐) 아래와 병합은 된다. 보이는 레이어는 하나뿐이다.
+        // 아래 레이어가 0%여도(눈은 켜짐) 아래와 병합은 된다
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsNotEnabled()
         composeRule.runOnIdle { fake.layers = listOf(fake.layers.last()) }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsNotEnabled()
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DUPLICATE).assertIsEnabled()
@@ -621,23 +582,20 @@ class LayerPanelTest {
     }
 
     @Test
-    fun hiddenLayers_turnOffMergeDown_andDoNotCountAsVisible() {
+    fun hiddenLayers_turnOffMergeDown() {
         val fake = FakeLayers(3)
         fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 1) layer.copy(visible = false) else layer }
         openCompactLayers(fake)
 
-        // 아래 레이어를 숨겼으면 아래와 병합은 꺼진다. 보이는 레이어는 둘이라 보이는 레이어 병합은 된다.
+        // 아래 레이어를 숨겼으면 아래와 병합은 꺼진다
         row(2).performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsEnabled().performClick()
+        Espresso.pressBack()
 
         // 숨긴 레이어 자신도 아래와 합치지 않는다
         row(1).performTouchInput { longClick() }
         composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_DOWN).assertIsNotEnabled()
-        // 하나를 더 숨기면 보이는 레이어가 하나뿐이다
-        composeRule.runOnIdle { fake.layers = fake.layers.mapIndexed { index, layer -> if (index == 0) layer.copy(visible = false) else layer } }
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_MERGE_VISIBLE).assertIsNotEnabled()
-        composeRule.runOnIdle { assertEquals(listOf("select 2", "mergeVisible", "select 1"), fake.calls) }
+        composeRule.runOnIdle { assertEquals(listOf("select 2", "select 1"), fake.calls) }
     }
 
     @Test
@@ -676,19 +634,16 @@ class LayerPanelTest {
     }
 
     @Test
-    fun addPhoto_sitsRightOfAdd_andAsksTheAppForAPhoto() {
-        // 사용자 요청: "레이어 패널의 + 오른쪽에 이미지 아이콘이나 카메라 아이콘으로 사진 추가 가능하도록 하세요."
+    fun addMenuPhoto_asksTheAppForAPhoto() {
+        // 사진 넣기는 + 메뉴의 '사진'(2026-10-24 사용자 요청, 전에는 + 오른쪽 버튼)
         val fake = FakeLayers(1)
         openCompactLayers(fake)
-        val add = bounds(EditScreenTags.LAYER_ADD)
-        val photo = bounds(EditScreenTags.LAYER_ADD_PHOTO)
-        assertEquals(add.center.y, photo.center.y, 1f)
-        assertTrue("$photo should be right next to $add", photo.left >= add.right - 1f && photo.left - add.right < add.width / 2)
         // 넓은 커버 시트에는 제목도 보인다
         composeRule.onNode(hasText(composeRule.activity.getString(R.string.tool_layers)) and hasAnyAncestor(hasTestTag(EditScreenTags.COVER_LAYER_SHEET)))
             .assertIsDisplayed()
 
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_PHOTO).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_ADD_MENU_PHOTO).performClick()
         composeRule.runOnIdle {
             assertEquals(1, photoRequests)
             // 레이어 일은 앱이 사진을 고른 뒤에 한다
@@ -760,10 +715,12 @@ class LayerPanelTest {
         fake.layers = listOf(FakeLayers.summary(0).copy(parent = LayerId(1)), FakeLayers.summary(1).copy(group = true))
         openCompactLayers(fake)
 
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsNotEnabled()
+        row(1).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsNotEnabled()
+        Espresso.pressBack()
         // 그룹 안의 레이어는 지울 수 있다
-        row(0).performClick()
-        composeRule.onNodeWithTag(EditScreenTags.LAYER_DELETE).assertIsEnabled()
+        row(0).performTouchInput { longClick() }
+        composeRule.onNodeWithTag(EditScreenTags.LAYER_MENU_DELETE).assertIsEnabled()
     }
 
     @Test
@@ -822,14 +779,14 @@ class LayerPanelTest {
     }
 
     @Test
-    fun main_layersPanel_dropsItsTitleWhenTheFiveButtonsLeaveNoRoom_butKeepsThePaneName() {
+    fun main_layersPanel_dropsItsTitleWhenTheHeaderLeavesNoRoom_butKeepsThePaneName() {
         val fake = FakeLayers(2)
         show(fake, 930, 700)
         composeRule.togglePanel(MainPanel.LAYERS)
         val title = composeRule.activity.getString(R.string.tool_layers)
 
-        // 패널 폭(280dp)에 버튼 다섯이 다 보이고, 한 줄로 들어가지 않는 제목은 두지 않는다
-        for (tag in listOf(EditScreenTags.LAYER_ADD, EditScreenTags.LAYER_ADD_PHOTO, EditScreenTags.LAYER_DELETE, EditScreenTags.VIEW_FLIP_VERTICAL, EditScreenTags.VIEW_FLIP_HORIZONTAL)) {
+        // 패널 폭(280dp)에 혼합 모드와 버튼 셋이 다 보이고, 한 줄로 들어가지 않는 제목은 두지 않는다
+        for (tag in listOf(EditScreenTags.LAYER_BLEND, EditScreenTags.LAYER_ADD, EditScreenTags.VIEW_FLIP_VERTICAL, EditScreenTags.VIEW_FLIP_HORIZONTAL)) {
             composeRule.onNodeWithTag(tag).assertIsDisplayed()
         }
         composeRule.onNode(hasText(title) and hasAnyAncestor(hasTestTag(EditScreenTags.FLOATING_PANEL))).assertDoesNotExist()
