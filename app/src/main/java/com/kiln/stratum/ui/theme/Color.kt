@@ -24,10 +24,11 @@ import androidx.compose.ui.graphics.Color
  * @property selectedContent 선택된 아이콘·글자, 글자 버튼
  * @property selectedBackground 선택된 항목 배경
  * @property chipSelectedBorder 선택된 칩 테두리
- * @property sliderFill 슬라이더 채움, 곡선
+ * @property sliderFill 슬라이더 채움(다크 흰색·라이트 #242424, 2026-10-24 사용자 요청)
+ * @property adjustAccent 조정 곡선·점과 바뀐 조정 항목 점(#0076FE, 슬라이더 채움과 따로)
  * @property tabIndicator 선택된 탭 밑줄
  * @property sliderTrack 슬라이더 빈 트랙
- * @property sliderThumb 슬라이더 손잡이
+ * @property sliderThumb 슬라이더 손잡이(#A5A5A4, 2026-10-24 사용자 요청)
  * @property sliderThumbBorder 손잡이 테두리(라이트는 흰 패널 위에서 보이게, 다크는 없음)
  * @property canvasOutline 캔버스 둘레 1dp(라이트에서 흰 캔버스와 작업 공간을 가름)
  * @property inverseBackground 알림(제스처 알림·알림 막대) 바탕
@@ -58,6 +59,7 @@ class StratumColors(
     val selectedBackground: Color,
     val chipSelectedBorder: Color,
     val sliderFill: Color,
+    val adjustAccent: Color,
     val tabIndicator: Color,
     val sliderTrack: Color,
     val sliderThumb: Color,
@@ -91,10 +93,11 @@ internal val DarkStratumColors = StratumColors(
     selectedContent = Color(0xFF8DB6FF),
     selectedBackground = Color(0xFF2A3550),
     chipSelectedBorder = Color(0xFF4C7BD9),
-    sliderFill = Color(0xFF0076FE),
+    sliderFill = Color(0xFFFFFFFF),
+    adjustAccent = Color(0xFF0076FE),
     tabIndicator = Color(0xFF0076FE),
     sliderTrack = Color(0xFF3A3C43),
-    sliderThumb = Color(0xFFFFFFFF),
+    sliderThumb = Color(0xFFA5A5A4),
     sliderThumbBorder = Color.Transparent,
     canvasOutline = Color(0xFF3A3C43),
     inverseBackground = Color(0xFFE9EAEE),
@@ -125,10 +128,11 @@ internal val LightStratumColors = StratumColors(
     selectedContent = Color(0xFF1F5BD0),
     selectedBackground = Color(0xFFDCE7FD),
     chipSelectedBorder = Color(0xFF4C7BD9),
-    sliderFill = Color(0xFF0076FE),
+    sliderFill = Color(0xFF242424),
+    adjustAccent = Color(0xFF0076FE),
     tabIndicator = Color(0xFF0076FE),
     sliderTrack = Color(0xFFC5C8CF),
-    sliderThumb = Color(0xFFFFFFFF),
+    sliderThumb = Color(0xFFA5A5A4),
     sliderThumbBorder = Color(0xFFC5C8CF),
     canvasOutline = Color(0xFFA3A7B0),
     inverseBackground = Color(0xFF2A2B30),

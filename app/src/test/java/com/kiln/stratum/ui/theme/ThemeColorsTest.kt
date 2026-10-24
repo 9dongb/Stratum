@@ -27,9 +27,16 @@ class ThemeColorsTest {
         assertEquals(Color(0xFF2F6FE4), dark.accent)
         assertEquals(Color(0xFF8DB6FF), dark.selectedContent)
         assertEquals(Color(0xFF2A3550), dark.selectedBackground)
-        // 슬라이더 채움은 다크·라이트 모두 #0076FE(2026-10-22 사용자 요청, 전에는 다크 #6EA2FF)
-        assertEquals(Color(0xFF0076FE), dark.sliderFill)
-        assertEquals(Color(0xFF0076FE), light.sliderFill)
+        // 슬라이더(2026-10-24 사용자 요청): 채움은 다크 흰색·라이트 #242424, 손잡이는 #A5A5A4, 빈 트랙은 그대로
+        assertEquals(Color(0xFFFFFFFF), dark.sliderFill)
+        assertEquals(Color(0xFF242424), light.sliderFill)
+        assertEquals(Color(0xFFA5A5A4), dark.sliderThumb)
+        assertEquals(Color(0xFFA5A5A4), light.sliderThumb)
+        assertEquals(Color(0xFF3A3C43), dark.sliderTrack)
+        assertEquals(Color(0xFFC5C8CF), light.sliderTrack)
+        // 조정 곡선·바뀐 항목 점은 슬라이더와 따로 #0076FE 그대로(2026-10-22 사용자 요청의 하늘색 → #0076FE)
+        assertEquals(Color(0xFF0076FE), dark.adjustAccent)
+        assertEquals(Color(0xFF0076FE), light.adjustAccent)
         assertEquals(Color(0xFF4C7BD9), dark.chipSelectedBorder)
         assertTrue(dark.isDark)
         assertTrue(!light.isDark)
@@ -95,7 +102,7 @@ class ThemeColorsTest {
 
     private fun StratumColors.allColors(): Set<Color> = setOf(
         workspace, background, panel, divider, fieldBorder, fieldBackground, textPrimary, textSecondary, textDescription,
-        textDisabled, accent, onAccent, selectedContent, selectedBackground, chipSelectedBorder, sliderFill, tabIndicator,
+        textDisabled, accent, onAccent, selectedContent, selectedBackground, chipSelectedBorder, sliderFill, adjustAccent, tabIndicator,
         sliderTrack, sliderThumb, sliderThumbBorder, canvasOutline, inverseBackground, inverseText, inverseAccent, error,
         onError, errorContainer, onErrorContainer, scrim
     )

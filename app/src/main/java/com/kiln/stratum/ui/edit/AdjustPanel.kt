@@ -262,7 +262,7 @@ private fun AdjustCell(item: AdjustItem, controls: AdjustControls, onClick: () -
             Modifier
                 .padding(top = 4.dp)
                 .size(6.dp)
-                .background(if (item.isChanged(controls.adjustments)) colors.sliderFill else Color.Transparent, StratumShapes.Dot)
+                .background(if (item.isChanged(controls.adjustments)) colors.adjustAccent else Color.Transparent, StratumShapes.Dot)
         )
     }
 }
@@ -386,7 +386,7 @@ private fun AdjustChip(item: AdjustItem, controls: AdjustControls, onClick: () -
         enabled = enabled,
         label = { Text(name, maxLines = 1, softWrap = false) },
         trailingIcon = if (item.isChanged(controls.adjustments)) {
-            { Box(Modifier.size(6.dp).background(StratumTheme.colors.sliderFill, StratumShapes.Dot)) }
+            { Box(Modifier.size(6.dp).background(StratumTheme.colors.adjustAccent, StratumShapes.Dot)) }
         } else {
             null
         },
@@ -635,10 +635,10 @@ private fun ToneCurveEditor(
         val height = size.height - inset * 2
         if (width <= 0f || height <= 0f) return@Canvas
         fun pointAt(x: Float, y: Float) = Offset(inset + x * width, inset + (1f - y) * height)
-        // 바탕은 입력칸 바탕, 격자는 구분선, 그대로인 대각선은 테두리 색, 곡선·점은 슬라이더 채움 색(꺼지면 비활성 색)
+        // 바탕은 입력칸 바탕, 격자는 구분선, 그대로인 대각선은 테두리 색, 곡선·점은 조정 강조 색 #0076FE(꺼지면 비활성 색, 슬라이더 채움과 따로)
         val grid = colors.divider
         val diagonal = colors.fieldBorder
-        val line = if (enabled) colors.sliderFill else colors.textDisabled
+        val line = if (enabled) colors.adjustAccent else colors.textDisabled
         // 바탕과 4칸 격자, 그대로인 대각선
         drawRect(colors.fieldBackground, topLeft = Offset(inset, inset), size = androidx.compose.ui.geometry.Size(width, height))
         for (step in 1..3) {
