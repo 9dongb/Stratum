@@ -17,9 +17,12 @@ import com.kiln.stratum.engine.platform.PreviewRenderer
 import com.kiln.stratum.engine.platform.ResizeImage
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_PIXEL_COUNT
 import com.kiln.stratum.engine.raster.TILE_SIZE
+import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileAt
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.CancellationException
@@ -181,5 +184,47 @@ class ImageResizerTest {
         assertThrows(CancellationException::class.java) {
             ResizeImage(1500, 150).applyTo(document) { throw CancellationException() }
         }
+    }
+
+    /** 문서 좌표 ([x], [y]) 픽셀(캔버스 밖 포함). 타일이 없거나 담지 않은 곳은 투명 */
+    private fun Document.pixelAnywhere(x: Int, y: Int): Int {
+        val tile = raster().tiles[tileAt(x, y)] ?: return 0
+        val localX = Math.floorMod(x, TILE_SIZE)
+        val localY = Math.floorMod(y, TILE_SIZE)
+        return if (localX < tile.width && localY < tile.height) tile.pixelAt(localX, localY) else 0
+    }
+
+    @Test
+    fun offCanvasPixels_areResizedWithTheLayer_withoutASeamAtTheCanvasEdge() {
+        // 256×256 캔버스: 캔버스 안은 가로로 밝아지는 회색, 왼쪽 캔버스 밖 자리(-1, 0)는 가로로 바뀌는 자홍~파랑(결정 기록 '캔버스 밖 픽셀')
+        val inside = Tile.of(IntArray(TILE_PIXEL_COUNT) { i -> (i % TILE_SIZE).let { Color.rgb(it, it, it) } })
+        val outside = Tile.of(IntArray(TILE_PIXEL_COUNT) { i -> Color.rgb(255 - i % TILE_SIZE, 0, 255) })
+        val document = Document.create(256, 256, "L", Raster.EMPTY.withTiles(mapOf(TileKey(-1, 0) to outside, TileKey(0, 0) to inside)))
+        // 같은 그림을 캔버스 안에 다 담은 512×256 문서(오른쪽으로 256 옮김). 0.75배면 256이 192로 딱 떨어져 픽셀이 겹친다.
+        val reference = Document.create(512, 256, "L", Raster.EMPTY.withTiles(mapOf(TileKey(0, 0) to outside, TileKey(1, 0) to inside)))
+
+        val resized = ResizeImage(192, 192).applyTo(document)
+        val expected = ResizeImage(384, 192).applyTo(reference)
+
+        for (y in listOf(0, 95, 191)) {
+            for (x in -192 until 192) {
+                val actual = resized.pixelAnywhere(x, y)
+                val want = expected.pixelAnywhere(x + 192, y)
+                if (!near(want, actual, tolerance = 1)) fail("($x, $y): ${hex(actual)} != ${hex(want)}")
+            }
+        }
+        // 캔버스 밖 타일은 바꾼 내용만큼 담고, 캔버스 안 타일은 캔버스 안쪽 크기 그대로다
+        val off = resized.raster().tiles.getValue(TileKey(-1, 0))
+        assertEquals(256, off.width)
+        assertEquals(192, off.height)
+        assertEquals(192, resized.raster().tiles.getValue(TileKey(0, 0)).width)
+        assertEquals(setOf(TileKey(-1, 0), TileKey(0, 0)), resized.raster().tiles.keys)
+
+        // 반으로 줄이면 x = -100의 픽셀은 -50으로 간다(-100·-99의 평균)
+        val halved = ResizeImage(128, 128).applyTo(document)
+        val pixel = halved.pixelAnywhere(-50, 50)
+        assertTrue(hex(pixel), near(Color.rgb(99, 0, 255), pixel, tolerance = 1))
+        assertEquals(256, halved.raster().tiles.getValue(TileKey(-1, 0)).width)
+        assertEquals(128, halved.raster().tiles.getValue(TileKey(-1, 0)).height)
     }
 }

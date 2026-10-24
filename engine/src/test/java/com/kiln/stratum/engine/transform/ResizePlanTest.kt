@@ -51,4 +51,40 @@ class ResizePlanTest {
         // 원본 끝을 넘지 않는다
         assertEquals(PixelRect(2042, 2042, 4000, 3000), plan.sourceRect(PixelRect(1024, 1024, 2000, 1500)))
     }
+
+    @Test
+    fun blocksOfAnArea_reachPastTheCanvas_onTheSameGrid() {
+        // 캔버스 밖 픽셀이 있는 레이어(결정 기록 '캔버스 밖 픽셀'): 대상 (-300, -10)~(1100, 500)
+        val plan = ResizePlan(PixelSize(2000, 1000), PixelSize(1000, 500))
+        val area = PixelRect(-300, -10, 1100, 500)
+        val blocks = plan.blocks(area)
+
+        // 대상 (0, 0)에 맞춘 1024 격자를 영역으로 자른 것이고, 빈틈없이 한 번씩 덮는다
+        assertEquals(
+            listOf(
+                PixelRect(-300, -10, 0, 0), PixelRect(0, -10, 1024, 0), PixelRect(1024, -10, 1100, 0),
+                PixelRect(-300, 0, 0, 500), PixelRect(0, 0, 1024, 500), PixelRect(1024, 0, 1100, 500)
+            ),
+            blocks
+        )
+        assertEquals(area.width.toLong() * area.height, blocks.sumOf { it.width.toLong() * it.height })
+        // 캔버스 안 묶음은 캔버스만 볼 때와 같은 격자에서 시작한다
+        assertEquals(plan.blocks().first().left, blocks[4].left)
+        assertEquals(plan.blocks().first().top, blocks[4].top)
+        assertTrue(plan.blocks(PixelRect(5, 5, 5, 9)).isEmpty())
+    }
+
+    @Test
+    fun sourceRectAndTargetArea_workPastTheCanvas() {
+        val plan = ResizePlan(PixelSize(2000, 1000), PixelSize(1000, 500))
+        val within = PixelRect(-600, -20, 2200, 1000)
+        // 원본 x = -100인 픽셀은 반으로 줄이면 대상 x = -50이다(캔버스 (0, 0)이 기준)
+        assertEquals(PixelRect(-50, -10, 1100, 500), plan.targetArea(PixelRect(-100, -20, 2200, 1000)))
+        val source = plan.sourceRect(PixelRect(-300, -10, 0, 500), within)
+        assertTrue(source.left in -606..-600)
+        assertEquals(within.top, source.top)
+        assertTrue(source.right > 0)
+        // 캔버스만 볼 때는 전처럼 캔버스 안으로 자른다
+        assertEquals(0, plan.sourceRect(PixelRect(0, 0, 100, 100)).left)
+    }
 }

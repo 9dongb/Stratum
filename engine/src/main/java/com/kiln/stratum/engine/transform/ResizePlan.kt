@@ -51,19 +51,45 @@ class ResizePlan(val source: PixelSize, val target: PixelSize) {
     }
 
     /**
-     * 대상 묶음 [block]을 그리는 데 필요한 원본 사각형(원본 픽셀 좌표). 보간에 쓰는 둘레 여유를 더하고 원본 안으로 자른다.
-     * 여유는 반씩 줄인 단계의 픽셀로 [RESAMPLE_MARGIN]개다.
+     * 대상 [area](대상 픽셀 좌표, 캔버스 밖 포함)를 덮는 대상 묶음들. 묶음은 대상 (0, 0)에 맞춘 [RESIZE_BLOCK_SIZE] 격자(음수는 내림)를 [area]로 자른 것이라
+     * [blocks]와 같은 격자이고, 타일이 묶음 경계에 걸치지 않는다. 캔버스 밖 픽셀이 있는 레이어의 크기를 바꿀 때 쓴다(결정 기록 '캔버스 밖 픽셀').
      */
-    fun sourceRect(block: PixelRect): PixelRect {
+    fun blocks(area: PixelRect): List<PixelRect> {
+        val blocks = ArrayList<PixelRect>()
+        if (area.width == 0 || area.height == 0) return blocks
+        val firstTop = Math.floorDiv(area.top, RESIZE_BLOCK_SIZE) * RESIZE_BLOCK_SIZE
+        val firstLeft = Math.floorDiv(area.left, RESIZE_BLOCK_SIZE) * RESIZE_BLOCK_SIZE
+        for (top in firstTop until area.bottom step RESIZE_BLOCK_SIZE) {
+            for (left in firstLeft until area.right step RESIZE_BLOCK_SIZE) {
+                blocks += PixelRect(maxOf(left, area.left), maxOf(top, area.top), minOf(left + RESIZE_BLOCK_SIZE, area.right), minOf(top + RESIZE_BLOCK_SIZE, area.bottom))
+            }
+        }
+        return blocks
+    }
+
+    /**
+     * 대상 묶음 [block]을 그리는 데 필요한 원본 사각형(원본 픽셀 좌표). 보간에 쓰는 둘레 여유를 더하고 [within](기본은 원본 캔버스) 안으로 자른다.
+     * 여유는 반씩 줄인 단계의 픽셀로 [RESAMPLE_MARGIN]개다. 캔버스 밖 픽셀이 있는 레이어는 [within]이 레이어 내용과 캔버스를 담는 사각형이다.
+     */
+    fun sourceRect(block: PixelRect, within: PixelRect = PixelRect.of(source)): PixelRect {
         val marginX = RESAMPLE_MARGIN.toDouble() * (1 shl levelX)
         val marginY = RESAMPLE_MARGIN.toDouble() * (1 shl levelY)
         return PixelRect(
-            left = floor(block.left / scaleX - marginX).toInt().coerceIn(0, source.width),
-            top = floor(block.top / scaleY - marginY).toInt().coerceIn(0, source.height),
-            right = ceil(block.right / scaleX + marginX).toInt().coerceIn(0, source.width),
-            bottom = ceil(block.bottom / scaleY + marginY).toInt().coerceIn(0, source.height)
+            left = floor(block.left / scaleX - marginX).toInt().coerceIn(within.left, within.right),
+            top = floor(block.top / scaleY - marginY).toInt().coerceIn(within.top, within.bottom),
+            right = ceil(block.right / scaleX + marginX).toInt().coerceIn(within.left, within.right),
+            bottom = ceil(block.bottom / scaleY + marginY).toInt().coerceIn(within.top, within.bottom)
         )
     }
+
+    /** 원본 [rect](원본 픽셀 좌표, 캔버스 밖 포함)를 바꾼 대상 사각형(바깥으로 반올림, 캔버스 (0, 0)이 기준이라 캔버스 안 계산과 같은 자리) */
+    fun targetArea(rect: PixelRect): PixelRect =
+        PixelRect(
+            floor(rect.left * scaleX).toInt(),
+            floor(rect.top * scaleY).toInt(),
+            ceil(rect.right * scaleX).toInt(),
+            ceil(rect.bottom * scaleY).toInt()
+        )
 
     companion object {
         /**

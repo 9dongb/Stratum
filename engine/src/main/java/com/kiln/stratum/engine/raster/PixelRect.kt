@@ -22,6 +22,10 @@ data class PixelRect(val left: Int, val top: Int, val right: Int, val bottom: In
         return if (r > l && b > t) PixelRect(l, t, r, b) else null
     }
 
+    /** 이 사각형과 [other]를 모두 담는 가장 작은 사각형. */
+    fun union(other: PixelRect): PixelRect =
+        PixelRect(minOf(left, other.left), minOf(top, other.top), maxOf(right, other.right), maxOf(bottom, other.bottom))
+
     /** [other]를 모두 담는지. */
     operator fun contains(other: PixelRect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom

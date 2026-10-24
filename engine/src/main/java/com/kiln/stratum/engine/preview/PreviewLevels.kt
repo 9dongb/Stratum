@@ -134,6 +134,24 @@ object PreviewLevels {
         )
     }
 
+    /**
+     * [rect](문서 좌표, 캔버스 밖 포함)를 담는, [level] 단계로 그릴 레이어 공간 영역(병합·크기 변경이 캔버스 밖 픽셀까지 그릴 때, 결정 기록 '캔버스 밖 픽셀').
+     * 문서로 자르지 않고 네 쪽 모두 단계 격자(max(타일 크기, 2^level) 픽셀)에 맞춰 넓힌다(음수는 내림).
+     */
+    fun area(level: Int, rect: PixelRect): PreviewRegion {
+        requireLevel(level)
+        val grid = maxOf(TILE_SIZE, 1 shl level)
+        return PreviewRegion(
+            level,
+            PixelRect(
+                left = Math.floorDiv(rect.left, grid) * grid,
+                top = Math.floorDiv(rect.top, grid) * grid,
+                right = -Math.floorDiv(-rect.right, grid) * grid,
+                bottom = -Math.floorDiv(-rect.bottom, grid) * grid
+            )
+        )
+    }
+
     /** [document] 크기 문서를 [level] 단계로 줄일 때의 타일 묶음들. 위 줄부터, 한 줄 안에서는 왼쪽부터 놓인다. */
     fun blocks(document: PixelSize, level: Int): List<PreviewBlock> = blocks(wholeRegion(document, level))
 
@@ -145,14 +163,14 @@ object PreviewLevels {
         val level = region.level
         val rect = region.rect
         val blocks = ArrayList<PreviewBlock>()
-        // 영역의 왼쪽·위는 격자(타일 크기 이상)에 맞춰져 있어, 묶음도 타일 경계에서 시작한다
+        // 영역의 왼쪽·위는 격자(타일 크기 이상)에 맞춰져 있어, 묶음도 타일 경계에서 시작한다(레이어 공간 영역은 음수일 수 있다)
         for (top in rect.top until rect.bottom step PREVIEW_BLOCK_SIZE) {
             for (left in rect.left until rect.right step PREVIEW_BLOCK_SIZE) {
                 val right = minOf(left + PREVIEW_BLOCK_SIZE, rect.right)
                 val bottom = minOf(top + PREVIEW_BLOCK_SIZE, rect.bottom)
                 blocks += PreviewBlock(
-                    firstColumn = left / TILE_SIZE,
-                    firstRow = top / TILE_SIZE,
+                    firstColumn = Math.floorDiv(left, TILE_SIZE),
+                    firstRow = Math.floorDiv(top, TILE_SIZE),
                     columns = (right - left + TILE_SIZE - 1) / TILE_SIZE,
                     rows = (bottom - top + TILE_SIZE - 1) / TILE_SIZE,
                     left = left,

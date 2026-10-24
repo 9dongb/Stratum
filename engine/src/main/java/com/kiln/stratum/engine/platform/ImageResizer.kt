@@ -23,9 +23,12 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
+import com.kiln.stratum.engine.raster.tileKeysIn
+import com.kiln.stratum.engine.raster.tileSquare
 import com.kiln.stratum.engine.selection.Selection
 import com.kiln.stratum.engine.transform.ResizePlan
 import java.util.IdentityHashMap
+import kotlin.math.ceil
 
 /**
  * 문서 전체(모든 레이어)의 크기를 [width]×[height]로 바꾼다. 픽셀을 다시 계산하는 일이라 GPU로 한다([ImageResizer]).
@@ -47,12 +50,20 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val scaleX = width / document.width.toFloat()
         val scaleY = height / document.height.toFloat()
         val scaled = { x: Float, y: Float -> x * scaleX to y * scaleY }
-        // 함께 쓰던 마스크는 한 번 바꿔 계속 함께 쓴다(피부 보정의 색 보정·피부 정돈, 결정 기록 '피부 보정'의 2c)
+        // 함께 쓰던 마스크는 한 번 바꿔 계속 함께 쓴다(피부 보정의 색 보정·피부 정돈, 결정 기록 '피부 보정'의 2c).
+        // 캔버스 밖 픽셀이 있는 레이어의 마스크는 그 픽셀 자리까지 함께 바꾸므로 따로 바꾼다(결정 기록 '캔버스 밖 픽셀').
         val masks = IdentityHashMap<Selection, Selection>()
-        fun resized(mask: Selection?) = mask?.let { masks.getOrPut(it) { MaskResizer.resize(it, plan, checkCanceled) } }
+        val grid = TileGrid(document.width, document.height)
+        fun resized(mask: Selection?, pixels: Raster? = null) = mask?.let {
+            if (pixels != null && pixels.hasOffCanvas(grid)) {
+                MaskResizer.resize(it, plan, checkCanceled, pixels)
+            } else {
+                masks.getOrPut(it) { MaskResizer.resize(it, plan, checkCanceled) }
+            }
+        }
         val layers = document.layers.map { layer ->
             when (val content = layer.content) {
-                is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled)).copy(mask = resized(layer.mask))
+                is RasterContent -> layer.withPixels(ImageResizer.resize(content.raster, plan, checkCanceled)).copy(mask = resized(layer.mask, content.raster))
                 // 조정 레이어는 마스크만 바꾼다(결정 기록 '피부 보정'의 1e)
                 is AdjustmentContent -> layer.copy(mask = resized(layer.mask)).withSkinMapped((scaleX + scaleY) / 2f, scaled)
                 // 그룹은 그리는 것이 없다(1g)
@@ -63,14 +74,26 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         return SkinRecord.rebased(document, document.copy(width = width, height = height, layers = layers, selection = null))
     }
 
-    /** 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다. 경계가 있는 마스크는 픽셀 하나에 1바이트를 더한다. */
+    /**
+     * 빈 레이어와 한 가지 색 레이어는 새 메모리를 거의 쓰지 않고, 나머지는 레이어마다 새 크기만큼 쓴다(캔버스 밖 픽셀이 있으면 내용과 캔버스를 담는
+     * 사각형을 바꾼 크기만큼, 결정 기록 '캔버스 밖 픽셀'). 경계가 있는 마스크는 픽셀 하나에 1바이트를 더한다.
+     */
     override fun estimateNewBytes(document: Document): Long {
         val source = PixelSize(document.width, document.height)
+        val target = PixelSize(width, height)
+        val grid = TileGrid(document.width, document.height)
         val layerBytes = width.toLong() * height * Int.SIZE_BYTES
-        val pixels = document.layers.count { layer ->
-            val raster = (layer.content as? RasterContent)?.raster
-            raster != null && raster.tiles.isNotEmpty() && ImageResizer.solidColor(raster, source) == null
-        } * layerBytes
+        var pixels = 0L
+        for (layer in document.layers) {
+            val raster = (layer.content as? RasterContent)?.raster ?: continue
+            if (raster.tiles.isEmpty() || ImageResizer.solidColor(raster, source) != null) continue
+            pixels += if (raster.hasOffCanvas(grid)) {
+                val area = ImageResizer.wholeTarget(raster, ResizePlan(source, target))
+                area.width.toLong() * area.height * Int.SIZE_BYTES
+            } else {
+                layerBytes
+            }
+        }
         val masks = document.layers.count { layer -> layer.mask?.tiles?.values?.any { !it.isFull } == true } * width.toLong() * height
         return pixels + masks
     }
@@ -102,6 +125,8 @@ internal object ImageResizer {
                 throw NotEnoughMemoryException(e)
             }
         }
+        // 캔버스 밖 픽셀이 있으면 레이어 내용 전체를 바꾼다(결정 기록 '캔버스 밖 픽셀')
+        if (raster.hasOffCanvas(TileGrid(plan.source.width, plan.source.height))) return resizeWhole(raster, plan, checkCanceled)
         val single = Document.create(plan.source.width, plan.source.height, "", raster)
         val targetGrid = TileGrid(plan.target.width, plan.target.height)
         val tiles = HashMap<TileKey, Tile?>()
@@ -125,6 +150,64 @@ internal object ImageResizer {
     }
 
     /**
+     * 캔버스 밖 픽셀이 있는 레이어의 크기 변경(결정 기록 '캔버스 밖 픽셀'): 레이어 내용과 캔버스를 담는 사각형 전체를 같은 배율로 바꾼다.
+     * 대상 묶음은 캔버스 안과 같은 격자이고, 레이어 공간으로 그려(캔버스 밖 원본도 읽음) 캔버스 끝에 이음매가 없다.
+     * 대상 타일은 바꾼 내용이 닿는 곳까지만 담고(캔버스 안 자리는 캔버스 안쪽보다 작지 않음), 그 자리로 오는 원본에 타일이 없으면 비워 둔다.
+     */
+    private fun resizeWhole(raster: Raster, plan: ResizePlan, checkCanceled: () -> Unit): Raster {
+        val extent = checkNotNull(raster.extent())
+        val within = extent.union(PixelRect.of(plan.source))
+        val area = plan.targetArea(within)
+        // 바이큐빅은 내용 끝 너머로 대상 픽셀 한둘(키우면 배율만큼)까지 번지므로 그만큼 더 담는다(그리는 사각형 안에서만)
+        val spill = ceil(maxOf(plan.scaleX, plan.scaleY)).toInt() + 1
+        val content = checkNotNull(plan.targetArea(extent).expanded(spill).intersect(area))
+        val single = Document.create(plan.source.width, plan.source.height, "", raster)
+        val targetGrid = TileGrid(plan.target.width, plan.target.height)
+        val tiles = HashMap<TileKey, Tile?>()
+        try {
+            for (block in plan.blocks(area)) {
+                checkCanceled()
+                val sourceRect = plan.sourceRect(block, within)
+                if (!raster.hasTilesIn(sourceRect)) continue
+                val pixels = renderBlock(single, plan, block, sourceRect, within = within) ?: throw NotEnoughMemoryException()
+                try {
+                    for (key in tileKeysIn(block)) {
+                        val square = tileSquare(key)
+                        // 이 타일 자리로 오는 원본이 모두 투명(타일 없음)이면 비워 둔다
+                        val covered = square.intersect(block) ?: continue
+                        if (!raster.hasTilesIn(plan.sourceRect(covered, within))) continue
+                        val size = wholeTileSize(key, square, content, targetGrid) ?: continue
+                        tiles[key] = copyTile(pixels, block, square, size)
+                    }
+                } finally {
+                    pixels.recycle()
+                }
+            }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        return Raster.EMPTY.withTiles(tiles)
+    }
+
+    /** 캔버스 밖 픽셀이 있는 [raster]를 [plan]대로 바꿀 때 그리는 대상 사각형(레이어 내용과 캔버스를 담는 사각형을 바꾼 것, 메모리 어림에 씀) */
+    fun wholeTarget(raster: Raster, plan: ResizePlan): PixelRect {
+        val canvas = PixelRect.of(plan.source)
+        return plan.targetArea(raster.extent()?.union(canvas) ?: canvas)
+    }
+
+    /** [key] 대상 타일이 담을 크기: 왼쪽 위부터 바꾼 내용([content])이 닿는 곳까지, 캔버스 안 자리는 캔버스 안쪽보다 작지 않게. 담을 것이 없으면 null. */
+    private fun wholeTileSize(key: TileKey, square: PixelRect, content: PixelRect, grid: TileGrid): PixelSize? {
+        val data = square.intersect(content)
+        var width = if (data == null) 0 else data.right - square.left
+        var height = if (data == null) 0 else data.bottom - square.top
+        grid.canvasRect(key)?.let { inside ->
+            width = maxOf(width, inside.width)
+            height = maxOf(height, inside.height)
+        }
+        return if (width > 0 && height > 0) PixelSize(width, height) else null
+    }
+
+    /**
      * 캔버스([size])의 모든 자리를 같은 한 가지 색 타일이 캔버스 안쪽 크기로 덮으면(한 가지 색 캔버스) 그 색. 크기를 바꿔도 같은 색이라 계산하지 않는다.
      * 캔버스 밖 자리나 캔버스 밖으로 더 담은 타일이 있으면 null이다(결정 기록 '캔버스 밖 픽셀').
      */
@@ -141,21 +224,28 @@ internal object ImageResizer {
     /**
      * 대상 묶음 [block]을 그린 소프트웨어 비트맵(대상 픽셀 크기). GPU가 그리지 못하면 null.
      * [document]의 보이는 레이어를 모두 합성해 그린다(크기 변경은 레이어 하나만 담은 문서, 내보내기는 문서 전체).
-     * [background]가 있으면 그 색 바탕 위에 얹는다(JPEG로 내보낼 때의 흰 바탕).
+     * [background]가 있으면 그 색 바탕 위에 얹는다(JPEG로 내보낼 때의 흰 바탕). [within]이 있으면 레이어 공간으로 그린다(캔버스 밖 픽셀이 있는 레이어의 크기 변경).
      */
     internal fun renderBlock(
         document: Document,
         plan: ResizePlan,
         block: PixelRect,
         sourceRect: PixelRect,
-        background: Int? = null
+        background: Int? = null,
+        within: PixelRect? = null
     ): Bitmap? {
         val fine = minOf(plan.levelX, plan.levelY)
         val coarse = maxOf(plan.levelX, plan.levelY)
         // 더 거친 단계의 격자에 맞춰 두어야, 한 축만 더 반으로 줄일 때도 두 픽셀 짝이 문서 전체와 같다
-        val snapped = checkNotNull(PreviewLevels.region(plan.source, coarse, sourceRect)) { "Empty source for $block" }
-        val region = PreviewRegion(fine, snapped.rect)
-        var level = PreviewRenderer.renderRegion(document, region) ?: return null
+        val snapped = if (within == null) {
+            checkNotNull(PreviewLevels.region(plan.source, coarse, sourceRect)) { "Empty source for $block" }.rect
+        } else {
+            // 레이어 공간: 오른쪽·아래는 레이어 내용과 캔버스를 담는 사각형([within]) 끝에서 자른다(그 끝은 캔버스 끝처럼 가장자리를 늘인다)
+            val aligned = PreviewLevels.area(coarse, sourceRect).rect
+            PixelRect(aligned.left, aligned.top, minOf(aligned.right, within.right), minOf(aligned.bottom, within.bottom))
+        }
+        val region = PreviewRegion(fine, snapped)
+        var level = (if (within == null) PreviewRenderer.renderRegion(document, region) else PreviewRenderer.renderLayerSpace(document, region)) ?: return null
         try {
             repeat(plan.levelX - fine) { level = halve(level, horizontal = true) ?: return null }
             repeat(plan.levelY - fine) { level = halve(level, horizontal = false) ?: return null }
@@ -213,18 +303,20 @@ internal object ImageResizer {
 
     /** 대상 묶음 비트맵 [pixels]를 타일로 나눠 [into]에 넣는다. 끝 타일은 캔버스 안쪽 크기만 담는다. */
     private fun splitIntoTiles(pixels: Bitmap, block: PixelRect, grid: TileGrid, into: MutableMap<TileKey, Tile?>) {
-        for (row in block.top / TILE_SIZE until (block.bottom + TILE_SIZE - 1) / TILE_SIZE) {
-            for (column in block.left / TILE_SIZE until (block.right + TILE_SIZE - 1) / TILE_SIZE) {
-                val key = TileKey(column, row)
-                val bounds = grid.bounds(key)
-                val picture = Picture()
-                val canvas = picture.beginRecording(bounds.width, bounds.height)
-                canvas.drawBitmap(pixels, (block.left - bounds.left).toFloat(), (block.top - bounds.top).toFloat(), CopyPaint)
-                picture.endRecording()
-                // 소프트웨어로 그려 바꿀 수 없는 비트맵 하나가 나온다(값은 그대로 베낀다)
-                into[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, bounds.width, bounds.height, Bitmap.Config.ARGB_8888)))
-            }
+        for (key in tileKeysIn(block)) {
+            val inside = grid.bounds(key)
+            into[key] = copyTile(pixels, block, tileSquare(key), PixelSize(inside.width, inside.height))
         }
+    }
+
+    /** 대상 묶음 [block]을 그린 [pixels]에서 [square] 자리의 [size] 타일을 베껴 낸다(값 그대로) */
+    private fun copyTile(pixels: Bitmap, block: PixelRect, square: PixelRect, size: PixelSize): Tile {
+        val picture = Picture()
+        val canvas = picture.beginRecording(size.width, size.height)
+        canvas.drawBitmap(pixels, (block.left - square.left).toFloat(), (block.top - square.top).toFloat(), CopyPaint)
+        picture.endRecording()
+        // 소프트웨어로 그려 바꿀 수 없는 비트맵 하나가 나온다(값은 그대로 베낀다)
+        return Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, size.width, size.height, Bitmap.Config.ARGB_8888)))
     }
 
     /** 그대로 베끼는 붓(필터·안티에일리어싱 끔). `Paint()`도 비트맵 필터가 켜져 있어 직접 끈다. */

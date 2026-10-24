@@ -267,4 +267,19 @@ class PreviewLevelsTest {
             PreviewLevels.canReuse(current, PreviewRegion(1, current.rect), document, PixelRect(900, 100, 1400, 400))
         )
     }
+
+    @Test
+    fun area_alignsPastTheCanvas_withoutClipping() {
+        // 레이어 공간 영역(결정 기록 '캔버스 밖 픽셀'): 문서로 자르지 않고 단계 격자에 맞춰 넓힌다(음수는 내림)
+        assertEquals(PixelRect(-512, -256, 768, 512), PreviewLevels.area(0, PixelRect(-300, -10, 700, 300)).rect)
+        assertEquals(PixelRect(-1024, 0, 1024, 1024), PreviewLevels.area(10, PixelRect(-1, 0, 1, 1)).rect)
+        val region = PreviewLevels.area(1, PixelRect(-300, -10, 700, 300))
+        assertEquals(-256, region.previewLeft)
+        assertEquals(640, region.previewWidth)
+        // 묶음도 음수 타일 자리부터 시작한다
+        val blocks = PreviewLevels.blocks(region)
+        assertEquals(-2, blocks.first().firstColumn)
+        assertEquals(-1, blocks.first().firstRow)
+        assertEquals(0, blocks.first().previewLeft)
+    }
 }

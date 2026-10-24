@@ -22,6 +22,7 @@ import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
 import com.kiln.stratum.engine.raster.TilePixels
+import com.kiln.stratum.engine.transform.MaskTransform
 import kotlin.math.ceil
 
 /**
@@ -52,19 +53,32 @@ object PreviewRenderer {
      * 확대해서 볼 때 보이는 곳만 선명하게 그리는 데 쓴다. 영역이 단계 격자에 맞춰져 있어,
      * 전체 축소본([render])의 같은 자리와 픽셀이 같다. GPU가 그리지 못하면 null.
      *
+     * 캔버스 안만 그린다(끝 타일이 캔버스 밖까지 담은 픽셀은 그리지 않음).
+     *
      * 한 번에 GPU에 넘기는 양은 묶음 하나(2048×2048px)다. GPU 작업은 화면 그리기와 같은 줄에서 돌아,
      * 큰 영역을 한꺼번에 넘기면 그동안 화면이 멈칫한다.
      */
-    fun renderRegion(document: Document, region: PreviewRegion, checkCanceled: () -> Unit = {}): Bitmap? {
+    fun renderRegion(document: Document, region: PreviewRegion, checkCanceled: () -> Unit = {}): Bitmap? =
+        drawRegion(document, region, layerSpace = false, checkCanceled)
+
+    /**
+     * [renderRegion]을 레이어 공간으로 그린다(병합·크기 변경이 캔버스 밖 픽셀까지 그릴 때, 결정 기록 '캔버스 밖 픽셀'). [region]은 캔버스 밖이어도 되고
+     * (왼쪽·위는 단계 격자에 맞춤, [PreviewLevels.area]), 타일은 담은 픽셀을 모두 그리며, 레이어 마스크 타일이 담지 않은 곳은 가린다.
+     * 조정 레이어의 마스크는 가장자리가 다 보이면 캔버스 밖도 보인다([MaskTransform.revealsOutside]).
+     */
+    fun renderLayerSpace(document: Document, region: PreviewRegion, checkCanceled: () -> Unit = {}): Bitmap? =
+        drawRegion(document, region, layerSpace = true, checkCanceled)
+
+    private fun drawRegion(document: Document, region: PreviewRegion, layerSpace: Boolean, checkCanceled: () -> Unit): Bitmap? {
         val size = PixelSize(document.width, document.height)
-        require(region.rect in PixelRect.of(size)) { "Region outside document: ${region.rect} in $size" }
+        require(layerSpace || region.rect in PixelRect.of(size)) { "Region outside document: ${region.rect} in $size" }
         val level = region.level
         val blocks = PreviewLevels.blocks(region)
         val rendered = ArrayList<Pair<PreviewBlock, Bitmap>>(blocks.size)
         try {
             for (block in blocks) {
                 checkCanceled()
-                rendered += block to (renderBlock(document, block, level) ?: return null)
+                rendered += block to (renderBlock(document, block, level, layerSpace) ?: return null)
             }
             // 묶음이 하나뿐이면 그대로 결과다
             if (rendered.size == 1) return rendered.removeAt(0).second
@@ -82,8 +96,8 @@ object PreviewRenderer {
     }
 
     /** 묶음 하나를 [level] 단계로 그린다. 처음은 타일에서 바로 그리고, 그다음부터는 앞 결과를 반씩 줄인다. */
-    private fun renderBlock(document: Document, block: PreviewBlock, level: Int): Bitmap? {
-        var current = drawTiles(document, block, halve = level > 0) ?: return null
+    private fun renderBlock(document: Document, block: PreviewBlock, level: Int, layerSpace: Boolean): Bitmap? {
+        var current = drawTiles(document, block, halve = level > 0, layerSpace) ?: return null
         var currentLevel = if (level > 0) 1 else 0
         while (currentLevel < level) {
             val next = halve(current)
@@ -95,10 +109,10 @@ object PreviewRenderer {
     }
 
     /**
-     * 묶음 안의 타일들을 레이어 아래부터 그린다. [halve]이면 반 크기로 그린다. 캔버스 안만 그린다: 끝 타일이 캔버스 밖까지 담았으면
-     * 반 크기로 줄일 때 그 픽셀이 끝 줄에 섞이지 않게 캔버스 안쪽으로 잘라 그린다(결정 기록 '캔버스 밖 픽셀').
+     * 묶음 안의 타일들을 레이어 아래부터 그린다. [halve]이면 반 크기로 그린다. 캔버스 안만 그리면 끝 타일이 캔버스 밖까지 담았을 때
+     * 반 크기로 줄일 때 그 픽셀이 끝 줄에 섞이지 않게 캔버스 안쪽으로 잘라 그린다(결정 기록 '캔버스 밖 픽셀'). [layerSpace]면 담은 픽셀을 모두 그린다.
      */
-    private fun drawTiles(document: Document, block: PreviewBlock, halve: Boolean): Bitmap? {
+    private fun drawTiles(document: Document, block: PreviewBlock, halve: Boolean, layerSpace: Boolean): Bitmap? {
         val grid = TileGrid(document.width, document.height)
         val scale = if (halve) 0.5f else 1f
         val width = if (halve) (block.width + 1) / 2 else block.width
@@ -131,12 +145,22 @@ object PreviewRenderer {
                                 // 마스크가 가린 자리(마스크 타일 없음)도 그리지 않는다. 다 보이는 마스크 타일은 곱할 것이 없다.
                                 val mask = step.mask
                                 val maskTile = if (mask == null) null else (mask.tiles[key] ?: continue)
-                                val inside = grid.bounds(key)
-                                val bitmap = insideOf(bitmapOf(tile.pixels, temporary), inside.width, inside.height, halve, temporary)
                                 val left = (column - block.firstColumn) * TILE_SIZE * scale
                                 val top = (row - block.firstRow) * TILE_SIZE * scale
-                                val maskBitmap = maskTile?.let { MaskTiles.bitmapOf(it, temporary) }?.let { insideOf(it, inside.width, inside.height, halve, temporary) }
-                                drawScaled(canvas, bitmap, left, top, scale, scale, adjust, maskBitmap)
+                                if (layerSpace) {
+                                    // 레이어 공간: 담은 픽셀을 모두 그리고, 담은 픽셀·마스크 타일 밖은 투명·가림이다(DECAL).
+                                    // 캔버스 끝에서 끝나는 쪽은 캔버스 안 그리기처럼 가장자리를 늘인다(홀수 크기를 반으로 줄인 끝 줄이 같게).
+                                    val inside = grid.canvasRect(key)
+                                    val edgeX = if (inside != null && tile.width <= inside.width) Shader.TileMode.CLAMP else Shader.TileMode.DECAL
+                                    val edgeY = if (inside != null && tile.height <= inside.height) Shader.TileMode.CLAMP else Shader.TileMode.DECAL
+                                    val maskBitmap = maskTile?.let { MaskTiles.bitmapOf(it, temporary) }
+                                    drawScaled(canvas, bitmapOf(tile.pixels, temporary), left, top, scale, scale, adjust, maskBitmap, edgeX, edgeY)
+                                } else {
+                                    val inside = grid.bounds(key)
+                                    val bitmap = insideOf(bitmapOf(tile.pixels, temporary), inside.width, inside.height, halve, temporary)
+                                    val maskBitmap = maskTile?.let { MaskTiles.bitmapOf(it, temporary) }?.let { insideOf(it, inside.width, inside.height, halve, temporary) }
+                                    drawScaled(canvas, bitmap, left, top, scale, scale, adjust, maskBitmap)
+                                }
                             }
                         }
                         if (saved != null) canvas.restoreToCount(saved)
@@ -151,7 +175,13 @@ object PreviewRenderer {
                         canvas = picture.beginRecording(width, height)
                         val left = (block.firstColumn * TILE_SIZE).toFloat()
                         val top = (block.firstRow * TILE_SIZE).toFloat()
-                        val mask = step.mask?.let { SelectionPreview.maskAt(it, left, top, scale, width, height).also { m -> temporary += m } }
+                        // 레이어 공간에서는 가장자리가 다 보이는 마스크의 캔버스 밖도 보인다(병합한 조정이 캔버스 밖 픽셀에도 걸림)
+                        val reveal = if (layerSpace && step.mask?.let { MaskTransform.revealsOutside(it, PixelSize(document.width, document.height)) } == true) {
+                            PixelRect(0, 0, document.width, document.height)
+                        } else {
+                            null
+                        }
+                        val mask = step.mask?.let { SelectionPreview.maskAt(it, left, top, scale, width, height, revealOutside = reveal).also { m -> temporary += m } }
                         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), Paint().apply {
                             shader = AdjustLayerShader.of(
                                 step,
@@ -212,6 +242,7 @@ object PreviewRenderer {
     /**
      * [drawScaled]를 가로 [scaleX], 세로 [scaleY] 배로 그린다. [adjust]가 있으면 보정해서 그린다.
      * [mask](같은 자리의 마스크 타일 알파 그림)가 있으면 보정한 색에 그 알파를 곱한다(레이어 마스크, 결정 기록 '피부 보정'의 1c).
+     * [edgeX]·[edgeY]는 그림 밖을 읽을 때다(가로·세로): 캔버스 안 그리기는 가장자리를 늘이고(CLAMP), 레이어 공간은 캔버스 밖으로 담은 쪽이 투명(DECAL)이다.
      */
     private fun drawScaled(
         canvas: Canvas,
@@ -221,13 +252,16 @@ object PreviewRenderer {
         scaleX: Float,
         scaleY: Float,
         adjust: AdjustShader? = null,
-        mask: Bitmap? = null
+        mask: Bitmap? = null,
+        edgeX: Shader.TileMode = Shader.TileMode.CLAMP,
+        edgeY: Shader.TileMode = edgeX
     ) {
         val matrix = Matrix().apply {
             setScale(scaleX, scaleY)
             postTranslate(left, top)
         }
-        val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+        // 레이어 공간(DECAL)에서는 담은 픽셀 밖이 투명이라, 홀수 크기를 반으로 줄인 끝 픽셀도 반만 덮인다
+        val shader = BitmapShader(bitmap, edgeX, edgeY).apply {
             filterMode = BitmapShader.FILTER_MODE_LINEAR
             setLocalMatrix(matrix)
         }
@@ -235,7 +269,7 @@ object PreviewRenderer {
         val drawn = if (mask == null) {
             adjusted
         } else {
-            val alpha = BitmapShader(mask, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+            val alpha = BitmapShader(mask, edgeX, edgeY).apply {
                 filterMode = BitmapShader.FILTER_MODE_LINEAR
                 setLocalMatrix(matrix)
             }

@@ -10,6 +10,7 @@ import android.graphics.Shader
 import com.kiln.stratum.engine.command.NotEnoughMemoryException
 import com.kiln.stratum.engine.raster.PixelSize
 import com.kiln.stratum.engine.raster.Raster
+import com.kiln.stratum.engine.raster.TILE_SIZE
 import com.kiln.stratum.engine.raster.Tile
 import com.kiln.stratum.engine.raster.TileGrid
 import com.kiln.stratum.engine.raster.TileKey
@@ -25,36 +26,47 @@ import com.kiln.stratum.engine.transform.ResizePlan
  */
 internal object MaskResizer {
 
-    /** [mask](문서 [plan].source 크기)를 [plan]대로 바꾼 새 마스크. 메모리가 모자라면 [NotEnoughMemoryException]. */
-    fun resize(mask: Selection, plan: ResizePlan, checkCanceled: () -> Unit): Selection {
+    /**
+     * [mask](문서 [plan].source 크기)를 [plan]대로 바꾼 새 마스크. 메모리가 모자라면 [NotEnoughMemoryException].
+     * [pixels]는 마스크가 딸린 레이어의 픽셀이다: 캔버스 밖 픽셀이 있으면 다 보이는 타일이 그 픽셀 자리까지 덮게 바꾼다(결정 기록 '캔버스 밖 픽셀').
+     */
+    fun resize(mask: Selection, plan: ResizePlan, checkCanceled: () -> Unit, pixels: Raster? = null): Selection {
         if (mask.isEmpty) return mask
-        val resized = ImageResizer.resize(toRaster(mask, plan.source, checkCanceled), plan, checkCanceled)
-        return fromRaster(resized, plan.target, checkCanceled)
+        val resized = ImageResizer.resize(toRaster(mask, plan.source, pixels, checkCanceled), plan, checkCanceled)
+        return fromRaster(resized, checkCanceled)
     }
 
     /** 흰색 한 가지 색 타일(다 보이는 마스크 타일 자리가 함께 쓴다) */
     private val WHITE = Tile.solid(Color.WHITE)
 
-    /** 마스크 알파를 흰색 픽셀(알파를 미리 곱한 값이라 (a, a, a, a))로 옮긴 래스터 */
-    private fun toRaster(mask: Selection, size: PixelSize, checkCanceled: () -> Unit): Raster {
+    /**
+     * 마스크 알파를 흰색 픽셀(알파를 미리 곱한 값이라 (a, a, a, a))로 옮긴 래스터.
+     * 다 보이는 타일은 흰색 한 가지 색 타일이고, 캔버스 안 자리는 캔버스 안쪽 크기(그 자리 [pixels] 타일이 캔버스 밖까지 담았으면 그만큼),
+     * 캔버스 밖 자리는 그 자리 픽셀 타일 크기(없으면 꽉 찬 타일)다. 크기마다 한 장을 함께 쓴다. 경계가 있는 타일은 담은 크기 그대로다.
+     */
+    private fun toRaster(mask: Selection, size: PixelSize, pixels: Raster?, checkCanceled: () -> Unit): Raster {
         val grid = TileGrid(size.width, size.height)
         val tiles = HashMap<TileKey, Tile?>()
+        val whites = HashMap<PixelSize, Tile>()
         val temporary = ArrayList<Bitmap>()
         try {
             for ((key, tile) in mask.tiles) {
                 checkCanceled()
                 val alpha = MaskTiles.bitmapOf(tile, temporary)
                 if (alpha == null) {
-                    tiles[key] = WHITE
+                    val under = pixels?.tiles?.get(key)
+                    val shape = grid.canvasRect(key)?.let { PixelSize(maxOf(it.width, under?.width ?: 0), maxOf(it.height, under?.height ?: 0)) }
+                        ?: under?.let { PixelSize(it.width, it.height) }
+                        ?: PixelSize(TILE_SIZE, TILE_SIZE)
+                    tiles[key] = whites.getOrPut(shape) { WHITE.cropped(shape.width, shape.height) }
                     continue
                 }
-                val bounds = grid.bounds(key)
                 val picture = Picture()
-                val canvas = picture.beginRecording(bounds.width, bounds.height)
+                val canvas = picture.beginRecording(alpha.width, alpha.height)
                 canvas.drawColor(Color.WHITE)
                 MaskTiles.drawAlpha(canvas, alpha, BlendMode.DST_IN)
                 picture.endRecording()
-                tiles[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, bounds.width, bounds.height, Bitmap.Config.ARGB_8888)))
+                tiles[key] = Tile.of(BitmapTilePixels(Bitmap.createBitmap(picture, alpha.width, alpha.height, Bitmap.Config.ARGB_8888)))
             }
         } catch (e: OutOfMemoryError) {
             throw NotEnoughMemoryException(e)
@@ -64,9 +76,8 @@ internal object MaskResizer {
         return Raster.EMPTY.withTiles(tiles)
     }
 
-    /** 래스터의 알파만 꺼낸 마스크(문서 [size]). 다 0인 타일은 비우고 다 255면 다 보이는 타일이다. */
-    private fun fromRaster(raster: Raster, size: PixelSize, checkCanceled: () -> Unit): Selection {
-        val grid = TileGrid(size.width, size.height)
+    /** 래스터의 알파만 꺼낸 마스크(타일마다 담은 크기 그대로). 다 0인 타일은 비우고 다 255면 다 보이는 타일이다. */
+    private fun fromRaster(raster: Raster, checkCanceled: () -> Unit): Selection {
         val tiles = HashMap<TileKey, MaskTile>()
         val temporary = ArrayList<Bitmap>()
         try {
@@ -76,10 +87,9 @@ internal object MaskResizer {
                     tiles[key] = MaskTile.FULL
                     continue
                 }
-                val bounds = grid.bounds(key)
                 val pixels = CanvasTileComposer.bitmapOf(tile, temporary)
-                val alpha = MaskTiles.draw(bounds.width, bounds.height) { canvas ->
-                    canvas.drawRect(0f, 0f, bounds.width.toFloat(), bounds.height.toFloat(), Paint().apply {
+                val alpha = MaskTiles.draw(tile.width, tile.height) { canvas ->
+                    canvas.drawRect(0f, 0f, tile.width.toFloat(), tile.height.toFloat(), Paint().apply {
                         shader = BitmapShader(pixels, Shader.TileMode.DECAL, Shader.TileMode.DECAL)
                         blendMode = BlendMode.SRC
                     })

@@ -26,8 +26,10 @@ object SelectionPreview {
     /**
      * [selection]을 문서 ([left], [top])부터 [scale]배로 그린 [width]×[height] 알파 비트맵(바꿀 수 없음, 쌍선형).
      * 그림 픽셀 (x, y)는 문서 ([left] + x / [scale], [top] + y / [scale])이다. AI 제거가 창마다 고른 곳을 그릴 때 쓴다.
+     * [revealOutside](캔버스 사각형)가 있으면 그 밖은 먼저 다 보이게(255) 칠하고 타일을 얹는다(레이어 공간에서 가장자리가 다 보이는 조정 레이어 마스크,
+     * 결정 기록 '캔버스 밖 픽셀').
      */
-    fun maskAt(selection: Selection, left: Float, top: Float, scale: Float, width: Int, height: Int): Bitmap {
+    fun maskAt(selection: Selection, left: Float, top: Float, scale: Float, width: Int, height: Int, revealOutside: PixelRect? = null): Bitmap {
         require(scale > 0f && width > 0 && height > 0) { "Bad mask: ${width}x$height at scale $scale" }
         val visible = PixelRect(
             floor(left).toInt(), floor(top).toInt(),
@@ -40,6 +42,13 @@ object SelectionPreview {
         val paint = Paint().apply { isFilterBitmap = true }
         val temporary = ArrayList<Bitmap>()
         try {
+            if (revealOutside != null) {
+                // 캔버스 밖을 다 보이게 칠한다(캔버스 안은 그대로 둔다)
+                canvas.save()
+                canvas.clipOutRect(revealOutside.left.toFloat(), revealOutside.top.toFloat(), revealOutside.right.toFloat(), revealOutside.bottom.toFloat())
+                canvas.drawRect(visible.left.toFloat(), visible.top.toFloat(), visible.right.toFloat(), visible.bottom.toFloat(), paint)
+                canvas.restore()
+            }
             for ((key, tile) in selection.tiles) {
                 val rect = PixelRect(key.column * TILE_SIZE, key.row * TILE_SIZE, (key.column + 1) * TILE_SIZE, (key.row + 1) * TILE_SIZE)
                 if (rect.intersect(visible) == null) continue

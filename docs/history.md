@@ -14,6 +14,24 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 사용자 피드백 13차 6d단계: 병합·크기 변경이 캔버스 밖 픽셀도(레이어 공간 그리기)
+
+- 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)"
+- 의도: 말하지 않음
+- 커밋:
+  - "병합·크기 변경이 캔버스 밖 픽셀도 합치고 바꾸게(레이어 공간 그리기)"
+- 바꾼 것(화면 변화 없음)
+  - `PreviewRenderer.renderLayerSpace`: 캔버스 밖까지 그리는 레이어 공간 그리기(타일이 담은 픽셀을 모두 그리고 그 밖은 투명, 마스크 타일 밖은 가림, 캔버스 끝에서 끝나는 쪽은 캔버스 안 그리기처럼 가장자리를 늘임). 조정 레이어의 마스크는 가장자리가 다 보이면 캔버스 밖도 보인다(`SelectionPreview.maskAt`의 `revealOutside`).
+  - `PreviewLevels.area`(캔버스로 자르지 않고 단계 격자에 맞춘 영역)와 묶음 나누기의 내림 나눗셈. `ResizePlan.blocks(area)`·`sourceRect(block, within)`·`targetArea`. `PixelRect.union`.
+  - `LayerMerger`(아래와 병합·보이는 레이어 병합): 캔버스 밖 자리도 묶음(내림 나눗셈)으로 레이어 공간에서 그리고, 다시 그린 타일은 그 자리 레이어 타일들을 모두 담는 크기(캔버스 안 자리는 캔버스 안쪽보다 작지 않음).
+  - `ImageResizer`: 캔버스 밖 픽셀이 있는 레이어는 레이어 내용과 캔버스를 담는 사각형 전체를 같은 배율로 바꾼다(`resizeWhole`). 대상 타일은 바꾼 내용이 닿는 곳까지만 담고, 원본이 없는 자리는 비운다. 메모리 어림도 그 사각형으로. `MaskResizer`는 마스크 타일이 담은 크기를 쓰고, 다 보이는 타일은 그 자리 픽셀 타일 크기의 흰 타일로 옮겨 픽셀과 함께 바뀐다(캔버스 밖 픽셀이 없는 레이어는 전처럼 한 가지 색 길).
+  - 테스트: `ResizePlanTest`·`PreviewLevelsTest`(캔버스 밖 영역), 에뮬레이터 `OffCanvasSurvivalTest`(아래와 병합이 캔버스 밖 픽셀을 남기고 위 레이어 마스크를 따름, 병합한 조정 레이어가 캔버스 밖에도 걸리고 가장자리를 가린 마스크면 안 걸림, 크기 변경이 캔버스 밖 픽셀과 마스크를 함께 줄임), `ImageResizerTest`(캔버스 밖 픽셀을 같은 그림을 캔버스 안에 다 담은 문서와 견줘 캔버스 끝에 이음매가 없음, 반으로 줄이면 x = −100이 −50으로).
+- 정한 것(Claude 판단)
+  - 게인맵 병합은 캔버스 안만 합친다(병합하면 캔버스 밖 게인맵은 없어지고 픽셀은 남음). 이유: 게인맵은 HDR 밝기 정보라 캔버스 밖 픽셀을 다시 들여올 때만 쓰이고, 병합 게인맵 겹치기(`GainmapComposer`)를 캔버스 밖까지 넓히는 일이 크다.
+  - 병합한 조정 레이어는 마스크가 없거나 가장자리가 다 보이면 캔버스 밖 픽셀에도 걸린다(포토샵과 같음, 설계 검토).
+  - 크기 변경의 캔버스 끝은 레이어 내용이 그쪽으로 이어지지 않으면 전처럼 가장자리를 늘인다(캔버스 밖 픽셀이 없는 레이어와 같은 모습).
+- 확인한 것: `./gradlew assembleDebug assembleDebugAndroidTest test` 통과(JVM 696개). 에뮬레이터(접은 상태) `OffCanvasSurvivalTest` 7개, `ImageResizerTest` 9개, `MergeCommandsTest` 9개, `AdjustmentLayerTest` 7개, `LayerGroupTest` 6개, `LayerMaskTest` 10개, `PreviewRendererTest` 10개, `HdrTest` 18개, `HealSkinSpotsTest` 6개, `StrokePreviewTest` 4개, `SkinRetouchTest` 4개, `ProjectFolderTest` 13개, `LayerPanelTest` 31개 통과. `ResizeDialogTest`는 접은 상태에서 전부터 실패하는 `medium_statusAndControlsStayInView`(기술 주의점)만 실패했다.
+
 ## 2026-10-24 · 사용자 피드백 13차 6c단계: 캔버스 밖 타일 저장·불러오기(판 3)
 
 - 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)"
