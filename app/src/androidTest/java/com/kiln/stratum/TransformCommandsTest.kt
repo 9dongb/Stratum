@@ -164,17 +164,24 @@ class TransformCommandsTest {
     }
 
     @Test
-    fun blankCanvas_staysOneTile() {
+    fun blankCanvas_staysAFewOneColourTiles() {
         val canvas = checkNotNull(BlankCanvas.create(1001, 521, CanvasFill.Solid(Color.WHITE), "Background"))
-        val white = canvas.raster.tiles.values.first()
+        val white = canvas.raster.tiles.getValue(TileKey(0, 0))
 
         for (result in listOf(
             RotateImage(clockwise = false).applyTo(canvas),
             FlipImage(horizontal = true).applyTo(canvas),
             CropImage(PixelRect(3, 7, 900, 500), PixelSize(1001, 521)).applyTo(canvas)
         )) {
-            assertEquals(TileGrid(result.width, result.height).keys().toSet(), result.raster.tiles.keys)
-            assertTrue(result.raster.tiles.values.all { it === white })
+            val grid = TileGrid(result.width, result.height)
+            assertEquals(grid.keys().toSet(), result.raster.tiles.keys)
+            // 꽉 찬 자리는 같은 타일, 끝 자리는 캔버스 안쪽 크기의 흰 타일(크기마다 한 장, 결정 기록 '캔버스 밖 픽셀')
+            assertSame(white, result.raster.tiles[TileKey(0, 0)])
+            for ((key, tile) in result.raster.tiles) {
+                assertEquals(Color.WHITE, tile.solidColor)
+                assertEquals(grid.solidShape(key), PixelSize(tile.width, tile.height))
+            }
+            assertTrue(result.raster.tiles.values.toSet().size <= 4)
         }
     }
 

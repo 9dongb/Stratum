@@ -1,25 +1,23 @@
 package com.kiln.stratum.engine.raster
 
 /**
- * 레이어 내용(알파가 0이 아닌 픽셀)을 모두 담는 가장 작은 사각형(문서 좌표). 모두 투명하면 null.
- * 레이어 돌리기·뒤집기(사용자 피드백 12차 2)의 축(이 사각형의 가운데)을 정한다.
+ * 레이어 내용(알파가 0이 아닌 픽셀)을 모두 담는 가장 작은 사각형(문서 좌표, 캔버스 밖 포함). 모두 투명하면 null.
+ * 레이어 돌리기·뒤집기(사용자 피드백 12차 2)의 축(이 사각형의 가운데)을 정한다. 캔버스 밖으로 밀려난 픽셀도 레이어 내용이다(포토샵의 레이어 범위).
  *
  * 빈 타일은 건너뛰고, 가장 바깥 타일 줄(왼쪽·오른쪽 열, 위·아래 행)부터 안쪽으로 그 줄의 타일만 읽다가 보이는 픽셀이 있는 줄에서 멈춘다.
  * 한 가지 색 타일은 읽지 않고, 타일 안에서도 바깥에서 안으로 읽다가 처음 보이는 픽셀에서 멈춘다. 그래서 사진처럼 꽉 찬 레이어는
  * 바깥 타일들의 가장자리 픽셀만 보고 끝나고, 큰 사진을 다 돌지 않는다(결정 기록 '레이어 돌리기·뒤집기').
- * [checkCanceled]는 타일을 읽을 때마다 부른다.
+ * 타일마다 담은 크기만 읽는다. [checkCanceled]는 타일을 읽을 때마다 부른다.
  */
-fun Raster.contentBounds(size: PixelSize, checkCanceled: () -> Unit = {}): PixelRect? {
-    val grid = TileGrid(size.width, size.height)
-    val keys = tiles.keys.filter { it.column < grid.columns && it.row < grid.rows }
+fun Raster.contentBounds(checkCanceled: () -> Unit = {}): PixelRect? {
+    val keys = tiles.keys
     if (keys.isEmpty()) return null
     // 타일마다 보이는 픽셀을 담는 사각형(타일 안 좌표). 바깥 줄을 볼 때 한 번씩만 읽는다.
     val found = HashMap<TileKey, PixelRect?>()
     fun opaque(key: TileKey): PixelRect? {
         if (found.containsKey(key)) return found[key]
         checkCanceled()
-        val bounds = grid.bounds(key)
-        return tiles.getValue(key).opaqueBounds(bounds.width, bounds.height).also { found[key] = it }
+        return tiles.getValue(key).opaqueBounds().also { found[key] = it }
     }
     val columns = keys.groupBy { it.column }.toSortedMap()
     val rows = keys.groupBy { it.row }.toSortedMap()

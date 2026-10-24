@@ -73,12 +73,12 @@ class OrientLayerTest {
         val block = PixelRect(200, 100, 300, 140)
         val document = withBitmapTiles(Document.create(600, 300, "Background", blockRaster(600, 300, block)))
         // 비트맵 타일에서도 내용 사각형을 찾는다
-        assertEquals(block, document.raster().contentBounds(PixelSize(600, 300)))
+        assertEquals(block, document.raster().contentBounds())
 
         val turned = OrientLayer(LayerId(0), Orientation.ROTATE_CLOCKWISE).applyTo(document).raster()
 
         // 100×40이 40×100이 되어, 가운데 (250, 120)에 놓인다: 왼쪽 위 (230, 70)
-        assertEquals(PixelRect(230, 70, 270, 170), turned.contentBounds(PixelSize(600, 300)))
+        assertEquals(PixelRect(230, 70, 270, 170), turned.contentBounds())
         for ((lx, ly) in listOf(0 to 0, 99 to 0, 0 to 39, 99 to 39, 37 to 21)) {
             // 시계 방향: 내용 안 (lx, ly)는 (39 - ly, lx)로 간다
             assertEquals("($lx, $ly)", colorAt(block.left + lx, block.top + ly), pixel(turned, 230 + 39 - ly, 70 + lx))
@@ -96,7 +96,7 @@ class OrientLayerTest {
         val left = OrientLayer(LayerId(0), Orientation.ROTATE_COUNTERCLOCKWISE).applyTo(document)
         val back = OrientLayer(LayerId(0), Orientation.ROTATE_CLOCKWISE).applyTo(left).raster()
 
-        assertEquals(block, back.contentBounds(PixelSize(600, 300)))
+        assertEquals(block, back.contentBounds())
         for (y in block.top until block.bottom step 3) {
             for (x in block.left until block.right step 4) {
                 assertEquals("($x, $y)", colorAt(x, y), pixel(back, x, y))
@@ -112,7 +112,7 @@ class OrientLayerTest {
         val horizontal = OrientLayer(LayerId(0), Orientation.FLIP_HORIZONTAL).applyTo(document).raster()
         val vertical = OrientLayer(LayerId(0), Orientation.FLIP_VERTICAL).applyTo(document).raster()
 
-        assertEquals(block, horizontal.contentBounds(PixelSize(600, 300)))
+        assertEquals(block, horizontal.contentBounds())
         assertEquals(colorAt(299, 100), pixel(horizontal, 200, 100))
         assertEquals(colorAt(210, 130), pixel(horizontal, 289, 130))
         assertEquals(colorAt(200, 139), pixel(vertical, 200, 100))
@@ -126,7 +126,7 @@ class OrientLayerTest {
         val turned = OrientLayer(LayerId(0), Orientation.ROTATE_CLOCKWISE).applyTo(document).raster()
 
         // 300×600이 되어 (150, -150)에 놓인다: 가운데 300×300만 남고 양옆은 투명하다
-        assertEquals(PixelRect(150, 0, 450, 300), turned.contentBounds(PixelSize(600, 300)))
+        assertEquals(PixelRect(150, 0, 450, 300), turned.contentBounds())
         // 캔버스 (tx, ty) ← 내용 (ty + 150, 299 - (tx - 150))
         assertEquals(colorAt(150, 299), pixel(turned, 150, 0))
         assertEquals(colorAt(449, 0), pixel(turned, 449, 299))
@@ -162,7 +162,7 @@ class OrientLayerTest {
 
         // 1/4 게인맵: 내용 (50, 25)~(75, 35)가 25×10에서 10×25가 되어 (230, 70)의 1/4 자리 (58, 18)에 놓인다
         assertEquals(150, turned.width)
-        assertEquals(PixelRect(58, 18, 68, 43), turned.raster.contentBounds(PixelSize(150, 75)))
+        assertEquals(PixelRect(58, 18, 68, 43), turned.raster.contentBounds())
         assertEquals(colorAt(50, 25), pixel(turned.raster, 67, 18))
         assertEquals(colorAt(74, 34), pixel(turned.raster, 58, 42))
     }
@@ -172,12 +172,12 @@ class OrientLayerTest {
         val blank = Document.create(600, 300, "Background", Raster.EMPTY)
         val withText = AddTextLayer("Hello", x = 50f, y = 50f, style = TextStyle(size = 60f, color = android.graphics.Color.BLACK), name = "Hello", index = 1)
             .applyTo(blank)
-        val before = checkNotNull(withText.raster(1).contentBounds(PixelSize(600, 300)))
+        val before = checkNotNull(withText.raster(1).contentBounds())
 
         val turned = OrientLayer(withText.layers[1].id, Orientation.ROTATE_CLOCKWISE).applyTo(withText)
 
         assertNull(turned.layers[1].text)
-        val after = checkNotNull(turned.raster(1).contentBounds(PixelSize(600, 300)))
+        val after = checkNotNull(turned.raster(1).contentBounds())
         assertEquals(before.width, after.height)
         assertEquals(before.height, after.width)
         assertTrue("$before -> $after", after != before)

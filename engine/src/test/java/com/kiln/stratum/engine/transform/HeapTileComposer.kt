@@ -31,7 +31,16 @@ class HeapTileComposer : TileComposer {
                 }
             }
         }
-        return Tile.of(pixels)
+        return Tile.of(pixels, width, height)
+    }
+
+    /** 만든 한 가지 색 타일 수 */
+    var solidCount = 0
+        private set
+
+    override fun solid(argb: Int, width: Int, height: Int): Tile {
+        solidCount++
+        return Tile.solid(argb, width, height)
     }
 
     override fun composeMask(width: Int, height: Int, pieces: List<MaskPiece>, orientation: Orientation): MaskTile? {

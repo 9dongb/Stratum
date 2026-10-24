@@ -244,7 +244,7 @@ object PreviewRenderer {
         when (pixels) {
             is BitmapTilePixels -> pixels.bitmap
             is HeapTilePixels ->
-                Bitmap.createBitmap(pixels.toIntArray(), TILE_SIZE, TILE_SIZE, Bitmap.Config.ARGB_8888)
+                Bitmap.createBitmap(pixels.toIntArray(), 0, TILE_SIZE, pixels.width, pixels.height, Bitmap.Config.ARGB_8888)
                     .also { temporary += it }
             else -> error("Unknown tile storage: ${pixels::class.java.name}")
         }

@@ -108,4 +108,16 @@ class SelectionTest {
         val changed = full.withTiles(mapOf(left to null))
         assertEquals(setOf(right), changed.tiles.keys)
     }
+
+    @Test
+    fun alphaAt_readsTilesOutsideTheCanvas() {
+        // 레이어 마스크는 캔버스 밖으로 밀려난 픽셀 자리에도 타일이 있을 수 있다(결정 기록 '캔버스 밖 픽셀')
+        val selection = Selection.of(mapOf(TileKey(-1, 0) to MaskTile.FULL))
+
+        assertEquals(255, selection.alphaAt(-1, 0))
+        assertEquals(255, selection.alphaAt(-256, 255))
+        assertEquals(0, selection.alphaAt(0, 0))
+        assertEquals(0, selection.alphaAt(-257, 0))
+        assertEquals(0, selection.alphaAt(-1, -1))
+    }
 }

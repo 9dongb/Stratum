@@ -104,16 +104,19 @@ class ProjectFolder(val directory: File) {
         if (!tilesDirectory.isDirectory && !tilesDirectory.mkdirs()) throw IOException("Couldn't create $tilesDirectory")
         val referenced = HashSet<String>()
         val referencedMeshes = HashSet<String>()
-        fun entriesOf(raster: Raster): List<TileEntry> =
+        val grid = TileGrid(document.width, document.height)
+        // 한 가지 색 타일은 그 자리의 한 가지 색 크기([TileGrid.solidShape])일 때만 색으로 적고, 아니면 파일로 쓴다
+        fun entriesOf(raster: Raster, grid: TileGrid): List<TileEntry> =
             raster.tiles.map { (key, tile) ->
                 checkCanceled()
-                TileEntry(key.column, key.row, refOf(tile, referenced))
+                TileEntry(key.column, key.row, refOf(tile, grid.solidShape(key), referenced))
             }
         // 게인맵 타일도 같은 타일 파일로 둔다(같은 객체는 한 번만 쓴다)
-        fun entryOf(gainmap: HdrGainmap): GainmapEntry = GainmapEntry(gainmap.width, gainmap.height, entriesOf(gainmap.raster))
+        fun entryOf(gainmap: HdrGainmap): GainmapEntry =
+            GainmapEntry(gainmap.width, gainmap.height, entriesOf(gainmap.raster, TileGrid(gainmap.width, gainmap.height)))
         val layers = document.layers.map { layer ->
             val content = when (val content = layer.content) {
-                is RasterContent -> RasterEntry(entriesOf(content.raster))
+                is RasterContent -> RasterEntry(entriesOf(content.raster, grid))
                 is AdjustmentContent -> AdjustmentEntry
                 GroupContent -> GroupEntry
             }
@@ -121,7 +124,7 @@ class ProjectFolder(val directory: File) {
             val liquify = layer.liquify?.let { record ->
                 LiquifyEntry(
                     record.version,
-                    entriesOf(record.base),
+                    entriesOf(record.base, grid),
                     record.baseGainmap?.let { entryOf(it) },
                     record.mesh?.let { meshFileOf(it, referencedMeshes) },
                     record.faces,
@@ -171,22 +174,42 @@ class ProjectFolder(val directory: File) {
         val manifest = BufferedInputStream(FileInputStream(manifestFile)).use { ProjectManifestCodec.read(it) }
         val grid = TileGrid(manifest.width, manifest.height)
         val solidTiles = HashMap<Int, Tile>()
+        val solidShapes = HashMap<Triple<Int, Int, Int>, Tile>()
         val fileTiles = HashMap<String, Tile>()
+        val croppedTiles = HashMap<Triple<String, Int, Int>, Tile>()
         val loaded = IdentityHashMap<Tile, String>()
-        // 같은 파일을 가리키는 자리는 같은 타일 객체를 함께 쓰고, 한 가지 색 타일은 색마다 한 장만 만든다
+        // 한 가지 색 꽉 찬 타일(색마다 한 장)을 [shape]로 자른 타일(색과 크기마다 한 장)
+        fun solidOf(argb: Int, shape: PixelSize): Tile = try {
+            solidShapes.getOrPut(Triple(argb, shape.width, shape.height)) {
+                solidTiles.getOrPut(argb) { BlankCanvas.solidTile(argb) ?: throw NotEnoughMemoryException() }.cropped(shape.width, shape.height)
+            }
+        } catch (e: OutOfMemoryError) {
+            throw NotEnoughMemoryException(e)
+        }
+        // 같은 파일을 가리키는 자리는 같은 타일 객체를 함께 쓰고, 한 가지 색 타일은 색과 크기마다 한 장만 만든다.
+        // 한 가지 색 타일은 그 자리의 한 가지 색 크기(끝 자리는 캔버스 안쪽)로 되살리고, 앞 판(캔버스 밖 픽셀이 없던 때) 파일의 끝 타일이
+        // 캔버스 밖까지 담았으면 그 부분은 쓰지 않던 찌꺼기라 잘라 낸다(결정 기록 '캔버스 밖 픽셀').
         fun rasterOf(entries: List<TileEntry>, grid: TileGrid): Raster {
             val tiles = HashMap<TileKey, Tile?>()
             for (tileEntry in entries) {
                 checkCanceled()
-                if (tileEntry.column !in 0 until grid.columns || tileEntry.row !in 0 until grid.rows) {
-                    throw UnreadableProjectException("Tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
-                }
-                tiles[TileKey(tileEntry.column, tileEntry.row)] = when (val ref = tileEntry.ref) {
-                    is TileRef.Solid -> solidTiles.getOrPut(ref.argb) {
-                        BlankCanvas.solidTile(ref.argb) ?: throw NotEnoughMemoryException()
-                    }
-                    is TileRef.File -> fileTiles.getOrPut(ref.name) {
-                        TileFiles.read(File(tilesDirectory, ref.name)).also { loaded[it] = ref.name }
+                val key = TileKey(tileEntry.column, tileEntry.row)
+                val inside = grid.canvasRect(key) ?: throw UnreadableProjectException("Tile outside canvas: (${tileEntry.column}, ${tileEntry.row})")
+                tiles[key] = when (val ref = tileEntry.ref) {
+                    is TileRef.Solid -> solidOf(ref.argb, grid.solidShape(key))
+                    is TileRef.File -> {
+                        val tile = fileTiles.getOrPut(ref.name) { TileFiles.read(File(tilesDirectory, ref.name)).also { loaded[it] = ref.name } }
+                        val width = minOf(tile.width, inside.width)
+                        val height = minOf(tile.height, inside.height)
+                        if (width == tile.width && height == tile.height) {
+                            tile
+                        } else {
+                            try {
+                                croppedTiles.getOrPut(Triple(ref.name, width, height)) { tile.cropped(width, height) }
+                            } catch (e: OutOfMemoryError) {
+                                throw NotEnoughMemoryException(e)
+                            }
+                        }
                     }
                 }
             }
@@ -325,9 +348,12 @@ class ProjectFolder(val directory: File) {
         savedMeshes.clear()
     }
 
-    /** [tile]이 있는 곳. 한 가지 색이면 색만, 아니면 파일(처음 보는 타일 객체면 새로 쓴다). 쓴 파일 이름은 [referenced]에 넣는다. */
-    private fun refOf(tile: Tile, referenced: MutableSet<String>): TileRef {
-        tile.solidColor?.let { return TileRef.Solid(it) }
+    /**
+     * [tile]이 있는 곳. 한 가지 색이고 그 자리의 한 가지 색 크기([shape])면 색만, 아니면 파일(처음 보는 타일 객체면 새로 쓴다).
+     * 쓴 파일 이름은 [referenced]에 넣는다.
+     */
+    private fun refOf(tile: Tile, shape: PixelSize, referenced: MutableSet<String>): TileRef {
+        tile.solidColor?.takeIf { tile.width == shape.width && tile.height == shape.height }?.let { return TileRef.Solid(it) }
         val name = savedTiles[tile] ?: run {
             val name = UUID.randomUUID().toString() + TILE_EXTENSION
             TileFiles.write(File(tilesDirectory, name), tile)

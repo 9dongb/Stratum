@@ -56,6 +56,10 @@ internal object CanvasTileComposer : TileComposer {
         }
     }
 
+    // 한 가지 색 꽉 찬 타일을 그 크기로 자른다(안드로이드 내부 채우기·복사)
+    override fun solid(argb: Int, width: Int, height: Int): Tile =
+        BlankCanvas.solidTile(argb)?.cropped(width, height) ?: throw OutOfMemoryError("No memory for a one-colour tile")
+
     /**
      * 마스크 조각들을 옮겨 마스크 타일 한 장을 만든다(레이어 마스크, 결정 기록 '피부 보정'의 1c). 픽셀 타일과 같은 정수 계수 행렬로 필터 없이 옮겨
      * 알파 값이 그대로다. 알파 그림은 셰이더로 그린다: 그냥 그리면 소프트웨어 그리기는 알파를 덮는 정도로만 쓴다([MaskTiles.drawAlpha]).
@@ -105,7 +109,7 @@ internal object CanvasTileComposer : TileComposer {
         when (val pixels = tile.pixels) {
             is BitmapTilePixels -> pixels.bitmap
             is HeapTilePixels ->
-                Bitmap.createBitmap(pixels.toIntArray(), TILE_SIZE, TILE_SIZE, Bitmap.Config.ARGB_8888)
+                Bitmap.createBitmap(pixels.toIntArray(), 0, TILE_SIZE, pixels.width, pixels.height, Bitmap.Config.ARGB_8888)
                     .also { temporary += it }
             else -> error("Unknown tile storage: ${pixels::class.java.name}")
         }

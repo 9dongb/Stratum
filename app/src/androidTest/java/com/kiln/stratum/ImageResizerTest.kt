@@ -66,15 +66,27 @@ class ImageResizerTest {
     }
 
     @Test
-    fun solidCanvas_staysOneTile() {
+    fun solidCanvas_staysAFewOneColourTiles() {
         val canvas = checkNotNull(BlankCanvas.create(1001, 521, CanvasFill.Solid(Color.WHITE), "Background"))
-        val white = canvas.raster().tiles.values.first()
+        val white = canvas.raster().tiles.getValue(TileKey(0, 0))
 
         val resized = ResizeImage(500, 260).applyTo(canvas)
 
         assertEquals(PixelSize(500, 260), PixelSize(resized.width, resized.height))
-        assertEquals(TileGrid(500, 260).keys().toSet(), resized.raster().tiles.keys)
-        assertTrue(resized.raster().tiles.values.all { it === white })
+        val grid = TileGrid(500, 260)
+        assertEquals(grid.keys().toSet(), resized.raster().tiles.keys)
+        // 계산하지 않고 꽉 찬 타일을 그대로, 끝 자리는 캔버스 안쪽 크기로 자른 것을 놓는다(결정 기록 '캔버스 밖 픽셀')
+        assertSame(white, resized.raster().tiles[TileKey(0, 0)])
+        for ((key, tile) in resized.raster().tiles) {
+            assertEquals(Color.WHITE, tile.solidColor)
+            assertEquals(grid.solidShape(key), PixelSize(tile.width, tile.height))
+        }
+        // 타일 하나보다 작은 캔버스도 꽉 찬 타일을 새로 만들어 키운다
+        val small = checkNotNull(BlankCanvas.create(100, 50, CanvasFill.Solid(Color.WHITE), "Background"))
+        val grown = ResizeImage(600, 300).applyTo(small).raster().tiles
+        assertEquals(TileGrid(600, 300).keys().toSet(), grown.keys)
+        assertTrue(grown.values.all { it.solidColor == Color.WHITE })
+        assertEquals(PixelSize(256, 256), grown.getValue(TileKey(0, 0)).let { PixelSize(it.width, it.height) })
     }
 
     @Test

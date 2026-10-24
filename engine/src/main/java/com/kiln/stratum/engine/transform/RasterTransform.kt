@@ -20,7 +20,8 @@ import kotlin.math.roundToInt
  * [TransformPlan]대로 문서의 모든 레이어를 돌리거나 뒤집거나 자르고, 레이어 하나를 옮기거나 돌린다. 레이어 마스크도 같은 계획으로 옮긴다([MaskTransform]).
  *
  * 타일을 새로 만들지 않아도 되는 자리는 원본 타일 객체를 그대로 쓴다.
- * - 한 가지 색 타일(새 캔버스) 하나가 대상 자리를 다 덮을 때. 그래서 빈 캔버스는 돌려도 타일 한 장이다.
+ * - 같은 색의 한 가지 색 타일(새 캔버스)들이 대상 자리를 다 덮을 때. 크기가 같은 원본 타일이 있으면 그것을, 없으면 그 크기의 한 가지 색 타일을
+ *   한 번만 만들어 함께 쓴다(끝 자리는 캔버스 안쪽 크기, 결정 기록 '캔버스 밖 픽셀'). 그래서 빈 캔버스는 돌려도 타일 몇 장이다.
  * - 방향이 그대로이고, 원본 타일 하나가 대상 자리를 꼭 맞게 덮을 때(왼쪽 위에 맞춘 자르기 등).
  * 그 밖에는 [TileComposer]가 캔버스 안쪽만 담은 새 타일을 만든다. 잘라 낸 픽셀이 끝 타일의 캔버스 밖 부분에 남으면,
  * 축소본이나 크기 변경이 끝 픽셀 너머를 읽을 때 새어 나오기 때문이다.
@@ -72,11 +73,14 @@ object RasterTransform {
         if (raster.tiles.isEmpty()) return Raster.EMPTY
         val sourceGrid = TileGrid(plan.sourceSize.width, plan.sourceSize.height)
         val tiles = HashMap<TileKey, Tile?>()
+        // 이번에 만든 한 가지 색 타일(색과 크기마다 한 장)
+        val solids = HashMap<Triple<Int, Int, Int>, Tile>()
         for (target in plan.targets) {
             checkCanceled()
             val pieces = target.parts.mapNotNull { part -> raster.tiles[part.source]?.let { TilePiece(it, part) } }
             if (pieces.isEmpty()) continue
-            tiles[target.key] = reusable(target, pieces, plan, sourceGrid)
+            tiles[target.key] = solidFor(target, pieces, composer, solids)
+                ?: reusable(target, pieces, plan, sourceGrid)
                 ?: composer.compose(target.width, target.height, pieces, plan.orientation)
         }
         return Raster.EMPTY.withTiles(tiles)
@@ -153,19 +157,28 @@ object RasterTransform {
         return HdrGainmap(gainmap.width, gainmap.height, transform(gainmap.raster, plan, composer, checkCanceled))
     }
 
+    /**
+     * 같은 색의 한 가지 색 타일들이 빈틈없이 덮는 대상 자리의 타일: 어느 방향으로 옮겨도 같은 색이다(옮기기는 빈 자리가 생길 수 있어 조각이 다 덮는지도 본다).
+     * 대상 크기와 같은 원본 타일이 있으면 그것을, 없으면 그 크기의 한 가지 색 타일을 [solids]에 한 장만 만들어 함께 쓴다. 아니면 null.
+     */
+    private fun solidFor(target: TargetTile, pieces: List<TilePiece>, composer: TileComposer, solids: MutableMap<Triple<Int, Int, Int>, Tile>): Tile? {
+        val color = pieces.first().tile.solidColor ?: return null
+        if (!target.isCovered || pieces.size != target.parts.size || pieces.any { it.tile.solidColor != color }) return null
+        pieces.firstOrNull { it.tile.width == target.width && it.tile.height == target.height }?.let { return it.tile }
+        return solids.getOrPut(Triple(color, target.width, target.height)) { composer.solid(color, target.width, target.height) }
+    }
+
     /** 새로 만들지 않고 그대로 쓸 수 있는 원본 타일. 없으면 null. */
     private fun reusable(target: TargetTile, pieces: List<TilePiece>, plan: TransformPlan, sourceGrid: TileGrid): Tile? {
         val first = pieces.first().tile
-        // 한 가지 색 타일 하나가 빈틈없이 덮으면, 어느 방향으로 옮겨도 같은 색이고 캔버스 밖 부분도 같은 색이다
-        // (옮기기는 빈 자리가 생길 수 있어 조각이 다 덮는지도 본다)
-        if (first.solidColor != null && target.isCovered && pieces.size == target.parts.size && pieces.all { it.tile === first }) return first
         if (plan.orientation != Orientation.IDENTITY) return null
         val part = pieces.singleOrNull()?.part ?: return null
         val whole = PixelRect(0, 0, target.width, target.height)
         val sourceBounds = sourceGrid.bounds(part.source)
-        // 원본 타일의 캔버스 안쪽이 대상 타일의 캔버스 안쪽과 꼭 맞아야, 잘라 낸 픽셀이 남지 않는다
+        // 원본 타일의 캔버스 안쪽이 대상 타일의 캔버스 안쪽과 꼭 맞고 원본 타일이 그만큼만 담아야, 잘라 낸 픽셀이 남지 않는다
         val fits = part.sourceRect == whole && part.targetRect == whole &&
-            sourceBounds.width == target.width && sourceBounds.height == target.height
+            sourceBounds.width == target.width && sourceBounds.height == target.height &&
+            first.width == target.width && first.height == target.height
         return if (fits) first else null
     }
 }

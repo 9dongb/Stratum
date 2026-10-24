@@ -141,7 +141,7 @@ data class OrientLayer(val layer: LayerId, val orientation: Orientation) : Cance
         if (index < 0) return document
         val target = document.layers[index]
         val raster = (target.content as? RasterContent)?.raster ?: return document
-        val bounds = raster.contentBounds(document.size, checkCanceled) ?: return document
+        val bounds = raster.contentBounds(checkCanceled)?.intersect(PixelRect.of(document.size)) ?: return document
         val origin = orientation.turnedOrigin(bounds)
         return try {
             val plan = TransformPlan.place(document.size, bounds, orientation, document.size, origin.x, origin.y)

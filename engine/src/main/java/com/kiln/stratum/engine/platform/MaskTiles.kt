@@ -26,7 +26,7 @@ import java.nio.ByteBuffer
 import kotlin.math.ceil
 
 /**
- * 힙 밖 알파 비트맵(ALPHA_8, 바꿀 수 없음) 한 장에 담은 선택 영역 타일. 문서 끝 타일은 문서 안쪽 크기만 담는다.
+ * 힙 밖 알파 비트맵(ALPHA_8, 바꿀 수 없음) 한 장에 담은 선택 영역 타일. 담은 크기는 비트맵 크기다(문서 끝 타일은 보통 문서 안쪽 크기).
  * 여러 선택 영역 상태가 함께 쓰므로 recycle()하지 않는다.
  */
 internal class AlphaMaskPixels(val bitmap: Bitmap) : MaskPixels {
@@ -38,6 +38,12 @@ internal class AlphaMaskPixels(val bitmap: Bitmap) : MaskPixels {
     }
 
     override fun alphaAt(x: Int, y: Int): Int = if (x < bitmap.width && y < bitmap.height) Color.alpha(bitmap.getPixel(x, y)) else 0
+
+    override val width: Int
+        get() = bitmap.width
+
+    override val height: Int
+        get() = bitmap.height
 
     override val byteCount: Int
         get() = bitmap.allocationByteCount

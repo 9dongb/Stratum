@@ -117,18 +117,22 @@ class ProjectFolderTest {
     }
 
     @Test
-    fun solidCanvas_savesNoTileFiles_andSharesOneTileAfterLoading() {
+    fun solidCanvas_savesNoTileFiles_andSharesOneTilePerShapeAfterLoading() {
         val document = checkNotNull(BlankCanvas.create(3000, 2000, CanvasFill.Solid(Color.WHITE), "Background"))
 
         ProjectFolder(directory).save(document, 1, 1)
         val loaded = ProjectFolder(directory).load().document
 
         assertTrue(tileFiles().isEmpty())
-        val tiles = loaded.raster().tiles.values
-        assertEquals(TileGrid(3000, 2000).keys().size, tiles.size)
-        val first = tiles.first()
-        assertTrue(tiles.all { it === first })
-        assertEquals(Color.WHITE, first.solidColor)
+        val grid = TileGrid(3000, 2000)
+        val tiles = loaded.raster().tiles
+        assertEquals(grid.keys().size, tiles.size)
+        // 끝 자리는 캔버스 안쪽 크기로 되살린다(결정 기록 '캔버스 밖 픽셀'). 크기마다 한 장이다(꽉 찬·오른쪽 끝·아래 끝·구석).
+        for ((key, tile) in tiles) {
+            assertEquals(Color.WHITE, tile.solidColor)
+            assertEquals(grid.solidShape(key), PixelSize(tile.width, tile.height))
+        }
+        assertEquals(4, tiles.values.toSet().size)
     }
 
     @Test

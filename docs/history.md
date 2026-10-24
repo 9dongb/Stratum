@@ -14,6 +14,20 @@
 새 항목은 그 작업의 커밋에 함께 넣으므로 자기 커밋 번호를 알 수 없다. 그래서 커밋 메시지를 적는다.
 이 기록 방식을 만들기 전(2026-10-16 이전 세션)의 요청·의도는 원래 PC에만 있던 맥락에서 옮겨 적었다(2026-10-17). 거기에도 없으면 "기록 없음"이라고 쓴다.
 
+## 2026-10-24 · 사용자 피드백 13차 6a단계: 캔버스 밖 픽셀의 바탕(타일 크기·음수 자리, 한 가지 색 끝 타일)
+
+- 요청(사용자, 그대로): "1. 이동 툴로 레이어 이동시 캔버스 밖 영역은 잘리는데 잘리지않게 해주세요.(포토샵 처럼)" 질문에서 "포토샵처럼 (추천)"을 골랐다.
+- 의도: 말하지 않음
+- 커밋:
+  - "타일 범위·음수 자리 도우미, 한 가지 색 끝 타일을 캔버스 안쪽 크기로"
+- 바꾼 것(화면 변화 없음)
+  - `raster/`: `TileKey`가 캔버스 밖(음수·열 수 이상)이어도 된다. `Tile.width`·`height`(담은 크기, 그 밖은 투명)·`cropped`, `Tile.of`·`solid`에 크기, `TilePixels.width`·`height`·`cropped`(힙 타일은 담은 크기 밖을 0으로). `TileGrid.contains`·`canvasRect`·`solidShape`, 내림 나눗셈 `tileAt`·`tileSquare`·`tileKeysIn`. `Raster.tileRect`·`extent`·`hasOffCanvas`, `hasTilesIn`은 내림 나눗셈, `filled`는 끝 자리를 캔버스 안쪽 크기로 자른 타일(크기마다 한 장). `contentBounds`는 모든 타일의 담은 크기를 본다.
+  - `selection/Selection.kt`: 마스크 타일의 담은 크기, `alphaAt`은 내림 나눗셈(캔버스 밖 자리도). `platform/`: `BitmapTilePixels`·`AlphaMaskPixels`가 크기를 알리고 비트맵 타일을 잘라 담는다. 힙 타일을 비트맵으로 바꿀 때 담은 크기로.
+  - `RasterTransform`: 같은 색 한 가지 색 타일이 덮는 자리는 크기가 같은 원본 타일을, 없으면 그 크기의 한 가지 색 타일을 한 번만 만든다(`TileComposer.solid`). `ImageResizer.solidColor`(한 가지 색 캔버스를 색으로 알아봄). `ProjectFolder`: 한 가지 색 타일은 자리의 크기로 되살리고, 그 크기일 때만 색으로 적는다. 앞 판 파일의 끝 타일이 캔버스 밖까지 담았으면 잘라 연다.
+  - 테스트: `RasterTest`(캔버스 밖 자리, 담은 크기, 자르기, 끝 자리 크기), `TileGridTest`, `ContentBoundsTest`(캔버스 밖 내용), `SelectionTest`(캔버스 밖 마스크), `RasterTransformTest`·에뮬레이터 `TransformCommandsTest`·`ImageResizerTest`·`ProjectFolderTest`·`MergeCommandsTest`(한 가지 색 타일은 크기마다 한 장), `OrientLayerTest`(함수 모양).
+- 정한 것(Claude 판단, 하위 에이전트의 설계 검토로 정함): 레이어마다 '내용 범위' 사각형을 따로 두지 않고 타일마다 담은 크기를 둔다(담은 픽셀은 모두 진짜 내용). 이유: 새 저장 값을 레이어 픽셀을 만드는 약 25곳에 넘기지 않아도 되고, 읽는 쪽이 저장된 것을 믿으면 된다. 그 대가로 한 가지 색 캔버스는 끝 자리 크기마다 작은 타일이 몇 장 더 있다.
+- 확인한 것: `./gradlew assembleDebug assembleDebugAndroidTest test` 통과. 에뮬레이터(접은 상태) 29개 클래스 모두 통과: `BlankCanvasTest`·`ProjectFolderTest`·`ImageResizerTest`·`TransformCommandsTest`·`MergeCommandsTest`·`OrientLayerTest`·`TranslateLayerTest`·`PaintStrokeTest`·`SmudgeStrokeTest`·`LayerMaskTest`·`PreviewRendererTest`·`AdjustmentLayerTest`·`LiquifyLayerTest`·`HdrTest`·`SelectionCommandsTest`·`EffectStrokeTest`·`ToneStrokeTest`·`RetouchStrokeTest`·`InpaintRegionTest`·`ColorSamplerTest`·`ImageExporterTest`·`WideColorTest`·`StrokePreviewTest`·`AddTextLayerTest`·`SkinRetouchTest`, 편집 화면 `EditorProjectTest`·`EditorViewModelTest`·`EditorBrushTest`·`EditorLayersTest`.
+
 ## 2026-10-24 · 사용자 피드백 13차 5단계: 얼굴 보정(뒷트임 되돌리기·콧볼·콧등 너비·중안부·광대)
 
 - 요청(사용자, 그대로):

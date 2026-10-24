@@ -10,9 +10,8 @@ import java.nio.ByteBuffer
 /**
  * 안드로이드 비트맵 한 장에 담은 타일 픽셀. 비트맵 픽셀은 자바 힙 밖 네이티브 메모리에 있다.
  *
- * [bitmap]은 바꿀 수 없는(immutable) ARGB_8888 비트맵이고, 알파를 미리 곱한 형식으로 저장된다.
- * 불러온 사진의 오른쪽·아래 끝 타일은 캔버스 안쪽 크기만 담고, 그 밖은 투명으로 읽는다.
- * 한 가지 색 캔버스는 꽉 찬 타일 한 장을 끝 자리에도 함께 쓰므로, 캔버스 밖 부분에도 픽셀이 있다(쓰지 않는다).
+ * [bitmap]은 바꿀 수 없는(immutable) ARGB_8888 비트맵이고, 알파를 미리 곱한 형식으로 저장된다. 담은 크기는 비트맵 크기다.
+ * 오른쪽·아래 끝 타일은 캔버스 안쪽 크기만 담거나(사진·한 가지 색 캔버스), 캔버스 밖으로 밀려난 픽셀만큼 더 담는다(결정 기록 '캔버스 밖 픽셀').
  * 여러 문서 상태와 실행 취소 기록이 같은 타일을 함께 쓰므로 recycle()하지 않는다.
  */
 internal class BitmapTilePixels(val bitmap: Bitmap) : TilePixels {
@@ -28,6 +27,22 @@ internal class BitmapTilePixels(val bitmap: Bitmap) : TilePixels {
     // getPixel은 알파를 미리 곱하지 않은 값으로 바꿔 돌려준다
     override fun pixelAt(x: Int, y: Int): Int =
         if (x < bitmap.width && y < bitmap.height) bitmap.getPixel(x, y) else 0
+
+    override val width: Int
+        get() = bitmap.width
+
+    override val height: Int
+        get() = bitmap.height
+
+    // 비트맵의 왼쪽 위를 잘라 바꿀 수 없는 복사본으로 담는다(안드로이드 내부 복사)
+    override fun cropped(width: Int, height: Int): TilePixels {
+        val part = Bitmap.createBitmap(bitmap, 0, 0, width, height)
+        try {
+            return BitmapTilePixels(part.copy(Bitmap.Config.ARGB_8888, false) ?: throw OutOfMemoryError("No memory to crop a tile"))
+        } finally {
+            if (part !== bitmap) part.recycle()
+        }
+    }
 
     // 끝 타일은 캔버스 안쪽 크기만 담아 꽉 찬 타일보다 작다
     override val byteCount: Int

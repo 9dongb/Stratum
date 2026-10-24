@@ -58,17 +58,24 @@ class BlankCanvasTest {
     }
 
     @Test
-    fun solid_sharesOneTileAtEveryPosition() {
+    fun solid_sharesOneTilePerShape_andEdgeTilesHoldOnlyTheCanvas() {
         val document = create(1001, 1001, CanvasFill.Solid(Color.WHITE))
 
         val tiles = document.raster().tiles
         val grid = TileGrid(1001, 1001)
         assertEquals(grid.keys().toSet(), tiles.keys)
         val first = checkNotNull(tiles[TileKey(0, 0)])
-        for (tile in tiles.values) assertSame(first, tile)
-        // 끝 자리에 놓인 꽉 찬 타일의 끝 픽셀도 같은 색이다
         assertEquals(Color.WHITE, first.pixelAt(0, 0))
         assertEquals(Color.WHITE, first.pixelAt(TILE_SIZE - 1, TILE_SIZE - 1))
+        // 안쪽 자리는 같은 타일, 끝 자리는 캔버스 안쪽(233px)만 담은 타일을 크기마다 한 장 함께 쓴다(결정 기록 '캔버스 밖 픽셀')
+        for ((key, tile) in tiles) {
+            assertEquals(grid.solidShape(key), PixelSize(tile.width, tile.height))
+            if (grid.solidShape(key) == PixelSize(TILE_SIZE, TILE_SIZE)) assertSame(first, tile)
+        }
+        assertEquals(4, tiles.values.toSet().size)
+        val corner = checkNotNull(tiles[TileKey(3, 3)])
+        assertEquals(Color.WHITE, corner.pixelAt(232, 232))
+        assertEquals(Color.TRANSPARENT, corner.pixelAt(233, 0))
         assertEquals("Background", document.layers.single().name)
     }
 

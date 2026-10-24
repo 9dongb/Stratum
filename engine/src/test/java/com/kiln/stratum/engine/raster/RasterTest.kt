@@ -67,9 +67,60 @@ class RasterTest {
     }
 
     @Test
-    fun tileKey_rejectsNegative() {
-        assertThrows(IllegalArgumentException::class.java) { TileKey(-1, 0) }
-        assertThrows(IllegalArgumentException::class.java) { TileKey(0, -1) }
+    fun tileKey_canSitOutsideTheCanvas() {
+        // 이동 도구가 캔버스 밖으로 밀어낸 픽셀이 남는 자리(결정 기록 '캔버스 밖 픽셀')
+        val raster = Raster.EMPTY.withTiles(mapOf(TileKey(-1, 0) to solidTile(1), TileKey(5, -2) to solidTile(2)))
+
+        assertEquals(PixelRect(-256, -512, 1536, 256), raster.extent())
+        assertTrue(raster.hasTilesIn(PixelRect(-10, 10, -5, 20)))
+        assertFalse(raster.hasTilesIn(PixelRect(0, 0, 256, 256)))
+    }
+
+    @Test
+    fun tileSize_isStoredAndOutsideItIsClear() {
+        val tile = Tile.of(IntArray(TILE_PIXEL_COUNT) { 0xFF112233.toInt() }, 100, 40)
+
+        assertEquals(100, tile.width)
+        assertEquals(40, tile.height)
+        assertEquals(0xFF112233.toInt(), tile.pixelAt(99, 39))
+        // 담은 크기 밖은 투명이다(꽉 찬 배열을 줘도 그 밖의 값은 버린다)
+        assertEquals(0, tile.pixelAt(100, 0))
+        assertEquals(0, tile.pixelAt(0, 40))
+        assertThrows(IllegalArgumentException::class.java) { Tile.of(IntArray(TILE_PIXEL_COUNT), 0, 10) }
+        assertThrows(IllegalArgumentException::class.java) { Tile.of(IntArray(TILE_PIXEL_COUNT), 10, TILE_SIZE + 1) }
+    }
+
+    @Test
+    fun cropped_keepsTheTopLeft_andTheColor() {
+        val solid = Tile.solid(0xFF00FF00.toInt())
+        val cropped = solid.cropped(30, 200)
+
+        assertEquals(30, cropped.width)
+        assertEquals(200, cropped.height)
+        assertEquals(0xFF00FF00.toInt(), cropped.solidColor)
+        assertEquals(0xFF00FF00.toInt(), cropped.pixelAt(29, 199))
+        assertEquals(0, cropped.pixelAt(30, 0))
+        // 같은 크기면 자기 자신이고, 더 크게는 자를 수 없다
+        assertSame(solid, solid.cropped(TILE_SIZE, TILE_SIZE))
+        assertThrows(IllegalArgumentException::class.java) { cropped.cropped(31, 10) }
+        val pixels = IntArray(TILE_PIXEL_COUNT) { it }
+        val part = Tile.of(pixels).cropped(3, 2)
+        assertEquals(TILE_SIZE + 2, part.pixelAt(2, 1))
+        assertNull(part.solidColor)
+    }
+
+    @Test
+    fun tileRect_andOffCanvas_followTheStoredSize() {
+        val grid = TileGrid(600, 300)
+        // 끝 자리 (2, 1)의 캔버스 안쪽은 88×44
+        val honest = Raster.EMPTY.withTiles(mapOf(TileKey(2, 1) to Tile.of(IntArray(TILE_PIXEL_COUNT), 88, 44)))
+        assertEquals(PixelRect(512, 256, 600, 300), honest.tileRect(TileKey(2, 1)))
+        assertNull(honest.tileRect(TileKey(0, 0)))
+        assertFalse(honest.hasOffCanvas(grid))
+        // 끝 자리에서 캔버스 밖까지 담았거나, 캔버스 밖 자리에 타일이 있으면 캔버스 밖 픽셀이 있다
+        assertTrue(Raster.EMPTY.withTiles(mapOf(TileKey(2, 1) to Tile.of(IntArray(TILE_PIXEL_COUNT), 90, 44))).hasOffCanvas(grid))
+        assertTrue(Raster.EMPTY.withTiles(mapOf(TileKey(3, 0) to solidTile(1))).hasOffCanvas(grid))
+        assertTrue(Raster.EMPTY.withTiles(mapOf(TileKey(0, -1) to solidTile(1))).hasOffCanvas(grid))
     }
 
     @Test
@@ -118,16 +169,25 @@ class RasterTest {
     }
 
     @Test
-    fun filled_putsSameTileAtEveryGridKey() {
-        val tile = solidTile(1)
-        // 600×300은 3×2 타일이고, 오른쪽·아래 끝은 캔버스 밖으로 조금 넘친다
+    fun filled_sharesOneTilePerShape_andCropsTheEdges() {
+        val tile = Tile.solid(1)
+        // 600×300은 3×2 타일이고, 오른쪽·아래 끝 타일은 캔버스 안쪽(88px·44px)만 담는다
         val grid = TileGrid(600, 300)
 
         val raster = Raster.filled(grid, tile)
 
         assertEquals(grid.keys().toSet(), raster.tiles.keys)
-        // 타일을 복사하지 않고 모든 자리가 한 객체를 함께 쓴다
-        for (key in grid.keys()) assertSame(tile, raster.tiles[key])
+        // 안쪽 자리는 받은 타일을 그대로 함께 쓴다
+        assertSame(tile, raster.tiles[TileKey(0, 0)])
+        assertSame(tile, raster.tiles[TileKey(1, 0)])
+        // 끝 자리는 크기마다 자른 타일 한 장(같은 색)이다
+        assertSame(raster.tiles[TileKey(0, 1)], raster.tiles[TileKey(1, 1)])
+        assertEquals(PixelSize(256, 44), raster.tiles[TileKey(0, 1)]!!.let { PixelSize(it.width, it.height) })
+        assertEquals(PixelSize(88, 256), raster.tiles[TileKey(2, 0)]!!.let { PixelSize(it.width, it.height) })
+        assertEquals(PixelSize(88, 44), raster.tiles[TileKey(2, 1)]!!.let { PixelSize(it.width, it.height) })
+        assertEquals(4, raster.tiles.values.toSet().size)
+        for (t in raster.tiles.values) assertEquals(1, t.solidColor)
+        assertFalse(raster.hasOffCanvas(grid))
     }
 
     @Test

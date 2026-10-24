@@ -23,6 +23,12 @@ interface TileComposer {
     fun compose(width: Int, height: Int, pieces: List<TilePiece>, orientation: Orientation): Tile
 
     /**
+     * [argb] 한 가지 색만 담은 [width]×[height] 타일(한 가지 색 타일을 크기가 다른 자리로 옮길 때, 결정 기록 '캔버스 밖 픽셀').
+     * 메모리가 모자라면 예외를 던진다.
+     */
+    fun solid(argb: Int, width: Int, height: Int): Tile
+
+    /**
      * 캔버스 안쪽이 [width]×[height]인 마스크 타일(레이어 마스크, 결정 기록 '피부 보정'의 1c). [pieces]를 같은 방법으로 옮겨 놓고,
      * 조각이 덮지 않은 곳은 0(가림)이다. 다 0이면 null, 다 255면 [MaskTile.FULL]이다. 메모리가 모자라면 예외를 던진다.
      */

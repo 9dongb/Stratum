@@ -69,7 +69,7 @@ data class ResizeImage(val width: Int, val height: Int) : CancellableCommand {
         val layerBytes = width.toLong() * height * Int.SIZE_BYTES
         val pixels = document.layers.count { layer ->
             val raster = (layer.content as? RasterContent)?.raster
-            raster != null && raster.tiles.isNotEmpty() && ImageResizer.solidTile(raster, source) == null
+            raster != null && raster.tiles.isNotEmpty() && ImageResizer.solidColor(raster, source) == null
         } * layerBytes
         val masks = document.layers.count { layer -> layer.mask?.tiles?.values?.any { !it.isFull } == true } * width.toLong() * height
         return pixels + masks
@@ -93,7 +93,15 @@ internal object ImageResizer {
     /** [raster]를 [plan]대로 바꾼 새 래스터. 메모리가 모자라면 [NotEnoughMemoryException]을 던진다. */
     fun resize(raster: Raster, plan: ResizePlan, checkCanceled: () -> Unit): Raster {
         if (raster.tiles.isEmpty()) return Raster.EMPTY
-        solidTile(raster, plan.source)?.let { return Raster.filled(TileGrid(plan.target.width, plan.target.height), it) }
+        solidColor(raster, plan.source)?.let { color ->
+            // 한 가지 색 캔버스: 꽉 찬 타일이 있으면 그것을, 없으면(캔버스가 타일 하나보다 작음) 새로 만들어 새 크기의 자리마다 놓는다
+            val full = raster.tiles.values.firstOrNull { it.width == TILE_SIZE && it.height == TILE_SIZE } ?: BlankCanvas.solidTile(color)
+            try {
+                return Raster.filled(TileGrid(plan.target.width, plan.target.height), full ?: throw NotEnoughMemoryException())
+            } catch (e: OutOfMemoryError) {
+                throw NotEnoughMemoryException(e)
+            }
+        }
         val single = Document.create(plan.source.width, plan.source.height, "", raster)
         val targetGrid = TileGrid(plan.target.width, plan.target.height)
         val tiles = HashMap<TileKey, Tile?>()
@@ -116,12 +124,18 @@ internal object ImageResizer {
         return Raster.EMPTY.withTiles(tiles)
     }
 
-    /** 모든 자리가 같은 한 가지 색 타일이면 그 타일. 크기를 바꿔도 같은 색이라 그대로 쓴다. */
-    fun solidTile(raster: Raster, size: PixelSize): Tile? {
+    /**
+     * 캔버스([size])의 모든 자리를 같은 한 가지 색 타일이 캔버스 안쪽 크기로 덮으면(한 가지 색 캔버스) 그 색. 크기를 바꿔도 같은 색이라 계산하지 않는다.
+     * 캔버스 밖 자리나 캔버스 밖으로 더 담은 타일이 있으면 null이다(결정 기록 '캔버스 밖 픽셀').
+     */
+    fun solidColor(raster: Raster, size: PixelSize): Int? {
         val grid = TileGrid(size.width, size.height)
-        val first = raster.tiles.values.firstOrNull() ?: return null
-        if (first.solidColor == null || raster.tiles.size != grid.columns * grid.rows) return null
-        return first.takeIf { tile -> raster.tiles.values.all { it === tile } }
+        val color = raster.tiles.values.firstOrNull()?.solidColor ?: return null
+        if (raster.tiles.size != grid.columns * grid.rows) return null
+        val honest = raster.tiles.all { (key, tile) ->
+            tile.solidColor == color && grid.contains(key) && grid.solidShape(key) == PixelSize(tile.width, tile.height)
+        }
+        return if (honest) color else null
     }
 
     /**

@@ -198,7 +198,7 @@ class RasterTransformTest {
     }
 
     @Test
-    fun solidCanvas_staysOneTile() {
+    fun solidCanvas_staysAFewSharedOneColourTiles() {
         val white = Tile.solid(0xFFFFFFFF.toInt())
         val size = PixelSize(1001, 521)
         val canvas = Document.create(size.width, size.height, "Background", Raster.filled(TileGrid(size.width, size.height), white))
@@ -206,10 +206,18 @@ class RasterTransformTest {
 
         for (plan in plans) {
             val result = RasterTransform.apply(canvas, plan, composer)
+            val grid = TileGrid(result.width, result.height)
 
-            assertEquals(TileGrid(result.width, result.height).keys().toSet(), result.raster().tiles.keys)
-            assertTrue(result.raster().tiles.values.all { it === white })
+            assertEquals(grid.keys().toSet(), result.raster().tiles.keys)
+            // 모두 흰색이고, 끝 자리는 캔버스 안쪽 크기만 담는다(결정 기록 '캔버스 밖 픽셀'). 크기마다 한 장이라 많아야 네 장이다.
+            for ((key, tile) in result.raster().tiles) {
+                assertEquals(0xFFFFFFFF.toInt(), tile.solidColor)
+                assertEquals("$plan $key", grid.solidShape(key), PixelSize(tile.width, tile.height))
+            }
+            assertTrue(result.raster().tiles.values.toSet().size <= 4)
+            assertSame(white, result.raster().tiles[TileKey(0, 0)])
         }
+        // 그리지 않는다(한 가지 색 타일만 크기마다 만든다)
         assertEquals(0, composer.composedCount)
     }
 
