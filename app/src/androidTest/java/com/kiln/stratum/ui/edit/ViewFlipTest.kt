@@ -264,6 +264,55 @@ class ViewFlipTest {
         assertColor(Color.GREEN, colorAt(EditScreenTags.CANVAS, 0.1f, 0.75f))
     }
 
+    /**
+     * 줄여서 한쪽으로 옮긴 사진은 반전해도 그 자리에서 뒤집힌다(사용자 피드백 13차 11: "제자리에서 반전이 아닌 캔버스 위치가 반대편으로 이동하면서
+     * 반전 됩니다"). 전에는 캔버스 영역 가운데를 기준으로 뒤집혀 사진이 반대편으로 건너갔다.
+     */
+    @Test
+    fun flipping_keepsAZoomedOutPhotoWhereItIs() {
+        val ready = ready()
+        composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(930.dp, 700.dp))) {
+                StratumTheme {
+                    EditScreen(state = ready, onBack = {}, onCanvasSize = { _, _ -> }, onViewport = {}, onChooseSize = {})
+                }
+            }
+        }
+        val canvas = composeRule.onNodeWithTag(EditScreenTags.CANVAS)
+        // 두 손가락으로 반쯤 줄이고(맞춤의 절반까지) 왼쪽으로 옮긴다: 사진은 캔버스 왼쪽 반에, 오른쪽은 빈 작업 공간
+        canvas.performTouchInput {
+            val a0 = center - Offset(width * 0.3f, 0f)
+            val a1 = center - Offset(width * 0.1f, 0f)
+            val b0 = center + Offset(width * 0.3f, 0f)
+            val b1 = center + Offset(width * 0.1f, 0f)
+            multiTouchSwipe(
+                curves = listOf({ t: Long -> a0 + (a1 - a0) * (t / 400f) }, { t: Long -> b0 + (b1 - b0) * (t / 400f) }),
+                durationMillis = 400
+            )
+        }
+        canvas.performTouchInput {
+            val a0 = center - Offset(width * 0.05f, 0f)
+            val b0 = center + Offset(width * 0.05f, 0f)
+            val shift = Offset(-width * 0.4f, 0f)
+            multiTouchSwipe(
+                curves = listOf({ t: Long -> a0 + shift * (t / 400f) }, { t: Long -> b0 + shift * (t / 400f) }),
+                durationMillis = 400
+            )
+        }
+        val workspace = colorAt(EditScreenTags.CANVAS, 0.9f, 0.5f)
+        assertColor(Color.RED, colorAt(EditScreenTags.CANVAS, 0.08f, 0.6f))
+        assertColor(Color.BLUE, colorAt(EditScreenTags.CANVAS, 0.42f, 0.6f))
+
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
+        composeRule.onNodeWithTag(EditScreenTags.VIEW_FLIP_HORIZONTAL).performClick().assertIsOn()
+        composeRule.onNodeWithTag(EditScreenTags.panelToggle(MainPanel.LAYERS)).performClick()
+
+        // 사진은 왼쪽 반에 그대로 남고 좌우만 뒤집힌다(오른쪽은 여전히 빈 작업 공간)
+        assertColor(Color.BLUE, colorAt(EditScreenTags.CANVAS, 0.08f, 0.6f))
+        assertColor(Color.RED, colorAt(EditScreenTags.CANVAS, 0.42f, 0.6f))
+        assertColor(workspace, colorAt(EditScreenTags.CANVAS, 0.9f, 0.5f))
+    }
+
     private companion object {
         const val TAG = "viewport"
     }

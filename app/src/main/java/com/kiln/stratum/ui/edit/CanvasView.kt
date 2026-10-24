@@ -104,6 +104,38 @@ fun CanvasView.transform(area: PixelSize, document: PixelSize): ViewTransform =
         )
     }
 
+/**
+ * 화면 반전을 [from]에서 [to]로 바꿀 때 사진이 제자리에서 뒤집히게 옮긴 보기(사용자 피드백 13차 11: "제자리에서 반전이 아닌 캔버스 위치가
+ * 반대편으로 이동하면서 반전 됩니다"). 반전은 캔버스 영역 가운데를 기준으로 그림 층을 뒤집으므로([CanvasViewport]), 확대·이동해 사진이
+ * 가운데에서 벗어나 있으면 반대편으로 건너간다. 그래서 바뀌는 축마다 보이는 사진(사진의 화면 사각형 ∩ 캔버스 영역)의 가운데를 기준으로
+ * 뒤집힌 것과 같게 가운데 위치를 옮긴다. 기준은 영역 가운데 그대로라 두 손가락 조작은 바뀌지 않는다.
+ * 맞춤 보기는 늘 가운데라 그대로이고, 확대해서 사진이 영역을 꽉 채우면 보이는 사진의 가운데가 영역 가운데라 그대로다.
+ */
+fun CanvasView.flippedInPlace(area: PixelSize, document: PixelSize, from: ViewFlip, to: ViewFlip): CanvasView {
+    if (this !is CanvasView.Free || area.width <= 0 || area.height <= 0) return this
+    val transform = transform(area, document)
+    // 그 축에서 문서가 그림 층 안(뒤집기 전)에서 옮겨 갈 거리. 화면 자리 = 가운데 + 반전 부호 × (안쪽 자리 - 가운데)이고,
+    // 보이는 사진의 가운데 p를 기준으로 거울처럼 놓이려면 안쪽 자리가 -2 × 부호 × (p - 가운데)만큼 옮겨 가야 한다.
+    fun shift(wasFlipped: Boolean, flips: Boolean, origin: Double, scale: Double, length: Int, size: Int): Double {
+        if (wasFlipped == flips) return 0.0
+        val center = size / 2.0
+        val sign = if (wasFlipped) -1.0 else 1.0
+        val start = center + sign * (origin - center)
+        val end = center + sign * (origin + length * scale - center)
+        val low = max(min(start, end), 0.0)
+        val high = min(max(start, end), size.toDouble())
+        if (high <= low) return 0.0
+        return -2 * sign * ((low + high) / 2 - center)
+    }
+    val dx = shift(from.horizontal, to.horizontal, transform.originX, transform.scaleX, document.width, area.width)
+    val dy = shift(from.vertical, to.vertical, transform.originY, transform.scaleY, document.height, area.height)
+    if (dx == 0.0 && dy == 0.0) return this
+    return copy(
+        centerX = (centerX - dx / scale).coerceIn(0.0, document.width.toDouble()),
+        centerY = (centerY - dy / scale).coerceIn(0.0, document.height.toDouble())
+    )
+}
+
 /** 이 보기의 배율. 맞춤이면 맞춘 배율이다. */
 fun CanvasView.scale(area: PixelSize, document: PixelSize): Double =
     when (this) {

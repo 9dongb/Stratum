@@ -582,7 +582,13 @@ fun EditScreen(
         val layerControls = ready?.let {
             LayerControls(
                 it.layers, it.activeLayer, liveOpacity, enabled = !cropMode, busy = it.busy, actions = layerActions, colorSpace = it.colorSpace,
-                editingMask = it.editingMask, viewFlip = viewFlip, onViewFlip = { flip -> viewFlipBits = flip.bits },
+                editingMask = it.editingMask, viewFlip = viewFlip,
+                // 반전은 보이는 사진이 제자리에서 뒤집히게 보기를 함께 옮긴다(사용자 피드백 13차 11, CanvasView.flippedInPlace)
+                onViewFlip = { flip ->
+                    val area = viewState.area
+                    viewState.view = viewState.view.flippedInPlace(PixelSize(area.width, area.height), it.documentSize, viewFlip, flip)
+                    viewFlipBits = flip.bits
+                },
                 onAddPhoto = onAddPhoto,
                 // 조정 레이어를 더하면 그 값을 바로 고치게 조정 패널을 연다(포토샵의 속성 패널처럼, 결정 기록 '피부 보정'의 1f)
                 onAddAdjustment = {

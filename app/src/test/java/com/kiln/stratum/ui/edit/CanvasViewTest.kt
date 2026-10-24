@@ -225,4 +225,49 @@ class CanvasViewTest {
         assertEquals(CanvasView.Fit, state.view)
         assertEquals(1, state.zoomChanges)
     }
+
+    /** 이 보기·반전으로 문서 사각형이 화면에서 차지하는 자리(왼쪽, 위, 오른쪽, 아래) */
+    private fun screenRect(view: CanvasView, flip: ViewFlip): List<Double> {
+        val t = view.transform(area, photo)
+        fun axis(origin: Double, scale: Double, length: Int, size: Int, flipped: Boolean): Pair<Double, Double> {
+            val a = origin
+            val b = origin + length * scale
+            val c = size / 2.0
+            val sa = if (flipped) 2 * c - a else a
+            val sb = if (flipped) 2 * c - b else b
+            return minOf(sa, sb) to maxOf(sa, sb)
+        }
+        val (left, right) = axis(t.originX, t.scaleX, photo.width, area.width, flip.horizontal)
+        val (top, bottom) = axis(t.originY, t.scaleY, photo.height, area.height, flip.vertical)
+        return listOf(left, top, right, bottom)
+    }
+
+    @Test
+    fun flippedInPlace_keepsAnOffCentrePhotoWhereItIs() {
+        // 줄여서 왼쪽 위로 옮긴 사진: 영역 가운데 기준으로 뒤집으면 반대편으로 건너가는데, 제자리에 남아야 한다(사용자 피드백 13차 11)
+        val view = CanvasView.Free(scale = 0.1, centerX = 3800.0, centerY = 2900.0)
+        val before = screenRect(view, ViewFlip.None)
+        assertTrue("photo should be off centre: $before", before[0] < 300.0)
+
+        val horizontal = ViewFlip(horizontal = true)
+        val moved = view.flippedInPlace(area, photo, ViewFlip.None, horizontal)
+        screenRect(moved, horizontal).zip(before).forEach { (a, b) -> assertEquals(b, a, 1e-6) }
+
+        val both = ViewFlip(horizontal = true, vertical = true)
+        val movedAgain = moved.flippedInPlace(area, photo, horizontal, both)
+        screenRect(movedAgain, both).zip(before).forEach { (a, b) -> assertEquals(b, a, 1e-6) }
+        // 다시 끄면 처음 보기로 돌아온다
+        val back = movedAgain.flippedInPlace(area, photo, both, horizontal).flippedInPlace(area, photo, horizontal, ViewFlip.None)
+        assertEquals(view.centerX, (back as CanvasView.Free).centerX, 1e-6)
+        assertEquals(view.centerY, back.centerY, 1e-6)
+    }
+
+    @Test
+    fun flippedInPlace_leavesFitAndAFilledCanvasAlone() {
+        assertEquals(CanvasView.Fit, CanvasView.Fit.flippedInPlace(area, photo, ViewFlip.None, ViewFlip(horizontal = true)))
+        // 확대해서 사진이 영역을 꽉 채우면 보이는 곳 그대로 뒤집힌다(지금과 같음)
+        val zoomed = CanvasView.Free(scale = 2.0, centerX = 1200.0, centerY = 900.0)
+        assertEquals(zoomed, zoomed.flippedInPlace(area, photo, ViewFlip.None, ViewFlip(horizontal = true, vertical = true)))
+    }
+
 }
