@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -165,6 +166,9 @@ fun rememberCanvasViewState(documentSize: PixelSize?): CanvasViewState =
  *
  * [threeFinger]가 있으면 세 손가락 톡·밀기를 알린다(설정의 '세 손가락 제스처', [detectCanvasGestures]). 그동안 도구 화면은 터치를 받지 않는다.
  *
+ * [brushDrag]가 있으면(크기·경도가 있는 도구) Ctrl(맥 키보드는 Command)+Alt를 누른 채 마우스 왼쪽 버튼으로 끌 때 붓 크기·경도를 바꾸게 알린다
+ * (사용자 피드백 13차 9). 그 누름은 도구 화면에 가지 않는다.
+ *
  * [flip]은 화면 반전(결정 기록 '화면 반전')이다. 이 영역 전체(문서·도구 화면)를 그림 층으로 뒤집는 변환 하나만 더하고, 픽셀은 그대로다.
  * Compose는 그림 층의 변환을 터치 자리에도 거꾸로 걸어 주므로, 도구 화면과 두 손가락 확대·이동은 뒤집기 전의 자리를 받는다
  * (반전된 화면의 오른쪽을 누르면 문서의 왼쪽). 세 손가락 밀기만 화면의 손가락 방향 그대로 알린다(위로 밀면 크기를 키움).
@@ -182,6 +186,7 @@ fun CanvasViewport(
     onViewport: (Viewport) -> Unit = {},
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
+    brushDrag: BrushDragActions? = null,
     flip: ViewFlip = ViewFlip.None,
     orientation: Orientation = Orientation.IDENTITY,
     overlay: @Composable BoxScope.() -> Unit = {}
@@ -194,6 +199,7 @@ fun CanvasViewport(
     val report by rememberUpdatedState(onViewport)
     val twoFingerTap by rememberUpdatedState(onTwoFingerTap)
     val threeFingerActions by rememberUpdatedState(threeFinger)
+    val brushDragActions by rememberUpdatedState(brushDrag)
     val currentFlip by rememberUpdatedState(flip)
     // 두 손가락 톡·세 손가락 제스처를 켜고 끌 때만 터치 처리를 다시 시작한다(켜져 있을 때만 그 터치를 소비한다)
     val tapEnabled = onTwoFingerTap != null
@@ -228,13 +234,22 @@ fun CanvasViewport(
             .onSizeChanged { area = it }
             // 스페이스바를 누른 채 끌거나 마우스 가운데 버튼으로 끌면 캔버스를 옮긴다(포토샵과 같다, 사용자 피드백 12차 4).
             // 마우스의 다른 버튼(오른쪽 등)은 칠하지 않는다. 도구·두 손가락 조작보다 먼저 받아 그 누름은 도구에 가지 않는다.
+            // Ctrl(Command)+Alt를 누른 채 왼쪽 버튼으로 끌면 붓 크기(좌우)·경도(위아래)를 바꾼다(사용자 피드백 13차 9).
             .pointerInput(viewState) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val buttons = currentEvent.buttons
+                    val keys = currentEvent.keyboardModifiers
                     val mouse = down.type == PointerType.Mouse
                     val pan = shortcutHost.spaceHeld || (mouse && buttons.isTertiaryPressed)
                     val otherButton = mouse && !buttons.isPrimaryPressed
+                    val adjust = mouse && !pan && buttons.isPrimaryPressed && (keys.isCtrlPressed || keys.isMetaPressed) && keys.isAltPressed &&
+                        brushDragActions != null
+                    if (adjust) {
+                        down.consume()
+                        dragBrush(down, viewConfiguration.touchSlop, { brushDragActions }, { currentFlip })
+                        return@awaitEachGesture
+                    }
                     if (!pan && !otherButton) return@awaitEachGesture
                     down.consume()
                     var last = down.position
@@ -365,3 +380,43 @@ private data class ViewportInputs(
     val orientation: Orientation,
     val original: PixelSize
 )
+
+/**
+ * Ctrl(Command)+Alt + 왼쪽 버튼 끌기(사용자 피드백 13차 9)를 [actions]에 알린다. 버튼을 뗄 때까지 모든 움직임을 받는다.
+ * 그림 층 안의 자리라 화면 반전([flip])이 걸린 축은 부호를 되돌려 화면에서 보이는 방향으로 알린다. 터치 허용 거리([slop])를 넘으면
+ * 더 많이 움직인 쪽으로 축을 정하고(세 손가락 밀기와 같다), 정한 순간의 자리부터 잰다(값이 처음에 튀지 않게).
+ */
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.dragBrush(
+    down: androidx.compose.ui.input.pointer.PointerInputChange,
+    slop: Float,
+    actions: () -> BrushDragActions?,
+    flip: () -> ViewFlip
+) {
+    fun screen(local: Offset): Offset {
+        val f = flip()
+        return Offset(if (f.horizontal) size.width - local.x else local.x, if (f.vertical) size.height - local.y else local.y)
+    }
+    val start = screen(down.position)
+    actions()?.start(start)
+    var axis: SwipeAxis? = null
+    var origin = start
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        event.changes.forEach { it.consume() }
+        if (!change.pressed) break
+        val now = screen(change.position)
+        val moved = now - start
+        val chosen = axis ?: if (moved.getDistance() > slop) {
+            (if (abs(moved.x) >= abs(moved.y)) SwipeAxis.HORIZONTAL else SwipeAxis.VERTICAL).also {
+                axis = it
+                origin = now
+            }
+        } else {
+            continue
+        }
+        val pixels = if (chosen == SwipeAxis.HORIZONTAL) now.x - origin.x else origin.y - now.y
+        actions()?.drag(chosen, (pixels / density).dp)
+    }
+    actions()?.end()
+}

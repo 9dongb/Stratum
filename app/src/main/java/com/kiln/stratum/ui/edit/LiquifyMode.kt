@@ -302,6 +302,29 @@ fun LiquifyMode(
     } else {
         null
     }
+    // Ctrl(Command)+Alt를 누른 채 마우스 왼쪽 버튼으로 끌기(사용자 피드백 13차 9): 좌우는 크기, 위아래는 압력(세 손가락 밀기처럼 경도 대신).
+    // 브러시 도구일 때만 받는다(얼굴 모드는 칠하지 않음). 끄는 동안 누른 자리에 크기 원.
+    val brushDrag: BrushDragActions? = if (!state.faceMode) {
+        object : BrushDragActions {
+            override fun start(at: Offset) = sizePreview.startAt(at)
+
+            override fun drag(axis: SwipeAxis, distance: Dp) {
+                val start = swipeAnchor.from(state)
+                when (axis) {
+                    SwipeAxis.HORIZONTAL -> actions.setSize(swipedSize(start.size, distance.value))
+                    SwipeAxis.VERTICAL -> actions.setStrength(swipedStrength(start.strength, distance.value))
+                }
+                sizePreview.onChange()
+            }
+
+            override fun end() {
+                swipeAnchor.end()
+                sizePreview.onFinished()
+            }
+        }
+    } else {
+        null
+    }
     // 얼굴 모드가 알릴 것(못 찾음·여럿 찾음 등)은 제스처 알림 자리에 한 번 띄운다. 접기·펼치기로 다시 만들어져도 다시 띄우지 않는다.
     val notice = state.faceNotice
     val noticeText = notice?.let { faceNoticeText(it) }
@@ -334,7 +357,7 @@ fun LiquifyMode(
                     // 돌아간 배치: [캔버스 | 크기·압력 기둥 | ✓ · 도구 · X 기둥]. 캔버스는 왼쪽 카메라 구멍과 아래 시스템 바를 피한다(편집 화면과 같다).
                     Row(Modifier.weight(1f).fillMaxWidth()) {
                         LiquifyCanvas(
-                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip,
+                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, brushDrag, sizePreview.anchor, flip,
                             Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
                         )
                         BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
@@ -353,7 +376,7 @@ fun LiquifyMode(
                         )
                     }
                 } else if (coverWindow) {
-                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.weight(1f).fillMaxWidth())
+                    LiquifyCanvas(state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, brushDrag, sizePreview.anchor, flip, Modifier.weight(1f).fillMaxWidth())
                     // 크기·압력은 편집 화면과 같은 한 줄 막대다(칩을 누르면 같은 줄이 슬라이더, 결정 기록 '커버 화면 개편').
                     // 아래 시스템 바는 맨 아래 X·✓ 줄이 피한다.
                     BackHandler(enabled = coverBar.expanded != null, onBack = coverBar::collapse)
@@ -377,7 +400,7 @@ fun LiquifyMode(
                     // 아래 시스템 바는 편집 화면의 캔버스처럼 피한다(맨 아래에서 시작한 획이 홈 제스처와 섞이지 않게)
                     Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                         LiquifyCanvas(
-                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, flip, Modifier.fillMaxSize(),
+                            state, viewState, actions, sizePreview.visible, { canvasTop = it }, twoFingerUndo, threeFinger, brushDrag, sizePreview.anchor, flip, Modifier.fillMaxSize(),
                             floating = floating
                         )
                         // 띠와 옵션 창은 캔버스와 같은 자리(옆쪽 카메라 구멍도 피함)에 뜬다
@@ -469,6 +492,8 @@ private fun LiquifyCanvas(
     onCanvasTop: (Float) -> Unit,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
+    brushDrag: BrushDragActions?,
+    anchor: Offset?,
     flip: ViewFlip,
     modifier: Modifier,
     floating: FloatingState? = null
@@ -483,7 +508,7 @@ private fun LiquifyCanvas(
             .testTag(EditScreenTags.LIQUIFY_CANVAS)
     ) {
         // 편집 화면의 화면 반전을 그대로 따른다(결정 기록 '화면 반전')
-        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger, flip = flip) {
+        CanvasViewport(ready, viewState, Modifier.fillMaxSize(), onTwoFingerTap = onTwoFingerTap, threeFinger = threeFinger, brushDrag = brushDrag, flip = flip) {
             if (state.faceMode) {
                 FaceOverlay(
                     view = { viewState.view },
@@ -498,7 +523,7 @@ private fun LiquifyCanvas(
                 LiquifyOverlay(view = { viewState.view }, document = state.documentSize, brushSize = state.size, enabled = !state.busy, actions = actions, modifier = Modifier.fillMaxSize())
             }
             if (showSize) {
-                SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize())
+                SizePreviewOverlay(view = { viewState.view }, document = state.documentSize, size = state.size, hardness = null, modifier = Modifier.fillMaxSize(), anchor = anchor)
             }
             // 띠의 옵션 창이 떠 있는 동안 캔버스를 누르면 닫기만 한다(편집 화면과 같다)
             floating?.let { FloatingDismissLayer(it, Modifier.fillMaxSize()) }

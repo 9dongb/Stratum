@@ -59,6 +59,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -1029,7 +1030,8 @@ fun EditScreen(
                     hardness = sizedBrush.hardness,
                     modifier = Modifier.fillMaxSize(),
                     bottomInset = if (coverLandscape) 0.dp else coverSheetInset,
-                    endInset = if (coverLandscape) coverSheetInset else 0.dp
+                    endInset = if (coverLandscape) coverSheetInset else 0.dp,
+                    anchor = sizePreview.anchor
                 )
             }
             // 스포이드로 고르는 동안 손가락 둘레에 고를 색(위)과 지금 색(아래) 고리를 보인다
@@ -1128,6 +1130,31 @@ fun EditScreen(
             } else {
                 null
             }
+            // Ctrl(Command)+Alt를 누른 채 마우스 왼쪽 버튼으로 끌기(사용자 피드백 13차 9): 좌우는 붓 크기(오른쪽 = 크게), 위아래는 경도(위 = 단단하게,
+            // 사용자 결정). 크기·경도가 있는 도구일 때만 받고(그 밖의 도구는 그 도구로 간다) 세 손가락 제스처 설정과 상관없다. 끄는 동안 누른 자리에 크기 원.
+            val brushDrag: BrushDragActions? = if (sizedBrush != null && !cropMode) {
+                object : BrushDragActions {
+                    override fun start(at: Offset) = sizePreview.startAt(at)
+
+                    override fun drag(axis: SwipeAxis, distance: Dp) {
+                        val start = swipeAnchor.from(sizedBrush ?: return)
+                        // AI 제거는 경도가 없어 위아래로 끌기는 하지 않는다(크기만)
+                        if (activeTool == EditTool.Retouch && retouchRemoving && axis == SwipeAxis.VERTICAL) return
+                        val changed = when (axis) {
+                            SwipeAxis.HORIZONTAL -> start.copy(size = swipedSize(start.size, distance.value))
+                            SwipeAxis.VERTICAL -> start.copy(hardness = swipedHardness(start.hardness, distance.value))
+                        }
+                        if (applyBrush(changed, sizeOnly = axis == SwipeAxis.HORIZONTAL)) sizePreview.onChange()
+                    }
+
+                    override fun end() {
+                        swipeAnchor.end()
+                        sizePreview.onFinished()
+                    }
+                }
+            } else {
+                null
+            }
             // 키보드 단축키(사용자 피드백 12차 4: "키보드 마우스 단축키 먼저", 포토샵과 같은 키). 글자 칸에 쓰는 동안은 오지 않는다(MainActivity).
             // 같은 일을 하는 버튼·제스처와 같은 조건일 때만 하고, 단축키로 알아본 키는 하지 못해도 받은 것으로 본다(포커스를 받은 버튼으로 가지 않게).
             // 창(크기 변경·글자·내보내기 등)이나 유동화 작업 모드가 떠 있으면 단축키를 받지 않는다(창의 몫). Esc는 닫을 것이 없으면 받지 않는다.
@@ -1201,7 +1228,7 @@ fun EditScreen(
                         EditCanvas(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay,
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom), reportCanvasTop, Modifier.weight(1f),
-                            twoFingerUndo, threeFinger,
+                            twoFingerUndo, threeFinger, brushDrag = brushDrag,
                             screenStart = screenLeft,
                             flip = viewFlip,
                             orientation = shownOrientation,
@@ -1245,7 +1272,7 @@ fun EditScreen(
                         // 뒤로 가기는 X와 같다(도구를 닫는 뒤로 가기). 탭 줄은 숨긴다.
                         EditCanvas(
                             state, viewState, messages, reportCanvasSize, onViewport, overlay,
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, brushDrag = brushDrag,
                             screenStart = screenLeft,
                             flip = viewFlip,
                             orientation = shownOrientation,
@@ -1398,7 +1425,7 @@ fun EditScreen(
                             EditCanvas(
                                 state, viewState, messages, reportCanvasSize, onViewport, overlay,
                                 WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom), reportCanvasTop, Modifier.weight(1f),
-                                twoFingerUndo, threeFinger,
+                                twoFingerUndo, threeFinger, brushDrag = brushDrag,
                                 screenStart = screenLeft,
                                 flip = viewFlip,
                                 orientation = shownOrientation,
@@ -1414,7 +1441,7 @@ fun EditScreen(
                         Column(body) {
                             EditCanvas(
                                 state, viewState, messages, reportCanvasSize, onViewport, overlay,
-                                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger,
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal), reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, brushDrag = brushDrag,
                                 screenStart = screenLeft,
                                 overlayBottom = coverSheetInset,
                                 flip = viewFlip,
@@ -1441,7 +1468,7 @@ fun EditScreen(
                     EditCanvas(
                         state, viewState, messages, reportCanvasSize, onViewport, overlay,
                         WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.End + WindowInsetsSides.Bottom),
-                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, screenStart = screenLeft, flip = viewFlip,
+                        reportCanvasTop, Modifier.weight(1f), twoFingerUndo, threeFinger, brushDrag = brushDrag, screenStart = screenLeft, flip = viewFlip,
                         orientation = shownOrientation,
                         onSpotHeal = useSpotHeal, onMagicWand = useMagicWand, onSkinRedCast = useSkinRedCast,
                         // 알림 막대는 선택 도구의 작업 표시줄 위에 뜬다
@@ -1708,6 +1735,7 @@ private fun EditCanvas(
     modifier: Modifier = Modifier,
     onTwoFingerTap: (() -> Unit)? = null,
     threeFinger: ThreeFingerActions? = null,
+    brushDrag: BrushDragActions? = null,
     screenStart: Float = 0f,
     overlayBottom: Dp = 0.dp,
     flip: ViewFlip = ViewFlip.None,
@@ -1847,7 +1875,7 @@ private fun EditCanvas(
             contentAlignment = Alignment.Center
         ) {
             // 화면 읽기 기능의 배율·'화면에 맞추기'는 캔버스 그림에 있다([CanvasViewport])
-            CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, flip, orientation)
+            CanvasContent(state, viewState, onViewport, overlay, showBusy, onTwoFingerTap, threeFinger, brushDrag, flip, orientation)
         }
         // 배율을 바꿀 때만 왼쪽 위에 잠깐 보이는 배율 표시(사용자 피드백 10차 8). 띠는 피해 놓고, 띠·옵션 창 아래에 그린다
         // (배율을 바꾼 직후 연 옵션 창이 배율 표시 밑에 깔려 누른 것이 화면 맞춤이 되지 않게)
@@ -1875,6 +1903,7 @@ private fun CanvasContent(
     showBusy: Boolean,
     onTwoFingerTap: (() -> Unit)?,
     threeFinger: ThreeFingerActions?,
+    brushDrag: BrushDragActions?,
     flip: ViewFlip,
     orientation: Orientation
 ) {
@@ -1885,7 +1914,7 @@ private fun CanvasContent(
             EditorState.Creating -> ProgressIndicator(stringResource(R.string.edit_creating_canvas))
             EditorState.LoadingProject -> ProgressIndicator(stringResource(R.string.edit_opening_project))
             is EditorState.Ready -> {
-                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, flip = flip, orientation = orientation, overlay = overlay)
+                CanvasViewport(state, viewState, Modifier.fillMaxSize(), onViewport, onTwoFingerTap, threeFinger, brushDrag, flip = flip, orientation = orientation, overlay = overlay)
                 if (showBusy) {
                     val working = stringResource(R.string.edit_working)
                     LinearProgressIndicator(

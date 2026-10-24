@@ -28,14 +28,27 @@ class SizePreviewState {
     var visible: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * 원을 그릴 자리(캔버스 영역 안, 화면 반전을 되돌린 화면 자리). 없으면 캔버스 가운데다(슬라이더·세 손가락 밀기).
+     * 마우스로 끌어 붓을 바꿀 때 누른 자리다(사용자 피드백 13차 9).
+     */
+    var anchor: Offset? by mutableStateOf(null)
+        private set
+
     /** 값이 바뀌었다 */
     fun onChange() {
         visible = true
     }
 
+    /** 마우스로 끌기를 시작했다: 원은 누른 자리 [at]에 그린다 */
+    fun startAt(at: Offset) {
+        anchor = at
+    }
+
     /** 손을 뗐다 */
     fun onFinished() {
         visible = false
+        anchor = null
     }
 }
 
@@ -49,6 +62,7 @@ fun rememberSizePreviewState(): SizePreviewState = remember { SizePreviewState()
  * 단단함 슬라이더를 끄는 동안에도 같은 원을 보여, 단단함 자리가 어떻게 바뀌는지 보인다.
  * 캔버스 밖은 자른다. 터치를 받지 않아 아래 도구 터치 자리에 그대로 간다.
  * [bottomInset]은 캔버스 아래쪽을 덮은 것(닫힌 화면의 옵션 칸)의 높이로, 원은 그 위 보이는 자리의 가운데에 둔다(크기 배율은 캔버스 전체로 잰다).
+ * [anchor]가 있으면(마우스로 끌기) 가운데 대신 그 자리에 그린다.
  */
 @Composable
 fun SizePreviewOverlay(
@@ -58,7 +72,8 @@ fun SizePreviewOverlay(
     hardness: Float?,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
-    endInset: Dp = 0.dp
+    endInset: Dp = 0.dp,
+    anchor: Offset? = null
 ) {
     // 문서 자리가 아니라 캔버스 가운데(옵션 칸 위)에 두는 표시라, 화면 반전을 되돌려 늘 같은 자리에 둔다
     Canvas(modifier.undoViewFlip(LocalViewFlip.current).clipToBounds().testTag(EditScreenTags.SIZE_PREVIEW)) {
@@ -67,7 +82,7 @@ fun SizePreviewOverlay(
         val scale = view().transform(area, document).scaleX.toFloat()
         val visibleHeight = (this.size.height - bottomInset.toPx()).coerceAtLeast(0f)
         val visibleWidth = (this.size.width - endInset.toPx()).coerceAtLeast(0f)
-        drawBrushSize(Offset(visibleWidth / 2f, visibleHeight / 2f), size / 2f * scale, hardness)
+        drawBrushSize(anchor ?: Offset(visibleWidth / 2f, visibleHeight / 2f), size / 2f * scale, hardness)
     }
 }
 
